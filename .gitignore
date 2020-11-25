@@ -1,0 +1,8 @@
+.DS_Store
+.idea/
+.vscode/
+/target
+*.iml
+**/*.rs.bk
+Cargo.lock
+sql/*.generated.sql

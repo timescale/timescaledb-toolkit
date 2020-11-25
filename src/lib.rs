@@ -24,9 +24,9 @@ pub struct TDigestTransState {
 }
 
 impl TDigestTransState {
-    fn add_value(&mut self, value: f64) {
+    fn push(&mut self, value: f64) {
         self.buffer.push(value);
-        if buffer.len() >= self.digested.max_size() {
+        if self.buffer.len() >= self.digested.max_size() {
             self.digest()
         }
     }
@@ -35,11 +35,12 @@ impl TDigestTransState {
         if self.buffer.is_empty() {
             return
         }
-        let new = replace(&mut state.buffer, vec![]);
+        let new = replace(&mut self.buffer, vec![]);
         self.digested = self.digested.merge_unsorted(new)
     }
 }
 
+#[allow(non_camel_case_types)]
 type int = u32;
 
 #[pg_extern]
@@ -67,7 +68,7 @@ fn tdigest_trans(
                 }.into(),
                 Some(state) => state,
             };
-            state.push_value(value);
+            state.push(value);
             Some(state)
         })
     }
@@ -89,13 +90,13 @@ fn tdigest_final(
                 None => return None,
                 Some(state) => state,
             };
-            let new = replace(&mut state.buffer, vec![]);
-            self.digest();
+            state.digest();
             Some(state.digested.estimate_quantile(0.50))
         })
     }
 }
 
+#[allow(non_camel_case_types)]
 type bytea = pg_sys::Datum;
 
 #[pg_extern]
@@ -103,19 +104,16 @@ fn tdigest_serialize(
     mut state: Internal<TDigestTransState>,
 ) -> bytea {
     state.digest();
-    let size = bincode::serialized_size(&state);
-    let mut bytes = Vec::with_capacity(size + 4);
+    let size = bincode::serialized_size(&*state)
+        .unwrap_or_else(|e| pgx::error!("serialization error {}", e));
+    let mut bytes = Vec::with_capacity(size as usize + 4);
     let mut varsize = [0; 4];
     unsafe {
-        pgx::set_varsize(&mut varsize as *mut _, size as _);
+        pgx::set_varsize(&mut varsize as *mut _ as *mut _, size as _);
     }
     bytes.extend_from_slice(&varsize);
-    match bincode::serialize_into(bytes, &state) {
-        Ok(_) => {}
-        Err(e) => {
-            pgx::error!("serialization error {}", e)
-        },
-    }
+    bincode::serialize_into(&mut bytes, &*state)
+        .unwrap_or_else(|e| pgx::error!("serialization error {}", e));
     bytes.as_mut_ptr() as pg_sys::Datum
 }
 

@@ -1,6 +1,8 @@
 
 use std::{
     alloc::{GlobalAlloc, Layout},
+    convert::TryInto,
+    ptr::NonNull,
 };
 
 use pgx::*;
@@ -21,7 +23,10 @@ struct PallocAllocator;
 unsafe impl GlobalAlloc for PallocAllocator {
     //FIXME allow for switching the memory context allocated in
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        pg_sys::MemoryContextAlloc(pg_sys::CurrentMemoryContext, layout.size() as _)  as *mut _
+        pg_sys::MemoryContextAlloc(
+            pg_sys::CurrentMemoryContext,
+            layout.size().try_into().unwrap()
+        )  as *mut _
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, _layout: Layout) {
@@ -29,11 +34,14 @@ unsafe impl GlobalAlloc for PallocAllocator {
     }
 
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-        pg_sys::MemoryContextAllocZero(pg_sys::CurrentMemoryContext, layout.size() as _)  as *mut _
+        pg_sys::MemoryContextAllocZero(
+            pg_sys::CurrentMemoryContext,
+            layout.size().try_into().unwrap()
+        ) as *mut _
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, _layout: Layout, new_size: usize) -> *mut u8 {
-        pg_sys::repalloc(ptr as *mut _, new_size as _) as *mut _
+        pg_sys::repalloc(ptr as *mut _, new_size.try_into().unwrap()) as *mut _
     }
 }
 
@@ -49,7 +57,7 @@ pub unsafe fn in_memory_context<T, F: FnOnce() -> T>(
 }
 
 
-pub struct Internal<T>(pub Box<T>);
+pub struct Internal<T>(pub NonNull<T>);
 
 impl<T> FromDatum for Internal<T> {
     #[inline]
@@ -59,18 +67,17 @@ impl<T> FromDatum for Internal<T> {
         _: pg_sys::Oid,
     ) -> Option<Internal<T>> {
         if is_null {
-            None
-        } else if datum == 0 {
-            panic!("Internal-type Datum flagged not null but its datum is zero")
-        } else {
-            Some(Internal::<T>(Box::<T>::from_raw(datum as *mut T)))
+            return None
         }
+        let nn = NonNull::new(datum as *mut T).unwrap_or_else(||
+                panic!("Internal-type Datum flagged not null but its datum is zero"));
+        Some(Internal(nn))
     }
 }
 
 impl<T> IntoDatum for Internal<T> {
     fn into_datum(self) -> Option<pg_sys::Datum> {
-        Some(Box::into_raw(self.0) as pg_sys::Datum)
+        Some(self.0.as_ptr() as pg_sys::Datum)
     }
 
     fn type_oid() -> pg_sys::Oid {
@@ -80,19 +87,19 @@ impl<T> IntoDatum for Internal<T> {
 
 impl<T> From<T> for Internal<T> {
     fn from(t: T) -> Self {
-        Self(t.into())
+        Self(Box::leak(Box::new(t)).into())
     }
 }
 
 impl<T> std::ops::Deref for Internal<T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
-        &*self.0
+        unsafe { self.0.as_ref() }
     }
 }
 
 impl<T> std::ops::DerefMut for Internal<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut *self.0
+        unsafe { self.0.as_mut() }
     }
 }

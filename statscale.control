@@ -1,5 +1,0 @@
-comment = 'statscale:  Created by pgx'
-default_version = '1.0'
-module_pathname = '$libdir/statscale'
-relocatable = false
-superuser = false

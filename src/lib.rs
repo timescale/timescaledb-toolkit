@@ -1,5 +1,8 @@
 
-use std::mem::replace;
+use std::{
+    mem::replace,
+    slice,
+};
 
 use serde::{Serialize, Deserialize};
 
@@ -115,6 +118,22 @@ fn tdigest_serialize(
     bincode::serialize_into(&mut bytes, &*state)
         .unwrap_or_else(|e| pgx::error!("serialization error {}", e));
     bytes.as_mut_ptr() as pg_sys::Datum
+}
+
+#[pg_extern]
+fn tdigest_deserialize(
+    bytes: bytea,
+    _internal: Option<Internal<()>>,
+) -> Internal<TDigestTransState> {
+    let tdigest: TDigestTransState = unsafe {
+        let detoasted = pg_sys::pg_detoast_datum(bytes as *mut _);
+        let len = pgx::varsize_any_exhdr(detoasted);
+        let data = pgx::vardata_any(detoasted);
+        let bytes = slice::from_raw_parts(data as *mut u8, len);
+        bincode::deserialize(bytes).unwrap_or_else(|e|
+            pgx::error!("deserialization error {}", e))
+    };
+    tdigest.into()
 }
 
 #[pg_extern]

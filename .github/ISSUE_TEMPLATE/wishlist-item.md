@@ -2,7 +2,7 @@
 name: Wishlist Item
 about: Suggest an idea for this project
 title: ''
-labels: ''
+labels: wishlist
 assignees: ''
 
 ---

@@ -2,7 +2,7 @@
 name: Proposed solution
 about: Propose a solution to a problem or wishlist item
 title: ''
-labels: function-request
+labels: proposed-solution
 assignees: ''
 
 ---

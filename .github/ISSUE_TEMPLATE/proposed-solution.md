@@ -21,3 +21,6 @@ Are there any issues with this particular solution to the problem?
 
 ## Open Questions ##
 Are any questions we'd need to address before releasing this feature?
+
+## Alternatives ##
+Are there any alternative to the solutions chosen in the above text? Are there any other issues competing with this one?

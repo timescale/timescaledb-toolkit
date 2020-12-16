@@ -14,14 +14,22 @@ pg12 = ["pgx/pg12"]
 pg_test = []
 
 [dependencies]
-pgx = "0.1.5"
-pgx-macros = "0.1.5"
-tdigest = {version = "0.2", features = ["use_serde"]}
+pgx = "0.1.6"
+pgx-macros = "0.1.6"
+tdigest = {git="https://github.com/WireBaron/t-digest", features = ["use_serde"]}
 bincode = "1.3.1"
 serde = "1.0"
 
+[dependencies.flat_serialize]
+git = "https://github.com/JLockerman/flat_serialize"
+rev = "da5a558"
+
+[dependencies.flat_serialize_macro]
+git = "https://github.com/JLockerman/flat_serialize"
+rev = "da5a558"
+
 [dev-dependencies]
-pgx-tests = "0.0.15"
+pgx-tests = "0.1.6"
 
 [profile.dev]
 panic = "unwind"

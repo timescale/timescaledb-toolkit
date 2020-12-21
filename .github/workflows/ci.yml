@@ -1,0 +1,48 @@
+name: CI
+on:
+  pull_request:
+  push:
+    branches:
+    - master
+    - staging
+    - trying
+
+jobs:
+  test:
+    name: Test PG 12
+    runs-on: ubuntu-latest
+    container:
+      image: timescaledev/rust-pgx:latest
+      env:
+        CARGO_INCREMENTAL: 0
+        CARGO_NET_RETRY: 10
+        CI: 1
+        RUST_BACKTRACE: short
+        RUSTUP_MAX_RETRIES: 10
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    - name: chown Repository
+      run: chown -R postgres .
+
+    - name: Cache cargo directories
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Cache cargo target dir
+      uses: actions/cache@v2
+      with:
+        path: target
+        key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+    - name: Run Tests
+      run:  sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo test pg12"
+

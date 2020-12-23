@@ -22,11 +22,11 @@ serde = "1.0"
 
 [dependencies.flat_serialize]
 git = "https://github.com/JLockerman/flat_serialize"
-rev = "da5a558"
+rev = "2ee6a5e"
 
 [dependencies.flat_serialize_macro]
 git = "https://github.com/JLockerman/flat_serialize"
-rev = "da5a558"
+rev = "2ee6a5e"
 
 [dev-dependencies]
 pgx-tests = "0.1.6"

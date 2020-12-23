@@ -64,6 +64,18 @@ macro_rules! pg_type {
                 &self.0
             }
         }
+
+        impl<'input> From<$inner_name<'input>> for $name<'input> {
+            fn from(inner: $inner_name<'input>) -> Self {
+                Self(inner)
+            }
+        }
+
+        impl<'input> From<$inner_name<'input>> for Option<$name<'input>> {
+            fn from(inner: $inner_name<'input>) -> Self {
+                Some($name(inner))
+            }
+        }
     }
 }
 
@@ -80,7 +92,7 @@ macro_rules! flatten {
             data.fill_vec(&mut output);
             set_varsize(output.as_mut_ptr() as *mut _, output.len() as i32);
 
-            $typ::try_ref(output.leak()).unwrap().0
+            $typ::try_ref(output.leak()).unwrap().0.into()
         }
     }
 }

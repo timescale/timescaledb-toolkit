@@ -221,7 +221,7 @@ fn tdigest_final(
 
             // we need to flatten the vector to a single buffer that contains
             // both the size, the data, and the varlen header
-            let flattened = crate::flatten! {
+            crate::flatten! {
                 TsTDigestData{
                     header: &0,
                     buckets: &buckets,
@@ -232,9 +232,7 @@ fn tdigest_final(
                     means: &means,
                     weights: &weights,
                 }
-            };
-
-            TimescaleTDigest(flattened).into()
+            }
         })
     }
 }

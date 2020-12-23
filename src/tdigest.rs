@@ -1,5 +1,6 @@
 
 use std::{
+    convert::TryInto,
     cmp::min,
     mem::replace,
     slice,
@@ -8,9 +9,12 @@ use std::{
 use serde::{Serialize, Deserialize};
 
 use pgx::*;
+use pg_sys::Datum;
+
+use flat_serialize::*;
 
 use crate::palloc::{Internal, in_memory_context};
-use crate::aggregate_utils::aggregate_mctx;
+use crate::aggregate_utils::{aggregate_mctx, in_aggregate_context};
 
 use tdigest::{
     TDigest,
@@ -71,29 +75,6 @@ pub fn tdigest_trans(
             };
             state.push(value);
             Some(state)
-        })
-    }
-}
-
-#[pg_extern]
-pub fn tdigest_final(
-    state: Option<Internal<TDigestTransState>>,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<tsTDigest> {
-    let mctx = aggregate_mctx(fcinfo);
-    let mctx = match mctx {
-        None => pgx::error!("cannot call as non-aggregate"),
-        Some(mctx) => mctx,
-    };
-    unsafe {
-        in_memory_context(mctx, || {
-            let mut state = match state {
-                None => return None,
-                Some(state) => state,
-            };
-            state.digest();
-
-            Some(write_pg_digest(&state.digested))
         })
     }
 }
@@ -172,100 +153,199 @@ pub fn tdigest_deserialize(
     tdigest.into()
 }
 
-// TODO: implement a more efficient representation
-#[derive(PostgresType, Serialize, Deserialize)]
-#[allow(non_camel_case_types)]
-pub struct tsTDigest {
-    buckets: usize,
-    count: f64,
-    sum: f64,
-    min: f64,
-    max: f64,
-    means: Vec<f64>,
-    weights: Vec<f64>,
+flat_serialize_macro::flat_serialize! {
+    struct TsTDigestData {
+        header: u32,
+        buckets: u32,
+        count: u32,
+        sum: f64,
+        min: f64,
+        max: f64,
+        means: [f64; std::cmp::min(self.buckets, self.count)],
+        weights: [u32; std::cmp::min(self.buckets, self.count)],
+    }
 }
 
-fn write_pg_digest(dig: &TDigest) -> tsTDigest {
-    let mut result = tsTDigest {
-        buckets: dig.max_size(),
-        count: dig.count(),
-        sum: dig.sum(),
-        min: dig.min(),
-        max: dig.max(),
-        means: vec!(0.0; dig.max_size()),
-        weights: vec!(0.0; dig.max_size()),
-    };
+#[derive(PostgresType, Copy, Clone)]
+#[inoutfuncs]
+pub struct TimescaleTDigest<'input>(TsTDigestData<'input>);
 
-    for (i, cent) in dig.raw_centroids().iter().enumerate() {
-        result.means[i] = cent.mean();
-        result.weights[i] = cent.weight();
+impl<'input> TimescaleTDigest<'input> {
+    fn to_tdigest(&self) -> TDigest {
+        let size = min(*self.0.buckets, *self.0.count) as usize;
+        let mut cents: Vec<Centroid> = Vec::new();
+
+        for i in 0..size {
+            cents.push(Centroid::new(self.0.means[i], self.0.weights[i] as f64));
+        }
+
+        TDigest::new(cents, *self.0.sum, *self.0.count as f64, *self.0.max, *self.0.min, *self.0.buckets as usize)
     }
-
-    result
 }
 
-fn read_pg_digest(state: &tsTDigest) -> TDigest {
-    let size = min(state.buckets, state.count as usize);
-    let mut cents: Vec<Centroid> = Vec::new();
-
-    for i in 0..size {
-        cents.push(Centroid::new(state.means[i], state.weights[i]));
+impl<'input> InOutFuncs for TimescaleTDigest<'input> {
+    fn output(&self, buffer: &mut StringInfo) {
+        use std::io::Write;
+        // for output we'll just write the debug format of the data
+        // if we decide to go this route we'll probably automate this process
+        //let _ = write!(buffer, "{:?}", self.0.data);
+        let _ = write!(buffer, "TODO, this");
     }
 
-    TDigest::new(cents, state.sum, state.count, state.max, state.min, state.buckets)
+    fn input(_input: &std::ffi::CStr) -> Self
+    where
+        Self: Sized,
+    {
+        unimplemented!("we don't bother implementing string input")
+    }
+}
+
+impl<'input> FromDatum for TimescaleTDigest<'input> {
+    unsafe fn from_datum(datum: Datum, is_null: bool, _: pg_sys::Oid) -> Option<Self>
+    where
+        Self: Sized,
+    {
+        if is_null {
+            return None;
+        }
+
+        let ptr = pg_sys::pg_detoast_datum_packed(datum as *mut pg_sys::varlena);
+        let data_len = varsize_any(ptr);
+        let bytes = slice::from_raw_parts(ptr as *mut u8, data_len);
+
+        let (data, _) = match TsTDigestData::try_ref(bytes) {
+            Ok(wrapped) => wrapped,
+            Err(e) => error!("invalid TimescaleTDigest {:?} - {},", e, bytes.len()),
+        };
+
+        TimescaleTDigest(data).into()
+    }
+}
+
+impl<'input> IntoDatum for TimescaleTDigest<'input> {
+    fn into_datum(self) -> Option<Datum> {
+        // to convert to a datum just get a pointer to the start of the buffer
+        // _technically_ this is only safe if we're sure that the data is laid
+        // out contiguously, which we have no way to guarantee except by
+        // allocation a new buffer, or storing some additional metadata.
+        Some(self.0.header as *const u32 as Datum)
+    }
+
+    fn type_oid() -> pg_sys::Oid {
+        rust_regtypein::<Self>()
+    }
+}
+
+macro_rules! flatten {
+    ($typ:ident { $($field:ident: $value:expr),* $(,)? }) => {
+        {
+            let data = $typ {
+                $(
+                    $field: $value
+                ),*
+            };
+            let mut output = vec![];
+            data.fill_vec(&mut output);
+            set_varsize(output.as_mut_ptr() as *mut _, output.len() as i32);
+
+            $typ::try_ref(output.leak()).unwrap().0
+        }
+    }
+}
+
+#[pg_extern]
+fn tdigest_final(
+    state: Option<Internal<TDigestTransState>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<TimescaleTDigest<'static>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            let mut state = match state {
+                None => return None,
+                Some(state) => state,
+            };
+            state.digest();
+
+            let buckets : u32 = state.digested.max_size().try_into().unwrap();
+            let count = state.digested.count() as u32;
+            let vec_size = min(buckets as usize, count as usize);
+            let mut means = vec!(0.0; vec_size);
+            let mut weights = vec!(0; vec_size);
+
+            for (i, cent) in state.digested.raw_centroids().iter().enumerate() {
+                means[i] = cent.mean();
+                weights[i] = cent.weight() as u32;
+            }
+
+            // we need to flatten the vector to a single buffer that contains
+            // both the size, the data, and the varlen header
+            let flattened = flatten! {
+                TsTDigestData{
+                    header: &0,
+                    buckets: &buckets,
+                    count: &count,
+                    sum: &state.digested.sum(),
+                    min: &state.digested.min(),
+                    max: &state.digested.max(),
+                    means: &means,
+                    weights: &weights,
+                }
+            };
+
+            TimescaleTDigest(flattened).into()
+        })
+    }
 }
 
 #[pg_extern]
 pub fn tdigest_quantile(
-    digest: tsTDigest,
+    digest: TimescaleTDigest,
     quantile: f64,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
-    let dig = read_pg_digest(&digest);
-    dig.estimate_quantile(quantile)
+    digest.to_tdigest().estimate_quantile(quantile)
 }
 
 #[pg_extern]
 pub fn tdigest_quantile_at_value(
-    digest: tsTDigest,
+    digest: TimescaleTDigest,
     value: f64,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
-    let dig = read_pg_digest(&digest);
-    dig.estimate_quantile_at_value(value)
+    digest.to_tdigest().estimate_quantile_at_value(value)
 }
 
 #[pg_extern]
 pub fn tdigest_count(
-    digest: tsTDigest,
+    digest: TimescaleTDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
-    digest.count
+    *digest.0.count as f64
 }
 
 #[pg_extern]
 pub fn tdigest_min(
-    digest: tsTDigest,
+    digest: TimescaleTDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
-    digest.min
+    *digest.0.min
 }
 
 #[pg_extern]
 pub fn tdigest_max(
-    digest: tsTDigest,
+    digest: TimescaleTDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
-    digest.max
+    *digest.0.max
 }
 
 #[pg_extern]
 pub fn tdigest_mean(
-    digest: tsTDigest,
+    digest: TimescaleTDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
-    if digest.count > 0.0 {
-        digest.sum / digest.count
+    if *digest.0.count > 0 {
+        *digest.0.sum / *digest.0.count as f64
     } else {
         0.0
     }
@@ -273,10 +353,10 @@ pub fn tdigest_mean(
 
 #[pg_extern]
 pub fn tdigest_sum(
-    digest: tsTDigest,
+    digest: TimescaleTDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
-    digest.sum
+    *digest.0.sum
 }
 
 #[cfg(any(test, feature = "pg_test"))]

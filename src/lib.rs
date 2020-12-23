@@ -1,6 +1,7 @@
 pub mod tdigest;
 mod palloc;
 mod aggregate_utils;
+mod type_builder;
 
 pgx::pg_module_magic!();
 

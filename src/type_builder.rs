@@ -12,13 +12,30 @@ macro_rules! pg_type {
         $(#[$attrs])?
         #[derive(PostgresType, Copy, Clone)]
         #[inoutfuncs]
-        pub struct $name<'input>($inner_name<'input>);
+        pub struct $name<'input>($inner_name<'input>, Option<&'input [u8]>);
 
         $(#[$attrs])?
         flat_serialize_macro::flat_serialize! {
             struct $inner_name {
                 header: u32,
                 $($field: $typ),*
+            }
+        }
+
+        impl<'input> $inner_name<'input> {
+            pub unsafe fn flatten(&self) -> $name<'static> {
+                let bytes = self.to_pg_bytes();
+                let wrapped = $inner_name::try_ref(bytes).unwrap().0;
+                (wrapped, bytes).into()
+            }
+
+            pub fn to_pg_bytes(&self) -> &'static [u8] {
+                let mut output = vec![];
+                self.fill_vec(&mut output);
+                unsafe {
+                    set_varsize(output.as_mut_ptr() as *mut _, output.len() as i32);
+                }
+                &*output.leak()
             }
         }
 
@@ -40,17 +57,17 @@ macro_rules! pg_type {
                     Err(e) => error!(concat!("invalid ", stringify!($name), " {:?}, got len {}"), e, bytes.len()),
                 };
 
-                $name(data).into()
+                $name(data, Some(bytes)).into()
             }
         }
 
         impl<'input> pgx::IntoDatum for $name<'input> {
             fn into_datum(self) -> Option<Datum> {
-                // to convert to a datum just get a pointer to the start of the buffer
-                // _technically_ this is only safe if we're sure that the data is laid
-                // out contiguously, which we have no way to guarantee except by
-                // allocation a new buffer, or storing some additional metadata.
-                Some(self.0.header as *const u32 as Datum)
+                let datum = match self.1 {
+                    Some(bytes) => bytes.as_ptr() as Datum,
+                    None => self.0.to_pg_bytes().as_ptr() as Datum,
+                };
+                Some(datum)
             }
 
             fn type_oid() -> pg_sys::Oid {
@@ -67,32 +84,20 @@ macro_rules! pg_type {
 
         impl<'input> From<$inner_name<'input>> for $name<'input> {
             fn from(inner: $inner_name<'input>) -> Self {
-                Self(inner)
+                Self(inner, None)
             }
         }
 
         impl<'input> From<$inner_name<'input>> for Option<$name<'input>> {
             fn from(inner: $inner_name<'input>) -> Self {
-                Some($name(inner))
+                Some($name(inner, None))
             }
         }
-    }
-}
 
-#[macro_export]
-macro_rules! flatten {
-    ($typ:ident { $($field:ident: $value:expr),* $(,)? }) => {
-        {
-            let data = $typ {
-                $(
-                    $field: $value
-                ),*
-            };
-            let mut output = vec![];
-            data.fill_vec(&mut output);
-            set_varsize(output.as_mut_ptr() as *mut _, output.len() as i32);
-
-            $typ::try_ref(output.leak()).unwrap().0.into()
+        impl<'input> From<($inner_name<'input>, &'input [u8])> for $name<'input> {
+            fn from((inner, bytes): ($inner_name<'input>, &'input [u8])) -> Self {
+                Self(inner, Some(bytes))
+            }
         }
     }
 }

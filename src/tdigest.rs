@@ -153,9 +153,8 @@ pub fn tdigest_deserialize(
     tdigest.into()
 }
 
-flat_serialize_macro::flat_serialize! {
-    struct TsTDigestData {
-        header: u32,
+crate::pg_type! {
+    struct TimescaleTDigest: TsTDigestData {
         buckets: u32,
         count: u32,
         sum: f64,
@@ -165,10 +164,6 @@ flat_serialize_macro::flat_serialize! {
         weights: [u32; std::cmp::min(self.buckets, self.count)],
     }
 }
-
-#[derive(PostgresType, Copy, Clone)]
-#[inoutfuncs]
-pub struct TimescaleTDigest<'input>(TsTDigestData<'input>);
 
 impl<'input> TimescaleTDigest<'input> {
     fn to_tdigest(&self) -> TDigest {
@@ -200,59 +195,6 @@ impl<'input> InOutFuncs for TimescaleTDigest<'input> {
     }
 }
 
-impl<'input> FromDatum for TimescaleTDigest<'input> {
-    unsafe fn from_datum(datum: Datum, is_null: bool, _: pg_sys::Oid) -> Option<Self>
-    where
-        Self: Sized,
-    {
-        if is_null {
-            return None;
-        }
-
-        let ptr = pg_sys::pg_detoast_datum_packed(datum as *mut pg_sys::varlena);
-        let data_len = varsize_any(ptr);
-        let bytes = slice::from_raw_parts(ptr as *mut u8, data_len);
-
-        let (data, _) = match TsTDigestData::try_ref(bytes) {
-            Ok(wrapped) => wrapped,
-            Err(e) => error!("invalid TimescaleTDigest {:?} - {},", e, bytes.len()),
-        };
-
-        TimescaleTDigest(data).into()
-    }
-}
-
-impl<'input> IntoDatum for TimescaleTDigest<'input> {
-    fn into_datum(self) -> Option<Datum> {
-        // to convert to a datum just get a pointer to the start of the buffer
-        // _technically_ this is only safe if we're sure that the data is laid
-        // out contiguously, which we have no way to guarantee except by
-        // allocation a new buffer, or storing some additional metadata.
-        Some(self.0.header as *const u32 as Datum)
-    }
-
-    fn type_oid() -> pg_sys::Oid {
-        rust_regtypein::<Self>()
-    }
-}
-
-macro_rules! flatten {
-    ($typ:ident { $($field:ident: $value:expr),* $(,)? }) => {
-        {
-            let data = $typ {
-                $(
-                    $field: $value
-                ),*
-            };
-            let mut output = vec![];
-            data.fill_vec(&mut output);
-            set_varsize(output.as_mut_ptr() as *mut _, output.len() as i32);
-
-            $typ::try_ref(output.leak()).unwrap().0
-        }
-    }
-}
-
 #[pg_extern]
 fn tdigest_final(
     state: Option<Internal<TDigestTransState>>,
@@ -279,7 +221,7 @@ fn tdigest_final(
 
             // we need to flatten the vector to a single buffer that contains
             // both the size, the data, and the varlen header
-            let flattened = flatten! {
+            let flattened = crate::flatten! {
                 TsTDigestData{
                     header: &0,
                     buckets: &buckets,
@@ -366,7 +308,7 @@ mod tests {
     fn apx_eql(value: f64, expected: f64, error: f64) {
         assert!((value - expected).abs() < error, "Float value {} differs from expected {} by more than {}", value, expected, error);
     }
-    
+
     fn pct_eql(value: f64, expected: f64, pct_error: f64) {
         apx_eql(value, expected, pct_error * expected);
     }
@@ -409,7 +351,7 @@ mod tests {
                     .select(&format!("SELECT tdigest_quantile(t_digest, {}), tdigest_quantile_at_value(t_digest, {}) FROM digest", quantile, value), None, None)
                     .first()
                     .get_two::<f64, f64>();
-                
+
                 if i == 0 {
                     pct_eql(est_val.unwrap(), 0.01, 1.0);
                     apx_eql(est_quant.unwrap(), quantile, 0.0001);

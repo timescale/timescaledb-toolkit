@@ -167,14 +167,14 @@ crate::pg_type! {
 
 impl<'input> TimescaleTDigest<'input> {
     fn to_tdigest(&self) -> TDigest {
-        let size = min(*self.0.buckets, *self.0.count) as usize;
+        let size = min(*self.buckets, *self.count) as usize;
         let mut cents: Vec<Centroid> = Vec::new();
 
         for i in 0..size {
-            cents.push(Centroid::new(self.0.means[i], self.0.weights[i] as f64));
+            cents.push(Centroid::new(self.means[i], self.weights[i] as f64));
         }
 
-        TDigest::new(cents, *self.0.sum, *self.0.count as f64, *self.0.max, *self.0.min, *self.0.buckets as usize)
+        TDigest::new(cents, *self.sum, *self.count as f64, *self.max, *self.0.min, *self.buckets as usize)
     }
 }
 
@@ -183,7 +183,7 @@ impl<'input> InOutFuncs for TimescaleTDigest<'input> {
         use std::io::Write;
         // for output we'll just write the debug format of the data
         // if we decide to go this route we'll probably automate this process
-        //let _ = write!(buffer, "{:?}", self.0.data);
+        //let _ = write!(buffer, "{:?}", self.data);
         let _ = write!(buffer, "TODO, this");
     }
 
@@ -258,7 +258,7 @@ pub fn tdigest_count(
     digest: TimescaleTDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
-    *digest.0.count as f64
+    *digest.count as f64
 }
 
 #[pg_extern]
@@ -266,7 +266,7 @@ pub fn tdigest_min(
     digest: TimescaleTDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
-    *digest.0.min
+    *digest.min
 }
 
 #[pg_extern]
@@ -274,7 +274,7 @@ pub fn tdigest_max(
     digest: TimescaleTDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
-    *digest.0.max
+    *digest.max
 }
 
 #[pg_extern]
@@ -282,8 +282,8 @@ pub fn tdigest_mean(
     digest: TimescaleTDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
-    if *digest.0.count > 0 {
-        *digest.0.sum / *digest.0.count as f64
+    if *digest.count > 0 {
+        *digest.sum / *digest.count as f64
     } else {
         0.0
     }
@@ -294,7 +294,7 @@ pub fn tdigest_sum(
     digest: TimescaleTDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
-    *digest.0.sum
+    *digest.sum
 }
 
 #[cfg(any(test, feature = "pg_test"))]

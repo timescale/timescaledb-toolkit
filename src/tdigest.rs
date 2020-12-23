@@ -154,6 +154,7 @@ pub fn tdigest_deserialize(
 }
 
 crate::pg_type! {
+    #[derive(Debug)]
     struct TimescaleTDigest: TsTDigestData {
         buckets: u32,
         count: u32,
@@ -165,6 +166,8 @@ crate::pg_type! {
     }
 }
 
+crate::debug_inout_funcs!(TimescaleTDigest);
+
 impl<'input> TimescaleTDigest<'input> {
     fn to_tdigest(&self) -> TDigest {
         let size = min(*self.buckets, *self.count) as usize;
@@ -175,23 +178,6 @@ impl<'input> TimescaleTDigest<'input> {
         }
 
         TDigest::new(cents, *self.sum, *self.count as f64, *self.max, *self.0.min, *self.buckets as usize)
-    }
-}
-
-impl<'input> InOutFuncs for TimescaleTDigest<'input> {
-    fn output(&self, buffer: &mut StringInfo) {
-        use std::io::Write;
-        // for output we'll just write the debug format of the data
-        // if we decide to go this route we'll probably automate this process
-        //let _ = write!(buffer, "{:?}", self.data);
-        let _ = write!(buffer, "TODO, this");
-    }
-
-    fn input(_input: &std::ffi::CStr) -> Self
-    where
-        Self: Sized,
-    {
-        unimplemented!("we don't bother implementing string input")
     }
 }
 

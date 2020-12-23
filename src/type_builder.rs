@@ -14,8 +14,8 @@ macro_rules! pg_type {
         #[inoutfuncs]
         pub struct $name<'input>($inner_name<'input>, Option<&'input [u8]>);
 
-        $(#[$attrs])?
         flat_serialize_macro::flat_serialize! {
+            $(#[$attrs])?
             struct $inner_name {
                 header: u32,
                 $($field: $typ),*
@@ -100,4 +100,25 @@ macro_rules! pg_type {
             }
         }
     }
+}
+
+#[macro_export]
+macro_rules! debug_inout_funcs {
+    ($name:ident) => {
+        impl<'input> InOutFuncs for $name<'input> {
+            fn output(&self, buffer: &mut StringInfo) {
+                use std::io::Write;
+                // for output we'll just write the debug format of the data
+                // if we decide to go this route we'll probably automate this process
+                let _ = write!(buffer, "{:?}", &self.0);
+            }
+
+            fn input(_input: &std::ffi::CStr) -> Self
+            where
+                Self: Sized,
+            {
+                unimplemented!(concat!("no valid TEXT input for ", stringify!($name)))
+            }
+        }
+    };
 }

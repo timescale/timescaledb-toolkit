@@ -221,18 +221,16 @@ fn tdigest_final(
 
             // we need to flatten the vector to a single buffer that contains
             // both the size, the data, and the varlen header
-            crate::flatten! {
-                TsTDigestData{
-                    header: &0,
-                    buckets: &buckets,
-                    count: &count,
-                    sum: &state.digested.sum(),
-                    min: &state.digested.min(),
-                    max: &state.digested.max(),
-                    means: &means,
-                    weights: &weights,
-                }
-            }
+            TsTDigestData {
+                header: &0,
+                buckets: &buckets,
+                count: &count,
+                sum: &state.digested.sum(),
+                min: &state.digested.min(),
+                max: &state.digested.max(),
+                means: &means,
+                weights: &weights,
+            }.flatten().into()
         })
     }
 }

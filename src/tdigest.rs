@@ -13,8 +13,12 @@ use pg_sys::Datum;
 
 use flat_serialize::*;
 
-use crate::palloc::{Internal, in_memory_context};
-use crate::aggregate_utils::{aggregate_mctx, in_aggregate_context};
+use crate::{
+    aggregate_utils::{aggregate_mctx, in_aggregate_context},
+    debug_inout_funcs,
+    flatten,
+    palloc::{Internal, in_memory_context}, pg_type
+};
 
 use tdigest::{
     TDigest,
@@ -153,11 +157,12 @@ pub fn tdigest_deserialize(
     tdigest.into()
 }
 
-crate::pg_type! {
+pg_type! {
     #[derive(Debug)]
-    struct TimescaleTDigest: TsTDigestData {
+    struct TimescaleTDigest {
         buckets: u32,
         count: u32,
+        padding: [u8; 4],
         sum: f64,
         min: f64,
         max: f64,
@@ -166,7 +171,7 @@ crate::pg_type! {
     }
 }
 
-crate::debug_inout_funcs!(TimescaleTDigest);
+debug_inout_funcs!(TimescaleTDigest);
 
 impl<'input> TimescaleTDigest<'input> {
     fn to_tdigest(&self) -> TDigest {
@@ -207,16 +212,18 @@ fn tdigest_final(
 
             // we need to flatten the vector to a single buffer that contains
             // both the size, the data, and the varlen header
-            TsTDigestData {
-                header: &0,
-                buckets: &buckets,
-                count: &count,
-                sum: &state.digested.sum(),
-                min: &state.digested.min(),
-                max: &state.digested.max(),
-                means: &means,
-                weights: &weights,
-            }.flatten().into()
+            flatten!(
+                TimescaleTDigest {
+                    buckets: &buckets,
+                    count: &count,
+                    sum: &state.digested.sum(),
+                    min: &state.digested.min(),
+                    max: &state.digested.max(),
+                    padding: &Default::default(),
+                    means: &means,
+                    weights: &weights,
+                }
+            ).into()
         })
     }
 }

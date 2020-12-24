@@ -390,12 +390,12 @@ checksum = "4443176a9f2c162692bd3d352d745ef9413eec5782a80d8fd6f8a1ac692a07f7"
 [[package]]
 name = "flat_serialize"
 version = "0.1.0"
-source = "git+https://github.com/JLockerman/flat_serialize?rev=8824b35#8824b35e1b6fedba7e0274de9339efdb2a35c1a2"
+source = "git+https://github.com/JLockerman/flat_serialize?rev=b94ec65#b94ec654ad977a680dd23d72c8f9f41b7c533c62"
 
 [[package]]
 name = "flat_serialize_macro"
 version = "0.1.0"
-source = "git+https://github.com/JLockerman/flat_serialize?rev=8824b35#8824b35e1b6fedba7e0274de9339efdb2a35c1a2"
+source = "git+https://github.com/JLockerman/flat_serialize?rev=b94ec65#b94ec654ad977a680dd23d72c8f9f41b7c533c62"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -810,6 +810,12 @@ dependencies = [
  "smallvec",
  "winapi",
 ]
+
+[[package]]
+name = "paste"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c5d65c4d95931acda4498f675e332fcbdc9a06705cd07086c510e9b6009cd1c1"
 
 [[package]]
 name = "peeking_take_while"
@@ -1493,6 +1499,7 @@ dependencies = [
  "bincode",
  "flat_serialize",
  "flat_serialize_macro",
+ "paste",
  "pgx",
  "pgx-macros",
  "pgx-tests",

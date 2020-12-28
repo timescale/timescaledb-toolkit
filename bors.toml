@@ -1,2 +1,3 @@
 status = ["Test PG 12"]
 delete-merged-branches = true
+timeout_sec = 1200 # 20 min

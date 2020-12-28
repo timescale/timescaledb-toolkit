@@ -3,4 +3,5 @@
 .vscode/
 /target
 *.iml
+**/*.rs.bk
 sql/*.generated.sql

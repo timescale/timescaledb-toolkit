@@ -44,5 +44,5 @@ jobs:
         key: ${{ runner.os }}-cargo-build-target
 
     - name: Run Tests
-      run:  sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx test pg12"
+      run: cd extension && sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx test pg12"
 

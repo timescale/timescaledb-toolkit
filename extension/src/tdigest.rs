@@ -128,17 +128,7 @@ pub fn tdigest_serialize(
     mut state: Internal<TDigestTransState>,
 ) -> bytea {
     state.digest();
-    let size = bincode::serialized_size(&*state)
-        .unwrap_or_else(|e| pgx::error!("serialization error {}", e));
-    let mut bytes = Vec::with_capacity(size as usize + 4);
-    let mut varsize = [0; 4];
-    unsafe {
-        pgx::set_varsize(&mut varsize as *mut _ as *mut _, size as _);
-    }
-    bytes.extend_from_slice(&varsize);
-    bincode::serialize_into(&mut bytes, &*state)
-        .unwrap_or_else(|e| pgx::error!("serialization error {}", e));
-    bytes.as_mut_ptr() as pg_sys::Datum
+    crate::do_serialize!(state)
 }
 
 #[pg_extern]
@@ -146,15 +136,7 @@ pub fn tdigest_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
 ) -> Internal<TDigestTransState> {
-    let tdigest: TDigestTransState = unsafe {
-        let detoasted = pg_sys::pg_detoast_datum(bytes as *mut _);
-        let len = pgx::varsize_any_exhdr(detoasted);
-        let data = pgx::vardata_any(detoasted);
-        let bytes = slice::from_raw_parts(data as *mut u8, len);
-        bincode::deserialize(bytes).unwrap_or_else(|e|
-            pgx::error!("deserialization error {}", e))
-    };
-    tdigest.into()
+    crate::do_deserialize!(bytes, TDigestTransState)
 }
 
 pg_type! {
@@ -162,7 +144,6 @@ pg_type! {
     struct TimescaleTDigest {
         buckets: u32,
         count: u32,
-        padding: [u8; 4],
         sum: f64,
         min: f64,
         max: f64,
@@ -219,7 +200,6 @@ fn tdigest_final(
                     sum: &state.digested.sum(),
                     min: &state.digested.min(),
                     max: &state.digested.max(),
-                    padding: &Default::default(),
                     means: &means,
                     weights: &weights,
                 }

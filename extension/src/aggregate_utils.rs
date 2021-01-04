@@ -2,6 +2,15 @@ use std::ptr::null_mut;
 
 use pgx::pg_sys;
 
+// TODO move to func_utils once there are enough function to warrant one
+pub unsafe fn get_collation(fcinfo: pg_sys::FunctionCallInfo) -> Option<pg_sys::Oid> {
+    if (*fcinfo).fncollation == 0 {
+        None
+    } else {
+        Some((*fcinfo).fncollation)
+    }
+}
+
 pub unsafe fn in_aggregate_context<T, F: FnOnce() -> T>(
     fcinfo: pg_sys::FunctionCallInfo,
     f: F,

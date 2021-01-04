@@ -1,4 +1,6 @@
 pub mod tdigest;
+pub mod hyperloglog;
+
 mod palloc;
 mod aggregate_utils;
 mod type_builder;

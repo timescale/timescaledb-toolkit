@@ -1,5 +1,5 @@
 
-use std::{cmp::min, convert::TryInto, hash::{BuildHasher, Hasher}, mem::{replace, size_of}, slice};
+use std::{hash::{BuildHasher, Hasher}, mem::size_of, slice};
 
 use serde::{Serialize, Deserialize};
 
@@ -26,13 +26,13 @@ pub struct HyperLogLogTrans {
 
 #[allow(non_camel_case_types)]
 type int = i32;
-type AnyType = Datum;
+type AnyElement = Datum;
 
 #[pg_extern]
 pub fn hyperloglog_trans(
     state: Option<Internal<HyperLogLogTrans>>,
     size: int,
-    value: Option<AnyType>,
+    value: Option<AnyElement>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal<HyperLogLogTrans>> {
     unsafe {
@@ -43,7 +43,7 @@ pub fn hyperloglog_trans(
             };
             let mut state = match state {
                 None => {
-                    let typ = pgx::get_getarg_type(fcinfo, 3);
+                    let typ = pgx::get_getarg_type(fcinfo, 2);
                     let hasher = DatumHashBuilder::from_type_id(typ);
                     let trans = HyperLogLogTrans {
                         logger: HyperLogLogger::with_hash(size as usize, hasher),
@@ -148,7 +148,19 @@ fn hyperloglog_final(
 debug_inout_funcs!(HyperLogLog);
 
 
-
+#[pg_extern]
+pub fn hyperloglog_count<'input>(
+    hyperloglog: HyperLogLog<'input>,
+) -> int {
+    // count does not depend on the type parameters
+    HLL::<()> {
+        registers: hyperloglog.registers,
+        b: *hyperloglog.b as _,
+        buildhasher: Default::default(),
+        phantom: Default::default(),
+        
+    }.count() as int
+}
 
 
 
@@ -308,4 +320,27 @@ impl<'de> Deserialize<'de> for DatumHashBuilder {
 unsafe fn get_struct<T>(tuple: pg_sys::HeapTuple) -> *mut T {
     //((char *) ((TUP)->t_data) + (TUP)->t_data->t_hoff)
     (*tuple).t_data.add((*(*tuple).t_data).t_hoff as usize).cast()
+}
+
+
+#[cfg(any(test, feature = "pg_test"))]
+mod tests {
+    use pgx::*;
+
+    #[pg_test]
+    fn test_hll_aggregate() {
+        Spi::execute(|client| {
+            let text = client
+                .select("SELECT hyperloglog(5, v::float)::TEXT FROM generate_series(1, 100) v", None, None)
+                .first()
+                .get_one::<String>();
+            assert_eq!(text.unwrap(), "HyperLogLogData { header: 192, version: 1, padding: [0, 0, 0], element_type: 701, b: 5, registers: [5, 5, 4, 4, 4, 3, 3, 2, 3, 2, 6, 4, 2, 3, 3, 5, 5, 0, 2, 2, 1, 4, 9, 1, 2, 6, 1, 1, 0, 5, 4, 3] }");
+
+            let count = client
+                .select("SELECT hyperloglog_count(hyperloglog(5, v::float)) FROM generate_series(1, 100) v", None, None)
+                .first()
+                .get_one::<i32>();
+            assert_eq!(count, Some(104));
+        });
+    }
 }

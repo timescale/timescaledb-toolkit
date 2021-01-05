@@ -1,3 +1,4 @@
 types.sql
 tdigest.generated.sql
+hyperloglog.generated.sql
 aggregates.sql

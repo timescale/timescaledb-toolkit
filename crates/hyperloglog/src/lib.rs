@@ -264,19 +264,13 @@ where
 
 impl<'buffer, T, B> HyperLogLog<'buffer, T, B>
 where
-    T: Hash + ?Sized,
-    B: BuildHasher + Clone, {
-
+    T: ?Sized,
+    B: Clone {
     /// Get number of registers.
     pub fn m(&self) -> usize {
         self.registers.len()
     }
-
-    /// Get `BuildHasher`.
-    pub fn buildhasher(&self) -> &B {
-        &self.buildhasher
-    }
-
+    
     /// Get relative error for this HyperLogLog configuration.
     pub fn relative_error(&self) -> f64 {
         (3f64 * 2f64.ln() - 1f64).sqrt() / (self.m() as f64).sqrt()
@@ -407,6 +401,18 @@ where
 
     pub fn is_empty(&self) -> bool {
         self.registers.iter().all(|&x| x == 0)
+    }
+}
+
+
+impl<'buffer, T, B> HyperLogLog<'buffer, T, B>
+where
+    T: Hash + ?Sized,
+    B: BuildHasher + Clone, {
+
+    /// Get `BuildHasher`.
+    pub fn buildhasher(&self) -> &B {
+        &self.buildhasher
     }
 
     pub fn merge(a: &Self, b: &Self) -> HyperLogLogger<T, B>

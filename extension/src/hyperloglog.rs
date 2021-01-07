@@ -19,8 +19,6 @@ use hyperloglog::{HyperLogLog as HLL, HyperLogLogger};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct HyperLogLogTrans {
-    //FIXME we can't use the default hasher, it may change
-    //FIXME get hash state
     logger: HyperLogLogger<Datum, DatumHashBuilder>,
 }
 
@@ -33,17 +31,18 @@ pub fn hyperloglog_trans(
     state: Option<Internal<HyperLogLogTrans>>,
     size: int,
     value: Option<AnyElement>,
-    fcinfo: pg_sys::FunctionCallInfo,
+    fc: pg_sys::FunctionCallInfo,
 ) -> Option<Internal<HyperLogLogTrans>> {
     unsafe {
-        in_aggregate_context(fcinfo, || {
+        in_aggregate_context(fc, || {
+            //TODO is this the right way to handle NULL?
             let value = match value {
                 None => return state,
                 Some(value) => value,
             };
             let mut state = match state {
                 None => {
-                    let typ = pgx::get_getarg_type(fcinfo, 2);
+                    let typ = pgx::get_getarg_type(fc, 2);
                     let hasher = DatumHashBuilder::from_type_id(typ);
                     let trans = HyperLogLogTrans {
                         logger: HyperLogLogger::with_hash(size as usize, hasher),
@@ -64,13 +63,8 @@ pub fn hyperloglog_combine(
     state2: Option<Internal<HyperLogLogTrans>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal<HyperLogLogTrans>> {
-    let mctx = aggregate_mctx(fcinfo);
-    let mctx = match mctx {
-        None => pgx::error!("cannot call as non-aggregate"),
-        Some(mctx) => mctx,
-    };
     unsafe {
-        in_memory_context(mctx, || {
+        in_aggregate_context(fc, || {
             match (state1, state2) {
                 (None, None) => None,
                 (None, Some(state2)) => Some(state2.clone().into()),
@@ -111,11 +105,16 @@ pub fn hyperloglog_deserialize(
 pg_type!{
     #[derive(Debug)]
     struct HyperLogLog {
-        element_type: Oid,
+        // Oids are stored in postgres arrays, so it should be safe to store them
+        // in our types as long as we do send/recv and in/out correctly
+        // see https://github.com/postgres/postgres/blob/b8d0cda53377515ac61357ec4a60e85ca873f486/src/include/utils/array.h#L90
+        element_type: Oid, //FIXME use Oid that I/O and send/recv as typename
         b: u32,
         registers: [u8; (1 as usize) << self.b],
     }
 }
+
+debug_inout_funcs!(HyperLogLog);
 
 #[pg_extern]
 fn hyperloglog_final(
@@ -144,9 +143,6 @@ fn hyperloglog_final(
         })
     }
 }
-
-debug_inout_funcs!(HyperLogLog);
-
 
 #[pg_extern]
 pub fn hyperloglog_count<'input>(

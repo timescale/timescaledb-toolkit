@@ -119,6 +119,7 @@ macro_rules! debug_inout_funcs {
             where
                 Self: Sized,
             {
+                //FIXME we need input for dump/restore
                 unimplemented!(concat!("no valid TEXT input for ", stringify!($name)))
             }
         }

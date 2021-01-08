@@ -9,10 +9,11 @@ use pg_sys::{Datum, Oid};
 use flat_serialize::*;
 
 use crate::{
-    aggregate_utils::{aggregate_mctx, in_aggregate_context},
+    aggregate_utils::in_aggregate_context,
     debug_inout_funcs,
     flatten,
-    palloc::{Internal, in_memory_context}, pg_type
+    palloc::Internal,
+    pg_type
 };
 
 use hyperloglog::{HyperLogLog as HLL, HyperLogLogger};
@@ -64,7 +65,7 @@ pub fn hyperloglog_combine(
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal<HyperLogLogTrans>> {
     unsafe {
-        in_aggregate_context(fc, || {
+        in_aggregate_context(fcinfo, || {
             match (state1, state2) {
                 (None, None) => None,
                 (None, Some(state2)) => Some(state2.clone().into()),
@@ -154,7 +155,7 @@ pub fn hyperloglog_count<'input>(
         b: *hyperloglog.b as _,
         buildhasher: Default::default(),
         phantom: Default::default(),
-        
+
     }.count() as int
 }
 

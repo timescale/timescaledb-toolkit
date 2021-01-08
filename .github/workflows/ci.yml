@@ -35,14 +35,13 @@ jobs:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
-        key: ${{ runner.os }}-cargo
+        key: ${{ runner.os }}-cargo-v1
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-cargo-build-target
+        key: ${{ runner.os }}-cargo-build-target-v1
 
     - name: Run Tests
       run: cd extension && sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx test pg12"
-

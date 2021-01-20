@@ -2,6 +2,7 @@
 
 members = [
     "extension",
+    "crates/t-digest",
 ]
 
 [profile.dev]

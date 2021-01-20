@@ -1,0 +1,12 @@
+[package]
+name = "tdigest"
+version = "0.2.2"
+edition = "2018"
+# based on: https://github.com/MnO2/t-digest"
+
+[dependencies]
+ordered-float = "1.0"
+serde = { package = "serde", version = "1.0", optional = true, default-features = false }
+
+[features]
+use_serde = ["serde", "serde/derive", "ordered-float/serde"]

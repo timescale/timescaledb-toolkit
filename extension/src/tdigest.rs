@@ -25,6 +25,8 @@ use tdigest::{
     Centroid,
 };
 
+// Intermediate state kept in postgres.  This is a tdigest object paired
+// with a vector of values that still need to be inserted.
 #[derive(Serialize, Deserialize, Clone)]
 pub struct TDigestTransState {
     #[serde(skip_serializing)]
@@ -33,6 +35,8 @@ pub struct TDigestTransState {
 }
 
 impl TDigestTransState {
+    // Add a new value, recalculate the digest if we've crossed a threshold.
+    // TODO threshold is currently set to number of digest buckets, should this be adjusted
     fn push(&mut self, value: f64) {
         self.buffer.push(value);
         if self.buffer.len() >= self.digested.max_size() {
@@ -40,6 +44,7 @@ impl TDigestTransState {
         }
     }
 
+    // Update the digest with all accumulated values.
     fn digest(&mut self) {
         if self.buffer.is_empty() {
             return
@@ -52,6 +57,8 @@ impl TDigestTransState {
 #[allow(non_camel_case_types)]
 type int = u32;
 
+// PG function for adding values to a digest.
+// Null values are ignored.
 #[pg_extern]
 pub fn tdigest_trans(
     state: Option<Internal<TDigestTransState>>,
@@ -83,6 +90,7 @@ pub fn tdigest_trans(
     }
 }
 
+// PG function for merging digests.
 #[pg_extern]
 pub fn tdigest_combine(
     state1: Option<Internal<TDigestTransState>>,
@@ -139,6 +147,7 @@ pub fn tdigest_deserialize(
     crate::do_deserialize!(bytes, TDigestTransState)
 }
 
+// PG object for the digest.
 pg_type! {
     #[derive(Debug)]
     struct TimescaleTDigest {
@@ -167,6 +176,7 @@ impl<'input> TimescaleTDigest<'input> {
     }
 }
 
+// PG function to generate a user-facing TimescaleTDigest object from an internal TDigestTransState.
 #[pg_extern]
 fn tdigest_final(
     state: Option<Internal<TDigestTransState>>,
@@ -208,6 +218,9 @@ fn tdigest_final(
     }
 }
 
+//---- Available PG operations on the digest
+
+// Approximate the value at the given quantile (0.0-1.0)
 #[pg_extern]
 pub fn tdigest_quantile(
     digest: TimescaleTDigest,
@@ -217,6 +230,7 @@ pub fn tdigest_quantile(
     digest.to_tdigest().estimate_quantile(quantile)
 }
 
+// Approximate the quantile at the given value
 #[pg_extern]
 pub fn tdigest_quantile_at_value(
     digest: TimescaleTDigest,
@@ -226,6 +240,7 @@ pub fn tdigest_quantile_at_value(
     digest.to_tdigest().estimate_quantile_at_value(value)
 }
 
+// Number of elements from which the digest was built.
 #[pg_extern]
 pub fn tdigest_count(
     digest: TimescaleTDigest,
@@ -234,6 +249,7 @@ pub fn tdigest_count(
     *digest.count as f64
 }
 
+// Minimum value entered in the digest.
 #[pg_extern]
 pub fn tdigest_min(
     digest: TimescaleTDigest,
@@ -242,6 +258,7 @@ pub fn tdigest_min(
     *digest.min
 }
 
+// Maximum value entered in the digest.
 #[pg_extern]
 pub fn tdigest_max(
     digest: TimescaleTDigest,
@@ -250,6 +267,8 @@ pub fn tdigest_max(
     *digest.max
 }
 
+// Average of all the values entered in the digest.
+// Note that this is not an approximation, though there may be loss of precision.
 #[pg_extern]
 pub fn tdigest_mean(
     digest: TimescaleTDigest,
@@ -262,6 +281,7 @@ pub fn tdigest_mean(
     }
 }
 
+// Sum of all the values entered in the digest.
 #[pg_extern]
 pub fn tdigest_sum(
     digest: TimescaleTDigest,
@@ -274,10 +294,12 @@ pub fn tdigest_sum(
 mod tests {
     use pgx::*;
 
+    // Assert equality between two floats, within some fixed error range.
     fn apx_eql(value: f64, expected: f64, error: f64) {
         assert!((value - expected).abs() < error, "Float value {} differs from expected {} by more than {}", value, expected, error);
     }
 
+    // Assert equality between two floats, within an error expressed as a fraction of the expected value.
     fn pct_eql(value: f64, expected: f64, pct_error: f64) {
         apx_eql(value, expected, pct_error * expected);
     }

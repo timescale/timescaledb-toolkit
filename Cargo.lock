@@ -1421,7 +1421,6 @@ dependencies = [
 [[package]]
 name = "tdigest"
 version = "0.2.2"
-source = "git+https://github.com/WireBaron/t-digest#055db9969cab55c1220989ccc295663a8571f3f6"
 dependencies = [
  "ordered-float",
  "serde",

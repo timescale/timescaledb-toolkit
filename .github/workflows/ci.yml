@@ -42,7 +42,9 @@ jobs:
       with:
         path: target
         key: ${{ runner.os }}-cargo-build-target
+    
+    - name: Run Library Tests
+      run: sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo test --workspace --exclude timescale_analytics"
 
-    - name: Run Tests
+    - name: Run Postgres Tests
       run: cd extension && sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx test pg12"
-

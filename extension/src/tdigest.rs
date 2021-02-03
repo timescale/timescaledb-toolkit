@@ -14,14 +14,14 @@ use pg_sys::Datum;
 use flat_serialize::*;
 
 use crate::{
-    aggregate_utils::{aggregate_mctx, in_aggregate_context},
+    aggregate_utils::in_aggregate_context,
     debug_inout_funcs,
     flatten,
-    palloc::{Internal, in_memory_context}, pg_type
+    palloc::Internal, pg_type
 };
 
 use tdigest::{
-    TDigest,
+    TDigest as InternalTDigest,
     Centroid,
 };
 
@@ -31,7 +31,7 @@ use tdigest::{
 pub struct TDigestTransState {
     #[serde(skip_serializing)]
     buffer: Vec<f64>,
-    digested: TDigest,
+    digested: InternalTDigest,
 }
 
 impl TDigestTransState {
@@ -66,13 +66,8 @@ pub fn tdigest_trans(
     value: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal<TDigestTransState>> {
-    let mctx = aggregate_mctx(fcinfo);
-    let mctx = match mctx {
-        None => pgx::error!("cannot call as non-aggregate"),
-        Some(mctx) => mctx,
-    };
     unsafe {
-        in_memory_context(mctx, || {
+        in_aggregate_context(fcinfo, || {
             let value = match value {
                 None => return state,
                 Some(value) => value,
@@ -80,7 +75,7 @@ pub fn tdigest_trans(
             let mut state = match state {
                 None => TDigestTransState{
                     buffer: vec![],
-                    digested: TDigest::new_with_size(size as _),
+                    digested: InternalTDigest::new_with_size(size as _),
                 }.into(),
                 Some(state) => state,
             };
@@ -97,13 +92,8 @@ pub fn tdigest_combine(
     state2: Option<Internal<TDigestTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal<TDigestTransState>> {
-    let mctx = aggregate_mctx(fcinfo);
-    let mctx = match mctx {
-        None => pgx::error!("cannot call as non-aggregate"),
-        Some(mctx) => mctx,
-    };
     unsafe {
-        in_memory_context(mctx, || {
+        in_aggregate_context(fcinfo, || {
             match (state1, state2) {
                 (None, None) => None,
                 (None, Some(state2)) => Some(state2.clone().into()),
@@ -119,7 +109,7 @@ pub fn tdigest_combine(
 
                     Some(TDigestTransState {
                             buffer: vec![],
-                            digested: TDigest::merge_digests(digvec),
+                            digested: InternalTDigest::merge_digests(digvec),
                         }.into()
                     )
                 }
@@ -147,10 +137,14 @@ pub fn tdigest_deserialize(
     crate::do_deserialize!(bytes, TDigestTransState)
 }
 
+extension_sql!(r#"
+CREATE TYPE TDigest;
+"#);
+
 // PG object for the digest.
 pg_type! {
     #[derive(Debug)]
-    struct TimescaleTDigest {
+    struct TDigest {
         buckets: u32,
         count: u32,
         sum: f64,
@@ -161,10 +155,10 @@ pg_type! {
     }
 }
 
-debug_inout_funcs!(TimescaleTDigest);
+debug_inout_funcs!(TDigest);
 
-impl<'input> TimescaleTDigest<'input> {
-    fn to_tdigest(&self) -> TDigest {
+impl<'input> TDigest<'input> {
+    fn to_tdigest(&self) -> InternalTDigest {
         let size = min(*self.buckets, *self.count) as usize;
         let mut cents: Vec<Centroid> = Vec::new();
 
@@ -172,16 +166,16 @@ impl<'input> TimescaleTDigest<'input> {
             cents.push(Centroid::new(self.means[i], self.weights[i] as f64));
         }
 
-        TDigest::new(cents, *self.sum, *self.count as f64, *self.max, *self.0.min, *self.buckets as usize)
+        InternalTDigest::new(cents, *self.sum, *self.count as f64, *self.max, *self.0.min, *self.buckets as usize)
     }
 }
 
-// PG function to generate a user-facing TimescaleTDigest object from an internal TDigestTransState.
+// PG function to generate a user-facing TDigest object from an internal TDigestTransState.
 #[pg_extern]
 fn tdigest_final(
     state: Option<Internal<TDigestTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<TimescaleTDigest<'static>> {
+) -> Option<TDigest<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let mut state = match state {
@@ -204,7 +198,7 @@ fn tdigest_final(
             // we need to flatten the vector to a single buffer that contains
             // both the size, the data, and the varlen header
             flatten!(
-                TimescaleTDigest {
+                TDigest {
                     buckets: &buckets,
                     count: &count,
                     sum: &state.digested.sum(),
@@ -218,12 +212,34 @@ fn tdigest_final(
     }
 }
 
+extension_sql!(r#"
+CREATE OR REPLACE FUNCTION TDigest_in(cstring) RETURNS TDigest IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C AS 'MODULE_PATHNAME', 'tdigest_in_wrapper';
+CREATE OR REPLACE FUNCTION TDigest_out(TDigest) RETURNS CString IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C AS 'MODULE_PATHNAME', 'tdigest_out_wrapper';
+
+CREATE TYPE TDigest (
+    INTERNALLENGTH = variable,
+    INPUT = TDigest_in,
+    OUTPUT = TDigest_out,
+    STORAGE = extended
+);
+
+CREATE AGGREGATE tdigest(size int, value DOUBLE PRECISION)
+(
+    sfunc=tdigest_trans,
+    stype=internal,
+    finalfunc=tdigest_final,
+    combinefunc=tdigest_combine,
+    serialfunc = tdigest_serialize,
+    deserialfunc = tdigest_deserialize
+);
+"#);
+
 //---- Available PG operations on the digest
 
 // Approximate the value at the given quantile (0.0-1.0)
 #[pg_extern]
 pub fn tdigest_quantile(
-    digest: TimescaleTDigest,
+    digest: TDigest,
     quantile: f64,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
@@ -233,7 +249,7 @@ pub fn tdigest_quantile(
 // Approximate the quantile at the given value
 #[pg_extern]
 pub fn tdigest_quantile_at_value(
-    digest: TimescaleTDigest,
+    digest: TDigest,
     value: f64,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
@@ -243,7 +259,7 @@ pub fn tdigest_quantile_at_value(
 // Number of elements from which the digest was built.
 #[pg_extern]
 pub fn tdigest_count(
-    digest: TimescaleTDigest,
+    digest: TDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
     *digest.count as f64
@@ -252,7 +268,7 @@ pub fn tdigest_count(
 // Minimum value entered in the digest.
 #[pg_extern]
 pub fn tdigest_min(
-    digest: TimescaleTDigest,
+    digest: TDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
     *digest.min
@@ -261,7 +277,7 @@ pub fn tdigest_min(
 // Maximum value entered in the digest.
 #[pg_extern]
 pub fn tdigest_max(
-    digest: TimescaleTDigest,
+    digest: TDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
     *digest.max
@@ -271,7 +287,7 @@ pub fn tdigest_max(
 // Note that this is not an approximation, though there may be loss of precision.
 #[pg_extern]
 pub fn tdigest_mean(
-    digest: TimescaleTDigest,
+    digest: TDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
     if *digest.count > 0 {
@@ -284,7 +300,7 @@ pub fn tdigest_mean(
 // Sum of all the values entered in the digest.
 #[pg_extern]
 pub fn tdigest_sum(
-    digest: TimescaleTDigest,
+    digest: TDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
     *digest.sum
@@ -305,7 +321,7 @@ mod tests {
     }
 
     #[pg_test]
-    fn test_aggregate() {
+    fn test_tdigest_aggregate() {
         Spi::execute(|client| {
             client.select("CREATE TABLE test (data DOUBLE PRECISION)", None, None);
             client.select("INSERT INTO test SELECT generate_series(0.01, 100, 0.01)", None, None);
@@ -316,9 +332,9 @@ mod tests {
                 .get_one::<i32>();
             assert_eq!(10000, sanity.unwrap());
 
-            client.select("CREATE VIEW digest AS SELECT t_digest(100, data) FROM test", None, None);
+            client.select("CREATE VIEW digest AS SELECT tdigest(100, data) FROM test", None, None);
             let (min, max, count) = client
-                .select("SELECT tdigest_min(t_digest), tdigest_max(t_digest), tdigest_count(t_digest) FROM digest", None, None)
+                .select("SELECT tdigest_min(tdigest), tdigest_max(tdigest), tdigest_count(tdigest) FROM digest", None, None)
                 .first()
                 .get_three::<f64, f64, f64>();
 
@@ -327,7 +343,7 @@ mod tests {
             apx_eql(count.unwrap(), 10000.0, 0.000001);
 
             let (mean, sum) = client
-                .select("SELECT tdigest_mean(t_digest), tdigest_sum(t_digest) FROM digest", None, None)
+                .select("SELECT tdigest_mean(tdigest), tdigest_sum(tdigest) FROM digest", None, None)
                 .first()
                 .get_two::<f64, f64>();
 
@@ -339,7 +355,7 @@ mod tests {
                 let quantile = value / 100.0;
 
                 let (est_val, est_quant) = client
-                    .select(&format!("SELECT tdigest_quantile(t_digest, {}), tdigest_quantile_at_value(t_digest, {}) FROM digest", quantile, value), None, None)
+                    .select(&format!("SELECT tdigest_quantile(tdigest, {}), tdigest_quantile_at_value(tdigest, {}) FROM digest", quantile, value), None, None)
                     .first()
                     .get_two::<f64, f64>();
 

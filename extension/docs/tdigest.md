@@ -20,25 +20,25 @@ For this example we're going to start with a table containing some NOAA weather 
 ```SQL
 timescale_analytics=# \d weather;
                          Table "public.weather"
- Column  |            Type             | Collation | Nullable | Default 
+ Column  |            Type             | Collation | Nullable | Default
 ---------+-----------------------------+-----------+----------+---------
- station | text                        |           |          | 
- name    | text                        |           |          | 
- date    | timestamp without time zone |           |          | 
- prcp    | double precision            |           |          | 
- snow    | double precision            |           |          | 
- tavg    | double precision            |           |          | 
- tmax    | double precision            |           |          | 
- tmin    | double precision            |           |          | 
+ station | text                        |           |          |
+ name    | text                        |           |          |
+ date    | timestamp without time zone |           |          |
+ prcp    | double precision            |           |          |
+ snow    | double precision            |           |          |
+ tavg    | double precision            |           |          |
+ tmax    | double precision            |           |          |
+ tmin    | double precision            |           |          |
 ```
 
 Now let's create some t-digests for our different stations and verify that they're receiving data.
 
 ```SQL
-timescale_analytics=# CREATE VIEW high_temp AS SELECT name, t_digest(100, tmax) FROM weather GROUP BY name;
+timescale_analytics=# CREATE VIEW high_temp AS SELECT name, tdigest(100, tmax) FROM weather GROUP BY name;
 CREATE VIEW
-timescale_analytics=# SELECT name, tdigest_count(t_digest) FROM high_temp;
-                 name                  | tdigest_count 
+timescale_analytics=# SELECT name, tdigest_count(tdigest) FROM high_temp;
+                 name                  | tdigest_count
 ---------------------------------------+---------------
  PORTLAND INTERNATIONAL AIRPORT, OR US |          7671
  LITCHFIELD PARK, AZ US                |          5881
@@ -49,8 +49,8 @@ timescale_analytics=# SELECT name, tdigest_count(t_digest) FROM high_temp;
 
 We can then check to see the 99.5 percentile high temperature for each location.
 ```SQL
-timescale_analytics=# SELECT name, tdigest_quantile(t_digest, 0.995) FROM high_temp;
-                 name                  |  tdigest_quantile  
+timescale_analytics=# SELECT name, tdigest_quantile(tdigest, 0.995) FROM high_temp;
+                 name                  |  tdigest_quantile
 ---------------------------------------+--------------------
  PORTLAND INTERNATIONAL AIRPORT, OR US |   98.4390837104072
  LITCHFIELD PARK, AZ US                | 114.97809722222223
@@ -60,8 +60,8 @@ timescale_analytics=# SELECT name, tdigest_quantile(t_digest, 0.995) FROM high_t
 ```
 Or even check to see what quantile 90F would fall at in each city.
 ```SQL
-timescale_analytics=# SELECT name, tdigest_quantile_at_value(t_digest, 90.0) FROM high_temp;
-                 name                  | tdigest_quantile_at_value 
+timescale_analytics=# SELECT name, tdigest_quantile_at_value(tdigest, 90.0) FROM high_temp;
+                 name                  | tdigest_quantile_at_value
 ---------------------------------------+---------------------------
  PORTLAND INTERNATIONAL AIRPORT, OR US |        0.9609990016734108
  LITCHFIELD PARK, AZ US                |        0.5531621580122781
@@ -71,7 +71,7 @@ timescale_analytics=# SELECT name, tdigest_quantile_at_value(t_digest, 90.0) FRO
 ```
 
 ## Command List (A-Z) [](tdigest-api)
-> - [t_digest](#t_digest)
+> - [tdigest](#tdigest)
 > - [tdigest_count](#tdigest_count)
 > - [tdigest_max](#tdigest_max)
 > - [tdigest_mean](#tdigest_mean)
@@ -82,17 +82,17 @@ timescale_analytics=# SELECT name, tdigest_quantile_at_value(t_digest, 90.0) FRO
 
 
 ---
-## **t_digest** [](t_digest)
+## **tdigest** [](tdigest)
 ```SQL
-t_digest(
+tdigest(
     buckets INTEGER,
     value DOUBLE PRECISION
-) RETURNS TimescaleTDigest 
+) RETURNS TDigest
 ```
 
 This will construct and return a TDigest with the specified number of buckets over the given values.
 
-### Required Arguments [](t_digest-required-arguments)
+### Required Arguments [](tdigest-required-arguments)
 |Name| Type |Description|
 |---|---|---|
 | `buckets` | `INTEGER` | Number of buckets in the digest.  Increasing this will provide more accurate quantile estimates, but will require more memory.|
@@ -103,20 +103,20 @@ This will construct and return a TDigest with the specified number of buckets ov
 
 |Column|Type|Description|
 |---|---|---|
-| `t_digest` | `TimescaleTDigest` | A t-digest object which may be passed to other t-digest APIs. |
+| `tdigest` | `TDigest` | A t-digest object which may be passed to other t-digest APIs. |
 <br>
 
-### Sample Usages [](t_digest-examples)
+### Sample Usages [](tdigest-examples)
 For this examples assume we have a table 'samples' with a column 'weights' holding `DOUBLE PRECISION` values.  The following will simply return a digest over that column
 
 ```SQL
-SELECT t_digest(100, weight) FROM samples;
+SELECT tdigest(100, weight) FROM samples;
 ```
 
 It may be more useful to build a view from the aggregate that we can later pass to other tdigest functions.
 
 ```SQL
-CREATE VIEW digest AS SELECT t_digest(100, weight) FROM samples;
+CREATE VIEW digest AS SELECT tdigest(100, weight) FROM samples;
 ```
 
 ---
@@ -124,7 +124,7 @@ CREATE VIEW digest AS SELECT t_digest(100, weight) FROM samples;
 ## **tdigest_min** [](tdigest_min)
 
 ```SQL
-tdigest_min(digest TimescaleTDigest) RETURNS DOUBLE PRECISION
+tdigest_min(digest TDigest) RETURNS DOUBLE PRECISION
 ```
 
 Get the minimum value from a t-digest.
@@ -132,7 +132,7 @@ Get the minimum value from a t-digest.
 ### Required Arguments [](tdigest_min-required-arguments)
 |Name|Type|Description|
 |---|---|---|
-| `digest` | `TimescaleTDigest` | The digest to extract the min value from. |
+| `digest` | `TDigest` | The digest to extract the min value from. |
 <br>
 
 ### Returns
@@ -145,13 +145,13 @@ Get the minimum value from a t-digest.
 ### Sample Usage [](tdigest_min-examples)
 
 ```SQL
-SELECT tdigest_min(t_digest) FROM digest;
+SELECT tdigest_min(tdigest) FROM digest;
 ```
 ---
 ## **tdigest_max** [](tdigest_max)
 
 ```SQL
-tdigest_max(digest TimescaleTDigest) RETURNS DOUBLE PRECISION
+tdigest_max(digest TDigest) RETURNS DOUBLE PRECISION
 ```
 
 Get the maximum value from a t-digest.
@@ -159,7 +159,7 @@ Get the maximum value from a t-digest.
 ### Required Arguments [](tdigest_max-required-arguments)
 |Name|Type|Description|
 |---|---|---|
-| `digest` | `TimescaleTDigest` | The digest to extract the max value from. |
+| `digest` | `TDigest` | The digest to extract the max value from. |
 <br>
 
 ### Returns
@@ -171,13 +171,13 @@ Get the maximum value from a t-digest.
 ### Sample Usage [](tdigest_max-examples)
 
 ```SQL
-SELECT tdigest_max(t_digest) FROM digest;
+SELECT tdigest_max(tdigest) FROM digest;
 ```
 ---
 ## **tdigest_count** [](tdigest_count)
 
 ```SQL
-tdigest_count(digest TimescaleTDigest) RETURNS DOUBLE PRECISION
+tdigest_count(digest TDigest) RETURNS DOUBLE PRECISION
 ```
 
 Get the number of values contained in a t-digest.
@@ -185,7 +185,7 @@ Get the number of values contained in a t-digest.
 ### Required Arguments [](tdigest_count-required-arguments)
 |Name|Type|Description|
 |---|---|---|
-| `digest` | `TimescaleTDigest` | The digest to extract the number of values from. |
+| `digest` | `TDigest` | The digest to extract the number of values from. |
 <br>
 
 ### Returns
@@ -197,14 +197,14 @@ Get the number of values contained in a t-digest.
 ### Sample Usage [](tdigest_count-examples)
 
 ```SQL
-SELECT tdigest_count(t_digest) FROM digest;
+SELECT tdigest_count(tdigest) FROM digest;
 ```
 
 ---
 ## **tdigest_mean** [](tdigest_mean)
 
 ```SQL
-tdigest_mean(digest TimescaleTDigest) RETURNS DOUBLE PRECISION
+tdigest_mean(digest TDigest) RETURNS DOUBLE PRECISION
 ```
 
 Get the average of all the values contained in a t-digest.
@@ -212,7 +212,7 @@ Get the average of all the values contained in a t-digest.
 ### Required Arguments [](tdigest_mean-required-arguments)
 |Name|Type|Description|
 |---|---|---|
-| `digest` | `TimescaleTDigest` |  The digest to extract the mean value from. |
+| `digest` | `TDigest` |  The digest to extract the mean value from. |
 <br>
 
 ### Returns
@@ -224,14 +224,14 @@ Get the average of all the values contained in a t-digest.
 ### Sample Usage [](tdigest_mean-examples)
 
 ```SQL
-SELECT tdigest_mean(t_digest) FROM digest;
+SELECT tdigest_mean(tdigest) FROM digest;
 ```
 
 ---
 ## **tdigest_sum** [](tdigest_sum)
 
 ```SQL
-tdigest_sum(digest TimescaleTDigest) RETURNS DOUBLE PRECISION
+tdigest_sum(digest TDigest) RETURNS DOUBLE PRECISION
 ```
 
 Get the sum of all the values in a t-digest
@@ -239,7 +239,7 @@ Get the sum of all the values in a t-digest
 ### Required Arguments [](tdigest_sum-required-arguments)
 |Name|Type|Description|
 |---|---|---|
-| `digest` | `TimescaleTDigest` |  The digest to compute the sum on. |
+| `digest` | `TDigest` |  The digest to compute the sum on. |
 <br>
 
 ### Returns
@@ -251,7 +251,7 @@ Get the sum of all the values in a t-digest
 ### Sample Usage [](tdigest_sum-examples)
 
 ```SQL
-SELECT tdigest_sum(t_digest) FROM digest;
+SELECT tdigest_sum(tdigest) FROM digest;
 ```
 
 ---
@@ -261,7 +261,7 @@ SELECT tdigest_sum(t_digest) FROM digest;
 tdigest_quantile(
     digest TimescaleTDiges,
     quantile DOUBLE PRECISION
-) RETURNS TimescaleTDigest 
+) RETURNS TDigest
 ```
 
 Get an approximate quantile from a t-digest
@@ -269,7 +269,7 @@ Get an approximate quantile from a t-digest
 ### Required Arguments [](tdigest_quantile-required-arguments)
 |Name|Type|Description|
 |---|---|---|
-| `digest` | `TimescaleTDigest` | The digest to compute the quantile on. |
+| `digest` | `TDigest` | The digest to compute the quantile on. |
 | `quantile` | `DOUBLE PRECISION` | The desired quantile (0.0-1.0) to approximate. |
 <br>
 
@@ -282,7 +282,7 @@ Get an approximate quantile from a t-digest
 ### Sample Usage [](tdigest_quantile-examples)
 
 ```SQL
-SELECT tdigest_quantile(t_digest, 0.995) FROM digest;
+SELECT tdigest_quantile(tdigest, 0.995) FROM digest;
 ```
 
 ---
@@ -292,7 +292,7 @@ SELECT tdigest_quantile(t_digest, 0.995) FROM digest;
 tdigest_quantile_at_value(
     digest TimescaleTDiges,
     value DOUBLE PRECISION
-) RETURNS TimescaleTDigest 
+) RETURNS TDigest
 ```
 
 Estimate what quantile given value would be located at in a t-digest.
@@ -300,7 +300,7 @@ Estimate what quantile given value would be located at in a t-digest.
 ### Required Arguments [](tdigest_quantile_at_value-required-arguments)
 |Name|Type|Description|
 |---|---|---|
-| `digest` | `TimescaleTDigest` | The digest to compute the quantile on. |
+| `digest` | `TDigest` | The digest to compute the quantile on. |
 | `value` | `DOUBLE PRECISION` |  The value to estimate the quantile of. |
 <br>
 
@@ -313,5 +313,5 @@ Estimate what quantile given value would be located at in a t-digest.
 ### Sample Usage [](tdigest_quantile_at_value-examples)
 
 ```SQL
-SELECT tdigest_quantile_at_value(t_digest, 500.0) FROM digest;
+SELECT tdigest_quantile_at_value(tdigest, 500.0) FROM digest;
 ```

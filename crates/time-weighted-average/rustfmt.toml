@@ -1,0 +1,5 @@
+unstable_features = true
+indent_style = "Visual"
+fn_args_layout = "Compressed"
+struct_field_align_threshold = 20
+use_small_heuristics = "Max"

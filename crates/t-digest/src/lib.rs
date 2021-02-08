@@ -133,7 +133,7 @@ impl TDigest {
         } else {
             let sz = centroids.len();
             let digests: Vec<TDigest> = vec![
-                TDigest::new_with_size(100),
+                TDigest::new_with_size(max_size),
                 TDigest::new(centroids, sum, count, max, min, sz),
             ];
 
@@ -364,6 +364,7 @@ impl TDigest {
             return TDigest::default();
         }
 
+        // TODO should this be the smaller of the sizes?
         let max_size = digests.first().unwrap().max_size;
         let mut centroids: Vec<Centroid> = Vec::with_capacity(n_centroids);
         let mut starts: Vec<usize> = Vec::with_capacity(digests.len());

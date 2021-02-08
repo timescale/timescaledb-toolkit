@@ -186,6 +186,11 @@ impl TDigest {
     pub fn max_size(&self) -> usize {
         self.max_size
     }
+
+    #[inline]
+    pub fn num_buckets(&self) -> usize {
+        self.centroids.len()
+    }
 }
 
 impl Default for TDigest {
@@ -776,5 +781,23 @@ mod tests {
             let percentage = (test - quantile).abs() / quantile;
             assert!(percentage < 0.001);
         }
+    }
+
+    #[test]
+    fn test_buffered_merge() {
+        let mut digested = TDigest::new_with_size(100);
+        let mut buffer = vec![];
+        for i in 1..=100 {
+            buffer.push(i as f64);
+            if buffer.len() >= digested.max_size() {
+                let new = std::mem::replace(&mut buffer, vec![]);
+                digested = digested.merge_unsorted(new)
+            }
+        }
+        if !buffer.is_empty() {
+            digested = digested.merge_unsorted(buffer)
+        }
+        let estimate = digested.estimate_quantile(0.99);
+        assert_eq!(estimate, 99.5);
     }
 }

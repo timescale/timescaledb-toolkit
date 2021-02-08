@@ -1,7 +1,6 @@
 
 use std::{
     convert::TryInto,
-    cmp::min,
     mem::replace,
     slice,
 };
@@ -150,8 +149,9 @@ pg_type! {
         sum: f64,
         min: f64,
         max: f64,
-        means: [f64; std::cmp::min(self.buckets, self.count)],
-        weights: [u32; std::cmp::min(self.buckets, self.count)],
+        means: [f64; self.buckets],
+        weights: [f64; self.buckets],
+        max_buckets: u32,
     }
 }
 
@@ -159,14 +159,13 @@ debug_inout_funcs!(TDigest);
 
 impl<'input> TDigest<'input> {
     fn to_tdigest(&self) -> InternalTDigest {
-        let size = min(*self.buckets, *self.count) as usize;
-        let mut cents: Vec<Centroid> = Vec::new();
+        let mut cents: Vec<Centroid> = Vec::with_capacity(*self.buckets as _);
 
-        for i in 0..size {
+        for i in 0..*self.buckets as usize {
             cents.push(Centroid::new(self.means[i], self.weights[i] as f64));
         }
 
-        InternalTDigest::new(cents, *self.sum, *self.count as f64, *self.max, *self.0.min, *self.buckets as usize)
+        InternalTDigest::new(cents, *self.sum, *self.count as f64, *self.max, *self.0.min, *self.max_buckets as usize)
     }
 }
 
@@ -184,22 +183,20 @@ fn tdigest_final(
             };
             state.digest();
 
-            let buckets : u32 = state.digested.max_size().try_into().unwrap();
+            let max_buckets: u32 = state.digested.max_size().try_into().unwrap();
             let count = state.digested.count() as u32;
-            let vec_size = min(buckets as usize, count as usize);
-            let mut means = vec!(0.0; vec_size);
-            let mut weights = vec!(0; vec_size);
 
-            for (i, cent) in state.digested.raw_centroids().iter().enumerate() {
-                means[i] = cent.mean();
-                weights[i] = cent.weight() as u32;
-            }
+            let (means, weights): (Vec<_>, Vec<_>) = state.digested.raw_centroids()
+                .iter()
+                .map(|c| (c.mean(), c.weight()))
+                .unzip();
 
             // we need to flatten the vector to a single buffer that contains
             // both the size, the data, and the varlen header
             flatten!(
                 TDigest {
-                    buckets: &buckets,
+                    max_buckets: &max_buckets,
+                    buckets: &(means.len() as u32),
                     count: &count,
                     sum: &state.digested.sum(),
                     min: &state.digested.min(),
@@ -367,6 +364,17 @@ mod tests {
                     pct_eql(est_quant.unwrap(), quantile, 1.0);
                 }
             }
+        });
+    }
+
+    #[pg_test]
+    fn test_tdigest_small_count() {
+        Spi::execute(|client| {
+            let estimate = client.select("SELECT tdigest_quantile(tdigest(100, data), 0.99) FROM generate_series(1, 100) data;", None, None)
+                .first()
+                .get_one();
+
+            assert_eq!(estimate, Some(99.5));
         });
     }
 }

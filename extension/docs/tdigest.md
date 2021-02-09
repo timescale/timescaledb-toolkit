@@ -110,13 +110,13 @@ This will construct and return a TDigest with the specified number of buckets ov
 For this examples assume we have a table 'samples' with a column 'weights' holding `DOUBLE PRECISION` values.  The following will simply return a digest over that column
 
 ```SQL
-SELECT tdigest(100, weight) FROM samples;
+SELECT tdigest(100, data) FROM samples;
 ```
 
 It may be more useful to build a view from the aggregate that we can later pass to other tdigest functions.
 
 ```SQL
-CREATE VIEW digest AS SELECT tdigest(100, weight) FROM samples;
+CREATE VIEW digest AS SELECT tdigest(100, data) FROM samples;
 ```
 
 ---
@@ -142,10 +142,14 @@ Get the minimum value from a t-digest.
 | `tdigest_min` | `DOUBLE PRECISION` | The minimum value entered into the t-digest. |
 <br>
 
-### Sample Usage [](tdigest_min-examples)
+### Sample Usages [](tdigest-min-examples)
 
 ```SQL
-SELECT tdigest_min(tdigest) FROM digest;
+SELECT tdigest_min(tdigest(100, data)) FROM generate_series(1, 100) data;
+ tdigest_min
+-------------
+           1
+(1 row)
 ```
 ---
 ## **tdigest_max** [](tdigest_max)
@@ -171,7 +175,11 @@ Get the maximum value from a t-digest.
 ### Sample Usage [](tdigest_max-examples)
 
 ```SQL
-SELECT tdigest_max(tdigest) FROM digest;
+SELECT tdigest_max(tdigest(100, data)) FROM generate_series(1, 100) data;
+ tdigest_max
+-------------
+         100
+(1 row)
 ```
 ---
 ## **tdigest_count** [](tdigest_count)
@@ -197,7 +205,11 @@ Get the number of values contained in a t-digest.
 ### Sample Usage [](tdigest_count-examples)
 
 ```SQL
-SELECT tdigest_count(tdigest) FROM digest;
+SELECT tdigest_count(tdigest(100, data)) FROM generate_series(1, 100) data;
+ tdigest_count
+---------------
+           100
+(1 row)
 ```
 
 ---
@@ -224,7 +236,11 @@ Get the average of all the values contained in a t-digest.
 ### Sample Usage [](tdigest_mean-examples)
 
 ```SQL
-SELECT tdigest_mean(tdigest) FROM digest;
+SELECT tdigest_mean(tdigest(100, data)) FROM generate_series(1, 100) data;
+ tdigest_mean
+--------------
+         50.5
+(1 row)
 ```
 
 ---
@@ -251,7 +267,11 @@ Get the sum of all the values in a t-digest
 ### Sample Usage [](tdigest_sum-examples)
 
 ```SQL
-SELECT tdigest_sum(tdigest) FROM digest;
+SELECT tdigest_sum(tdigest(100, data)) FROM generate_series(1, 100) data;
+ tdigest_sum
+-------------
+        5050
+(1 row)
 ```
 
 ---
@@ -264,7 +284,7 @@ tdigest_quantile(
 ) RETURNS TDigest
 ```
 
-Get an approximate quantile from a t-digest
+Get the approximate value at a quantile from a t-digest
 
 ### Required Arguments [](tdigest_quantile-required-arguments)
 |Name|Type|Description|
@@ -282,7 +302,11 @@ Get an approximate quantile from a t-digest
 ### Sample Usage [](tdigest_quantile-examples)
 
 ```SQL
-SELECT tdigest_quantile(tdigest, 0.995) FROM digest;
+SELECT tdigest_quantile(tdigest(100, data), 0.90) FROM generate_series(1, 100) data;
+ tdigest_quantile
+------------------
+             90.5
+(1 row)
 ```
 
 ---
@@ -295,7 +319,7 @@ tdigest_quantile_at_value(
 ) RETURNS TDigest
 ```
 
-Estimate what quantile given value would be located at in a t-digest.
+Estimate what quantile a given value would be located at in a t-digest.
 
 ### Required Arguments [](tdigest_quantile_at_value-required-arguments)
 |Name|Type|Description|
@@ -313,5 +337,9 @@ Estimate what quantile given value would be located at in a t-digest.
 ### Sample Usage [](tdigest_quantile_at_value-examples)
 
 ```SQL
-SELECT tdigest_quantile_at_value(tdigest, 500.0) FROM digest;
+SELECT tdigest_quantile_at_value(tdigest(100, data), 90) FROM generate_series(1, 100) data;
+ tdigest_quantile_at_value
+---------------------------
+                     0.895
+(1 row)
 ```

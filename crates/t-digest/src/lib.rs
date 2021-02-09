@@ -40,6 +40,7 @@ use serde::{Deserialize, Serialize};
 /// Centroid implementation to the cluster mentioned in the paper.
 #[derive(Debug, PartialEq, Eq, Clone)]
 #[cfg_attr(feature = "use_serde", derive(Serialize, Deserialize))]
+#[repr(C)]
 pub struct Centroid {
     mean: OrderedFloat<f64>,
     weight: OrderedFloat<f64>,

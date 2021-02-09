@@ -149,8 +149,7 @@ pg_type! {
         sum: f64,
         min: f64,
         max: f64,
-        means: [f64; self.buckets],
-        weights: [f64; self.buckets],
+        centroids: [Centroid; self.buckets],
         max_buckets: u32,
     }
 }
@@ -159,13 +158,14 @@ debug_inout_funcs!(TDigest);
 
 impl<'input> TDigest<'input> {
     fn to_tdigest(&self) -> InternalTDigest {
-        let mut cents: Vec<Centroid> = Vec::with_capacity(*self.buckets as _);
-
-        for i in 0..*self.buckets as usize {
-            cents.push(Centroid::new(self.means[i], self.weights[i] as f64));
-        }
-
-        InternalTDigest::new(cents, *self.sum, *self.count as f64, *self.max, *self.0.min, *self.max_buckets as usize)
+        InternalTDigest::new(
+            Vec::from(self.centroids),
+            *self.sum,
+            *self.count as f64,
+            *self.max,
+            *self.0.min,
+            *self.max_buckets as usize
+        )
     }
 }
 
@@ -186,23 +186,19 @@ fn tdigest_final(
             let max_buckets: u32 = state.digested.max_size().try_into().unwrap();
             let count = state.digested.count() as u32;
 
-            let (means, weights): (Vec<_>, Vec<_>) = state.digested.raw_centroids()
-                .iter()
-                .map(|c| (c.mean(), c.weight()))
-                .unzip();
+            let centroids = state.digested.raw_centroids();
 
             // we need to flatten the vector to a single buffer that contains
             // both the size, the data, and the varlen header
             flatten!(
                 TDigest {
                     max_buckets: &max_buckets,
-                    buckets: &(means.len() as u32),
+                    buckets: &(centroids.len() as u32),
                     count: &count,
                     sum: &state.digested.sum(),
                     min: &state.digested.min(),
                     max: &state.digested.max(),
-                    means: &means,
-                    weights: &weights,
+                    centroids: &centroids,
                 }
             ).into()
         })

@@ -3,7 +3,7 @@ macro_rules! pg_type {
     (
         $(#[$attrs: meta])?
         struct $name: ident {
-            $($field:ident : $typ: tt),*
+            $($(#[$fattrs: meta])* $field:ident : $typ: tt),*
             $(,)?
         }
     ) => {
@@ -17,11 +17,15 @@ macro_rules! pg_type {
 
             flat_serialize_macro::flat_serialize! {
                 $(#[$attrs])?
+                #[derive(serde::Serialize, serde::Deserialize)]
                 struct [<$name Data>] {
+                    #[serde(skip, default="crate::serialization::serde_reference_adaptor::default_header")]
                     header: u32,
+                    #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]
                     version: u8,
+                    #[serde(skip, default="crate::serialization::serde_reference_adaptor::default_padding")]
                     padding: [u8; 3],
-                    $($field: $typ),*
+                    $($(#[$fattrs])* $field: $typ),*
                 }
             }
 
@@ -36,7 +40,7 @@ macro_rules! pg_type {
                     let mut output = vec![];
                     self.fill_vec(&mut output);
                     unsafe {
-                        set_varsize(output.as_mut_ptr() as *mut _, output.len() as i32);
+                        ::pgx::set_varsize(output.as_mut_ptr() as *mut _, output.len() as i32);
                     }
                     &*output.leak()
                 }
@@ -107,20 +111,36 @@ macro_rules! pg_type {
 }
 
 #[macro_export]
-macro_rules! debug_inout_funcs {
+macro_rules! json_inout_funcs {
     ($name:ident) => {
         impl<'input> InOutFuncs for $name<'input> {
             fn output(&self, buffer: &mut StringInfo) {
-                use std::io::Write;
-                let _ = write!(buffer, "{:?}", &self.0);
+                use $crate::serialization::{EncodedStr::*, str_to_db_encoding};
+
+                let stringified = serde_json::to_string(&**self).unwrap();
+                match str_to_db_encoding(&stringified) {
+                    Utf8(s) => buffer.push_str(s),
+                    Other(s) => buffer.push_bytes(s.to_bytes()),
+                }
             }
 
-            fn input(_input: &std::ffi::CStr) -> Self
+            fn input(input: &std::ffi::CStr) -> Self
             where
                 Self: Sized,
             {
-                //FIXME we need input for dump/restore
-                unimplemented!(concat!("no valid TEXT input for ", stringify!($name)))
+                use $crate::serialization::str_from_db_encoding;
+
+                // SAFETY our serde shims will allocate and leak copies of all
+                // the data, so the lifetimes of the borrows aren't actually
+                // relevant to the output lifetime
+                let val = unsafe {
+                    unsafe fn extend_lifetime(s: &str) -> &'static str {
+                        std::mem::transmute(s)
+                    }
+                    let input = extend_lifetime(str_from_db_encoding(input));
+                    serde_json::from_str(input).unwrap()
+                };
+                unsafe { Self(val, None).flatten() }
             }
         }
     };

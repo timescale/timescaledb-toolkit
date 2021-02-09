@@ -14,7 +14,7 @@ use flat_serialize::*;
 
 use crate::{
     aggregate_utils::in_aggregate_context,
-    debug_inout_funcs,
+    json_inout_funcs,
     flatten,
     palloc::Internal, pg_type
 };
@@ -144,17 +144,24 @@ CREATE TYPE TDigest;
 pg_type! {
     #[derive(Debug)]
     struct TDigest {
+        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]
         buckets: u32,
+        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]
         count: u32,
+        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]
         sum: f64,
+        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]
         min: f64,
+        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]
         max: f64,
+        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize_slice")]
         centroids: [Centroid; self.buckets],
+        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]
         max_buckets: u32,
     }
 }
 
-debug_inout_funcs!(TDigest);
+json_inout_funcs!(TDigest);
 
 impl<'input> TDigest<'input> {
     fn to_tdigest(&self) -> InternalTDigest {
@@ -371,6 +378,24 @@ mod tests {
                 .get_one();
 
             assert_eq!(estimate, Some(99.5));
+        });
+    }
+
+    #[pg_test]
+    fn test_tdigest_io() {
+        Spi::execute(|client| {
+            let output = client.select("SELECT tdigest(100, data)::text FROM generate_series(1, 100) data;", None, None)
+                .first()
+                .get_one::<String>();
+
+            let expected = "{\"version\":1,\"buckets\":88,\"count\":100,\"sum\":5050.0,\"min\":1.0,\"max\":100.0,\"centroids\":[{\"mean\":1.0,\"weight\":1.0},{\"mean\":2.0,\"weight\":1.0},{\"mean\":3.0,\"weight\":1.0},{\"mean\":4.0,\"weight\":1.0},{\"mean\":5.0,\"weight\":1.0},{\"mean\":6.0,\"weight\":1.0},{\"mean\":7.0,\"weight\":1.0},{\"mean\":8.0,\"weight\":1.0},{\"mean\":9.0,\"weight\":1.0},{\"mean\":10.0,\"weight\":1.0},{\"mean\":11.0,\"weight\":1.0},{\"mean\":12.0,\"weight\":1.0},{\"mean\":13.0,\"weight\":1.0},{\"mean\":14.0,\"weight\":1.0},{\"mean\":15.0,\"weight\":1.0},{\"mean\":16.0,\"weight\":1.0},{\"mean\":17.0,\"weight\":1.0},{\"mean\":18.0,\"weight\":1.0},{\"mean\":19.0,\"weight\":1.0},{\"mean\":20.0,\"weight\":1.0},{\"mean\":21.0,\"weight\":1.0},{\"mean\":22.0,\"weight\":1.0},{\"mean\":23.0,\"weight\":1.0},{\"mean\":24.0,\"weight\":1.0},{\"mean\":25.0,\"weight\":1.0},{\"mean\":26.0,\"weight\":1.0},{\"mean\":27.0,\"weight\":1.0},{\"mean\":28.0,\"weight\":1.0},{\"mean\":29.0,\"weight\":1.0},{\"mean\":30.0,\"weight\":1.0},{\"mean\":31.0,\"weight\":1.0},{\"mean\":32.0,\"weight\":1.0},{\"mean\":33.0,\"weight\":1.0},{\"mean\":34.0,\"weight\":1.0},{\"mean\":35.0,\"weight\":1.0},{\"mean\":36.0,\"weight\":1.0},{\"mean\":37.0,\"weight\":1.0},{\"mean\":38.0,\"weight\":1.0},{\"mean\":39.0,\"weight\":1.0},{\"mean\":40.0,\"weight\":1.0},{\"mean\":41.0,\"weight\":1.0},{\"mean\":42.0,\"weight\":1.0},{\"mean\":43.0,\"weight\":1.0},{\"mean\":44.0,\"weight\":1.0},{\"mean\":45.0,\"weight\":1.0},{\"mean\":46.0,\"weight\":1.0},{\"mean\":47.0,\"weight\":1.0},{\"mean\":48.0,\"weight\":1.0},{\"mean\":49.0,\"weight\":1.0},{\"mean\":50.0,\"weight\":1.0},{\"mean\":51.0,\"weight\":1.0},{\"mean\":52.5,\"weight\":2.0},{\"mean\":54.5,\"weight\":2.0},{\"mean\":56.5,\"weight\":2.0},{\"mean\":58.5,\"weight\":2.0},{\"mean\":60.5,\"weight\":2.0},{\"mean\":62.5,\"weight\":2.0},{\"mean\":64.0,\"weight\":1.0},{\"mean\":65.5,\"weight\":2.0},{\"mean\":67.5,\"weight\":2.0},{\"mean\":69.0,\"weight\":1.0},{\"mean\":70.5,\"weight\":2.0},{\"mean\":72.0,\"weight\":1.0},{\"mean\":73.5,\"weight\":2.0},{\"mean\":75.0,\"weight\":1.0},{\"mean\":76.0,\"weight\":1.0},{\"mean\":77.5,\"weight\":2.0},{\"mean\":79.0,\"weight\":1.0},{\"mean\":80.0,\"weight\":1.0},{\"mean\":81.5,\"weight\":2.0},{\"mean\":83.0,\"weight\":1.0},{\"mean\":84.0,\"weight\":1.0},{\"mean\":85.0,\"weight\":1.0},{\"mean\":86.0,\"weight\":1.0},{\"mean\":87.0,\"weight\":1.0},{\"mean\":88.0,\"weight\":1.0},{\"mean\":89.0,\"weight\":1.0},{\"mean\":90.0,\"weight\":1.0},{\"mean\":91.0,\"weight\":1.0},{\"mean\":92.0,\"weight\":1.0},{\"mean\":93.0,\"weight\":1.0},{\"mean\":94.0,\"weight\":1.0},{\"mean\":95.0,\"weight\":1.0},{\"mean\":96.0,\"weight\":1.0},{\"mean\":97.0,\"weight\":1.0},{\"mean\":98.0,\"weight\":1.0},{\"mean\":99.0,\"weight\":1.0},{\"mean\":100.0,\"weight\":1.0}],\"max_buckets\":100}";
+
+            assert_eq!(output, Some(expected.into()));
+
+            let estimate = client.select(&format!("SELECT tdigest_quantile('{}', 0.90)", expected), None, None)
+                .first()
+                .get_one();
+            assert_eq!(estimate, Some(90.5));
         });
     }
 }

@@ -3,6 +3,7 @@
 members = [
     "extension",
     "crates/t-digest",
+    "crates/hyperloglog",
 ]
 
 [profile.dev]

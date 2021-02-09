@@ -1,1 +1,2 @@
 tdigest.generated.sql
+hyperloglog.generated.sql

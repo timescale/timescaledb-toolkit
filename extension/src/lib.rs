@@ -1,7 +1,10 @@
 pub mod tdigest;
+pub mod hyperloglog;
+
 mod palloc;
 mod aggregate_utils;
 mod type_builder;
+mod serialization;
 
 pgx::pg_module_magic!();
 

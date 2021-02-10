@@ -16,6 +16,12 @@ use pgx::*;
 #[repr(transparent)]
 pub struct PgCollationId(pub Oid);
 
+impl PgCollationId {
+    pub fn is_invalid(&self) -> bool {
+        self.0 == pg_sys::InvalidOid
+    }
+}
+
 // FIXME upstream to pgx
 const PG_UTF8: i32 = 6;
 #[allow(non_upper_case_globals)]
@@ -68,6 +74,11 @@ impl Serialize for PgCollationId {
         S: serde::Serializer,
     {
         unsafe {
+            let mut layout: Option<(&str, &str)> = None;
+            if self.is_invalid() {
+                return layout.serialize(serializer)
+            }
+
             let tuple =
                 pg_sys::SearchSysCache1(pg_sys::SysCacheIdentifier_COLLOID as _, self.0 as _);
             if tuple.is_null() {
@@ -109,7 +120,8 @@ impl Serialize for PgCollationId {
             let collation_name = collation_name.to_str().unwrap();
 
             let qualified_name: (&str, &str) = (namespace, collation_name);
-            let res = qualified_name.serialize(serializer);
+            layout = Some(qualified_name);
+            let res = layout.serialize(serializer);
             if let Some(db_tuple) = db_tuple {
                 pg_sys::ReleaseSysCache(db_tuple);
             }
@@ -126,7 +138,12 @@ impl<'de> Deserialize<'de> for PgCollationId {
     {
         use serde::de::Error;
 
-        let (namespace, name) = <(&str, &str)>::deserialize(deserializer)?;
+        let collation = <Option<(&str, &str)>>::deserialize(deserializer)?;
+        let (namespace, name) = match collation {
+            None => return Ok(Self(0)),
+            Some(qualified_name) => qualified_name,
+        };
+
         let (namespace, name) = (
             CString::new(namespace).unwrap(),
             CString::new(name).unwrap(),
@@ -220,7 +237,7 @@ mod tests {
         let serialized = bincode::serialize(&PgCollationId(950)).unwrap();
         assert_eq!(
             serialized,
-            vec![10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111, 103, 1, 0, 0, 0, 0, 0, 0, 0, 67]
+            vec![1, 10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111, 103, 1, 0, 0, 0, 0, 0, 0, 0, 67]
         );
         let deserialized: PgCollationId = bincode::deserialize(&serialized).unwrap();
         assert_eq!(deserialized.0, 950);
@@ -240,7 +257,7 @@ mod tests {
         let serialized = bincode::serialize(&PgCollationId(951)).unwrap();
         assert_eq!(
             serialized,
-            vec![10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111, 103, 5, 0, 0, 0, 0, 0, 0, 0, 80, 79, 83, 73, 88]
+            vec![1, 10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111, 103, 5, 0, 0, 0, 0, 0, 0, 0, 80, 79, 83, 73, 88]
         );
         let deserialized: PgCollationId = bincode::deserialize(&serialized).unwrap();
         assert_eq!(deserialized.0, 951);

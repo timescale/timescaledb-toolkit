@@ -20,6 +20,9 @@ struct PallocAllocator;
 /// MemoryContext we allocate in, there doesn't seem to be way to do so that is
 /// safe in the context of postgres exceptions and doesn't incur the cost of
 /// setjmp
+// NOTE some code, for instance the JSON deserialization code in
+//      serde_reference_adaptor assumes it's ok to leak memory as postgres will
+//      clean it up
 unsafe impl GlobalAlloc for PallocAllocator {
     //FIXME allow for switching the memory context allocated in
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {

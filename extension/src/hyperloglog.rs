@@ -10,7 +10,7 @@ use flat_serialize::*;
 
 use crate::{
     aggregate_utils::{get_collation, in_aggregate_context},
-    debug_inout_funcs,
+    json_inout_funcs,
     flatten,
     palloc::Internal,
     pg_type,
@@ -118,14 +118,18 @@ pg_type!{
         // Oids are stored in postgres arrays, so it should be safe to store them
         // in our types as long as we do send/recv and in/out correctly
         // see https://github.com/postgres/postgres/blob/b8d0cda53377515ac61357ec4a60e85ca873f486/src/include/utils/array.h#L90
+        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]
         element_type: ShortTypeId,
+        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]
         collation: PgCollationId,
+        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]
         b: u32,
+        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize_slice")]
         registers: [u8; (1 as usize) << self.b],
     }
 }
 
-debug_inout_funcs!(HyperLogLog);
+json_inout_funcs!(HyperLogLog);
 
 #[pg_extern]
 fn hyperloglog_final(
@@ -334,6 +338,30 @@ impl<'de> Deserialize<'de> for DatumHashBuilder {
     }
 }
 
+#[pg_extern]
+fn test_hll_aggregate_int_manual() {
+    Spi::execute(|client| {
+        let text = client
+            .select("SELECT hyperloglog(32, v::int)::TEXT FROM generate_series(1, 100) v", None, None)
+            .first()
+            .get_one::<String>();
+
+        let expected = "{\"version\":1,\"element_type\":\"INT4\",\"collation\":null,\"b\":5,\"registers\":[6,2,6,3,7,2,5,3,2,3,4,4,0,2,2,3,1,4,2,2,2,2,3,2,2,5,1,3,3,3,3,3]}";
+        assert_eq!(text.unwrap(), expected);
+
+        let count = client
+            .select("SELECT hyperloglog_count(hyperloglog(32, v::int)) FROM generate_series(1, 100) v", None, None)
+            .first()
+            .get_one::<i32>();
+        assert_eq!(count, Some(113));
+
+        let count2 = client
+            .select(&format!("SELECT hyperloglog_count('{}')", expected), None, None)
+            .first()
+            .get_one::<i32>();
+        assert_eq!(count2, count);
+    });
+}
 
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {
@@ -346,13 +374,21 @@ mod tests {
                 .select("SELECT hyperloglog(32, v::float)::TEXT FROM generate_series(1, 100) v", None, None)
                 .first()
                 .get_one::<String>();
-            assert_eq!(text.unwrap(), "HyperLogLogData { header: 208, version: 1, padding: [0, 0, 0], element_type: ShortTypeId(701), collation: PgCollationId(0), b: 5, registers: [2, 5, 2, 3, 2, 6, 3, 2, 1, 3, 5, 3, 3, 3, 3, 3, 6, 3, 0, 4, 3, 6, 0, 2, 6, 1, 2, 9, 3, 10, 2, 2] }");
+
+            let expected = "{\"version\":1,\"element_type\":\"FLOAT8\",\"collation\":null,\"b\":5,\"registers\":[2,5,2,3,2,6,3,2,1,3,5,3,3,3,3,3,6,3,0,4,3,6,0,2,6,1,2,9,3,10,2,2]}";
+            assert_eq!(text.unwrap(), expected);
 
             let count = client
                 .select("SELECT hyperloglog_count(hyperloglog(32, v::float)) FROM generate_series(1, 100) v", None, None)
                 .first()
                 .get_one::<i32>();
             assert_eq!(count, Some(108));
+
+            let count2 = client
+                .select(&format!("SELECT hyperloglog_count('{}')", expected), None, None)
+                .first()
+                .get_one::<i32>();
+            assert_eq!(count2, count);
         });
     }
 
@@ -363,30 +399,49 @@ mod tests {
                 .select("SELECT hyperloglog(32, v::int)::TEXT FROM generate_series(1, 100) v", None, None)
                 .first()
                 .get_one::<String>();
-            assert_eq!(text.unwrap(), "HyperLogLogData { header: 208, version: 1, padding: [0, 0, 0], element_type: ShortTypeId(23), collation: PgCollationId(0), b: 5, registers: [6, 2, 6, 3, 7, 2, 5, 3, 2, 3, 4, 4, 0, 2, 2, 3, 1, 4, 2, 2, 2, 2, 3, 2, 2, 5, 1, 3, 3, 3, 3, 3] }");
+
+            let expected = "{\"version\":1,\"element_type\":\"INT4\",\"collation\":null,\"b\":5,\"registers\":[6,2,6,3,7,2,5,3,2,3,4,4,0,2,2,3,1,4,2,2,2,2,3,2,2,5,1,3,3,3,3,3]}";
+            assert_eq!(text.unwrap(), expected);
 
             let count = client
                 .select("SELECT hyperloglog_count(hyperloglog(32, v::int)) FROM generate_series(1, 100) v", None, None)
                 .first()
                 .get_one::<i32>();
             assert_eq!(count, Some(113));
+
+            let count2 = client
+                .select(&format!("SELECT hyperloglog_count('{}')", expected), None, None)
+                .first()
+                .get_one::<i32>();
+            assert_eq!(count2, count);
         });
     }
 
     #[pg_test]
     fn test_hll_aggregate_text() {
         Spi::execute(|client| {
+            use crate::serialization::PgCollationId;
+
             let text = client
                 .select("SELECT hyperloglog(32, v::text)::TEXT FROM generate_series(1, 100) v", None, None)
                 .first()
                 .get_one::<String>();
-            assert_eq!(text.unwrap(), "HyperLogLogData { header: 208, version: 1, padding: [0, 0, 0], element_type: ShortTypeId(25), collation: PgCollationId(100), b: 5, registers: [4, 2, 1, 1, 5, 2, 5, 1, 6, 5, 6, 1, 3, 3, 4, 3, 2, 3, 0, 3, 3, 5, 2, 3, 8, 5, 2, 1, 4, 1, 4, 3] }");
+
+            let default_collation = serde_json::to_string(&PgCollationId(100)).unwrap();
+            let expected = format!("{{\"version\":1,\"element_type\":\"TEXT\",\"collation\":{},\"b\":5,\"registers\":[4,2,1,1,5,2,5,1,6,5,6,1,3,3,4,3,2,3,0,3,3,5,2,3,8,5,2,1,4,1,4,3]}}", default_collation);
+            assert_eq!(text.unwrap(), expected);
 
             let count = client
-                .select("SELECT hyperloglog_count(hyperloglog(32, v::int)) FROM generate_series(1, 100) v", None, None)
+                .select("SELECT hyperloglog_count(hyperloglog(32, v::text)) FROM generate_series(1, 100) v", None, None)
                 .first()
                 .get_one::<i32>();
-            assert_eq!(count, Some(113));
+            assert_eq!(count, Some(106));
+
+            let count2 = client
+                .select(&format!("SELECT hyperloglog_count('{}')", expected), None, None)
+                .first()
+                .get_one::<i32>();
+            assert_eq!(count2, count);
         });
     }
 

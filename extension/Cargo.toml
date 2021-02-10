@@ -26,11 +26,11 @@ paste = "1.0"
 
 [dependencies.flat_serialize]
 git = "https://github.com/JLockerman/flat_serialize"
-rev = "fcf4593"
+rev = "9e2582d"
 
 [dependencies.flat_serialize_macro]
 git = "https://github.com/JLockerman/flat_serialize"
-rev = "fcf4593"
+rev = "9e2582d"
 
 [dev-dependencies]
 pgx-tests = "0.1.6"

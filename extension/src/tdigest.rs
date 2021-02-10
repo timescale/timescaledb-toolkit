@@ -144,19 +144,12 @@ CREATE TYPE TDigest;
 pg_type! {
     #[derive(Debug)]
     struct TDigest {
-        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]
         buckets: u32,
-        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]
         count: u32,
-        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]
         sum: f64,
-        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]
         min: f64,
-        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]
         max: f64,
-        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize_slice")]
         centroids: [Centroid; self.buckets],
-        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]
         max_buckets: u32,
     }
 }

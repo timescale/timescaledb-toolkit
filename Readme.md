@@ -6,9 +6,10 @@ ergonomics and performance. Our issue tracker contains more
 on [the features we're planning to work on](https://github.com/timescale/timescale-analytics/labels/proposed-feature) and [the problems we're trying to solve](https://github.com/timescale/timescale-analytics/labels/feature-request),
 and our [Discussions forum](https://github.com/timescale/timescale-analytics/discussions) contains ongoing conversation.
 
-We provide a docker image containing a nightly build of the [`main`](https://github.com/timescale/timescale-analytics/tree/main)
+We provide an experimental docker image containing a nightly build of the [`main`](https://github.com/timescale/timescale-analytics/tree/main)
 branch of the repo, along with TimescaleDB 2.0, at
-[`timescaledev/timescale-analytics:nightly`](https://hub.docker.com/r/timescaledev/timescale-.analytics/tags?page=1&ordering=last_updated).
+[`timescaledev/timescale-analytics:nightly`](https://hub.docker.com/r/timescaledev/timescale-.analytics/tags?page=1&ordering=last_updated). This image is perma-unstable and _will_ break from night to night; only use it to try out new features, or as a canary in a CI setup.
+
 Documentation for this version of the Timescale Analytics extension can be found
 in this repository at [`extension/docs`](https://github.com/timescale/timescale-analytics/tree/main/extension/docs)
 

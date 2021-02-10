@@ -396,12 +396,12 @@ checksum = "4443176a9f2c162692bd3d352d745ef9413eec5782a80d8fd6f8a1ac692a07f7"
 [[package]]
 name = "flat_serialize"
 version = "0.1.0"
-source = "git+https://github.com/JLockerman/flat_serialize?rev=fcf4593#fcf4593fb0411804a8c535bd7f0fd1634a07a21a"
+source = "git+https://github.com/JLockerman/flat_serialize?rev=9e2582d#9e2582df885b1180ee8e9031cbbbe2143bb8bb5c"
 
 [[package]]
 name = "flat_serialize_macro"
 version = "0.1.0"
-source = "git+https://github.com/JLockerman/flat_serialize?rev=fcf4593#fcf4593fb0411804a8c535bd7f0fd1634a07a21a"
+source = "git+https://github.com/JLockerman/flat_serialize?rev=9e2582d#9e2582df885b1180ee8e9031cbbbe2143bb8bb5c"
 dependencies = [
  "proc-macro2",
  "quote",

@@ -118,13 +118,9 @@ pg_type!{
         // Oids are stored in postgres arrays, so it should be safe to store them
         // in our types as long as we do send/recv and in/out correctly
         // see https://github.com/postgres/postgres/blob/b8d0cda53377515ac61357ec4a60e85ca873f486/src/include/utils/array.h#L90
-        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]
         element_type: ShortTypeId,
-        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]
         collation: PgCollationId,
-        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]
         b: u32,
-        #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize_slice")]
         registers: [u8; (1 as usize) << self.b],
     }
 }

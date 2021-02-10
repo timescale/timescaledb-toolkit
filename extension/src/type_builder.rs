@@ -18,10 +18,13 @@ macro_rules! pg_type {
             flat_serialize_macro::flat_serialize! {
                 $(#[$attrs])?
                 #[derive(serde::Serialize, serde::Deserialize)]
+                #[flat_serialize::field_attr(
+                    fixed = r##"#[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]"##,
+                    variable = r##"#[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize_slice")]"##,
+                )]
                 struct [<$name Data>] {
                     #[serde(skip, default="crate::serialization::serde_reference_adaptor::default_header")]
                     header: u32,
-                    #[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]
                     version: u8,
                     #[serde(skip, default="crate::serialization::serde_reference_adaptor::default_padding")]
                     padding: [u8; 3],

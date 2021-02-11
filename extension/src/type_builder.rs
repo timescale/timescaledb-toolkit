@@ -58,10 +58,13 @@ macro_rules! pg_type {
                         return None;
                     }
 
-                    let ptr = pg_sys::pg_detoast_datum_packed(datum as *mut pg_sys::varlena);
-                    let data_len = varsize_any(ptr);
+                    let mut ptr = pg_sys::pg_detoast_datum_packed(datum as *mut pg_sys::varlena);
+                    //TODO is there a better way to do this?
+                    if pgx::varatt_is_1b(ptr) {
+                        ptr = pg_sys::pg_detoast_datum_copy(ptr);
+                    }
+                    let data_len = pgx::varsize_any(ptr);
                     let bytes = slice::from_raw_parts(ptr as *mut u8, data_len);
-
                     let (data, _) = match [<$name Data>]::try_ref(bytes) {
                         Ok(wrapped) => wrapped,
                         Err(e) => error!(concat!("invalid ", stringify!($name), " {:?}, got len {}"), e, bytes.len()),

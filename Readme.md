@@ -2,16 +2,18 @@
 
 This repository is the home of the Timescale Analytics team. Our mission is to
 ease all things analytics when using TimescaleDB, with a particular focus on
-ergonomics and performance. Our issue tracker contains more
-on [the features we're planning to work on](https://github.com/timescale/timescale-analytics/labels/proposed-feature) and [the problems we're trying to solve](https://github.com/timescale/timescale-analytics/labels/feature-request),
+developer ergonomics and performance. Our issue tracker contains more
+on [the features we're planning to work on](https://github.com/timescale/timescale-analytics/labels/proposed-feature)
+and [the problems we're trying to solve](https://github.com/timescale/timescale-analytics/labels/feature-request),
 and our [Discussions forum](https://github.com/timescale/timescale-analytics/discussions) contains ongoing conversation.
 
 We provide an experimental docker image containing a nightly build of the [`main`](https://github.com/timescale/timescale-analytics/tree/main)
 branch of the repo, along with TimescaleDB 2.0, at
-[`timescaledev/timescale-analytics:nightly`](https://hub.docker.com/r/timescaledev/timescale-.analytics/tags?page=1&ordering=last_updated). This image is perma-unstable and _will_ break from night to night; only use it to try out new features, or as a canary in a CI setup.
+[`timescaledev/timescale-analytics:nightly`](https://hub.docker.com/r/timescaledev/timescale-.analytics/tags?page=1&ordering=last_updated).
+This image is perma-unstable and _will_ break from night to night; only use it to try out new features or as a canary in a CI setup.
 
 Documentation for this version of the Timescale Analytics extension can be found
-in this repository at [`extension/docs`](https://github.com/timescale/timescale-analytics/tree/main/extension/docs)
+in this repository at [`extension/docs`](https://github.com/timescale/timescale-analytics/tree/main/extension/docs).
 
 ## 🖥 Try It Out ##
 
@@ -23,9 +25,11 @@ docker run -d --name timescaledb -p 5432:5432 -e POSTGRES_PASSWORD=password time
 ## ✏️ Get Involved ##
 
 The Timescale Analytics project is still in the initial planning stage as we
-decide our priorities and what to implement first. As such, nows a great time
-to help determine the direction the project will go! Have a look at the
-[list of featrues we're thinking of working on](https://github.com/timescale/timescale-analytics/labels/proposed-feature) and feel free to comment on the features, expand the list, or hop on the [Discussions forum](https://github.com/timescale/timescale-analytics/discussions) for more in-depth discusssions.
+decide our priorities and what to implement first. As such, now is a great time
+to help shape the project's direction! Have a look at the
+[list of features we're thinking of working on](https://github.com/timescale/timescale-analytics/labels/proposed-feature)
+and feel free to comment on the features, expand the list, or
+hop on the [Discussions forum](https://github.com/timescale/timescale-analytics/discussions) for more in-depth discussions.
 
 ## 🐯 About TimescaleDB
 
@@ -33,12 +37,12 @@ to help determine the direction the project will go! Have a look at the
 **distributed time-series database built on PostgreSQL** that scales to
 over 10 million of metrics per second, supports native compression,
 handles high cardinality, and offers native time-series capabilities,
-such as data retention policies, continuous aggregate views,
+such as data-retention policies, continuous aggregate views,
 downsampling, data gap-filling and interpolation.
 
 TimescaleDB also supports full SQL, a variety of data types (numerics,
 text, arrays, JSON, booleans), and ACID semantics. Operationally mature
-capabilities include high-availability, streaming backups, upgrades over
+capabilities include high availability, streaming backups, upgrades over
 time, roles and permissions, and security.
 
 TimescaleDB has a **large and active user community** (tens of millions

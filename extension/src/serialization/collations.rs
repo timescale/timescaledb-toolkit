@@ -20,6 +20,14 @@ impl PgCollationId {
     pub fn is_invalid(&self) -> bool {
         self.0 == pg_sys::InvalidOid
     }
+
+    pub fn to_option_oid(&self) -> Option<Oid> {
+        if self.is_invalid() {
+            None
+        } else {
+            Some(self.0)
+        }
+    }
 }
 
 // FIXME upstream to pgx

@@ -1,5 +1,6 @@
 pub mod tdigest;
 pub mod hyperloglog;
+pub mod uddsketch;
 
 mod palloc;
 mod aggregate_utils;

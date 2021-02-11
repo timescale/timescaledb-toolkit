@@ -1,2 +1,5 @@
 tdigest.generated.sql
 hyperloglog.generated.sql
+uddsketch.generated.sql
+serialization_collations.generated.sql
+serialization_types.generated.sql

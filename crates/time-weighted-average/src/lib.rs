@@ -1,14 +1,5 @@
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub struct TSPoint {
-    pub ts: i64,
-    pub val: f64,
-}
-
-#[derive(Debug)]
-pub enum TSPointError {
-    TimesEqual,
-}
-
+pub mod tspoint;
+use tspoint::{TSPoint, TSPointError};
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[repr(u8)]
 pub enum TimeWeightMethod {
@@ -69,11 +60,14 @@ impl TimeWeightSummary {
     /// evaluate the time_weighted_average based on the summary, along with several other
     /// parameters that determine how we extrapolate to the ends of time ranges. Notes on
     /// behaviour in several cases:
-    /// 1. If the TimeWeightSummary is using the Linear method and start, end, prev and
-    ///    next parameters are provided, the prev point is used to determine the linearly
-    ///    interpolated value at the start, the next is used to determine the linearly
-    ///    interpolated value at the end and then an average calculated.
-    /// 2. If
+    /// 1. The start_prev parameter is optional, but if a start is provided a previous point must be
+    /// provided (for both linear and locf weighting methods), if it is not provided the average
+    /// will be evaluated from the *observed* start
+    /// 2. The end_next parameter is also optional, if an end is provided and the locf weighting
+    /// method is specified, a next parameter isn't needed, with the linear method, the next
+    /// point is needed and we will error if it is not provided. If an end is not specified, the
+    /// average will be evaluated to the *observed* end
+
     pub fn time_weighted_average(
         &self, start_prev: Option<(i64, TSPoint)>, end_next: Option<(i64, Option<TSPoint>)>,
     ) -> Result<f64, TimeWeightError> {
@@ -124,16 +118,7 @@ impl TimeWeightSummary {
     }
 }
 
-impl TSPoint {
-    pub fn interpolate_linear(&self, p2: &TSPoint, ts: &i64) -> Result<f64, TSPointError> {
-        if self.ts == p2.ts {
-            return Err(TSPointError::TimesEqual);
-        }
-        let duration = (p2.ts - self.ts) as f64;
-        let dinterp = (ts - self.ts) as f64;
-        Ok((p2.val - self.val) * duration / dinterp + self.val)
-    }
-}
+
 
 impl TimeWeightMethod {
     fn interpolate(
@@ -148,9 +133,9 @@ impl TimeWeightMethod {
             ts: target,
             val: match (self, second) {
                 (TimeWeightMethod::LOCF, _) => first.val,
-                // TODO
+                // TODO make this a method on TimeWeightMethod?
                 (TimeWeightMethod::Linear, Some(second)) => {
-                    first.interpolate_linear(&second, &target).unwrap()
+                    first.interpolate_linear(&second, target).unwrap()
                 }
                 (TimeWeightMethod::Linear, None) => return Err(TimeWeightError::InvalidParameter),
             },
@@ -261,7 +246,8 @@ mod tests {
         let s = new_from_iter(vec![TSPoint { ts: 0, val: 1.0 }, TSPoint { ts: 10, val: 0.0 }], t)
             .unwrap();
         let mut o = s;
-        // adding points at the same timestamp shouldn't affect the value (no matter whether the value is larger or smaller than the original)
+        // adding points at the same timestamp shouldn't affect the value (no matter whether the
+        // value is larger or smaller than the original)
         o.accum(TSPoint { ts: 10, val: 2.0 }).unwrap();
         assert_eq!(s, o);
         o.accum(TSPoint { ts: 10, val: -1.0 }).unwrap();
@@ -271,8 +257,12 @@ mod tests {
     fn order_combine_test(t: TimeWeightMethod) {
         let s = new_from_iter(vec![TSPoint { ts: 0, val: 1.0 }, TSPoint { ts: 10, val: 0.0 }], t)
             .unwrap();
-        let smaller = new_from_iter(vec![TSPoint { ts: 5, val: 1.0 }, TSPoint { ts: 15, val: 0.0 }], t).unwrap();
-        let equal = new_from_iter(vec![TSPoint { ts: 10, val: 1.0 }, TSPoint { ts: 15, val: 0.0 }], t).unwrap();
+        let smaller =
+            new_from_iter(vec![TSPoint { ts: 5, val: 1.0 }, TSPoint { ts: 15, val: 0.0 }], t)
+                .unwrap();
+        let equal =
+            new_from_iter(vec![TSPoint { ts: 10, val: 1.0 }, TSPoint { ts: 15, val: 0.0 }], t)
+                .unwrap();
 
         assert_eq!(s.combine(&smaller), Err(TimeWeightError::OrderError));
         assert_eq!(s.combine(&equal), Err(TimeWeightError::OrderError));
@@ -286,12 +276,31 @@ mod tests {
     }
 
     #[test]
-    fn test_mismatch_combine(){
-        let s1 = new_from_iter(vec![TSPoint { ts: 0, val: 1.0 }, TSPoint { ts: 10, val: 0.0 }],TimeWeightMethod::LOCF)
+    fn test_mismatch_combine() {
+        let s1 = new_from_iter(
+            vec![TSPoint { ts: 0, val: 1.0 }, TSPoint { ts: 10, val: 0.0 }],
+            TimeWeightMethod::LOCF,
+        )
         .unwrap();
-        let s2 = new_from_iter(vec![TSPoint { ts: 20, val: 2.0 }, TSPoint { ts: 30, val: 1.0 }], TimeWeightMethod::Linear)
+        let s2 = new_from_iter(
+            vec![TSPoint { ts: 20, val: 2.0 }, TSPoint { ts: 30, val: 1.0 }],
+            TimeWeightMethod::Linear,
+        )
+        .unwrap();
+        assert_eq!(s1.combine(&s2), Err(TimeWeightError::MethodMismatch));
+
+        let s1 = new_from_iter(
+            vec![TSPoint { ts: 0, val: 1.0 }, TSPoint { ts: 10, val: 0.0 }],
+            TimeWeightMethod::Linear,
+        )
+        .unwrap();
+        let s2 = new_from_iter(
+            vec![TSPoint { ts: 20, val: 2.0 }, TSPoint { ts: 30, val: 1.0 }],
+            TimeWeightMethod::LOCF,
+        )
         .unwrap();
         assert_eq!(s1.combine(&s2), Err(TimeWeightError::MethodMismatch));
     }
+
 
 }

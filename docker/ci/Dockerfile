@@ -12,7 +12,7 @@ RUN set -ex \
     && cd ~ \
     && git clone https://github.com/JLockerman/pgx.git \
     && cd pgx \
-    && git checkout pg_extern-schema-and-name \
+    && git checkout timescale \
     && cd ~/pgx/cargo-pgx \
     && cargo install --path . \
     && cd ~ \

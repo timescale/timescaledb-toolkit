@@ -23,7 +23,7 @@ Timescale's HyperLogLog is implemented as an aggregate function in PostgreSQL.  
 toolkit_experimental.hyperloglog(
     size INTEGER,
     value AnyElement¹
-) RETURNS TDigest
+) RETURNS Hyperloglog
 ```
 ¹The type must have an extended (64bit) hash function.
 
@@ -58,6 +58,47 @@ CREATE VIEW digest AS SELECT toolkit_experimental.hyperloglog(64, data) FROM sam
 
 ---
 
+## **rollup** <a id="rollup"></a>
+
+```SQL ,ignore
+rollup(
+    log hyperloglog
+) RETURNS Hyperloglog
+```
+
+Returns a Hyperloglog over the union of the input elements.
+
+### Required Arguments <a id="hyperloglog-required-arguments"></a>
+|Name| Type |Description|
+|---|---|---|
+| `log` | `Hyperloglog` |  Column of Hyperloglogs to be unioned. |
+<br>
+
+### Returns
+
+|Column|Type|Description|
+|---|---|---|
+| `hyperloglog` | `Hyperloglog` | A hyperloglog containing the count of the union of the input Hyperloglogs. |
+<br>
+
+### Sample Usages <a id="summary-form-examples"></a>
+
+```SQL
+SELECT toolkit_experimental.hyperloglog_count(
+    toolkit_experimental.rollup(
+        (SELECT toolkit_experimental.hyperloglog(32, v::text) FROM generate_series(1, 100) v),
+        (SELECT toolkit_experimental.hyperloglog(32, v::text) FROM generate_series(50, 150) v)
+    )
+)
+```
+```output
+ count
+-------
+   152
+```
+
+---
+
 ## **hyperloglog_count** <a id="hyperloglog_count"></a>
 
 ```SQL ,ignore
@@ -88,5 +129,5 @@ FROM generate_series(1, 100) data
 ```output
  hyperloglog_count
 -------------------
-               103
+               114
 ```

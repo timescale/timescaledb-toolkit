@@ -103,8 +103,6 @@ pg_type! {
         compactions: u64,
         count: u64,
         sum: f64,
-        min: f64,
-        max: f64,
         keys: [uddsketch::SketchHashKey; self.num_buckets],
         counts: [u64; self.num_buckets],
     }
@@ -114,7 +112,7 @@ json_inout_funcs!(UddSketch);
 
 impl<'input> UddSketch<'input> {
     fn to_uddsketch(&self) -> UddSketchInternal {
-        UddSketchInternal::new_from_data(*self.max_buckets as u64, *self.alpha, *self.compactions, *self.count, *self.sum, *self.min, *self.max, Vec::from(self.keys), Vec::from(self.counts))
+        UddSketchInternal::new_from_data(*self.max_buckets as u64, *self.alpha, *self.compactions, *self.count, *self.sum, Vec::from(self.keys), Vec::from(self.counts))
     }
 }
 
@@ -150,8 +148,6 @@ fn uddsketch_final(
                     compactions: &(state.times_compacted() as u64),
                     count: &state.count(),
                     sum: &state.sum(),
-                    min: &state.min(),
-                    max: &state.max(),
                     keys: &keys,
                     counts: &counts,
                 }
@@ -213,24 +209,6 @@ pub fn uddsketch_count(
     *sketch.count as f64
 }
 
-// Minimum value entered in the sketch.
-#[pg_extern]
-pub fn uddsketch_min<'internal>(
-    sketch: UddSketch<'internal>,
-    _fcinfo: pg_sys::FunctionCallInfo,
-) -> f64 {
-    *sketch.min
-}
-
-// Maximum value entered in the sketch.
-#[pg_extern]
-pub fn uddsketch_max(
-    sketch: UddSketch,
-    _fcinfo: pg_sys::FunctionCallInfo,
-) -> f64 {
-    *sketch.max
-}
-
 // Average of all the values entered in the sketch.
 // Note that this is not an approximation, though there may be loss of precision.
 #[pg_extern]
@@ -243,15 +221,6 @@ pub fn uddsketch_mean(
     } else {
         0.0
     }
-}
-
-// Sum of all the values entered in the sketch.
-#[pg_extern]
-pub fn uddsketch_sum(
-    sketch: UddSketch,
-    _fcinfo: pg_sys::FunctionCallInfo,
-) -> f64 {
-    *sketch.sum
 }
 
 // The maximum error (relative to the true value) for any quantile estimate.
@@ -295,22 +264,13 @@ mod tests {
                 .get_one::<i32>();
             assert!(sanity.unwrap_or(0) > 0);
 
-            let (min, max, count) = client
-                .select("SELECT uddsketch_min(uddsketch), uddsketch_max(uddsketch), uddsketch_count(uddsketch) FROM sketch", None, None)
-                .first()
-                .get_three::<f64, f64, f64>();
-
-            apx_eql(min.unwrap(), 0.01, 0.000001);
-            apx_eql(max.unwrap(), 100.0, 0.000001);
-            apx_eql(count.unwrap(), 10000.0, 0.000001);
-
-            let (mean, sum) = client
-                .select("SELECT uddsketch_mean(uddsketch), uddsketch_sum(uddsketch) FROM sketch", None, None)
+            let (mean, count) = client
+                .select("SELECT uddsketch_mean(uddsketch), uddsketch_count(uddsketch) FROM sketch", None, None)
                 .first()
                 .get_two::<f64, f64>();
 
             apx_eql(mean.unwrap(), 50.005, 0.0001);
-            apx_eql(sum.unwrap(), 500050.0, 0.0001);
+            apx_eql(count.unwrap(), 10000.0, 0.000001);
 
             let error = client
                 .select("SELECT uddsketch_error(uddsketch) FROM sketch", None, None)

@@ -18,7 +18,7 @@ Timescale's t-digest is implemented as an aggregate function in PostgreSQL.  The
 For this example we're going to start with a table containing some NOAA weather data for a few weather stations across the US over the past 20 years.
 
 ```SQL
-timescale_analytics=# \d weather;
+timescale_analytics=> \d weather;
                          Table "public.weather"
  Column  |            Type             | Collation | Nullable | Default
 ---------+-----------------------------+-----------+----------+---------
@@ -35,9 +35,9 @@ timescale_analytics=# \d weather;
 Now let's create some t-digests for our different stations and verify that they're receiving data.
 
 ```SQL
-timescale_analytics=# CREATE VIEW high_temp AS SELECT name, tdigest(100, tmax) FROM weather GROUP BY name;
+timescale_analytics=> CREATE VIEW high_temp AS SELECT name, tdigest(100, tmax) FROM weather GROUP BY name;
 CREATE VIEW
-timescale_analytics=# SELECT name, tdigest_count(tdigest) FROM high_temp;
+timescale_analytics=> SELECT name, tdigest_count(tdigest) FROM high_temp;
                  name                  | tdigest_count
 ---------------------------------------+---------------
  PORTLAND INTERNATIONAL AIRPORT, OR US |          7671
@@ -49,7 +49,7 @@ timescale_analytics=# SELECT name, tdigest_count(tdigest) FROM high_temp;
 
 We can then check to see the 99.5 percentile high temperature for each location.
 ```SQL
-timescale_analytics=# SELECT name, tdigest_quantile(tdigest, 0.995) FROM high_temp;
+timescale_analytics=> SELECT name, tdigest_quantile(tdigest, 0.995) FROM high_temp;
                  name                  |  tdigest_quantile
 ---------------------------------------+--------------------
  PORTLAND INTERNATIONAL AIRPORT, OR US |   98.4390837104072
@@ -60,7 +60,7 @@ timescale_analytics=# SELECT name, tdigest_quantile(tdigest, 0.995) FROM high_te
 ```
 Or even check to see what quantile 90F would fall at in each city.
 ```SQL
-timescale_analytics=# SELECT name, tdigest_quantile_at_value(tdigest, 90.0) FROM high_temp;
+timescale_analytics=> SELECT name, tdigest_quantile_at_value(tdigest, 90.0) FROM high_temp;
                  name                  | tdigest_quantile_at_value
 ---------------------------------------+---------------------------
  PORTLAND INTERNATIONAL AIRPORT, OR US |        0.9609990016734108
@@ -279,7 +279,7 @@ SELECT tdigest_sum(tdigest(100, data)) FROM generate_series(1, 100) data;
 
 ```SQL
 tdigest_quantile(
-    digest TimescaleTDiges,
+    digest TDigest,
     quantile DOUBLE PRECISION
 ) RETURNS TDigest
 ```
@@ -314,7 +314,7 @@ SELECT tdigest_quantile(tdigest(100, data), 0.90) FROM generate_series(1, 100) d
 
 ```SQL
 tdigest_quantile_at_value(
-    digest TimescaleTDiges,
+    digest TDigest,
     value DOUBLE PRECISION
 ) RETURNS TDigest
 ```

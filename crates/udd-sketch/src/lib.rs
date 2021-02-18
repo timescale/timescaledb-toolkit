@@ -174,8 +174,6 @@ pub struct UDDSketch {
     compactions: u32,// should always be smaller than 64
     max_buckets: u64,
     num_values: u64,
-    min_value: f64,
-    max_value: f64,
     values_sum: f64,
 }
 
@@ -189,15 +187,13 @@ impl UDDSketch {
             compactions: 0,
             max_buckets: max_buckets,
             num_values: 0,
-            min_value: f64::INFINITY,
-            max_value: f64::NEG_INFINITY,
             values_sum: 0.0,
         }
     }
 
     // This constructor is used to recreate a UddSketch from it's component data
     pub fn new_from_data(max_buckets: u64, current_error: f64,
-    compactions: u64, values: u64, sum: f64, min: f64, max: f64, keys: Vec<SketchHashKey>,
+    compactions: u64, values: u64, sum: f64, keys: Vec<SketchHashKey>,
     counts: Vec<u64>) -> Self {
         let mut sketch =UDDSketch {
             buckets: SketchHashMap::new(),
@@ -206,8 +202,6 @@ impl UDDSketch {
             compactions: compactions as u32,
             max_buckets: max_buckets,
             num_values: values,
-            min_value: min,
-            max_value: max,
             values_sum: sum,
         };
         assert_eq!(keys.len(), counts.len());
@@ -269,12 +263,6 @@ impl UDDSketch {
             self.compact_buckets();
         }
 
-        if value < self.min_value {
-            self.min_value = value;
-        }
-        if value > self.max_value {
-            self.max_value = value;
-        }
         self.num_values += 1;
         self.values_sum += value;
     }
@@ -313,8 +301,6 @@ impl UDDSketch {
             self.compact_buckets();
         }
 
-        self.min_value = f64::min(self.min_value, target.min_value);
-        self.max_value = f64::max(self.max_value, target.max_value);
         self.num_values += other.num_values;
         self.values_sum += other.values_sum;
     }
@@ -353,25 +339,12 @@ impl UDDSketch {
     }
 
     #[inline]
-    pub fn max(&self) -> f64 {
-        self.max_value
-    }
-
-    #[inline]
-    pub fn min(&self) -> f64 {
-        self.min_value
-    }
-
-    #[inline]
     pub fn max_error(&self) -> f64 {
         self.alpha
     }
 
     pub fn estimate_quantile(&self, quantile: f64) -> f64 {
         assert!(quantile >= 0.0 && quantile <= 1.0);
-        if quantile == 1.0 {
-            return self.max_value;
-        }
         let mut remaining = (self.num_values as f64 * quantile) as u64;
         for entry in self.buckets.iter() {
             let (key, count) = entry;
@@ -386,12 +359,6 @@ impl UDDSketch {
 
     // This relative error isn't bounded by alpha, what is the bound?
     pub fn estimate_quantile_at_value(&self, value: f64) -> f64 {
-        if value < self.min_value {
-            return 0.0;
-        } else if value > self.max_value {
-            return 1.0;
-        }
-
         let mut count = 0;
         let target = self.key(value);
 
@@ -422,9 +389,6 @@ mod tests {
         sketch.add_value(0.5);
 
         assert_eq!(sketch.count(), 3);
-        assert_eq!(sketch.min(), 0.5);
-        assert_eq!(sketch.max(), 3.0);
-        assert_eq!(sketch.sum(), 4.5);
         assert_eq!(sketch.mean(), 1.5);
         assert_eq!(sketch.max_error(), 0.1);
     }
@@ -469,8 +433,6 @@ mod tests {
         sketch1.add_value(4.2); // Bucket #8
 
         assert_eq!(sketch1.count(), 5);
-        assert_eq!(sketch1.min(), 1.1);
-        assert_eq!(sketch1.max(), 4.2);
         assert_eq!(sketch1.max_error(), a1);
 
         let mut sketch2 = UDDSketch::new(20, 0.1);
@@ -484,8 +446,6 @@ mod tests {
 
         sketch1.merge_sketch(&sketch2);
         assert_eq!(sketch1.count(), 10);
-        assert_eq!(sketch1.min(), 1.1);
-        assert_eq!(sketch1.max(), 11.2);
         assert_eq!(sketch1.max_error(), a1);
 
         let mut sketch3 = UDDSketch::new(20, 0.1);
@@ -499,8 +459,6 @@ mod tests {
 
         sketch1.merge_sketch(&sketch3);
         assert_eq!(sketch1.count(), 15);
-        assert_eq!(sketch1.min(), 0.6);
-        assert_eq!(sketch1.max(), 15.2);
         assert_eq!(sketch1.max_error(), a1);
 
         let mut sketch4 = UDDSketch::new(20, 0.1);
@@ -518,8 +476,6 @@ mod tests {
 
         sketch1.merge_sketch(&sketch4);
         assert_eq!(sketch1.count(), 24);
-        assert_eq!(sketch1.min(), -400000000000.0);
-        assert_eq!(sketch1.max(), 400000000000.0);
         assert_eq!(sketch1.max_error(), a2);
 
         let mut sketch5 = UDDSketch::new(20, 0.1);

@@ -15,7 +15,9 @@ Note that tags can be applied at either a feature or function scope.  The functi
 The following links lead to pages for the different features in the Timescale Analytics repository.
 
 - [Hyperloglog](tdigest) <sup><mark>experimental</mark></sup> – An approximate `COUNT DISTINCT` based on hashing that provides reaonable accuracy in constant space. ([Methods](hyperloglog#hyperloglog_api))
- - [T-Digest](tdigest) <sup><mark>experimental</mark></sup> – A quantile estimate sketch optimized to provide more accurate estimates near the tails (i.e. 0.001 or 0.995) than conventional approaches. ([Methods](tdigest#tdigest_api))
+- [T-Digest](tdigest) <sup><mark>experimental</mark></sup> – A quantile estimate sketch optimized to provide more accurate estimates near the tails (i.e. 0.001 or 0.995) than conventional approaches. ([Methods](tdigest#tdigest_api))
+- [UddSketch](uddsketch) <sup><mark>experimental</mark></sup> – A quantile estimate sketch which provides a guaranteed maximum relative error. ([Methods](uddsketch#uddsketch_api))
 
 [tdigest]: /extension/docs/tdigest.md
 [hyperloglog]: /extension/docs/hyperloglog.md
+[uddsketch]: /extension/docs/uddsketch.md

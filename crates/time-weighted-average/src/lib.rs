@@ -1,6 +1,9 @@
 pub mod tspoint;
-use tspoint::{TSPoint, TSPointError};
+use tspoint::TSPoint;
+#[cfg(feature = "use_serde")]
+use serde::{Deserialize, Serialize};
 #[derive(Clone, Copy, PartialEq, Debug)]
+#[cfg_attr(feature = "use_serde", derive(Serialize, Deserialize))]
 #[repr(u8)]
 pub enum TimeWeightMethod {
     LOCF,
@@ -8,11 +11,12 @@ pub enum TimeWeightMethod {
 }
 
 #[derive(Clone, Copy, PartialEq, Debug)]
+#[cfg_attr(feature = "use_serde", derive(Serialize, Deserialize))]
 pub struct TimeWeightSummary {
-    method: TimeWeightMethod,
-    first: TSPoint,
-    last: TSPoint,
-    w_sum: f64,
+    pub method: TimeWeightMethod,
+    pub first: TSPoint,
+    pub last: TSPoint,
+    pub w_sum: f64,
 }
 
 #[derive(PartialEq, Debug)]

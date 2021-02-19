@@ -1741,8 +1741,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "time-weighted-average"
+name = "time_weighted_average"
 version = "0.1.0"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "timescale_analytics"
@@ -1759,6 +1762,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tdigest",
+ "time_weighted_average",
  "uddsketch",
 ]
 

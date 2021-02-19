@@ -1,5 +1,5 @@
 [package]
-name = "time-weighted-average"
+name = "time_weighted_average"
 version = "0.1.0"
 authors = ["David Kohn <david@timescale.com>"]
 edition = "2018"
@@ -7,3 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+serde = { package = "serde", version = "1.0", optional = true, default-features = false }
+
+[features]
+use_serde = ["serde", "serde/derive"]

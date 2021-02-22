@@ -39,9 +39,16 @@ timescale_analytics=> \d weather;
 Now let's create some UddSketches for our different stations and verify that they're receiving data.
 
 ```SQL
-timescale_analytics=> CREATE VIEW daily_rain AS SELECT name, uddsketch(100, 0.005, prcp) FROM weather GROUP BY name;
+timescale_analytics=> CREATE VIEW daily_rain AS
+    SELECT name, timescale_analytics_experimental.uddsketch(100, 0.005, prcp)
+    FROM weather
+    GROUP BY name;
 CREATE VIEW
-timescale_analytics=> SELECT name, uddsketch_count(uddsketch), uddsketch_error(uddsketch) FROM daily_rain;
+timescale_analytics=> SELECT
+    name,
+    timescale_analytics_experimental.uddsketch_count(uddsketch),
+    timescale_analytics_experimental.uddsketch_error(uddsketch)
+FROM daily_rain;
                  name                  | uddsketch_count |   uddsketch_error
 ---------------------------------------+-----------------+---------------------
  PORTLAND INTERNATIONAL AIRPORT, OR US |            7671 |  0.0199975003624472
@@ -55,7 +62,10 @@ Notice that 100 buckets proved to be insufficient to maintain 0.5% relative erro
 
 We can then check some rainfall quantiles to see how our stations compare.
 ```SQL
-timescale_analytics=> SELECT name, uddsketch_quantile(uddsketch, 0.6) FROM daily_rain;
+timescale_analytics=> SELECT
+    name,
+    timescale_analytics_experimental.uddsketch_quantile(uddsketch, 0.6)
+FROM daily_rain;
                  name                  |  uddsketch_quantile
 ---------------------------------------+----------------------
  PORTLAND INTERNATIONAL AIRPORT, OR US | 0.009850446542334412
@@ -64,7 +74,10 @@ timescale_analytics=> SELECT name, uddsketch_quantile(uddsketch, 0.6) FROM daily
  MIAMI INTERNATIONAL AIRPORT, FL US    |                    0
 (4 rows)
 
-timescale_analytics=> SELECT name, uddsketch_quantile(uddsketch, 0.9) FROM daily_rain;
+timescale_analytics=> SELECT
+    name,
+    timescale_analytics_experimental.uddsketch_quantile(uddsketch, 0.9)
+FROM daily_rain;
                  name                  | uddsketch_quantile
 ---------------------------------------+--------------------
  PORTLAND INTERNATIONAL AIRPORT, OR US | 0.3072142710699281
@@ -73,7 +86,10 @@ timescale_analytics=> SELECT name, uddsketch_quantile(uddsketch, 0.9) FROM daily
  MIAMI INTERNATIONAL AIRPORT, FL US    | 0.5483701300878486
 (4 rows)
 
-timescale_analytics=> SELECT name, uddsketch_quantile(uddsketch, 0.995) FROM daily_rain;
+timescale_analytics=> SELECT
+    name,
+    timescale_analytics_experimental.uddsketch_quantile(uddsketch, 0.995)
+FROM daily_rain;
                  name                  | uddsketch_quantile
 ---------------------------------------+--------------------
  PORTLAND INTERNATIONAL AIRPORT, OR US | 1.1969797510556823
@@ -95,7 +111,7 @@ timescale_analytics=> SELECT name, uddsketch_quantile(uddsketch, 0.995) FROM dai
 ---
 ## **uddsketch** [](uddsketch)
 ```SQL
-uddsketch(
+timescale_analytics_experimental.uddsketch(
     size INTEGER,
     max_error DOUBLE PRECISION,
     value DOUBLE PRECISION
@@ -123,20 +139,22 @@ This will construct and return a new UddSketch with at most `size` buckets.  The
 For this examples assume we have a table 'samples' with a column 'weights' holding `DOUBLE PRECISION` values.  The following will simply return a sketch over that column
 
 ```SQL
-SELECT uddsketch(100, 0.01, data) FROM samples;
+SELECT timescale_analytics_experimental.uddsketch(100, 0.01, data) FROM samples;
 ```
 
 It may be more useful to build a view from the aggregate that we can later pass to other uddsketch functions.
 
 ```SQL
-CREATE VIEW sketch AS SELECT uddsketch(100, 0.01, data) FROM samples;
+CREATE VIEW sketch AS
+    SELECT timescale_analytics_experimental.uddsketch(100, 0.01, data)
+    FROM samples;
 ```
 
 ---
 ## **uddsketch_count** [](uddsketch_count)
 
 ```SQL
-uddsketch_count(sketch UddSketch) RETURNS DOUBLE PRECISION
+timescale_analytics_experimental.uddsketch_count(sketch UddSketch) RETURNS DOUBLE PRECISION
 ```
 
 Get the number of values contained in a UddSketch.
@@ -156,7 +174,9 @@ Get the number of values contained in a UddSketch.
 ### Sample Usage [](uddsketch_count-examples)
 
 ```SQL
-SELECT uddsketch_count(uddsketch(100, 0.01, data)) FROM generate_series(1, 100) data;
+SELECT timescale_analytics_experimental.uddsketch_count(
+    timescale_analytics_experimental.uddsketch(100, 0.01, data)
+) FROM generate_series(1, 100) data;
  uddsketch_count
 ---------------
            100
@@ -168,7 +188,7 @@ SELECT uddsketch_count(uddsketch(100, 0.01, data)) FROM generate_series(1, 100) 
 ## **uddsketch_error** [](uddsketch_error)
 
 ```SQL
-uddsketch_error(sketch UddSketch) RETURNS DOUBLE PRECISION
+timescale_analytics_experimental.uddsketch_error(sketch UddSketch) RETURNS DOUBLE PRECISION
 ```
 
 This returns the maximum relative error that a quantile estimate will have (relative to the correct value).  This will initially be the same as the `max_error` used to construct the UddSketch, but if the sketch has needed to combine buckets this function will return the new maximum error.
@@ -189,7 +209,9 @@ This returns the maximum relative error that a quantile estimate will have (rela
 ### Sample Usages [](uddsketch_error-examples)
 
 ```SQL
-SELECT uddsketch_error(uddsketch(100, 0.01, data)) FROM generate_series(1, 100) data;
+SELECT timescale_analytics_experimental.uddsketch_error(
+    timescale_analytics_experimental.uddsketch(100, 0.01, data)
+) FROM generate_series(1, 100) data;
  uddsketch_error
 -------------
             0.01
@@ -200,7 +222,7 @@ SELECT uddsketch_error(uddsketch(100, 0.01, data)) FROM generate_series(1, 100) 
 ## **uddsketch_mean** [](uddsketch_mean)
 
 ```SQL
-uddsketch_mean(sketch UddSketch) RETURNS DOUBLE PRECISION
+timescale_analytics_experimental.uddsketch_mean(sketch UddSketch) RETURNS DOUBLE PRECISION
 ```
 
 Get the average of all the values contained in a UddSketch.
@@ -220,7 +242,9 @@ Get the average of all the values contained in a UddSketch.
 ### Sample Usage [](uddsketch_mean-examples)
 
 ```SQL
-SELECT uddsketch_mean(uddsketch(100, 0.01, data)) FROM generate_series(1, 100) data;
+SELECT timescale_analytics_experimental.uddsketch_mean(
+    timescale_analytics_experimental.uddsketch(100, 0.01, data)
+) FROM generate_series(1, 100) data;
  uddsketch_mean
 --------------
          50.5
@@ -231,7 +255,7 @@ SELECT uddsketch_mean(uddsketch(100, 0.01, data)) FROM generate_series(1, 100) d
 ## **uddsketch_quantile** [](uddsketch_quantile)
 
 ```SQL
-uddsketch_quantile(
+timescale_analytics_experimental.uddsketch_quantile(
     sketch UddSketch,
     quantile DOUBLE PRECISION
 ) RETURNS UddSketch
@@ -255,7 +279,10 @@ Get the approximate value at a quantile from a UddSketch.
 ### Sample Usage [](uddsketch_quantile-examples)
 
 ```SQL
-SELECT uddsketch_quantile(uddsketch(100, 0.01, data), 0.90) FROM generate_series(1, 100) data;
+SELECT timescale_analytics_experimental.uddsketch_quantile(
+    timescale_analytics_experimental.uddsketch(100, 0.01, data),
+    0.90
+) FROM generate_series(1, 100) data;
  uddsketch_quantile
 --------------------
   89.13032933635797
@@ -266,7 +293,7 @@ SELECT uddsketch_quantile(uddsketch(100, 0.01, data), 0.90) FROM generate_series
 ## **uddsketch_quantile_at_value** [](uddsketch_quantile_at_value)
 
 ```SQL
-uddsketch_quantile_at_value(
+timescale_analytics_experimental.uddsketch_quantile_at_value(
     sketch UddSketch,
     value DOUBLE PRECISION
 ) RETURNS UddSketch
@@ -290,7 +317,10 @@ Estimate what quantile a given value would be located at in a UddSketch.
 ### Sample Usage [](uddsketch_quantile_at_value-examples)
 
 ```SQL
-SELECT uddsketch_quantile_at_value(uddsketch(100, 0.01, data), 90) FROM generate_series(1, 100) data;
+SELECT timescale_analytics_experimental.uddsketch_quantile_at_value(
+    uddsketch(100, 0.01, data),
+    90
+) FROM generate_series(1, 100) data;
  uddsketch_quantile_at_value
 ---------------------------
                      0.89

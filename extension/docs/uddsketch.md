@@ -46,15 +46,15 @@ timescale_analytics=> CREATE VIEW daily_rain AS
 CREATE VIEW
 timescale_analytics=> SELECT
     name,
-    timescale_analytics_experimental.uddsketch_count(uddsketch),
-    timescale_analytics_experimental.uddsketch_error(uddsketch)
+    timescale_analytics_experimental.get_count(uddsketch),
+    timescale_analytics_experimental.error(uddsketch)
 FROM daily_rain;
-                 name                  | uddsketch_count |   uddsketch_error
----------------------------------------+-----------------+---------------------
- PORTLAND INTERNATIONAL AIRPORT, OR US |            7671 |  0.0199975003624472
- LITCHFIELD PARK, AZ US                |            5904 |               0.005
- NY CITY CENTRAL PARK, NY US           |            7671 | 0.03997901311671962
- MIAMI INTERNATIONAL AIRPORT, FL US    |            7671 | 0.03997901311671962
+                 name                  | get_count |               error
+---------------------------------------+-----------+---------------------
+ PORTLAND INTERNATIONAL AIRPORT, OR US |      7671 |  0.0199975003624472
+ LITCHFIELD PARK, AZ US                |      5904 |               0.005
+ NY CITY CENTRAL PARK, NY US           |      7671 | 0.03997901311671962
+ MIAMI INTERNATIONAL AIRPORT, FL US    |      7671 | 0.03997901311671962
 (4 rows)
 ```
 
@@ -64,9 +64,9 @@ We can then check some rainfall quantiles to see how our stations compare.
 ```SQL
 timescale_analytics=> SELECT
     name,
-    timescale_analytics_experimental.uddsketch_quantile(uddsketch, 0.6)
+    timescale_analytics_experimental.quantile(uddsketch, 0.6)
 FROM daily_rain;
-                 name                  |  uddsketch_quantile
+                 name                  |             quantile
 ---------------------------------------+----------------------
  PORTLAND INTERNATIONAL AIRPORT, OR US | 0.009850446542334412
  LITCHFIELD PARK, AZ US                |                    0
@@ -76,9 +76,9 @@ FROM daily_rain;
 
 timescale_analytics=> SELECT
     name,
-    timescale_analytics_experimental.uddsketch_quantile(uddsketch, 0.9)
+    timescale_analytics_experimental.quantile(uddsketch, 0.9)
 FROM daily_rain;
-                 name                  | uddsketch_quantile
+                 name                  |           quantile
 ---------------------------------------+--------------------
  PORTLAND INTERNATIONAL AIRPORT, OR US | 0.3072142710699281
  LITCHFIELD PARK, AZ US                |                  0
@@ -88,9 +88,9 @@ FROM daily_rain;
 
 timescale_analytics=> SELECT
     name,
-    timescale_analytics_experimental.uddsketch_quantile(uddsketch, 0.995)
+    timescale_analytics_experimental.quantile(uddsketch, 0.995)
 FROM daily_rain;
-                 name                  | uddsketch_quantile
+                 name                  |           quantile
 ---------------------------------------+--------------------
  PORTLAND INTERNATIONAL AIRPORT, OR US | 1.1969797510556823
  LITCHFIELD PARK, AZ US                | 0.7671946655927083
@@ -154,7 +154,7 @@ CREATE VIEW sketch AS
 ## **uddsketch_count** [](uddsketch_count)
 
 ```SQL
-timescale_analytics_experimental.uddsketch_count(sketch UddSketch) RETURNS DOUBLE PRECISION
+timescale_analytics_experimental.get_count(sketch UddSketch) RETURNS DOUBLE PRECISION
 ```
 
 Get the number of values contained in a UddSketch.
@@ -174,12 +174,12 @@ Get the number of values contained in a UddSketch.
 ### Sample Usage [](uddsketch_count-examples)
 
 ```SQL
-SELECT timescale_analytics_experimental.uddsketch_count(
+SELECT timescale_analytics_experimental.get_count(
     timescale_analytics_experimental.uddsketch(100, 0.01, data)
 ) FROM generate_series(1, 100) data;
- uddsketch_count
----------------
-           100
+ get_count
+-----------
+       100
 (1 row)
 ```
 
@@ -188,7 +188,7 @@ SELECT timescale_analytics_experimental.uddsketch_count(
 ## **uddsketch_error** [](uddsketch_error)
 
 ```SQL
-timescale_analytics_experimental.uddsketch_error(sketch UddSketch) RETURNS DOUBLE PRECISION
+timescale_analytics_experimental.error(sketch UddSketch) RETURNS DOUBLE PRECISION
 ```
 
 This returns the maximum relative error that a quantile estimate will have (relative to the correct value).  This will initially be the same as the `max_error` used to construct the UddSketch, but if the sketch has needed to combine buckets this function will return the new maximum error.
@@ -209,12 +209,12 @@ This returns the maximum relative error that a quantile estimate will have (rela
 ### Sample Usages [](uddsketch_error-examples)
 
 ```SQL
-SELECT timescale_analytics_experimental.uddsketch_error(
+SELECT timescale_analytics_experimental.error(
     timescale_analytics_experimental.uddsketch(100, 0.01, data)
 ) FROM generate_series(1, 100) data;
- uddsketch_error
--------------
-            0.01
+ error
+-------
+  0.01
 (1 row)
 ```
 
@@ -222,7 +222,7 @@ SELECT timescale_analytics_experimental.uddsketch_error(
 ## **uddsketch_mean** [](uddsketch_mean)
 
 ```SQL
-timescale_analytics_experimental.uddsketch_mean(sketch UddSketch) RETURNS DOUBLE PRECISION
+timescale_analytics_experimental.mean(sketch UddSketch) RETURNS DOUBLE PRECISION
 ```
 
 Get the average of all the values contained in a UddSketch.
@@ -242,12 +242,12 @@ Get the average of all the values contained in a UddSketch.
 ### Sample Usage [](uddsketch_mean-examples)
 
 ```SQL
-SELECT timescale_analytics_experimental.uddsketch_mean(
+SELECT timescale_analytics_experimental.mean(
     timescale_analytics_experimental.uddsketch(100, 0.01, data)
 ) FROM generate_series(1, 100) data;
- uddsketch_mean
---------------
-         50.5
+ mean
+------
+ 50.5
 (1 row)
 ```
 
@@ -255,7 +255,7 @@ SELECT timescale_analytics_experimental.uddsketch_mean(
 ## **uddsketch_quantile** [](uddsketch_quantile)
 
 ```SQL
-timescale_analytics_experimental.uddsketch_quantile(
+timescale_analytics_experimental.quantile(
     sketch UddSketch,
     quantile DOUBLE PRECISION
 ) RETURNS UddSketch
@@ -279,11 +279,11 @@ Get the approximate value at a quantile from a UddSketch.
 ### Sample Usage [](uddsketch_quantile-examples)
 
 ```SQL
-SELECT timescale_analytics_experimental.uddsketch_quantile(
+SELECT timescale_analytics_experimental.quantile(
     timescale_analytics_experimental.uddsketch(100, 0.01, data),
     0.90
 ) FROM generate_series(1, 100) data;
- uddsketch_quantile
+           quantile
 --------------------
   89.13032933635797
 (1 row)
@@ -293,7 +293,7 @@ SELECT timescale_analytics_experimental.uddsketch_quantile(
 ## **uddsketch_quantile_at_value** [](uddsketch_quantile_at_value)
 
 ```SQL
-timescale_analytics_experimental.uddsketch_quantile_at_value(
+timescale_analytics_experimental.quantile_at_value(
     sketch UddSketch,
     value DOUBLE PRECISION
 ) RETURNS UddSketch
@@ -317,12 +317,12 @@ Estimate what quantile a given value would be located at in a UddSketch.
 ### Sample Usage [](uddsketch_quantile_at_value-examples)
 
 ```SQL
-SELECT timescale_analytics_experimental.uddsketch_quantile_at_value(
+SELECT timescale_analytics_experimental.quantile_at_value(
     uddsketch(100, 0.01, data),
     90
 ) FROM generate_series(1, 100) data;
- uddsketch_quantile_at_value
----------------------------
-                     0.89
+ quantile_at_value
+-------------------
+             0.89
 (1 row)
 ```

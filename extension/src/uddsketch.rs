@@ -198,7 +198,7 @@ CREATE AGGREGATE timescale_analytics_experimental.uddsketch(
 //---- Available PG operations on the sketch
 
 // Approximate the value at the given quantile (0.0-1.0)
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(name="quantile", schema = "timescale_analytics_experimental")]
 pub fn uddsketch_quantile(
     sketch: timescale_analytics_experimental::UddSketch,
     quantile: f64,
@@ -207,7 +207,7 @@ pub fn uddsketch_quantile(
 }
 
 // Approximate the quantile at the given value
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(name="quantile_at_value", schema = "timescale_analytics_experimental")]
 pub fn uddsketch_quantile_at_value(
     sketch: timescale_analytics_experimental::UddSketch,
     value: f64,
@@ -216,7 +216,7 @@ pub fn uddsketch_quantile_at_value(
 }
 
 // Number of elements from which the sketch was built.
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(name="get_count", schema = "timescale_analytics_experimental")]
 pub fn uddsketch_count(
     sketch: timescale_analytics_experimental::UddSketch,
 ) -> f64 {
@@ -225,7 +225,7 @@ pub fn uddsketch_count(
 
 // Average of all the values entered in the sketch.
 // Note that this is not an approximation, though there may be loss of precision.
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(name="mean", schema = "timescale_analytics_experimental")]
 pub fn uddsketch_mean(
     sketch: timescale_analytics_experimental::UddSketch,
 ) -> f64 {
@@ -237,7 +237,7 @@ pub fn uddsketch_mean(
 }
 
 // The maximum error (relative to the true value) for any quantile estimate.
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(name="error", schema = "timescale_analytics_experimental")]
 pub fn uddsketch_error(
     sketch: timescale_analytics_experimental::UddSketch
 ) -> f64 {
@@ -281,8 +281,8 @@ mod tests {
 
             let (mean, count) = client
                 .select("SELECT \
-                    timescale_analytics_experimental.uddsketch_mean(uddsketch), \
-                    timescale_analytics_experimental.uddsketch_count(uddsketch) \
+                    timescale_analytics_experimental.mean(uddsketch), \
+                    timescale_analytics_experimental.get_count(uddsketch) \
                     FROM sketch", None, None)
                 .first()
                 .get_two::<f64, f64>();
@@ -292,7 +292,7 @@ mod tests {
 
             let error = client
                 .select("SELECT \
-                    timescale_analytics_experimental.uddsketch_error(uddsketch) \
+                    timescale_analytics_experimental.error(uddsketch) \
                     FROM sketch", None, None)
                 .first()
                 .get_one::<f64>();
@@ -306,8 +306,8 @@ mod tests {
                 let (est_val, est_quant) = client
                     .select(
                         &format!("SELECT \
-                                timescale_analytics_experimental.uddsketch_quantile(uddsketch, {}), \
-                                timescale_analytics_experimental.uddsketch_quantile_at_value(uddsketch, {}) \
+                                timescale_analytics_experimental.quantile(uddsketch, {}), \
+                                timescale_analytics_experimental.quantile_at_value(uddsketch, {}) \
                             FROM sketch", quantile, value), None, None)
                     .first()
                     .get_two::<f64, f64>();

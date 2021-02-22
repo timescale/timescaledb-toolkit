@@ -6,6 +6,7 @@ mod palloc;
 mod aggregate_utils;
 mod type_builder;
 mod serialization;
+mod schema_test;
 
 pgx::pg_module_magic!();
 

@@ -24,6 +24,15 @@ use tdigest::{
     Centroid,
 };
 
+// hack to allow us to qualify names with "timescale_analytics_experimental"
+// so that pgx generates the correct SQL
+mod timescale_analytics_experimental {
+    pub(crate) use super::*;
+    extension_sql!(r#"
+        CREATE SCHEMA IF NOT EXISTS timescale_analytics_experimental;
+    "#);
+}
+
 // Intermediate state kept in postgres.  This is a tdigest object paired
 // with a vector of values that still need to be inserted.
 #[derive(Serialize, Deserialize, Clone)]
@@ -58,7 +67,7 @@ type int = u32;
 
 // PG function for adding values to a digest.
 // Null values are ignored.
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn tdigest_trans(
     state: Option<Internal<TDigestTransState>>,
     size: int,
@@ -85,7 +94,7 @@ pub fn tdigest_trans(
 }
 
 // PG function for merging digests.
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn tdigest_combine(
     state1: Option<Internal<TDigestTransState>>,
     state2: Option<Internal<TDigestTransState>>,
@@ -120,7 +129,7 @@ pub fn tdigest_combine(
 #[allow(non_camel_case_types)]
 type bytea = pg_sys::Datum;
 
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn tdigest_serialize(
     mut state: Internal<TDigestTransState>,
 ) -> bytea {
@@ -128,7 +137,7 @@ pub fn tdigest_serialize(
     crate::do_serialize!(state)
 }
 
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn tdigest_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
@@ -137,7 +146,7 @@ pub fn tdigest_deserialize(
 }
 
 extension_sql!(r#"
-CREATE TYPE TDigest;
+CREATE TYPE timescale_analytics_experimental.TDigest;
 "#);
 
 // PG object for the digest.
@@ -170,11 +179,11 @@ impl<'input> TDigest<'input> {
 }
 
 // PG function to generate a user-facing TDigest object from an internal TDigestTransState.
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 fn tdigest_final(
     state: Option<Internal<TDigestTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<TDigest<'static>> {
+) -> Option<timescale_analytics_experimental::TDigest<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let mut state = match state {
@@ -206,33 +215,42 @@ fn tdigest_final(
 }
 
 extension_sql!(r#"
-CREATE OR REPLACE FUNCTION TDigest_in(cstring) RETURNS TDigest IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C AS 'MODULE_PATHNAME', 'tdigest_in_wrapper';
-CREATE OR REPLACE FUNCTION TDigest_out(TDigest) RETURNS CString IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C AS 'MODULE_PATHNAME', 'tdigest_out_wrapper';
+CREATE OR REPLACE FUNCTION
+    timescale_analytics_experimental.TDigest_in(cstring)
+RETURNS timescale_analytics_experimental.TDigest
+IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C
+AS 'MODULE_PATHNAME', 'tdigest_in_wrapper';
 
-CREATE TYPE TDigest (
+CREATE OR REPLACE FUNCTION
+    timescale_analytics_experimental.TDigest_out(timescale_analytics_experimental.TDigest)
+RETURNS CString
+IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C
+AS 'MODULE_PATHNAME', 'tdigest_out_wrapper';
+
+CREATE TYPE timescale_analytics_experimental.TDigest (
     INTERNALLENGTH = variable,
-    INPUT = TDigest_in,
-    OUTPUT = TDigest_out,
+    INPUT = timescale_analytics_experimental.TDigest_in,
+    OUTPUT = timescale_analytics_experimental.TDigest_out,
     STORAGE = extended
 );
 
-CREATE AGGREGATE tdigest(size int, value DOUBLE PRECISION)
+CREATE AGGREGATE timescale_analytics_experimental.tdigest(size int, value DOUBLE PRECISION)
 (
-    sfunc=tdigest_trans,
-    stype=internal,
-    finalfunc=tdigest_final,
-    combinefunc=tdigest_combine,
-    serialfunc = tdigest_serialize,
-    deserialfunc = tdigest_deserialize
+    sfunc = timescale_analytics_experimental.tdigest_trans,
+    stype = internal,
+    finalfunc = timescale_analytics_experimental.tdigest_final,
+    combinefunc = timescale_analytics_experimental.tdigest_combine,
+    serialfunc = timescale_analytics_experimental.tdigest_serialize,
+    deserialfunc = timescale_analytics_experimental.tdigest_deserialize
 );
 "#);
 
 //---- Available PG operations on the digest
 
 // Approximate the value at the given quantile (0.0-1.0)
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn tdigest_quantile(
-    digest: TDigest,
+    digest: timescale_analytics_experimental::TDigest,
     quantile: f64,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
@@ -240,9 +258,9 @@ pub fn tdigest_quantile(
 }
 
 // Approximate the quantile at the given value
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn tdigest_quantile_at_value(
-    digest: TDigest,
+    digest: timescale_analytics_experimental::TDigest,
     value: f64,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
@@ -250,27 +268,27 @@ pub fn tdigest_quantile_at_value(
 }
 
 // Number of elements from which the digest was built.
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn tdigest_count(
-    digest: TDigest,
+    digest: timescale_analytics_experimental::TDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
     *digest.count as f64
 }
 
 // Minimum value entered in the digest.
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn tdigest_min(
-    digest: TDigest,
+    digest: timescale_analytics_experimental::TDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
     *digest.min
 }
 
 // Maximum value entered in the digest.
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn tdigest_max(
-    digest: TDigest,
+    digest: timescale_analytics_experimental::TDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
     *digest.max
@@ -278,9 +296,9 @@ pub fn tdigest_max(
 
 // Average of all the values entered in the digest.
 // Note that this is not an approximation, though there may be loss of precision.
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn tdigest_mean(
-    digest: TDigest,
+    digest: timescale_analytics_experimental::TDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
     if *digest.count > 0 {
@@ -291,9 +309,9 @@ pub fn tdigest_mean(
 }
 
 // Sum of all the values entered in the digest.
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn tdigest_sum(
-    digest: TDigest,
+    digest: timescale_analytics_experimental::TDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
     *digest.sum
@@ -325,9 +343,20 @@ mod tests {
                 .get_one::<i32>();
             assert_eq!(10000, sanity.unwrap());
 
-            client.select("CREATE VIEW digest AS SELECT tdigest(100, data) FROM test", None, None);
+            client.select("CREATE VIEW digest AS \
+                SELECT timescale_analytics_experimental.tdigest(100, data) FROM test",
+                None,
+                None
+            );
             let (min, max, count) = client
-                .select("SELECT tdigest_min(tdigest), tdigest_max(tdigest), tdigest_count(tdigest) FROM digest", None, None)
+                .select("SELECT \
+                    timescale_analytics_experimental.tdigest_min(tdigest), \
+                    timescale_analytics_experimental.tdigest_max(tdigest), \
+                    timescale_analytics_experimental.tdigest_count(tdigest) \
+                    FROM digest",
+                    None,
+                    None
+                )
                 .first()
                 .get_three::<f64, f64, f64>();
 
@@ -336,7 +365,13 @@ mod tests {
             apx_eql(count.unwrap(), 10000.0, 0.000001);
 
             let (mean, sum) = client
-                .select("SELECT tdigest_mean(tdigest), tdigest_sum(tdigest) FROM digest", None, None)
+                .select("SELECT \
+                    timescale_analytics_experimental.tdigest_mean(tdigest), \
+                    timescale_analytics_experimental.tdigest_sum(tdigest) \
+                    FROM digest",
+                    None,
+                    None
+                )
                 .first()
                 .get_two::<f64, f64>();
 
@@ -348,7 +383,15 @@ mod tests {
                 let quantile = value / 100.0;
 
                 let (est_val, est_quant) = client
-                    .select(&format!("SELECT tdigest_quantile(tdigest, {}), tdigest_quantile_at_value(tdigest, {}) FROM digest", quantile, value), None, None)
+                    .select(
+                        &format!("SELECT
+                            timescale_analytics_experimental.tdigest_quantile(tdigest, {}), \
+                            timescale_analytics_experimental.tdigest_quantile_at_value(tdigest, {}) \
+                            FROM digest",
+                            quantile,
+                            value),
+                        None,
+                        None)
                     .first()
                     .get_two::<f64, f64>();
 
@@ -366,7 +409,13 @@ mod tests {
     #[pg_test]
     fn test_tdigest_small_count() {
         Spi::execute(|client| {
-            let estimate = client.select("SELECT tdigest_quantile(tdigest(100, data), 0.99) FROM generate_series(1, 100) data;", None, None)
+            let estimate = client.select("SELECT \
+                    timescale_analytics_experimental.tdigest_quantile(\
+                        timescale_analytics_experimental.tdigest(100, data), \
+                        0.99) \
+                    FROM generate_series(1, 100) data;",
+                None,
+                None)
                 .first()
                 .get_one();
 
@@ -377,7 +426,11 @@ mod tests {
     #[pg_test]
     fn test_tdigest_io() {
         Spi::execute(|client| {
-            let output = client.select("SELECT tdigest(100, data)::text FROM generate_series(1, 100) data;", None, None)
+            let output = client.select("SELECT \
+                timescale_analytics_experimental.tdigest(100, data)::text \
+                FROM generate_series(1, 100) data;",
+                None,
+                None)
                 .first()
                 .get_one::<String>();
 
@@ -385,7 +438,11 @@ mod tests {
 
             assert_eq!(output, Some(expected.into()));
 
-            let estimate = client.select(&format!("SELECT tdigest_quantile('{}', 0.90)", expected), None, None)
+            let estimate = client.select(
+                &format!(
+                    "SELECT timescale_analytics_experimental.tdigest_quantile('{}', 0.90)",
+                    expected
+                ), None, None)
                 .first()
                 .get_one();
             assert_eq!(estimate, Some(90.5));

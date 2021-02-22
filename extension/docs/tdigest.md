@@ -43,14 +43,14 @@ CREATE VIEW
 
 timescale_analytics=> SELECT
         name,
-        timescale_analytics_experimental.tdigest_count(tdigest)
+        timescale_analytics_experimental.get_count(tdigest)
     FROM high_temp;
-                 name                  | tdigest_count
----------------------------------------+---------------
- PORTLAND INTERNATIONAL AIRPORT, OR US |          7671
- LITCHFIELD PARK, AZ US                |          5881
- NY CITY CENTRAL PARK, NY US           |          7671
- MIAMI INTERNATIONAL AIRPORT, FL US    |          7671
+                 name                  | get_count
+---------------------------------------+-----------
+ PORTLAND INTERNATIONAL AIRPORT, OR US |      7671
+ LITCHFIELD PARK, AZ US                |      5881
+ NY CITY CENTRAL PARK, NY US           |      7671
+ MIAMI INTERNATIONAL AIRPORT, FL US    |      7671
 (4 rows)
 ```
 
@@ -58,9 +58,9 @@ We can then check to see the 99.5 percentile high temperature for each location.
 ```SQL
 timescale_analytics=> SELECT
         name,
-        timescale_analytics_experimental.tdigest_quantile(tdigest, 0.995)
+        timescale_analytics_experimental.quantile(tdigest, 0.995)
     FROM high_temp;
-                 name                  |  tdigest_quantile
+                 name                  |           quantile
 ---------------------------------------+--------------------
  PORTLAND INTERNATIONAL AIRPORT, OR US |   98.4390837104072
  LITCHFIELD PARK, AZ US                | 114.97809722222223
@@ -72,14 +72,14 @@ Or even check to see what quantile 90F would fall at in each city.
 ```SQL
 timescale_analytics=> SELECT
         name,
-        timescale_analytics_experimental.tdigest_quantile_at_value(tdigest, 90.0)
+        timescale_analytics_experimental.quantile_at_value(tdigest, 90.0)
     FROM high_temp;
-                 name                  | tdigest_quantile_at_value
----------------------------------------+---------------------------
- PORTLAND INTERNATIONAL AIRPORT, OR US |        0.9609990016734108
- LITCHFIELD PARK, AZ US                |        0.5531621580122781
- NY CITY CENTRAL PARK, NY US           |        0.9657150306348585
- MIAMI INTERNATIONAL AIRPORT, FL US    |        0.8093468908877591
+                 name                  |  quantile_at_value
+---------------------------------------+--------------------
+ PORTLAND INTERNATIONAL AIRPORT, OR US | 0.9609990016734108
+ LITCHFIELD PARK, AZ US                | 0.5531621580122781
+ NY CITY CENTRAL PARK, NY US           | 0.9657150306348585
+ MIAMI INTERNATIONAL AIRPORT, FL US    | 0.8093468908877591
 (4 rows)
 ```
 
@@ -139,7 +139,7 @@ CREATE VIEW digest AS
 ## **tdigest_min** [](tdigest_min)
 
 ```SQL
-timescale_analytics_experimental.tdigest_min(digest TDigest) RETURNS DOUBLE PRECISION
+timescale_analytics_experimental.get_min(digest TDigest) RETURNS DOUBLE PRECISION
 ```
 
 Get the minimum value from a t-digest.
@@ -160,7 +160,7 @@ Get the minimum value from a t-digest.
 ### Sample Usages [](tdigest-min-examples)
 
 ```SQL
-SELECT timescale_analytics_experimental.tdigest_min(tdigest(100, data))
+SELECT timescale_analytics_experimental.get_min(tdigest(100, data))
 FROM generate_series(1, 100) data;
  tdigest_min
 -------------
@@ -171,7 +171,7 @@ FROM generate_series(1, 100) data;
 ## **tdigest_max** [](tdigest_max)
 
 ```SQL
-timescale_analytics_experimental.tdigest_max(digest TDigest) RETURNS DOUBLE PRECISION
+timescale_analytics_experimental.get_max(digest TDigest) RETURNS DOUBLE PRECISION
 ```
 
 Get the maximum value from a t-digest.
@@ -191,18 +191,18 @@ Get the maximum value from a t-digest.
 ### Sample Usage [](tdigest_max-examples)
 
 ```SQL
-SELECT timescale_analytics_experimental.tdigest_max(tdigest(100, data))
+SELECT timescale_analytics_experimental.get_max(tdigest(100, data))
 FROM generate_series(1, 100) data;
- tdigest_max
--------------
-         100
+ get_max
+---------
+     100
 (1 row)
 ```
 ---
 ## **tdigest_count** [](tdigest_count)
 
 ```SQL
-timescale_analytics_experimental.tdigest_count(digest TDigest) RETURNS DOUBLE PRECISION
+timescale_analytics_experimental.get_count(digest TDigest) RETURNS DOUBLE PRECISION
 ```
 
 Get the number of values contained in a t-digest.
@@ -222,11 +222,11 @@ Get the number of values contained in a t-digest.
 ### Sample Usage [](tdigest_count-examples)
 
 ```SQL
-SELECT timescale_analytics_experimental.tdigest_count(tdigest(100, data))
+SELECT timescale_analytics_experimental.get_count(tdigest(100, data))
 FROM generate_series(1, 100) data;
- tdigest_count
----------------
-           100
+ get_count
+-----------
+       100
 (1 row)
 ```
 
@@ -234,7 +234,7 @@ FROM generate_series(1, 100) data;
 ## **tdigest_mean** [](tdigest_mean)
 
 ```SQL
-timescale_analytics_experimental.tdigest_mean(digest TDigest) RETURNS DOUBLE PRECISION
+timescale_analytics_experimental.mean(digest TDigest) RETURNS DOUBLE PRECISION
 ```
 
 Get the average of all the values contained in a t-digest.
@@ -254,11 +254,11 @@ Get the average of all the values contained in a t-digest.
 ### Sample Usage [](tdigest_mean-examples)
 
 ```SQL
-SELECT timescale_analytics_experimental.tdigest_mean(tdigest(100, data))
+SELECT timescale_analytics_experimental.mean(tdigest(100, data))
 FROM generate_series(1, 100) data;
- tdigest_mean
---------------
-         50.5
+ mean
+------
+ 50.5
 (1 row)
 ```
 
@@ -266,7 +266,7 @@ FROM generate_series(1, 100) data;
 ## **tdigest_sum** [](tdigest_sum)
 
 ```SQL
-timescale_analytics_experimental.tdigest_sum(digest TDigest) RETURNS DOUBLE PRECISION
+timescale_analytics_experimental.sum(digest TDigest) RETURNS DOUBLE PRECISION
 ```
 
 Get the sum of all the values in a t-digest
@@ -286,11 +286,11 @@ Get the sum of all the values in a t-digest
 ### Sample Usage [](tdigest_sum-examples)
 
 ```SQL
-SELECT timescale_analytics_experimental.tdigest_sum(tdigest(100, data))
+SELECT timescale_analytics_experimental.sum(tdigest(100, data))
 FROM generate_series(1, 100) data;
- tdigest_sum
--------------
-        5050
+  sum
+------
+ 5050
 (1 row)
 ```
 
@@ -298,7 +298,7 @@ FROM generate_series(1, 100) data;
 ## **tdigest_quantile** [](tdigest_quantile)
 
 ```SQL
-timescale_analytics_experimental.tdigest_quantile(
+timescale_analytics_experimental.quantile(
     digest TDigest,
     quantile DOUBLE PRECISION
 ) RETURNS TDigest
@@ -322,11 +322,11 @@ Get the approximate value at a quantile from a t-digest
 ### Sample Usage [](tdigest_quantile-examples)
 
 ```SQL
-SELECT timescale_analytics_experimental.tdigest_quantile(tdigest(100, data), 0.90)
+SELECT timescale_analytics_experimental.quantile(tdigest(100, data), 0.90)
 FROM generate_series(1, 100) data;
- tdigest_quantile
-------------------
-             90.5
+ quantile
+----------
+     90.5
 (1 row)
 ```
 
@@ -334,7 +334,7 @@ FROM generate_series(1, 100) data;
 ## **tdigest_quantile_at_value** [](tdigest_quantile_at_value)
 
 ```SQL
-timescale_analytics_experimental.tdigest_quantile_at_value(
+timescale_analytics_experimental.quantile_at_value(
     digest TDigest,
     value DOUBLE PRECISION
 ) RETURNS TDigest
@@ -358,10 +358,10 @@ Estimate what quantile a given value would be located at in a t-digest.
 ### Sample Usage [](tdigest_quantile_at_value-examples)
 
 ```SQL
-SELECT timescale_analytics_experimental.tdigest_quantile_at_value(tdigest(100, data), 90)
+SELECT timescale_analytics_experimental.quantile_at_value(tdigest(100, data), 90)
 FROM generate_series(1, 100) data;
- tdigest_quantile_at_value
----------------------------
-                     0.895
+ quantile_at_value
+-------------------
+             0.895
 (1 row)
 ```

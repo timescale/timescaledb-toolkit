@@ -14,8 +14,8 @@ pg12 = ["pgx/pg12"]
 pg_test = []
 
 [dependencies]
-pgx = "0.1.6"
-pgx-macros = "0.1.6"
+pgx = "=0.1.19"
+pgx-macros = "=0.1.19"
 tdigest = {path="../crates/t-digest", features = ["use_serde"]}
 hyperloglog = {path="../crates/hyperloglog"}
 uddsketch = {path="../crates/udd-sketch"}

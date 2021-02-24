@@ -188,8 +188,9 @@ macro_rules! do_serialize {
             use $crate::type_builder::SerializationType;
 
             let state = &*$state;
-            let size = bincode::serialized_size(state)
-                .unwrap_or_else(|e| pgx::error!("serialization error {}", e)) + 2;
+            let serialized_size = bincode::serialized_size(state)
+                .unwrap_or_else(|e| pgx::error!("serialization error {}", e));
+            let size = serialized_size + 2; // size of serialized data + our version flags
             let mut bytes = Vec::with_capacity(size as usize + 4);
             let varsize = [0; 4];
             bytes.extend_from_slice(&varsize);

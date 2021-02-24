@@ -7,7 +7,7 @@ use std::collections::HashMap;
 // This is used to index the buckets of the UddSketch.  In particular, because UddSketch stores values
 // based on a logarithmic scale, we need to track negative values separately from positive values, and
 // zero also needs special casing.
-#[derive(Serialize, Deserialize, Hash, PartialEq, Eq, Copy, Clone, Ord)]
+#[derive(Serialize, Deserialize, Hash, PartialEq, Eq, Copy, Clone, Ord, Debug)]
 #[repr(C, u64)]
 pub enum SketchHashKey {
     Negative(i64),
@@ -55,7 +55,7 @@ impl SketchHashKey {
 }
 
 // Entries in the SketchHashMap contain a count and the next valid index of the map.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[derive(Clone)]
 struct SketchHashEntry {
     count: u64,
@@ -63,7 +63,7 @@ struct SketchHashEntry {
 }
 
 // SketchHashMap is a special hash map of SketchHashKey->count that also keeps the equivalent of a linked list of the entries by increasing key value.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 #[derive(Clone)]
 struct SketchHashMap {
     map: HashMap<SketchHashKey, SketchHashEntry>,
@@ -166,7 +166,7 @@ impl SketchHashMap {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct UDDSketch {
     buckets: SketchHashMap,
     alpha: f64,

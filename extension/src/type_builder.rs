@@ -191,10 +191,7 @@ macro_rules! do_serialize {
             let size = bincode::serialized_size(state)
                 .unwrap_or_else(|e| pgx::error!("serialization error {}", e)) + 2;
             let mut bytes = Vec::with_capacity(size as usize + 4);
-            let mut varsize = [0; 4];
-            unsafe {
-                pgx::set_varsize(&mut varsize as *mut _ as *mut _, size as _);
-            }
+            let varsize = [0; 4];
             bytes.extend_from_slice(&varsize);
             // type version
             bytes.push($version);
@@ -202,11 +199,13 @@ macro_rules! do_serialize {
             bytes.push(SerializationType::Default as u8);
             bincode::serialize_into(&mut bytes, state)
                 .unwrap_or_else(|e| pgx::error!("serialization error {}", e));
-            bytes.as_mut_ptr() as pg_sys::Datum
+            unsafe {
+                ::pgx::set_varsize(bytes.as_mut_ptr() as *mut _, bytes.len() as i32);
+            }
+            bytes.leak().as_mut_ptr() as pg_sys::Datum
         }
     };
 }
-
 #[macro_export]
 macro_rules! do_deserialize {
     ($bytes: ident, $t: ty) => {
@@ -214,7 +213,7 @@ macro_rules! do_deserialize {
             use $crate::type_builder::SerializationType;
 
             let state: $t = unsafe {
-                let detoasted = pg_sys::pg_detoast_datum($bytes as *mut _);
+                let detoasted = pg_sys::pg_detoast_datum_packed($bytes as *mut _);
                 let len = pgx::varsize_any_exhdr(detoasted);
                 let data = pgx::vardata_any(detoasted);
                 let bytes = slice::from_raw_parts(data as *mut u8, len);

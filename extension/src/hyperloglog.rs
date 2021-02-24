@@ -23,6 +23,15 @@ use crate::{
 
 use hyperloglog::{HyperLogLog as HLL, HyperLogLogger};
 
+// hack to allow us to qualify names with "timescale_analytics_experimental"
+// so that pgx generates the correct SQL
+mod timescale_analytics_experimental {
+    pub(crate) use super::*;
+    extension_sql!(r#"
+        CREATE SCHEMA IF NOT EXISTS timescale_analytics_experimental;
+    "#);
+}
+
 #[derive(Clone, Serialize, Deserialize)]
 pub struct HyperLogLogTrans {
     logger: HyperLogLogger<Datum, DatumHashBuilder>,
@@ -32,7 +41,7 @@ pub struct HyperLogLogTrans {
 type int = i32;
 type AnyElement = Datum;
 
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn hyperloglog_trans(
     state: Option<Internal<HyperLogLogTrans>>,
     size: int,
@@ -68,7 +77,7 @@ pub fn hyperloglog_trans(
     }
 }
 
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn hyperloglog_combine(
     state1: Option<Internal<HyperLogLogTrans>>,
     state2: Option<Internal<HyperLogLogTrans>>,
@@ -93,12 +102,12 @@ pub fn hyperloglog_combine(
 #[allow(non_camel_case_types)]
 type bytea = pg_sys::Datum;
 
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn hyperloglog_serialize(state: Internal<HyperLogLogTrans>) -> bytea {
     crate::do_serialize!(state)
 }
 
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn hyperloglog_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
@@ -108,7 +117,7 @@ pub fn hyperloglog_deserialize(
 
 extension_sql!(
     r#"
-CREATE TYPE Hyperloglog;
+CREATE TYPE timescale_analytics_experimental.Hyperloglog;
 "#
 );
 
@@ -127,11 +136,11 @@ pg_type! {
 
 json_inout_funcs!(HyperLogLog);
 
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 fn hyperloglog_final(
     state: Option<Internal<HyperLogLogTrans>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<HyperLogLog<'static>> {
+) -> Option<timescale_analytics_experimental::HyperLogLog<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let state = match state {
@@ -146,30 +155,40 @@ fn hyperloglog_final(
 
 extension_sql!(
     r#"
-CREATE OR REPLACE FUNCTION Hyperloglog_in(cstring) RETURNS Hyperloglog IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C AS 'MODULE_PATHNAME', 'hyperloglog_in_wrapper';
-CREATE OR REPLACE FUNCTION Hyperloglog_out(Hyperloglog) RETURNS CString IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C AS 'MODULE_PATHNAME', 'hyperloglog_out_wrapper';
+CREATE OR REPLACE FUNCTION timescale_analytics_experimental.Hyperloglog_in(cstring)
+RETURNS timescale_analytics_experimental.Hyperloglog
+IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C
+AS 'MODULE_PATHNAME', 'hyperloglog_in_wrapper';
 
-CREATE TYPE Hyperloglog (
+CREATE OR REPLACE FUNCTION timescale_analytics_experimental.Hyperloglog_out(
+    timescale_analytics_experimental.Hyperloglog
+) RETURNS CString
+IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C
+AS 'MODULE_PATHNAME', 'hyperloglog_out_wrapper';
+
+CREATE TYPE timescale_analytics_experimental.Hyperloglog (
     INTERNALLENGTH = variable,
-    INPUT = Hyperloglog_in,
-    OUTPUT = Hyperloglog_out,
+    INPUT = timescale_analytics_experimental.Hyperloglog_in,
+    OUTPUT = timescale_analytics_experimental.Hyperloglog_out,
     STORAGE = extended
 );
 
-CREATE AGGREGATE hyperloglog(size int, value AnyElement)
+CREATE AGGREGATE timescale_analytics_experimental.hyperloglog(size int, value AnyElement)
 (
     stype = internal,
-    sfunc=hyperloglog_trans,
-    finalfunc = hyperloglog_final,
-    combinefunc = hyperloglog_combine,
-    serialfunc = hyperloglog_serialize,
-    deserialfunc = hyperloglog_deserialize
+    sfunc = timescale_analytics_experimental.hyperloglog_trans,
+    finalfunc = timescale_analytics_experimental.hyperloglog_final,
+    combinefunc = timescale_analytics_experimental.hyperloglog_combine,
+    serialfunc = timescale_analytics_experimental.hyperloglog_serialize,
+    deserialfunc = timescale_analytics_experimental.hyperloglog_deserialize
 );
 "#
 );
 
-#[pg_extern]
-pub fn hyperloglog_count<'input>(hyperloglog: HyperLogLog<'input>) -> i64 {
+#[pg_extern(schema = "timescale_analytics_experimental")]
+pub fn hyperloglog_count<'input>(
+    hyperloglog: timescale_analytics_experimental::HyperLogLog<'input>
+) -> i64 {
     // count does not depend on the type parameters
     HLL::<()> {
         registers: hyperloglog.registers,
@@ -180,11 +199,11 @@ pub fn hyperloglog_count<'input>(hyperloglog: HyperLogLog<'input>) -> i64 {
     .count()
 }
 
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn hyperloglog_union<'input>(
-    a: HyperLogLog<'input>,
-    b: HyperLogLog<'input>,
-) -> HyperLogLog<'input> {
+    a: timescale_analytics_experimental::HyperLogLog<'input>,
+    b: timescale_analytics_experimental::HyperLogLog<'input>,
+) -> timescale_analytics_experimental::HyperLogLog<'input> {
     let a = HLL::<'_, Datum, DatumHashBuilder> {
         registers: a.registers,
         b: *a.b as _,
@@ -216,7 +235,8 @@ pub fn hyperloglog_union<'input>(
     flatten_log(merged.as_hyperloglog())
 }
 
-fn flatten_log(hyperloglog: HLL<Datum, DatumHashBuilder>) -> HyperLogLog<'static> {
+fn flatten_log(hyperloglog: HLL<Datum, DatumHashBuilder>)
+-> timescale_analytics_experimental::HyperLogLog<'static> {
     let (element_type, collation) = {
         let hasher = hyperloglog.buildhasher();
         (ShortTypeId(hasher.type_id), PgCollationId(hasher.collation))
@@ -381,43 +401,6 @@ impl<'de> Deserialize<'de> for DatumHashBuilder {
     }
 }
 
-#[pg_extern]
-fn test_hll_aggregate_int_manual() {
-    Spi::execute(|client| {
-        let text = client
-            .select(
-                "SELECT hyperloglog(32, v::int)::TEXT FROM generate_series(1, 100) v",
-                None,
-                None,
-            )
-            .first()
-            .get_one::<String>();
-
-        let expected = "{\"version\":1,\"element_type\":\"INT4\",\"collation\":null,\"b\":5,\"registers\":[6,2,6,3,7,2,5,3,2,3,4,4,0,2,2,3,1,4,2,2,2,2,3,2,2,5,1,3,3,3,3,3]}";
-        assert_eq!(text.unwrap(), expected);
-
-        let count = client
-            .select(
-                "SELECT hyperloglog_count(hyperloglog(32, v::int)) FROM generate_series(1, 100) v",
-                None,
-                None,
-            )
-            .first()
-            .get_one::<i32>();
-        assert_eq!(count, Some(113));
-
-        let count2 = client
-            .select(
-                &format!("SELECT hyperloglog_count('{}')", expected),
-                None,
-                None,
-            )
-            .first()
-            .get_one::<i32>();
-        assert_eq!(count2, count);
-    });
-}
-
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {
     use pgx::*;
@@ -427,7 +410,9 @@ mod tests {
         Spi::execute(|client| {
             let text = client
                 .select(
-                    "SELECT hyperloglog(32, v::float)::TEXT FROM generate_series(1, 100) v",
+                    "SELECT \
+                        timescale_analytics_experimental.hyperloglog(32, v::float)::TEXT \
+                        FROM generate_series(1, 100) v",
                     None,
                     None,
                 )
@@ -438,14 +423,18 @@ mod tests {
             assert_eq!(text.unwrap(), expected);
 
             let count = client
-                .select("SELECT hyperloglog_count(hyperloglog(32, v::float)) FROM generate_series(1, 100) v", None, None)
+                .select("SELECT \
+                    timescale_analytics_experimental.hyperloglog_count(\
+                        timescale_analytics_experimental.hyperloglog(32, v::float)\
+                    ) \
+                    FROM generate_series(1, 100) v", None, None)
                 .first()
                 .get_one::<i32>();
             assert_eq!(count, Some(108));
 
             let count2 = client
                 .select(
-                    &format!("SELECT hyperloglog_count('{}')", expected),
+                    &format!("SELECT timescale_analytics_experimental.hyperloglog_count('{}')", expected),
                     None,
                     None,
                 )
@@ -460,7 +449,8 @@ mod tests {
         Spi::execute(|client| {
             let text = client
                 .select(
-                    "SELECT hyperloglog(32, v::int)::TEXT FROM generate_series(1, 100) v",
+                    "SELECT timescale_analytics_experimental.hyperloglog(32, v::int)::TEXT
+                    FROM generate_series(1, 100) v",
                     None,
                     None,
                 )
@@ -471,14 +461,17 @@ mod tests {
             assert_eq!(text.unwrap(), expected);
 
             let count = client
-                .select("SELECT hyperloglog_count(hyperloglog(32, v::int)) FROM generate_series(1, 100) v", None, None)
+                .select("SELECT \
+                timescale_analytics_experimental.hyperloglog_count(\
+                    timescale_analytics_experimental.hyperloglog(32, v::int)\
+                ) FROM generate_series(1, 100) v", None, None)
                 .first()
                 .get_one::<i32>();
             assert_eq!(count, Some(113));
 
             let count2 = client
                 .select(
-                    &format!("SELECT hyperloglog_count('{}')", expected),
+                    &format!("SELECT timescale_analytics_experimental.hyperloglog_count('{}')", expected),
                     None,
                     None,
                 )
@@ -495,7 +488,9 @@ mod tests {
 
             let text = client
                 .select(
-                    "SELECT hyperloglog(32, v::text)::TEXT FROM generate_series(1, 100) v",
+                    "SELECT \
+                        timescale_analytics_experimental.hyperloglog(32, v::text)::TEXT \
+                    FROM generate_series(1, 100) v",
                     None,
                     None,
                 )
@@ -507,14 +502,16 @@ mod tests {
             assert_eq!(text.unwrap(), expected);
 
             let count = client
-                .select("SELECT hyperloglog_count(hyperloglog(32, v::text)) FROM generate_series(1, 100) v", None, None)
+                .select("SELECT timescale_analytics_experimental.hyperloglog_count(\
+                    timescale_analytics_experimental.hyperloglog(32, v::text)\
+                ) FROM generate_series(1, 100) v", None, None)
                 .first()
                 .get_one::<i32>();
             assert_eq!(count, Some(106));
 
             let count2 = client
                 .select(
-                    &format!("SELECT hyperloglog_count('{}')", expected),
+                    &format!("SELECT timescale_analytics_experimental.hyperloglog_count('{}')", expected),
                     None,
                     None,
                 )
@@ -531,7 +528,9 @@ mod tests {
                 // self-union should be a nop
                 let expected = client
                     .select(
-                        "SELECT hyperloglog(32, v::text)::TEXT FROM generate_series(1, 100) v",
+                        "SELECT \
+                                timescale_analytics_experimental.hyperloglog(32, v::text)::TEXT \
+                            FROM generate_series(1, 100) v",
                         None,
                         None,
                     )
@@ -541,7 +540,10 @@ mod tests {
 
                 let text = client
                     .select(
-                        "SELECT hyperloglog_union(hyperloglog(32, v::text), hyperloglog(32, v::text))::TEXT FROM generate_series(1, 100) v",
+                        "SELECT timescale_analytics_experimental.hyperloglog_union(\
+                            timescale_analytics_experimental.hyperloglog(32, v::text), \
+                            timescale_analytics_experimental.hyperloglog(32, v::text)\
+                        )::TEXT FROM generate_series(1, 100) v",
                         None,
                         None,
                     )
@@ -554,10 +556,12 @@ mod tests {
             {
                 // differing unions should be a sum of the distinct counts
                 let query =
-                    "SELECT hyperloglog_count(hyperloglog_union(\
-                        (SELECT hyperloglog(32, v::text) FROM generate_series(1, 100) v),\
-                        (SELECT hyperloglog(32, v::text) FROM generate_series(50, 150) v)\
-                    ))";
+                    "SELECT timescale_analytics_experimental.hyperloglog_count(\
+                        timescale_analytics_experimental.hyperloglog_union(\
+                            (SELECT timescale_analytics_experimental.hyperloglog(32, v::text) FROM generate_series(1, 100) v),\
+                            (SELECT timescale_analytics_experimental.hyperloglog(32, v::text) FROM generate_series(50, 150) v)\
+                        )\
+                    )";
                 let count = client
                     .select(
                         query,

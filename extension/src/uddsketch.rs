@@ -20,12 +20,21 @@ use crate::{
     palloc::Internal, pg_type
 };
 
+// hack to allow us to qualify names with "timescale_analytics_experimental"
+// so that pgx generates the correct SQL
+mod timescale_analytics_experimental {
+    pub(crate) use super::*;
+    extension_sql!(r#"
+        CREATE SCHEMA IF NOT EXISTS timescale_analytics_experimental;
+    "#);
+}
+
 #[allow(non_camel_case_types)]
 type int = u32;
 
 // PG function for adding values to a sketch.
 // Null values are ignored.
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn uddsketch_trans(
     state: Option<Internal<UddSketchInternal>>,
     size: int,
@@ -50,7 +59,7 @@ pub fn uddsketch_trans(
 }
 
 // PG function for merging sketches.
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn uddsketch_combine(
     state1: Option<Internal<UddSketchInternal>>,
     state2: Option<Internal<UddSketchInternal>>,
@@ -75,14 +84,14 @@ pub fn uddsketch_combine(
 #[allow(non_camel_case_types)]
 type bytea = pg_sys::Datum;
 
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn uddsketch_serialize(
     state: Internal<UddSketchInternal>,
 ) -> bytea {
     crate::do_serialize!(state)
 }
 
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn uddsketch_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
@@ -91,7 +100,7 @@ pub fn uddsketch_deserialize(
 }
 
 extension_sql!(r#"
-CREATE TYPE UddSketch;
+CREATE TYPE timescale_analytics_experimental.UddSketch;
 "#);
 
 // PG object for the sketch.
@@ -117,11 +126,11 @@ impl<'input> UddSketch<'input> {
 }
 
 // PG function to generate a user-facing UddSketch object from a UddSketchInternal.
-#[pg_extern]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 fn uddsketch_final(
     state: Option<Internal<UddSketchInternal>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<UddSketch<'static>> {
+) -> Option<timescale_analytics_experimental::UddSketch<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let mut state = match state {
@@ -157,64 +166,68 @@ fn uddsketch_final(
 }
 
 extension_sql!(r#"
-CREATE OR REPLACE FUNCTION UddSketch_in(cstring) RETURNS UddSketch IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C AS 'MODULE_PATHNAME', 'uddsketch_in_wrapper';
-CREATE OR REPLACE FUNCTION UddSketch_out(UddSketch) RETURNS CString IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C AS 'MODULE_PATHNAME', 'uddsketch_out_wrapper';
+CREATE OR REPLACE FUNCTION timescale_analytics_experimental.UddSketch_in(cstring)
+RETURNS timescale_analytics_experimental.UddSketch
+IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C
+AS 'MODULE_PATHNAME', 'uddsketch_in_wrapper';
 
-CREATE TYPE UddSketch (
+CREATE OR REPLACE FUNCTION timescale_analytics_experimental.UddSketch_out(
+    timescale_analytics_experimental.UddSketch
+) RETURNS CString IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C
+AS 'MODULE_PATHNAME', 'uddsketch_out_wrapper';
+
+CREATE TYPE timescale_analytics_experimental.UddSketch (
     INTERNALLENGTH = variable,
-    INPUT = UddSketch_in,
-    OUTPUT = UddSketch_out,
+    INPUT = timescale_analytics_experimental.UddSketch_in,
+    OUTPUT = timescale_analytics_experimental.UddSketch_out,
     STORAGE = extended
 );
 
-CREATE AGGREGATE uddsketch(size int, max_error DOUBLE PRECISION, value DOUBLE PRECISION)
-(
-    sfunc=uddsketch_trans,
-    stype=internal,
-    finalfunc=uddsketch_final,
-    combinefunc=uddsketch_combine,
-    serialfunc=uddsketch_serialize,
-    deserialfunc=uddsketch_deserialize
+CREATE AGGREGATE timescale_analytics_experimental.uddsketch(
+    size int, max_error DOUBLE PRECISION, value DOUBLE PRECISION
+) (
+    sfunc = timescale_analytics_experimental.uddsketch_trans,
+    stype = internal,
+    finalfunc = timescale_analytics_experimental.uddsketch_final,
+    combinefunc = timescale_analytics_experimental.uddsketch_combine,
+    serialfunc = timescale_analytics_experimental.uddsketch_serialize,
+    deserialfunc = timescale_analytics_experimental.uddsketch_deserialize
 );
 "#);
 
 //---- Available PG operations on the sketch
 
 // Approximate the value at the given quantile (0.0-1.0)
-#[pg_extern]
+#[pg_extern(name="quantile", schema = "timescale_analytics_experimental")]
 pub fn uddsketch_quantile(
-    sketch: UddSketch,
+    sketch: timescale_analytics_experimental::UddSketch,
     quantile: f64,
-    _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
     sketch.to_uddsketch().estimate_quantile(quantile)
 }
 
 // Approximate the quantile at the given value
-#[pg_extern]
+#[pg_extern(name="quantile_at_value", schema = "timescale_analytics_experimental")]
 pub fn uddsketch_quantile_at_value(
-    sketch: UddSketch,
+    sketch: timescale_analytics_experimental::UddSketch,
     value: f64,
-    _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
     sketch.to_uddsketch().estimate_quantile_at_value(value)
 }
 
 // Number of elements from which the sketch was built.
-#[pg_extern]
+#[pg_extern(name="get_count", schema = "timescale_analytics_experimental")]
 pub fn uddsketch_count(
-    sketch: UddSketch,
-    _fcinfo: pg_sys::FunctionCallInfo,
+    sketch: timescale_analytics_experimental::UddSketch,
 ) -> f64 {
     *sketch.count as f64
 }
 
 // Average of all the values entered in the sketch.
 // Note that this is not an approximation, though there may be loss of precision.
-#[pg_extern]
+#[pg_extern(name="mean", schema = "timescale_analytics_experimental")]
 pub fn uddsketch_mean(
-    sketch: UddSketch,
-    _fcinfo: pg_sys::FunctionCallInfo,
+    sketch: timescale_analytics_experimental::UddSketch,
 ) -> f64 {
     if *sketch.count > 0 {
         *sketch.sum / *sketch.count as f64
@@ -224,9 +237,9 @@ pub fn uddsketch_mean(
 }
 
 // The maximum error (relative to the true value) for any quantile estimate.
-#[pg_extern]
+#[pg_extern(name="error", schema = "timescale_analytics_experimental")]
 pub fn uddsketch_error(
-    sketch: UddSketch
+    sketch: timescale_analytics_experimental::UddSketch
 ) -> f64 {
     *sketch.alpha
 }
@@ -257,7 +270,9 @@ mod tests {
                 .get_one::<i32>();
             assert_eq!(Some(10000), sanity);
 
-            client.select("CREATE VIEW sketch AS SELECT uddsketch(100, 0.05, data) FROM test", None, None);
+            client.select("CREATE VIEW sketch AS \
+                SELECT timescale_analytics_experimental.uddsketch(100, 0.05, data) \
+                FROM test", None, None);
             let sanity = client
                 .select("SELECT COUNT(*) FROM sketch", None, None)
                 .first()
@@ -265,7 +280,10 @@ mod tests {
             assert!(sanity.unwrap_or(0) > 0);
 
             let (mean, count) = client
-                .select("SELECT uddsketch_mean(uddsketch), uddsketch_count(uddsketch) FROM sketch", None, None)
+                .select("SELECT \
+                    timescale_analytics_experimental.mean(uddsketch), \
+                    timescale_analytics_experimental.get_count(uddsketch) \
+                    FROM sketch", None, None)
                 .first()
                 .get_two::<f64, f64>();
 
@@ -273,7 +291,9 @@ mod tests {
             apx_eql(count.unwrap(), 10000.0, 0.000001);
 
             let error = client
-                .select("SELECT uddsketch_error(uddsketch) FROM sketch", None, None)
+                .select("SELECT \
+                    timescale_analytics_experimental.error(uddsketch) \
+                    FROM sketch", None, None)
                 .first()
                 .get_one::<f64>();
 
@@ -284,7 +304,11 @@ mod tests {
                 let quantile = value / 100.0;
 
                 let (est_val, est_quant) = client
-                    .select(&format!("SELECT uddsketch_quantile(uddsketch, {}), uddsketch_quantile_at_value(uddsketch, {}) FROM sketch", quantile, value), None, None)
+                    .select(
+                        &format!("SELECT \
+                                timescale_analytics_experimental.quantile(uddsketch, {}), \
+                                timescale_analytics_experimental.quantile_at_value(uddsketch, {}) \
+                            FROM sketch", quantile, value), None, None)
                     .first()
                     .get_two::<f64, f64>();
 

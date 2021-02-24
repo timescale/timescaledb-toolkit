@@ -35,9 +35,9 @@ mod timescale_analytics_experimental {
 
 // Intermediate state kept in postgres.  This is a tdigest object paired
 // with a vector of values that still need to be inserted.
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TDigestTransState {
-    #[serde(skip_serializing)]
+    #[serde(skip)]
     buffer: Vec<f64>,
     digested: InternalTDigest,
 }

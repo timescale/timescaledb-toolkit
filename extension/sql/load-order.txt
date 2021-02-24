@@ -1,3 +1,4 @@
 tdigest.generated.sql
 hyperloglog.generated.sql
 uddsketch.generated.sql
+triggers.generated.sql

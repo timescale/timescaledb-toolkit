@@ -270,9 +270,22 @@ mod tests {
                 .get_one::<i32>();
             assert_eq!(Some(10000), sanity);
 
+            client.select(
+                "SET timescale_analytics_acknowledge_auto_drop TO 'true'",
+                None,
+                None,
+            );
+
             client.select("CREATE VIEW sketch AS \
                 SELECT timescale_analytics_experimental.uddsketch(100, 0.05, data) \
                 FROM test", None, None);
+
+            client.select(
+                "RESET timescale_analytics_acknowledge_auto_drop",
+                None,
+                None,
+            );
+
             let sanity = client
                 .select("SELECT COUNT(*) FROM sketch", None, None)
                 .first()

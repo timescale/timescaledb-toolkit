@@ -954,7 +954,7 @@ checksum = "d4fd5641d01c8f18a23da7b6fe29298ff4b55afcccdf78973b24cf3175fee32e"
 [[package]]
 name = "pgx"
 version = "0.1.19"
-source = "git+https://github.com/JLockerman/pgx.git?branch=timescale#2919153eeaf17242e1769b379e8749cdc6ded412"
+source = "git+https://github.com/JLockerman/pgx.git?branch=timescale#429eadab3b37633fddf9ce2fda9f31c9b2065c52"
 dependencies = [
  "atomic-traits",
  "bitflags",
@@ -976,7 +976,7 @@ dependencies = [
 [[package]]
 name = "pgx-macros"
 version = "0.1.19"
-source = "git+https://github.com/JLockerman/pgx.git?branch=timescale#2919153eeaf17242e1769b379e8749cdc6ded412"
+source = "git+https://github.com/JLockerman/pgx.git?branch=timescale#429eadab3b37633fddf9ce2fda9f31c9b2065c52"
 dependencies = [
  "pgx-utils",
  "proc-macro2",
@@ -988,7 +988,7 @@ dependencies = [
 [[package]]
 name = "pgx-pg-sys"
 version = "0.1.19"
-source = "git+https://github.com/JLockerman/pgx.git?branch=timescale#2919153eeaf17242e1769b379e8749cdc6ded412"
+source = "git+https://github.com/JLockerman/pgx.git?branch=timescale#429eadab3b37633fddf9ce2fda9f31c9b2065c52"
 dependencies = [
  "bindgen",
  "build-deps",
@@ -1007,7 +1007,7 @@ dependencies = [
 [[package]]
 name = "pgx-tests"
 version = "0.1.19"
-source = "git+https://github.com/JLockerman/pgx.git?branch=timescale#2919153eeaf17242e1769b379e8749cdc6ded412"
+source = "git+https://github.com/JLockerman/pgx.git?branch=timescale#429eadab3b37633fddf9ce2fda9f31c9b2065c52"
 dependencies = [
  "colored",
  "lazy_static",
@@ -1026,7 +1026,7 @@ dependencies = [
 [[package]]
 name = "pgx-utils"
 version = "0.1.19"
-source = "git+https://github.com/JLockerman/pgx.git?branch=timescale#2919153eeaf17242e1769b379e8749cdc6ded412"
+source = "git+https://github.com/JLockerman/pgx.git?branch=timescale#429eadab3b37633fddf9ce2fda9f31c9b2065c52"
 dependencies = [
  "colored",
  "dirs",

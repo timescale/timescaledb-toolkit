@@ -343,11 +343,24 @@ mod tests {
                 .get_one::<i32>();
             assert_eq!(10000, sanity.unwrap());
 
+            client.select(
+                "SET timescale_analytics_acknowledge_auto_drop TO 'true'",
+                None,
+                None,
+            );
+
             client.select("CREATE VIEW digest AS \
                 SELECT timescale_analytics_experimental.tdigest(100, data) FROM test",
                 None,
                 None
             );
+
+            client.select(
+                "RESET timescale_analytics_acknowledge_auto_drop",
+                None,
+                None,
+            );
+
             let (min, max, count) = client
                 .select("SELECT \
                     timescale_analytics_experimental.get_min(tdigest), \

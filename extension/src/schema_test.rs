@@ -5,6 +5,20 @@ mod tests {
 
     use pgx::*;
 
+    #[pg_extern(schema="timescale_analytics_experimental")]
+    fn expected_failure() -> i32 { 1 }
+
+    #[pg_test(error = "features in timescale_analytics_experimental are unstable, and objects depending on them will be deleted on extension update (there will be a DROP SCHEMA timescale_analytics_experimental CASCADE), which on Forge can happen at any time.")]
+    fn test_blocks_view() {
+        Spi::execute(|client| {
+            let _ = client.select(
+                "CREATE VIEW failed AS SELECT timescale_analytics_experimental.expected_failure();",
+               None,
+                None);
+        })
+    }
+
+
     // Test that any new features are added to the the experimental schema
     #[pg_test]
     fn test_schema_qualification() {
@@ -73,6 +87,10 @@ mod tests {
     // TODO it may pay to auto-discover this list based on the previous version of
     //      the extension, once we have a released extension
     static RELEASED_FEATURES: &[&'static str] = &[
-
+        "event trigger disallow_experimental_deps",
+        "event trigger disallow_experimental_dependencies_on_views",
+        "function disallow_experimental_dependencies()",
+        "function disallow_experimental_view_dependencies()",
+        "function timescale_analytics_probe()",
     ];
 }

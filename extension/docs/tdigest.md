@@ -1,4 +1,4 @@
-# T-Digest <sup><mark>experimental</mark></sup>
+# T-Digest [<sup><mark>experimental</mark></sup>](/extension/docs/README.md#tag-notes)
 
 > [Description](#tdigest-description)<br>
 > [Details](#tdigest-details)<br>

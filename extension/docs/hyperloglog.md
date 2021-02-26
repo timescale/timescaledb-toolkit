@@ -1,4 +1,4 @@
-# Hyperloglog <sup><mark>experimental</mark></sup>
+# Hyperloglog [<sup><mark>experimental</mark></sup>](/extension/docs/README.md#tag-notes)
 
 > [Description](#hyperloglog-description)<br>
 > [Details](#hyperloglog-details)<br>

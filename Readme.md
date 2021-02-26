@@ -22,6 +22,10 @@ Run
 docker run -d --name timescaledb -p 5432:5432 -e POSTGRES_PASSWORD=password timescaledev/timescale-analytics:nightly
 ```
 
+The extension contains experimental features in the `timecale_analytics_experimental`, schema
+see [our docs section on experimental features](/extension/docs/README.md#tag-notes) for
+more details.
+
 ## ✏️ Get Involved ##
 
 The Timescale Analytics project is still in the initial planning stage as we

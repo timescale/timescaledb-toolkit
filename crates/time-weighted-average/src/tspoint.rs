@@ -31,7 +31,7 @@ impl TSPoint {
 mod tests {
     #[test]
     fn test_linear_interpolate(){
-        use crate::{TSPoint, TSPointError};
+        use crate::tspoint::{TSPoint, TSPointError};
         let p1 = TSPoint{ts: 1, val: 1.0};
         let p2 = TSPoint{ts: 3, val: 3.0};
         assert_eq!(p1.interpolate_linear(&p2, 2).unwrap(), 2.0);

@@ -246,17 +246,17 @@ mod tests {
     fn combine_test(t: TimeWeightMethod) {
         let s = TimeWeightSummary::new_from_sorted_iter(
             vec![
-                TSPoint { ts: 0, val: 1.0 },
-                TSPoint { ts: 10, val: 0.0 },
-                TSPoint { ts: 20, val: 2.0 },
-                TSPoint { ts: 30, val: 1.0 },
+                &TSPoint { ts: 0, val: 1.0 },
+                &TSPoint { ts: 10, val: 0.0 },
+                &TSPoint { ts: 20, val: 2.0 },
+                &TSPoint { ts: 30, val: 1.0 },
             ],
             t,
         )
         .unwrap();
-        let s1 = TimeWeightSummary::new_from_sorted_iter(vec![TSPoint { ts: 0, val: 1.0 }, TSPoint { ts: 10, val: 0.0 }], t)
+        let s1 = TimeWeightSummary::new_from_sorted_iter(vec![&TSPoint { ts: 0, val: 1.0 }, &TSPoint { ts: 10, val: 0.0 }], t)
             .unwrap();
-        let s2 = TimeWeightSummary::new_from_sorted_iter(vec![TSPoint { ts: 20, val: 2.0 }, TSPoint { ts: 30, val: 1.0 }], t)
+        let s2 = TimeWeightSummary::new_from_sorted_iter(vec![&TSPoint { ts: 20, val: 2.0 }, &TSPoint { ts: 30, val: 1.0 }], t)
             .unwrap();
         let s_comb = s1.combine(&s2).unwrap();
         assert_eq!(s, s_comb);
@@ -272,7 +272,7 @@ mod tests {
     }
 
     fn order_accum_test(t: TimeWeightMethod) {
-        let s = TimeWeightSummary::new_from_sorted_iter(vec![TSPoint { ts: 0, val: 1.0 }, TSPoint { ts: 10, val: 0.0 }], t)
+        let s = TimeWeightSummary::new_from_sorted_iter(vec![&TSPoint { ts: 0, val: 1.0 }, &TSPoint { ts: 10, val: 0.0 }], t)
             .unwrap();
         let mut o = s;
         // adding points at the same timestamp shouldn't affect the value (no matter whether the
@@ -284,13 +284,13 @@ mod tests {
         assert_eq!(o.accum(TSPoint { ts: 5, val: -1.0 }), Err(TimeWeightError::OrderError));
     }
     fn order_combine_test(t: TimeWeightMethod) {
-        let s = TimeWeightSummary::new_from_sorted_iter(vec![TSPoint { ts: 0, val: 1.0 }, TSPoint { ts: 10, val: 0.0 }], t)
+        let s = TimeWeightSummary::new_from_sorted_iter(vec![&TSPoint { ts: 0, val: 1.0 }, &TSPoint { ts: 10, val: 0.0 }], t)
             .unwrap();
         let smaller =
-            TimeWeightSummary::new_from_sorted_iter(vec![TSPoint { ts: 5, val: 1.0 }, TSPoint { ts: 15, val: 0.0 }], t)
+            TimeWeightSummary::new_from_sorted_iter(vec![&TSPoint { ts: 5, val: 1.0 },&TSPoint { ts: 15, val: 0.0 }], t)
                 .unwrap();
         let equal =
-            TimeWeightSummary::new_from_sorted_iter(vec![TSPoint { ts: 10, val: 1.0 }, TSPoint { ts: 15, val: 0.0 }], t)
+            TimeWeightSummary::new_from_sorted_iter(vec![&TSPoint { ts: 10, val: 1.0 }, &TSPoint { ts: 15, val: 0.0 }], t)
                 .unwrap();
 
         assert_eq!(s.combine(&smaller), Err(TimeWeightError::OrderError));
@@ -307,24 +307,24 @@ mod tests {
     #[test]
     fn test_mismatch_combine() {
         let s1 = TimeWeightSummary::new_from_sorted_iter(
-            vec![TSPoint { ts: 0, val: 1.0 }, TSPoint { ts: 10, val: 0.0 }],
+            vec![&TSPoint { ts: 0, val: 1.0 }, &TSPoint{ ts: 10, val: 0.0 }],
             TimeWeightMethod::LOCF,
         )
         .unwrap();
         let s2 = TimeWeightSummary::new_from_sorted_iter(
-            vec![TSPoint { ts: 20, val: 2.0 }, TSPoint { ts: 30, val: 1.0 }],
+            vec![&TSPoint { ts: 20, val: 2.0 }, &TSPoint { ts: 30, val: 1.0 }],
             TimeWeightMethod::Linear,
         )
         .unwrap();
         assert_eq!(s1.combine(&s2), Err(TimeWeightError::MethodMismatch));
 
-        let s1 = new_from_sorted_iter(
-            vec![TSPoint { ts: 0, val: 1.0 }, TSPoint { ts: 10, val: 0.0 }],
+        let s1 = TimeWeightSummary::new_from_sorted_iter(
+            vec![&TSPoint { ts: 0, val: 1.0 }, &TSPoint { ts: 10, val: 0.0 }],
             TimeWeightMethod::Linear,
         )
         .unwrap();
         let s2 = TimeWeightSummary::new_from_sorted_iter(
-            vec![TSPoint { ts: 20, val: 2.0 }, TSPoint { ts: 30, val: 1.0 }],
+            vec![&TSPoint { ts: 20, val: 2.0 }, &TSPoint { ts: 30, val: 1.0 }],
             TimeWeightMethod::LOCF,
         )
         .unwrap();

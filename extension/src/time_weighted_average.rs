@@ -19,22 +19,18 @@ use time_weighted_average::{
     TimeWeightError,
     TimeWeightMethod,
 };
-extension_sql!(r#"set search_path to 'timescale_analytics_experimental', 'public';"#);
-//
-// time_weight_ordered()
-// time_weight()
-// WITH t as (SELECT time_bucket('5 min', ts) as bucket, id,  time_weight(ts, value, method=>'locf') as tw
-// FROM foo
-// WHERE ts > '2020-10-01' and ts <= '2020-10-02'
-// [AND id IN ('foo', 'bar', 'baz')]
-// GROUP BY 1, 2 )
-// SELECT bucket, id, average(with_bounds(tw, bounds => time_bucket_range(bucket, '5 min'), prev=>(SELECT tspoint(ts, value) FROM foo f WHERE f.id = t.id AND f.ts < '2020-10-01' ORDER BY ts DESC LIMIT 1)) OVER (PARTITION BY id ORDER BY bucket ASC ))
-// FROM t;
-// with_bounds(time_weight(ts, val, 'linear'), bounds=> tstzrange, prev => tspoint(), next => tspoint())
-// SELECT average(time_weight_ordered(time, value, 'linear'))
-// SELECT time_weight_ordered(time, value, 'linear') |> with_bounds(bounds)
 
-// This assumes ordered input and will nott sort interally, will error if input is unsorted.
+// hack to allow us to qualify names with "timescale_analytics_experimental"
+// so that pgx generates the correct SQL
+mod timescale_analytics_experimental {
+    pub(crate) use super::*;
+    extension_sql!(r#"
+        CREATE SCHEMA IF NOT EXISTS timescale_analytics_experimental;
+    "#);
+}
+extension_sql!(r#"set search_path to 'timescale_analytics_experimental', 'public';"#);
+
+// This assumes ordered input and will not sort interally, will error if input is unsorted.
 #[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn time_weight_ordered_trans(
     state: Option<Internal<TimeWeightSummary>>,
@@ -94,7 +90,7 @@ type bytea = pg_sys::Datum;
 
 #[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn time_weight_summary_serialize(
-    mut state: Internal<TimeWeightSummary>,
+    state: Internal<TimeWeightSummary>,
 ) -> bytea {
     crate::do_serialize!(state)
 }
@@ -405,5 +401,22 @@ CREATE AGGREGATE time_weight(tws time_weight_summary)
     parallel = restricted
 );
 "#);
+
+#[pg_extern(name="average", schema = "timescale_analytics_experimental")]
+pub fn time_weighted_average_average(
+    tws: Option<timescale_analytics_experimental::time_weight_summary>,
+    _fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<f64> {
+    match tws {
+        None => None,
+        Some(tws) => 
+            match tws.to_TimeWeightSummary().time_weighted_average(None, None) {
+                Ok(a) => Some(a),
+                //without bounds, the average for a single value is undefined, but it probably shouldn't throw an error, we'll return null for now. 
+                Err(e) => if e == TimeWeightError::ZeroDuration {None} else {Err(e).unwrap()}
+            }
+    }
+}
+
 
 extension_sql!(r#"reset search_path;"#);

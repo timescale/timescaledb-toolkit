@@ -4,7 +4,7 @@ The Timescale Analytics project contains a number of utilities for working with 
 
 ## A note on tags [](tag-notes)
 Functionality within the Timescale Analytics repository is intended to be introduced in varying stages of completeness.  To clarify which releases a given feature or function can be found in, the following tags are used:
- - **Experimental** - Denotes functionality that is still under very active development and may have poor performance, not handle corner cases or errors, etc.  Experimental APIs will change across releases, and extension-update will drop database objects that depend on experimental features. Do not use them unless you're willing ot deal with the object you've created being dropped on update. This is particularly important for Forge users, as automatic extension updates WILL DELETE database objects. Experimental features and functions can be found exclusively in the `timescale_analytics_experimental` schema.
+ - **Experimental** - Denotes functionality that is still under very active development and may have poor performance, not handle corner cases or errors, etc.  Experimental APIs will change across releases, and extension-update will drop database objects that depend on experimental features. Do not use them unless you're willing ot deal with the object you've created (the view, table, continuous aggregates, function, etc.) being dropped on update. This is particularly important for Forge users, as automatic extension updates WILL DELETE database objects. Experimental features and functions can be found exclusively in the `timescale_analytics_experimental` schema.
  - **Stable** ***release id*** - Functionality in this state should be correct and performant.  Stable APIs will be found in our releases and should not be broken in future releases.  Note that this tag will also be accompanied with the version in which the feature was originally released, such as: Feature Foo<sup><mark>stable-1.2</mark></sup>.
  - **Deprecated** - It may be necessary to remove stable functionality at some point, for instance if it is being supplanted by newer functionality or if it has deprecated dependencies.  Functionality with this tag is expected to be removed in future releases and current users of it should move to alternatives.
 
@@ -15,7 +15,7 @@ Note that tags can be applied at either a feature or function scope.  The functi
 The following links lead to pages for the different features in the Timescale Analytics repository.
 
 - [Hyperloglog](tdigest) [<sup><mark>experimental</mark></sup>](/extension/docs/README.md#tag-notes) – An approximate `COUNT DISTINCT` based on hashing that provides reaonable accuracy in constant space. ([Methods](hyperloglog#hyperloglog_api))
-- [T-Digest](tdigest) [<sup><mark>experimental</mark></sup>](/extension/docs/README.md#tag-notes) – A quantile estimate sketch optimized to provide more accurate estimates near the tails (i.e. 0.001 or 0.995) than conventional approaches. ([Methods](tdigest#tdigest_api))
+- [T-Digest](hyperloglog) [<sup><mark>experimental</mark></sup>](/extension/docs/README.md#tag-notes) – A quantile estimate sketch optimized to provide more accurate estimates near the tails (i.e. 0.001 or 0.995) than conventional approaches. ([Methods](tdigest#tdigest_api))
 - [UddSketch](uddsketch) [<sup><mark>experimental</mark></sup>](/extension/docs/README.md#tag-notes) – A quantile estimate sketch which provides a guaranteed maximum relative error. ([Methods](uddsketch#uddsketch_api))
 
 [tdigest]: /extension/docs/tdigest.md

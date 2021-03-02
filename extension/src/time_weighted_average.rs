@@ -1,16 +1,16 @@
+#![allow(non_camel_case_types)]
 
 use serde::{Serialize, Deserialize};
-use pg_sys::TimestampTz;
 use pg_sys::Datum;
 use std::slice;
 
 use flat_serialize::*;
 use pgx::*;
 use crate::{
-    aggregate_utils::{aggregate_mctx, in_aggregate_context},
+    aggregate_utils::{ in_aggregate_context},
     flatten,
     json_inout_funcs,
-    palloc::{Internal, in_memory_context}, pg_type
+    palloc::{Internal}, pg_type
 };
 
 use time_weighted_average::{
@@ -20,6 +20,7 @@ use time_weighted_average::{
     TimeWeightMethod,
 };
 
+
 // hack to allow us to qualify names with "timescale_analytics_experimental"
 // so that pgx generates the correct SQL
 mod timescale_analytics_experimental {
@@ -28,80 +29,10 @@ mod timescale_analytics_experimental {
         CREATE SCHEMA IF NOT EXISTS timescale_analytics_experimental;
     "#);
 }
-extension_sql!(r#"set search_path to 'timescale_analytics_experimental', 'public';"#);
-
-// This assumes ordered input and will not sort interally, will error if input is unsorted.
-#[pg_extern(schema = "timescale_analytics_experimental")]
-pub fn time_weight_ordered_trans(
-    state: Option<Internal<TimeWeightSummary>>,
-    method: String,
-    ts: Option<pg_sys::TimestampTz>,
-    val: Option<f64>,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<TimeWeightSummary>> {
-    unsafe {
-        in_aggregate_context(fcinfo, || {
-            let p = match (ts, val) {
-                (_, None) => return state,
-                (None, _) => return state, 
-                (Some(ts), Some(val)) => TSPoint{ts, val},
-            };
-            let method = match method.to_lowercase().as_str() {
-                "linear"=> TimeWeightMethod::Linear,
-                "locf" => TimeWeightMethod::LOCF,
-                &_ => panic!()
-            };
-            let state = match state {
-                None => TimeWeightSummary::new(p, method).into(),
-                Some(state) => {state.clone().accum(p).unwrap(); state},
-            };
-            Some(state)
-        })
-    }
-}
-
-// requires moderately ordered states, not for this function call as either can be first or second, but for multiple it will need to be ordered or it'll error
-#[pg_extern(schema = "timescale_analytics_experimental")]
-pub fn time_weight_ordered_combine(
-    state1: Option<Internal<TimeWeightSummary>>,
-    state2: Option<Internal<TimeWeightSummary>>,
-    fcinfo: pg_sys::FunctionCallInfo,
-)  -> Option<Internal<TimeWeightSummary>> {
-    unsafe {
-        in_aggregate_context(fcinfo, || {
-            match (state1, state2) {
-                (None, None) => None,
-                (None, Some(state2)) => Some(state2.clone().into()),
-                (Some(state1), None) => Some(state1.clone().into()),
-                (Some(state1), Some(state2)) => {
-                    if state1.first.ts < state2.first.ts {
-                        Some(state1.combine(&state2).unwrap().clone().into())
-                    } else {
-                        Some(state2.combine(&state1).unwrap().clone().into())
-                    }
-                }
-            }
-        })
-    }
-}
 
 #[allow(non_camel_case_types)]
 type bytea = pg_sys::Datum;
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
-pub fn time_weight_summary_serialize(
-    state: Internal<TimeWeightSummary>,
-) -> bytea {
-    crate::do_serialize!(state)
-}
-
-#[pg_extern(schema = "timescale_analytics_experimental")]
-pub fn time_weight_summary_deserialize(
-    bytes: bytea,
-    _internal: Option<Internal<()>>,
-) -> Internal<TimeWeightSummary> {
-    crate::do_deserialize!(bytes, TimeWeightSummary)
-}
 
 extension_sql!(r#"
 CREATE TYPE timescale_analytics_experimental.time_weight_summary;
@@ -120,6 +51,7 @@ pg_type! {
 json_inout_funcs!(time_weight_summary);
 
 impl<'input> time_weight_summary<'input> {
+    #[allow(non_snake_case)]
     fn to_TimeWeightSummary(&self) -> TimeWeightSummary {
         TimeWeightSummary{
             method: *self.method,
@@ -130,81 +62,15 @@ impl<'input> time_weight_summary<'input> {
     }
 }
 
-
-// trans function for the aggregate over the exposed summary
-#[pg_extern(schema = "timescale_analytics_experimental")]
-pub fn time_weight_summary_ordered_trans(
-    state: Option<Internal<TimeWeightSummary>>,
-    next: Option<time_weight_summary>,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<TimeWeightSummary>> {
-    unsafe {
-        in_aggregate_context(fcinfo, || {
-            match (state, next) {
-                (None, None) => None,
-                (None, Some(next)) => Some(next.to_TimeWeightSummary().clone().into()),
-                (Some(state), None) => Some(state),
-                (Some(state), Some(next)) =>  Some(state.combine(&next.to_TimeWeightSummary()).unwrap().into())
-            }
-        })
-    }
-}
-
-#[pg_extern(schema = "timescale_analytics_experimental")]
-fn time_weight_ordered_final(
-    state: Option<Internal<TimeWeightSummary>>,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<time_weight_summary<'static>> {
-    unsafe {
-        in_aggregate_context(fcinfo, || {
-            let state = match state {
-                None => return None,
-                Some(state) => state,
-            };
-
-            flatten!(
-                time_weight_summary {
-                    method: &state.method,
-                    first: &state.first,
-                    last: &state.last,
-                    w_sum: &state.w_sum,
-                }
-            ).into()
-        })
-    }
-}
-
 extension_sql!(r#"
-CREATE OR REPLACE FUNCTION time_weight_summary_in(cstring) RETURNS time_weight_summary IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C AS 'MODULE_PATHNAME', 'time_weight_summary_in_wrapper';
-CREATE OR REPLACE FUNCTION time_weight_summary_out(time_weight_summary) RETURNS CString IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C AS 'MODULE_PATHNAME', 'time_weight_summary_out_wrapper';
+CREATE OR REPLACE FUNCTION timescale_analytics_experimental.time_weight_summary_in(cstring) RETURNS timescale_analytics_experimental.time_weight_summary IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C AS 'MODULE_PATHNAME', 'time_weight_summary_in_wrapper';
+CREATE OR REPLACE FUNCTION timescale_analytics_experimental.time_weight_summary_out(timescale_analytics_experimental.time_weight_summary) RETURNS CString IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C AS 'MODULE_PATHNAME', 'time_weight_summary_out_wrapper';
 
-CREATE TYPE time_weight_summary (
+CREATE TYPE timescale_analytics_experimental.time_weight_summary (
     INTERNALLENGTH = variable,
-    INPUT = time_weight_summary_in,
-    OUTPUT = time_weight_summary_out,
+    INPUT = timescale_analytics_experimental.time_weight_summary_in,
+    OUTPUT = timescale_analytics_experimental.time_weight_summary_out,
     STORAGE = extended
-);
-
-CREATE AGGREGATE time_weight_ordered(method text, ts timestamptz, value DOUBLE PRECISION)
-(
-    sfunc = time_weight_ordered_trans,
-    stype = internal,
-    finalfunc = time_weight_ordered_final,
-    combinefunc = time_weight_ordered_combine,
-    serialfunc = time_weight_summary_serialize,
-    deserialfunc = time_weight_summary_deserialize,
-    parallel = restricted
-);
-
-CREATE AGGREGATE time_weight_ordered(tws time_weight_summary)
-(
-    sfunc = time_weight_summary_ordered_trans,
-    stype = internal,
-    finalfunc = time_weight_ordered_final,
-    combinefunc = time_weight_ordered_combine,
-    serialfunc = time_weight_summary_serialize,
-    deserialfunc = time_weight_summary_deserialize,
-    parallel = restricted
 );
 "#);
 
@@ -212,43 +78,43 @@ CREATE AGGREGATE time_weight_ordered(tws time_weight_summary)
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TimeWeightTransState {
     #[serde(skip)]
-    buffer: Vec<TSPoint>,
+    point_buffer: Vec<TSPoint>,
     method: Option<TimeWeightMethod>,
-    combine_buffer: Vec<TimeWeightSummary>,
+    summary_buffer: Vec<TimeWeightSummary>,
 }
 
 impl TimeWeightTransState {
-    fn push(&mut self, value: TSPoint, method: TimeWeightMethod) {
+    fn push_point(&mut self, value: TSPoint, method: TimeWeightMethod) {
         match self.method {
             None => {self.method = Some(method)},
             Some(m)=> {if m != method {panic!("Mismatched methods")}}
         }
-        self.buffer.push(value);
+        self.point_buffer.push(value);
     }
 
-    fn sort_and_calc(&mut self) {
-        if self.buffer.is_empty() {
+    fn combine_points(&mut self) {
+        if self.point_buffer.is_empty() {
             return
         }
-        self.buffer.sort_unstable_by_key(|p| p.ts);
+        self.point_buffer.sort_unstable_by_key(|p| p.ts);
         match self.method {
-            None => panic!("invalid state"), // this shouldn't be None if the buffer is not empty
-            Some(m)=>self.combine_buffer.push(TimeWeightSummary::new_from_sorted_iter(&self.buffer, m).unwrap()),
+            None => panic!("invalid state"), // this shouldn't be None if the point_buffer is not empty
+            Some(m)=>self.summary_buffer.push(TimeWeightSummary::new_from_sorted_iter(&self.point_buffer, m).unwrap()),
         };
-        self.buffer.clear();
+        self.point_buffer.clear();
     }
-    fn combine_push(&mut self, other: &TimeWeightTransState) {
-        let cb = other.combine_buffer.clone();
+    fn push_summary(&mut self, other: &TimeWeightTransState) {
+        let cb = other.summary_buffer.clone();
         for val in cb.into_iter(){
-            self.combine_buffer.push(val);
+            self.summary_buffer.push(val);
         };
     }
-    fn combine_sort_and_calc(&mut self) {
-        if self.combine_buffer.len() <= 1 {
+    fn combine_summaries(&mut self) {
+        if self.summary_buffer.len() <= 1 {
             return
         }
-        self.combine_buffer.sort_unstable_by_key(|s| s.first.ts);
-        self.combine_buffer = vec![TimeWeightSummary::combine_sorted_iter(&self.combine_buffer).unwrap()];
+        self.summary_buffer.sort_unstable_by_key(|s| s.first.ts);
+        self.summary_buffer = vec![TimeWeightSummary::combine_sorted_iter(&self.summary_buffer).unwrap()];
     }
 }
 
@@ -256,8 +122,8 @@ impl TimeWeightTransState {
 pub fn time_weight_trans_serialize(
     mut state: Internal<TimeWeightTransState>,
 ) -> bytea {
-    state.sort_and_calc();
-    state.combine_sort_and_calc();
+    state.combine_points();
+    state.combine_summaries();
     crate::do_serialize!(state)
 }
 
@@ -290,8 +156,12 @@ pub fn time_weight_trans(
                 &_ => panic!("unknown method")
             };
             match state {
-                None => {let mut s = TimeWeightTransState{buffer: vec![], method: None, combine_buffer: vec![] }; s.push(p, method); Some(s.into())},
-                Some(mut s) => {s.push(p, method); Some(s)},
+                None => {
+                    let mut s = TimeWeightTransState{point_buffer: vec![], method: None, summary_buffer: vec![]}; 
+                    s.push_point(p, method); 
+                    Some(s.into())
+                },
+                Some(mut s) => {s.push_point(p, method); Some(s)},
             }
         })
     }
@@ -301,18 +171,18 @@ pub fn time_weight_trans(
 #[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn time_weight_summary_trans(
     state: Option<Internal<TimeWeightTransState>>,
-    next: Option<time_weight_summary>,
+    next: Option<timescale_analytics_experimental::time_weight_summary>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal<TimeWeightTransState>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state, next) {
                 (None, None) => None,
-                (None, Some(next)) => Some(TimeWeightTransState{combine_buffer:vec![next.to_TimeWeightSummary()], buffer: vec![], method: Some(*next.method)}.into()),
+                (None, Some(next)) => Some(TimeWeightTransState{summary_buffer:vec![next.to_TimeWeightSummary()], point_buffer: vec![], method: Some(*next.method)}.into()),
                 (Some(state), None) => Some(state),
                 (Some(mut state), Some(next)) =>  {
-                    let next = TimeWeightTransState{combine_buffer:vec![next.to_TimeWeightSummary()], buffer: vec![], method: Some(*next.method)};
-                    state.combine_push(&next); 
+                    let next = TimeWeightTransState{summary_buffer:vec![next.to_TimeWeightSummary()], point_buffer: vec![], method: Some(*next.method)};
+                    state.push_summary(&next); 
                     Some(state.into())
                 },
             }
@@ -331,14 +201,14 @@ pub fn time_weight_combine(
         in_aggregate_context(fcinfo, || {
             match (state1, state2) {
                 (None, None) => None,
-                (None, Some(state2)) => {let mut s = state2.clone(); s.sort_and_calc(); Some(s.into())},
-                (Some(state1), None) => {let mut s = state1.clone(); s.sort_and_calc(); Some(s.into())}, //should I make these return themselves?
+                (None, Some(state2)) => {let mut s = state2.clone(); s.combine_points(); Some(s.into())},
+                (Some(state1), None) => {let mut s = state1.clone(); s.combine_points(); Some(s.into())}, //should I make these return themselves?
                 (Some(state1), Some(state2)) => {
                     let mut s1 = state1.clone(); // is there a way to avoid if it doesn't need it?
-                    s1.sort_and_calc(); 
+                    s1.combine_points(); 
                     let mut s2 = state2.clone();
-                    s2.sort_and_calc();
-                    s2.combine_push(&s1);
+                    s2.combine_points();
+                    s2.push_summary(&s1);
                     Some(s2.into())
                 }
             }
@@ -350,17 +220,17 @@ pub fn time_weight_combine(
 fn time_weight_final(
     state: Option<Internal<TimeWeightTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<time_weight_summary<'static>> {
+) -> Option<timescale_analytics_experimental::time_weight_summary<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let mut state = match state {
                 None => return None,
                 Some(state) => state.clone(),
             };
-            state.sort_and_calc();
-            state.combine_sort_and_calc();
-            debug_assert!(state.combine_buffer.len() <= 1);
-            match state.combine_buffer.pop() {
+            state.combine_points();
+            state.combine_summaries();
+            debug_assert!(state.summary_buffer.len() <= 1);
+            match state.summary_buffer.pop() {
                 None => None,
                 Some(st) => Some(
                     flatten!(
@@ -379,25 +249,25 @@ fn time_weight_final(
 extension_sql!(r#"
 
 
-CREATE AGGREGATE time_weight(method text, ts timestamptz, value DOUBLE PRECISION)
+CREATE AGGREGATE timescale_analytics_experimental.time_weight(method text, ts timestamptz, value DOUBLE PRECISION)
 (
-    sfunc = time_weight_trans,
+    sfunc = timescale_analytics_experimental.time_weight_trans,
     stype = internal,
-    finalfunc = time_weight_final,
-    combinefunc = time_weight_combine,
-    serialfunc = time_weight_trans_serialize,
-    deserialfunc = time_weight_trans_deserialize,
+    finalfunc = timescale_analytics_experimental.time_weight_final,
+    combinefunc = timescale_analytics_experimental.time_weight_combine,
+    serialfunc = timescale_analytics_experimental.time_weight_trans_serialize,
+    deserialfunc = timescale_analytics_experimental.time_weight_trans_deserialize,
     parallel = restricted
 );
 
-CREATE AGGREGATE time_weight(tws time_weight_summary)
+CREATE AGGREGATE timescale_analytics_experimental.time_weight(tws timescale_analytics_experimental.time_weight_summary)
 (
-    sfunc = time_weight_summary_trans,
+    sfunc = timescale_analytics_experimental.time_weight_summary_trans,
     stype = internal,
-    finalfunc = time_weight_final,
-    combinefunc = time_weight_combine,
-    serialfunc = time_weight_trans_serialize,
-    deserialfunc = time_weight_trans_deserialize,
+    finalfunc = timescale_analytics_experimental.time_weight_final,
+    combinefunc = timescale_analytics_experimental.time_weight_combine,
+    serialfunc = timescale_analytics_experimental.time_weight_trans_serialize,
+    deserialfunc = timescale_analytics_experimental.time_weight_trans_deserialize,
     parallel = restricted
 );
 "#);
@@ -419,4 +289,57 @@ pub fn time_weighted_average_average(
 }
 
 
-extension_sql!(r#"reset search_path;"#);
+
+
+#[cfg(any(test, feature = "pg_test"))]
+mod tests {
+    use pgx::*;
+
+    
+    #[pg_test]
+    fn test_time_weight_aggregate(){
+        Spi::execute(|client| {
+            client.select("CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)", None, None);
+            // set search_path after defining our table so we don't pollute the wrong schema
+            let search_path = client.select("SELECT format('timescale_analytics_experimental, %s',current_setting('search_path'))", None, None).first().get_one::<String>();
+            client.select(&format!("SET LOCAL search_path TO {}", search_path.unwrap()), None, None);
+            client.select("INSERT INTO test VALUES('2020-01-01 00:00:00+00', 10.0), ('2020-01-01 00:01:00+00', 20.0)", None, None);
+            // test basic with 2 points
+            let simple = client.select("SELECT average(time_weight('Linear', ts, val)) FROM test", None, None).first().get_one::<f64>();
+            assert_eq!(simple.unwrap(), 15.0);
+            let simple = client.select("SELECT average(time_weight('LOCF', ts, val)) FROM test", None, None).first().get_one::<f64>();
+            assert_eq!(simple.unwrap(), 10.0);
+            
+            // more values evenly spaced
+            client.select("INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)", None, None);
+            let simple = client.select("SELECT average(time_weight('Linear', ts, val)) FROM test", None, None).first().get_one::<f64>();
+            assert_eq!(simple.unwrap(), 15.0);
+            let simple = client.select("SELECT average(time_weight('LOCF', ts, val)) FROM test", None, None).first().get_one::<f64>();
+            assert_eq!(simple.unwrap(), 15.0);
+
+            //non-evenly spaced values
+            client.select("INSERT INTO test VALUES('2020-01-01 00:08:00+00', 30.0), ('2020-01-01 00:10:00+00', 10.0), ('2020-01-01 00:10:30+00', 20.0), ('2020-01-01 00:20:00+00', 30.0)", None, None);
+            let simple = client.select("SELECT average(time_weight('Linear', ts, val)) FROM test", None, None).first().get_one::<f64>();
+            // expected =(15 +15 +15 +15 + 20*4 + 20*2 +15*.5 + 25*9.5) / 20 = 21.25 just taking the midpoints between each point and multiplying by minutes and dividing by total
+            assert_eq!(simple.unwrap(), 21.25);
+            let simple = client.select("SELECT average(time_weight('LOCF', ts, val)) FROM test", None, None).first().get_one::<f64>();
+            // expected = (10 + 20 + 10 + 20 + 10*4 + 30*2 +10*.5 + 20*9.5) / 20 = 17.75 using last value and carrying for each point
+            assert_eq!(simple.unwrap(), 17.75);
+
+            //make sure this works with whatever ordering we throw at it
+            let simple = client.select("SELECT average(time_weight('Linear', ts, val ORDER BY random())) FROM test", None, None).first().get_one::<f64>();
+            assert_eq!(simple.unwrap(), 21.25);
+            let simple = client.select("SELECT average(time_weight('LOCF', ts, val ORDER BY random())) FROM test", None, None).first().get_one::<f64>();
+            assert_eq!(simple.unwrap(), 17.75);
+
+            // make sure we get the same result if we do multi-level aggregation (though these will only have )
+            let simple = client.select("WITH t AS (SELECT date_trunc('minute', ts), time_weight('Linear', ts, val) AS tws FROM test GROUP BY 1) SELECT average(time_weight(tws)) FROM t", None, None).first().get_one::<f64>();
+            assert_eq!(simple.unwrap(), 21.25);
+            let simple = client.select("WITH t AS (SELECT date_trunc('minute', ts), time_weight('LOCF', ts, val) AS tws FROM test GROUP BY 1) SELECT average(time_weight(tws)) FROM t", None, None).first().get_one::<f64>();
+            assert_eq!(simple.unwrap(), 17.75);
+    });
+        
+    }
+    
+}
+

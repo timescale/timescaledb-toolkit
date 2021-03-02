@@ -1,7 +1,7 @@
 pub mod tspoint;
-use tspoint::TSPoint;
 #[cfg(feature = "use_serde")]
 use serde::{Deserialize, Serialize};
+use tspoint::TSPoint;
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[cfg_attr(feature = "use_serde", derive(Serialize, Deserialize))]
 #[repr(u8)]
@@ -31,7 +31,12 @@ pub enum TimeWeightError {
 
 impl TimeWeightSummary {
     pub fn new(pt: TSPoint, method: TimeWeightMethod) -> Self {
-        TimeWeightSummary { method: method, first: pt, last: pt, w_sum: 0.0 }
+        TimeWeightSummary {
+            method: method,
+            first: pt,
+            last: pt,
+            w_sum: 0.0,
+        }
     }
 
     pub fn accum(&mut self, pt: TSPoint) -> Result<(), TimeWeightError> {
@@ -39,18 +44,28 @@ impl TimeWeightSummary {
             return Err(TimeWeightError::OrderError);
         }
         if pt.ts == self.last.ts {
-            return Ok(()); // if two points are equal we only use the first we see
+            // if two points are equal we only use the first we see
+            // see discussion at https://github.com/timescale/timescale-analytics/discussions/65
+            return Ok(());
         }
         self.w_sum += self.method.weighted_sum(self.last, pt);
         self.last = pt;
         Ok(())
     }
 
+    // This combine function is different than some other combine functions as it requires disjoint time ranges in order to work
+    // correctly. The aggregate will never be parallel safe in the Postgres formulation because of this. However in the continuous 
+    // aggregate context (and potentially in a multinode context) where we can be sure of disjoint time ranges, this will work. 
+    // If there are space partitions, the space partition keys should be included in the group bys in order to be sure of this, otherwise
+    // overlapping ranges will be created. 
     pub fn combine(&self, next: &TimeWeightSummary) -> Result<TimeWeightSummary, TimeWeightError> {
         if self.method != next.method {
             return Err(TimeWeightError::MethodMismatch);
         }
         if self.last.ts >= next.first.ts {
+            // this combine function should always be pulling from disjoint sets, so duplicate values do not need to be handled
+            // as we do in accum() (where duplicates are ignored) here we throw an error, because duplicate values should
+            // always have been sorted into one or another bucket, and it means that the bounds of our buckets were wrong.
             return Err(TimeWeightError::OrderError);
         }
         let new = TimeWeightSummary {
@@ -63,12 +78,15 @@ impl TimeWeightSummary {
     }
 
     pub fn new_from_sorted_iter<'a>(
-        iter: impl IntoIterator<Item = &'a TSPoint>, method: TimeWeightMethod,
+        iter: impl IntoIterator<Item = &'a TSPoint>,
+        method: TimeWeightMethod,
     ) -> Result<TimeWeightSummary, TimeWeightError> {
         let mut t = iter.into_iter();
         let mut s = match t.next() {
-            None => {return Err(TimeWeightError::EmptyIterator);}, 
-            Some(val) => TimeWeightSummary::new(*val, method)
+            None => {
+                return Err(TimeWeightError::EmptyIterator);
+            }
+            Some(val) => TimeWeightSummary::new(*val, method),
         };
         for p in t {
             s.accum(*p)?;
@@ -81,12 +99,15 @@ impl TimeWeightSummary {
     // basic case
     // wrong sort
     // empty iter
-    pub fn combine_sorted_iter<'a> (
-        iter: impl IntoIterator<Item = &'a TimeWeightSummary>) -> Result<TimeWeightSummary, TimeWeightError> {
+    pub fn combine_sorted_iter<'a>(
+        iter: impl IntoIterator<Item = &'a TimeWeightSummary>,
+    ) -> Result<TimeWeightSummary, TimeWeightError> {
         let mut t = iter.into_iter();
         let mut s = match t.next() {
-            None => {return Err(TimeWeightError::EmptyIterator);}, 
-            Some(val) => *val
+            None => {
+                return Err(TimeWeightError::EmptyIterator);
+            }
+            Some(val) => *val,
         };
         for p in t {
             s = s.combine(p)?;
@@ -106,7 +127,9 @@ impl TimeWeightSummary {
     /// average will be evaluated to the *observed* end
 
     pub fn time_weighted_average(
-        &self, start_prev: Option<(i64, TSPoint)>, end_next: Option<(i64, Option<TSPoint>)>,
+        &self,
+        start_prev: Option<(i64, TSPoint)>,
+        end_next: Option<(i64, Option<TSPoint>)>,
     ) -> Result<f64, TimeWeightError> {
         let mut calc = *self;
         if let Some((start, prev)) = start_prev {
@@ -133,7 +156,11 @@ impl TimeWeightSummary {
         let new_first = self.method.interpolate(prev, Some(self.first), start)?;
         let w_sum = self.w_sum + self.method.weighted_sum(new_first, self.first);
 
-        Ok(TimeWeightSummary { first: new_first, w_sum, ..*self })
+        Ok(TimeWeightSummary {
+            first: new_first,
+            w_sum,
+            ..*self
+        })
     }
 
     fn with_next(&self, end: i64, next: Option<TSPoint>) -> Result<Self, TimeWeightError> {
@@ -151,15 +178,20 @@ impl TimeWeightSummary {
         let new_last = self.method.interpolate(self.last, next, end)?;
         let w_sum = self.w_sum + self.method.weighted_sum(self.last, new_last);
 
-        Ok(TimeWeightSummary { last: new_last, w_sum, ..*self })
+        Ok(TimeWeightSummary {
+            last: new_last,
+            w_sum,
+            ..*self
+        })
     }
 }
 
-
-
 impl TimeWeightMethod {
     fn interpolate(
-        &self, first: TSPoint, second: Option<TSPoint>, target: i64,
+        &self,
+        first: TSPoint,
+        second: Option<TSPoint>,
+        target: i64,
     ) -> Result<TSPoint, TimeWeightError> {
         if let Some(second) = second {
             if second.ts <= first.ts {
@@ -197,7 +229,6 @@ impl TimeWeightMethod {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use crate::*;
@@ -211,7 +242,6 @@ mod tests {
     // Overflow? -> Inf
     //
 
-    
     #[test]
     fn test_simple_accum_locf() {
         let mut s = TimeWeightSummary::new(TSPoint { ts: 0, val: 1.0 }, TimeWeightMethod::LOCF);
@@ -254,10 +284,16 @@ mod tests {
             t,
         )
         .unwrap();
-        let s1 = TimeWeightSummary::new_from_sorted_iter(vec![&TSPoint { ts: 0, val: 1.0 }, &TSPoint { ts: 10, val: 0.0 }], t)
-            .unwrap();
-        let s2 = TimeWeightSummary::new_from_sorted_iter(vec![&TSPoint { ts: 20, val: 2.0 }, &TSPoint { ts: 30, val: 1.0 }], t)
-            .unwrap();
+        let s1 = TimeWeightSummary::new_from_sorted_iter(
+            vec![&TSPoint { ts: 0, val: 1.0 }, &TSPoint { ts: 10, val: 0.0 }],
+            t,
+        )
+        .unwrap();
+        let s2 = TimeWeightSummary::new_from_sorted_iter(
+            vec![&TSPoint { ts: 20, val: 2.0 }, &TSPoint { ts: 30, val: 1.0 }],
+            t,
+        )
+        .unwrap();
         let s_comb = s1.combine(&s2).unwrap();
         assert_eq!(s, s_comb);
         // test combine with single val as well as multiple
@@ -272,8 +308,11 @@ mod tests {
     }
 
     fn order_accum_test(t: TimeWeightMethod) {
-        let s = TimeWeightSummary::new_from_sorted_iter(vec![&TSPoint { ts: 0, val: 1.0 }, &TSPoint { ts: 10, val: 0.0 }], t)
-            .unwrap();
+        let s = TimeWeightSummary::new_from_sorted_iter(
+            vec![&TSPoint { ts: 0, val: 1.0 }, &TSPoint { ts: 10, val: 0.0 }],
+            t,
+        )
+        .unwrap();
         let mut o = s;
         // adding points at the same timestamp shouldn't affect the value (no matter whether the
         // value is larger or smaller than the original)
@@ -281,17 +320,27 @@ mod tests {
         assert_eq!(s, o);
         o.accum(TSPoint { ts: 10, val: -1.0 }).unwrap();
         assert_eq!(s, o);
-        assert_eq!(o.accum(TSPoint { ts: 5, val: -1.0 }), Err(TimeWeightError::OrderError));
+        assert_eq!(
+            o.accum(TSPoint { ts: 5, val: -1.0 }),
+            Err(TimeWeightError::OrderError)
+        );
     }
     fn order_combine_test(t: TimeWeightMethod) {
-        let s = TimeWeightSummary::new_from_sorted_iter(vec![&TSPoint { ts: 0, val: 1.0 }, &TSPoint { ts: 10, val: 0.0 }], t)
-            .unwrap();
-        let smaller =
-            TimeWeightSummary::new_from_sorted_iter(vec![&TSPoint { ts: 5, val: 1.0 },&TSPoint { ts: 15, val: 0.0 }], t)
-                .unwrap();
-        let equal =
-            TimeWeightSummary::new_from_sorted_iter(vec![&TSPoint { ts: 10, val: 1.0 }, &TSPoint { ts: 15, val: 0.0 }], t)
-                .unwrap();
+        let s = TimeWeightSummary::new_from_sorted_iter(
+            vec![&TSPoint { ts: 0, val: 1.0 }, &TSPoint { ts: 10, val: 0.0 }],
+            t,
+        )
+        .unwrap();
+        let smaller = TimeWeightSummary::new_from_sorted_iter(
+            vec![&TSPoint { ts: 5, val: 1.0 }, &TSPoint { ts: 15, val: 0.0 }],
+            t,
+        )
+        .unwrap();
+        let equal = TimeWeightSummary::new_from_sorted_iter(
+            vec![&TSPoint { ts: 10, val: 1.0 }, &TSPoint { ts: 15, val: 0.0 }],
+            t,
+        )
+        .unwrap();
 
         assert_eq!(s.combine(&smaller), Err(TimeWeightError::OrderError));
         assert_eq!(s.combine(&equal), Err(TimeWeightError::OrderError));
@@ -307,7 +356,7 @@ mod tests {
     #[test]
     fn test_mismatch_combine() {
         let s1 = TimeWeightSummary::new_from_sorted_iter(
-            vec![&TSPoint { ts: 0, val: 1.0 }, &TSPoint{ ts: 10, val: 0.0 }],
+            vec![&TSPoint { ts: 0, val: 1.0 }, &TSPoint { ts: 10, val: 0.0 }],
             TimeWeightMethod::LOCF,
         )
         .unwrap();
@@ -330,5 +379,4 @@ mod tests {
         .unwrap();
         assert_eq!(s1.combine(&s2), Err(TimeWeightError::MethodMismatch));
     }
-
 }

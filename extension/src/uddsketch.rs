@@ -195,6 +195,41 @@ CREATE AGGREGATE timescale_analytics_experimental.uddsketch(
 );
 "#);
 
+#[pg_extern(schema = "timescale_analytics_experimental")]
+pub fn uddsketch_compound_trans(
+    state: Option<Internal<UddSketchInternal>>,
+    value: Option<timescale_analytics_experimental::UddSketch>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal<UddSketchInternal>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            let value = match value {
+                None => return state,
+                Some(value) => value.to_uddsketch(),
+            };
+            let mut state = match state {
+                None => return Some(value.into()),
+                Some(state) => state,
+            };
+            state.merge_sketch(&value);
+            state.into()
+        })
+    }
+}
+
+extension_sql!(r#"
+CREATE AGGREGATE timescale_analytics_experimental.uddsketch(
+    timescale_analytics_experimental.uddsketch
+) (
+    sfunc = timescale_analytics_experimental.uddsketch_compound_trans,
+    stype = internal,
+    finalfunc = timescale_analytics_experimental.uddsketch_final,
+    combinefunc = timescale_analytics_experimental.uddsketch_combine,
+    serialfunc = timescale_analytics_experimental.uddsketch_serialize,
+    deserialfunc = timescale_analytics_experimental.uddsketch_deserialize
+);
+"#);
+
 //---- Available PG operations on the sketch
 
 // Approximate the value at the given quantile (0.0-1.0)
@@ -333,6 +368,59 @@ mod tests {
                     pct_eql(est_quant.unwrap(), quantile, 1.0);
                 }
             }
+        });
+    }
+
+    #[pg_test]
+    fn test_compound_agg() {
+        Spi::execute(|client| {
+            client.select("CREATE TABLE new_test (device INTEGER, value DOUBLE PRECISION)", None, None);
+            client.select("INSERT INTO new_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
+
+            let sanity = client
+                .select("SELECT COUNT(*) FROM new_test", None, None)
+                .first()
+                .get_one::<i32>();
+            assert_eq!(Some(1010), sanity);
+
+            client.select(
+                "SET timescale_analytics_acknowledge_auto_drop TO 'true'",
+                None,
+                None,
+            );
+
+            client.select("CREATE VIEW sketches AS \
+                SELECT device, timescale_analytics_experimental.uddsketch(20, 0.01, value) \
+                FROM new_test \
+                GROUP BY device", None, None);
+
+            client.select("CREATE VIEW composite AS \
+                SELECT timescale_analytics_experimental.uddsketch(uddsketch) \
+                FROM sketches", None, None);
+
+            client.select("CREATE VIEW base AS \
+                SELECT timescale_analytics_experimental.uddsketch(20, 0.01, value) \
+                FROM new_test", None, None);
+                
+            let (value, error) = client
+                .select("SELECT \
+                    timescale_analytics_experimental.quantile(uddsketch, 0.9), \
+                    timescale_analytics_experimental.error(uddsketch) \
+                    FROM base", None, None)
+                .first()
+                .get_two::<f64, f64>();
+                
+            let (test_value, test_error) = client
+                .select("SELECT \
+                    timescale_analytics_experimental.quantile(uddsketch, 0.9), \
+                    timescale_analytics_experimental.error(uddsketch) \
+                    FROM composite", None, None)
+                .first()
+                .get_two::<f64, f64>();
+
+            apx_eql(test_value.unwrap(), value.unwrap(), 0.0001);
+            apx_eql(test_error.unwrap(), error.unwrap(), 0.000001);
+            apx_eql(test_value.unwrap(), 9.0, test_error.unwrap());
         });
     }
 }

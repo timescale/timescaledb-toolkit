@@ -41,14 +41,13 @@ impl std::cmp::PartialOrd for SketchHashKey{
 
 impl SketchHashKey {
     /// This is the key corresponding to the current key after the SketchHashMap it refers to has gone through one compaction.
-    /// compact bucket index towards the smaller bucket size,
-    /// aka 0 on the number line, -INF on the bucket indicies
+    /// Note that odd buckets get combined with the bucket after them (i.e. old buckets -3 and -2 become new bucket -1, {-1, 0} -> 0, {1, 2} -> 1)
     fn compact_key(&self) -> SketchHashKey {
         use SketchHashKey::*;
 
         match *self {
-            Negative(x) => Negative(if x < 0 {x-1} else {x} /2),
-            Positive(x) => Positive(if x < 0 {x-1} else {x} /2),
+            Negative(x) => Negative(if x > 0 {x+1} else {x} /2),
+            Positive(x) => Positive(if x > 0 {x+1} else {x} /2),
             x => x.clone(),  // Zero and Invalid don't compact
         }
     }
@@ -283,12 +282,12 @@ impl UDDSketch {
             return;
         }
 
-        let mut target = other.clone();
+        let mut other = other.clone();
 
-        while self.compactions > target.compactions {
-            target.compact_buckets();
+        while self.compactions > other.compactions {
+            other.compact_buckets();
         }
-        while target.compactions > self.compactions {
+        while other.compactions > self.compactions {
             self.compact_buckets();
         }
 

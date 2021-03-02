@@ -137,7 +137,7 @@ pub fn tdigest_serialize(
     crate::do_serialize!(state)
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "timescale_analytics_experimental", strict)]
 pub fn tdigest_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,

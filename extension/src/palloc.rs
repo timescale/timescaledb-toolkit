@@ -72,7 +72,15 @@ impl<T> FromDatum for Internal<T> {
         if is_null {
             return None
         }
-        let nn = NonNull::new(datum as *mut T).unwrap_or_else(||
+
+        let ptr = datum as *mut T;
+        // FIXME it looks like timescale occasionally passes a 0 ptr as non-null
+        //       we special case 0-sized types to ensure that we still function
+        //       in that case
+        if std::mem::size_of::<T>() == 0 && ptr.is_null() {
+            return Some(Internal(NonNull::dangling()))
+        }
+        let nn = NonNull::new(ptr).unwrap_or_else(||
                 panic!("Internal-type Datum flagged not null but its datum is zero"));
         Some(Internal(nn))
     }

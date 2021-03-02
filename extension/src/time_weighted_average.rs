@@ -14,7 +14,7 @@ use crate::{
 };
 
 use time_weighted_average::{
-    tspoint::TSPoint, 
+    tspoint::TSPoint,
     TimeWeightSummary,
     TimeWeightError,
     TimeWeightMethod,
@@ -127,7 +127,7 @@ pub fn time_weight_trans_serialize(
     crate::do_serialize!(state)
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "timescale_analytics_experimental", strict)]
 pub fn time_weight_trans_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
@@ -147,7 +147,7 @@ pub fn time_weight_trans(
         in_aggregate_context(fcinfo, || {
             let p = match (ts, val) {
                 (_, None) => return state,
-                (None, _) => return state, 
+                (None, _) => return state,
                 (Some(ts), Some(val)) => TSPoint{ts, val},
             };
             let method = match method.to_lowercase().as_str() {
@@ -157,8 +157,8 @@ pub fn time_weight_trans(
             };
             match state {
                 None => {
-                    let mut s = TimeWeightTransState{point_buffer: vec![], method: None, summary_buffer: vec![]}; 
-                    s.push_point(p, method); 
+                    let mut s = TimeWeightTransState{point_buffer: vec![], method: None, summary_buffer: vec![]};
+                    s.push_point(p, method);
                     Some(s.into())
                 },
                 Some(mut s) => {s.push_point(p, method); Some(s)},
@@ -182,7 +182,7 @@ pub fn time_weight_summary_trans(
                 (Some(state), None) => Some(state),
                 (Some(mut state), Some(next)) =>  {
                     let next = TimeWeightTransState{summary_buffer:vec![next.to_TimeWeightSummary()], point_buffer: vec![], method: Some(*next.method)};
-                    state.push_summary(&next); 
+                    state.push_summary(&next);
                     Some(state.into())
                 },
             }
@@ -205,7 +205,7 @@ pub fn time_weight_combine(
                 (Some(state1), None) => {let mut s = state1.clone(); s.combine_points(); Some(s.into())}, //should I make these return themselves?
                 (Some(state1), Some(state2)) => {
                     let mut s1 = state1.clone(); // is there a way to avoid if it doesn't need it?
-                    s1.combine_points(); 
+                    s1.combine_points();
                     let mut s2 = state2.clone();
                     s2.combine_points();
                     s2.push_summary(&s1);
@@ -279,10 +279,10 @@ pub fn time_weighted_average_average(
 ) -> Option<f64> {
     match tws {
         None => None,
-        Some(tws) => 
+        Some(tws) =>
             match tws.to_TimeWeightSummary().time_weighted_average(None, None) {
                 Ok(a) => Some(a),
-                //without bounds, the average for a single value is undefined, but it probably shouldn't throw an error, we'll return null for now. 
+                //without bounds, the average for a single value is undefined, but it probably shouldn't throw an error, we'll return null for now.
                 Err(e) => if e == TimeWeightError::ZeroDuration {None} else {Err(e).unwrap()}
             }
     }
@@ -295,7 +295,7 @@ pub fn time_weighted_average_average(
 mod tests {
     use pgx::*;
 
-    
+
     #[pg_test]
     fn test_time_weight_aggregate(){
         Spi::execute(|client| {
@@ -309,7 +309,7 @@ mod tests {
             assert_eq!(simple.unwrap(), 15.0);
             let simple = client.select("SELECT average(time_weight('LOCF', ts, val)) FROM test", None, None).first().get_one::<f64>();
             assert_eq!(simple.unwrap(), 10.0);
-            
+
             // more values evenly spaced
             client.select("INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)", None, None);
             let simple = client.select("SELECT average(time_weight('Linear', ts, val)) FROM test", None, None).first().get_one::<f64>();
@@ -338,8 +338,7 @@ mod tests {
             let simple = client.select("WITH t AS (SELECT date_trunc('minute', ts), time_weight('LOCF', ts, val) AS tws FROM test GROUP BY 1) SELECT average(time_weight(tws)) FROM t", None, None).first().get_one::<f64>();
             assert_eq!(simple.unwrap(), 17.75);
     });
-        
-    }
-    
-}
 
+    }
+
+}

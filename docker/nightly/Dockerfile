@@ -22,9 +22,8 @@ RUN set -ex \
     # to the end of the path.
     && PATH="${PATH}:/root/.cargo/bin" \
     # install pgx.
-    && git clone --branch work-in-workspaces https://github.com/JLockerman/pgx.git /rust/pgx \
-        && cargo install --path /rust/pgx/cargo-pgx \
-        && cargo pgx init --pg12 /usr/local/bin/pg_config
+    && cargo install --git https://github.com/JLockerman/pgx.git --branch timescale cargo-pgx \
+    && cargo pgx init --pg12 /usr/local/bin/pg_config
 
 # we seperate out the build components so we we can just get them from cache
 # and don't need to fetch/build them each time
@@ -37,8 +36,7 @@ RUN set -ex \
     # apk version of rust, to get dynamic linking, so add the rustup components
     # to the end of the path.
     && PATH="${PATH}:/root/.cargo/bin" \
-    && cd /rust/timescale-analytics && git reset HEAD --hard \
-        && git clean -f -x \
+    && cd /rust/timescale-analytics \
         && cd extension \
         && cargo pgx install --release
 
@@ -46,4 +44,4 @@ RUN set -ex \
 # ship the build tools.
 FROM timescale/timescaledb:latest-pg12 AS nightly
 
-COPY --from=build-analytics /usr/local/lib/postgresql/ /usr/local/lib/postgresql/
+COPY --from=build-analytics /usr/local/ /usr/local/

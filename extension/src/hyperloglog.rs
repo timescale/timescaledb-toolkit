@@ -107,7 +107,7 @@ pub fn hyperloglog_serialize(state: Internal<HyperLogLogTrans>) -> bytea {
     crate::do_serialize!(state)
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "timescale_analytics_experimental", strict)]
 pub fn hyperloglog_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,

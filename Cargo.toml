@@ -5,7 +5,7 @@ members = [
     "crates/t-digest",
     "crates/hyperloglog",
     "crates/udd-sketch",
-]
+    "crates/time-weighted-average",]
 
 [profile.dev]
 panic = "unwind"

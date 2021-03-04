@@ -3,6 +3,4 @@ hyperloglog.generated.sql
 uddsketch.generated.sql
 triggers.generated.sql
 time_weighted_average.generated.sql
-schema_test.generated.sql
-serialization_collations.generated.sql
-serialization_types.generated.sql
+grant_usage.sql

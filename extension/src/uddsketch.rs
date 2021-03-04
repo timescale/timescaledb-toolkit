@@ -191,7 +191,8 @@ CREATE AGGREGATE timescale_analytics_experimental.uddsketch(
     finalfunc = timescale_analytics_experimental.uddsketch_final,
     combinefunc = timescale_analytics_experimental.uddsketch_combine,
     serialfunc = timescale_analytics_experimental.uddsketch_serialize,
-    deserialfunc = timescale_analytics_experimental.uddsketch_deserialize
+    deserialfunc = timescale_analytics_experimental.uddsketch_deserialize,
+    parallel = safe
 );
 "#);
 
@@ -226,7 +227,8 @@ CREATE AGGREGATE timescale_analytics_experimental.uddsketch(
     finalfunc = timescale_analytics_experimental.uddsketch_final,
     combinefunc = timescale_analytics_experimental.uddsketch_combine,
     serialfunc = timescale_analytics_experimental.uddsketch_serialize,
-    deserialfunc = timescale_analytics_experimental.uddsketch_deserialize
+    deserialfunc = timescale_analytics_experimental.uddsketch_deserialize,
+    parallel = safe
 );
 "#);
 
@@ -420,7 +422,7 @@ mod tests {
 
             apx_eql(test_value.unwrap(), value.unwrap(), 0.0001);
             apx_eql(test_error.unwrap(), error.unwrap(), 0.000001);
-            apx_eql(test_value.unwrap(), 9.0, test_error.unwrap());
+            pct_eql(test_value.unwrap(), 9.0, test_error.unwrap());
         });
     }
 }

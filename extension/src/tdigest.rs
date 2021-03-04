@@ -1,9 +1,5 @@
 
-use std::{
-    convert::TryInto,
-    mem::replace,
-    slice,
-};
+use std::{convert::TryInto, mem::replace, ops::Deref, slice};
 
 use serde::{Serialize, Deserialize};
 
@@ -107,6 +103,7 @@ pub fn tdigest_combine(
                 (None, Some(state2)) => Some(state2.clone().into()),
                 (Some(state1), None) => Some(state1.clone().into()),
                 (Some(state1), Some(state2)) => {
+                    assert_eq!(state1.digested.max_size(), state2.digested.max_size());
                     let digvec = vec![state1.digested.clone(), state2.digested.clone()];
                     if !state1.buffer.is_empty() {
                         digvec[0].merge_unsorted(state1.buffer.clone());  // merge_unsorted should take a reference
@@ -154,27 +151,49 @@ pg_type! {
     #[derive(Debug)]
     struct TDigest {
         buckets: u32,
-        count: u32,
+        max_buckets: u32,
+        count: u64,
         sum: f64,
         min: f64,
         max: f64,
         centroids: [Centroid; self.buckets],
-        max_buckets: u32,
     }
 }
 
 json_inout_funcs!(TDigest);
 
 impl<'input> TDigest<'input> {
-    fn to_tdigest(&self) -> InternalTDigest {
+    fn to_internal_tdigest(&self) -> InternalTDigest {
         InternalTDigest::new(
             Vec::from(self.centroids),
             *self.sum,
-            *self.count as f64,
+            *self.count,
             *self.max,
             *self.0.min,
             *self.max_buckets as usize
         )
+    }
+
+    fn from_internal_tdigest(digest: &InternalTDigest) -> TDigest<'input> {
+        let max_buckets: u32 = digest.max_size().try_into().unwrap();
+
+        let centroids = digest.raw_centroids();
+
+        // we need to flatten the vector to a single buffer that contains
+        // both the size, the data, and the varlen header
+        unsafe {
+            flatten!(
+                TDigest {
+                    max_buckets: &max_buckets,
+                    buckets: &(centroids.len() as u32),
+                    count: &digest.count(),
+                    sum: &digest.sum(),
+                    min: &digest.min(),
+                    max: &digest.max(),
+                    centroids: &centroids,
+                }
+            )
+        }
     }
 }
 
@@ -192,27 +211,11 @@ fn tdigest_final(
             };
             state.digest();
 
-            let max_buckets: u32 = state.digested.max_size().try_into().unwrap();
-            let count = state.digested.count() as u32;
-
-            let centroids = state.digested.raw_centroids();
-
-            // we need to flatten the vector to a single buffer that contains
-            // both the size, the data, and the varlen header
-            flatten!(
-                TDigest {
-                    max_buckets: &max_buckets,
-                    buckets: &(centroids.len() as u32),
-                    count: &count,
-                    sum: &state.digested.sum(),
-                    min: &state.digested.min(),
-                    max: &state.digested.max(),
-                    centroids: &centroids,
-                }
-            ).into()
+            TDigest::from_internal_tdigest(&state.digested).into()
         })
     }
 }
+
 
 extension_sql!(r#"
 CREATE OR REPLACE FUNCTION
@@ -241,7 +244,94 @@ CREATE AGGREGATE timescale_analytics_experimental.tdigest(size int, value DOUBLE
     finalfunc = timescale_analytics_experimental.tdigest_final,
     combinefunc = timescale_analytics_experimental.tdigest_combine,
     serialfunc = timescale_analytics_experimental.tdigest_serialize,
-    deserialfunc = timescale_analytics_experimental.tdigest_deserialize
+    deserialfunc = timescale_analytics_experimental.tdigest_deserialize,
+    parallel = safe
+);
+"#);
+
+#[pg_extern(schema = "timescale_analytics_experimental")]
+pub fn tdigest_compound_trans(
+    state: Option<Internal<InternalTDigest>>,
+    value: Option<timescale_analytics_experimental::TDigest<'static>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal<InternalTDigest>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            match (state, value) {
+                (a, None) => a,
+                (None, Some(a)) => Some(a.to_internal_tdigest().into()),
+                (Some(a), Some(b)) => {
+                    assert_eq!(a.max_size(), *b.max_buckets as usize);
+                    Some(InternalTDigest::merge_digests(
+                            vec![a.deref().clone(), b.to_internal_tdigest()]  // TODO: TDigest merge with self
+                        ).into())
+                }
+            }
+        })
+    }
+}
+
+#[pg_extern(schema = "timescale_analytics_experimental")]
+pub fn tdigest_compound_combine(
+    state1: Option<Internal<InternalTDigest>>,
+    state2: Option<Internal<InternalTDigest>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal<InternalTDigest>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            match (state1, state2) {
+                (None, None) => None,
+                (None, Some(state2)) => Some(state2.clone().into()),
+                (Some(state1), None) => Some(state1.clone().into()),
+                (Some(state1), Some(state2)) => {
+                    assert_eq!(state1.max_size(), state2.max_size());
+                    Some(InternalTDigest::merge_digests(
+                            vec![state1.deref().clone(), state2.deref().clone()]  // TODO: TDigest merge with self
+                        ).into())
+                }
+            }
+        })
+    }
+}
+
+#[pg_extern(schema = "timescale_analytics_experimental")]
+fn tdigest_compound_final(
+    state: Option<Internal<InternalTDigest>>,
+    _fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<timescale_analytics_experimental::TDigest<'static>> {
+    match state {
+        None => None,
+        Some(state) => Some(TDigest::from_internal_tdigest(&state.deref())),
+    }
+}
+
+#[pg_extern(schema = "timescale_analytics_experimental")]
+fn tdigest_compound_serialize(
+    state: Internal<InternalTDigest>,
+    _fcinfo: pg_sys::FunctionCallInfo,
+) -> bytea {
+    crate::do_serialize!(state)
+}
+
+#[pg_extern(schema = "timescale_analytics_experimental")]
+pub fn tdigest_compound_deserialize(
+    bytes: bytea,
+    _internal: Option<Internal<()>>,
+) -> Internal<InternalTDigest> {
+    crate::do_deserialize!(bytes, InternalTDigest)
+}
+
+extension_sql!(r#"
+CREATE AGGREGATE timescale_analytics_experimental.tdigest(
+    timescale_analytics_experimental.tdigest
+) (
+    sfunc = timescale_analytics_experimental.tdigest_compound_trans,
+    stype = internal,
+    finalfunc = timescale_analytics_experimental.tdigest_compound_final,
+    combinefunc = timescale_analytics_experimental.tdigest_compound_combine,
+    serialfunc = timescale_analytics_experimental.tdigest_compound_serialize,
+    deserialfunc = timescale_analytics_experimental.tdigest_compound_deserialize,
+    parallel = safe
 );
 "#);
 
@@ -254,7 +344,7 @@ pub fn tdigest_quantile(
     quantile: f64,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
-    digest.to_tdigest().estimate_quantile(quantile)
+    digest.to_internal_tdigest().estimate_quantile(quantile)
 }
 
 // Approximate the quantile at the given value
@@ -264,7 +354,7 @@ pub fn tdigest_quantile_at_value(
     value: f64,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
-    digest.to_tdigest().estimate_quantile_at_value(value)
+    digest.to_internal_tdigest().estimate_quantile_at_value(value)
 }
 
 // Number of elements from which the digest was built.
@@ -447,7 +537,7 @@ mod tests {
                 .first()
                 .get_one::<String>();
 
-            let expected = "{\"version\":1,\"buckets\":88,\"count\":100,\"sum\":5050.0,\"min\":1.0,\"max\":100.0,\"centroids\":[{\"mean\":1.0,\"weight\":1.0},{\"mean\":2.0,\"weight\":1.0},{\"mean\":3.0,\"weight\":1.0},{\"mean\":4.0,\"weight\":1.0},{\"mean\":5.0,\"weight\":1.0},{\"mean\":6.0,\"weight\":1.0},{\"mean\":7.0,\"weight\":1.0},{\"mean\":8.0,\"weight\":1.0},{\"mean\":9.0,\"weight\":1.0},{\"mean\":10.0,\"weight\":1.0},{\"mean\":11.0,\"weight\":1.0},{\"mean\":12.0,\"weight\":1.0},{\"mean\":13.0,\"weight\":1.0},{\"mean\":14.0,\"weight\":1.0},{\"mean\":15.0,\"weight\":1.0},{\"mean\":16.0,\"weight\":1.0},{\"mean\":17.0,\"weight\":1.0},{\"mean\":18.0,\"weight\":1.0},{\"mean\":19.0,\"weight\":1.0},{\"mean\":20.0,\"weight\":1.0},{\"mean\":21.0,\"weight\":1.0},{\"mean\":22.0,\"weight\":1.0},{\"mean\":23.0,\"weight\":1.0},{\"mean\":24.0,\"weight\":1.0},{\"mean\":25.0,\"weight\":1.0},{\"mean\":26.0,\"weight\":1.0},{\"mean\":27.0,\"weight\":1.0},{\"mean\":28.0,\"weight\":1.0},{\"mean\":29.0,\"weight\":1.0},{\"mean\":30.0,\"weight\":1.0},{\"mean\":31.0,\"weight\":1.0},{\"mean\":32.0,\"weight\":1.0},{\"mean\":33.0,\"weight\":1.0},{\"mean\":34.0,\"weight\":1.0},{\"mean\":35.0,\"weight\":1.0},{\"mean\":36.0,\"weight\":1.0},{\"mean\":37.0,\"weight\":1.0},{\"mean\":38.0,\"weight\":1.0},{\"mean\":39.0,\"weight\":1.0},{\"mean\":40.0,\"weight\":1.0},{\"mean\":41.0,\"weight\":1.0},{\"mean\":42.0,\"weight\":1.0},{\"mean\":43.0,\"weight\":1.0},{\"mean\":44.0,\"weight\":1.0},{\"mean\":45.0,\"weight\":1.0},{\"mean\":46.0,\"weight\":1.0},{\"mean\":47.0,\"weight\":1.0},{\"mean\":48.0,\"weight\":1.0},{\"mean\":49.0,\"weight\":1.0},{\"mean\":50.0,\"weight\":1.0},{\"mean\":51.0,\"weight\":1.0},{\"mean\":52.5,\"weight\":2.0},{\"mean\":54.5,\"weight\":2.0},{\"mean\":56.5,\"weight\":2.0},{\"mean\":58.5,\"weight\":2.0},{\"mean\":60.5,\"weight\":2.0},{\"mean\":62.5,\"weight\":2.0},{\"mean\":64.0,\"weight\":1.0},{\"mean\":65.5,\"weight\":2.0},{\"mean\":67.5,\"weight\":2.0},{\"mean\":69.0,\"weight\":1.0},{\"mean\":70.5,\"weight\":2.0},{\"mean\":72.0,\"weight\":1.0},{\"mean\":73.5,\"weight\":2.0},{\"mean\":75.0,\"weight\":1.0},{\"mean\":76.0,\"weight\":1.0},{\"mean\":77.5,\"weight\":2.0},{\"mean\":79.0,\"weight\":1.0},{\"mean\":80.0,\"weight\":1.0},{\"mean\":81.5,\"weight\":2.0},{\"mean\":83.0,\"weight\":1.0},{\"mean\":84.0,\"weight\":1.0},{\"mean\":85.0,\"weight\":1.0},{\"mean\":86.0,\"weight\":1.0},{\"mean\":87.0,\"weight\":1.0},{\"mean\":88.0,\"weight\":1.0},{\"mean\":89.0,\"weight\":1.0},{\"mean\":90.0,\"weight\":1.0},{\"mean\":91.0,\"weight\":1.0},{\"mean\":92.0,\"weight\":1.0},{\"mean\":93.0,\"weight\":1.0},{\"mean\":94.0,\"weight\":1.0},{\"mean\":95.0,\"weight\":1.0},{\"mean\":96.0,\"weight\":1.0},{\"mean\":97.0,\"weight\":1.0},{\"mean\":98.0,\"weight\":1.0},{\"mean\":99.0,\"weight\":1.0},{\"mean\":100.0,\"weight\":1.0}],\"max_buckets\":100}";
+            let expected = "{\"version\":1,\"buckets\":88,\"max_buckets\":100,\"count\":100,\"sum\":5050.0,\"min\":1.0,\"max\":100.0,\"centroids\":[{\"mean\":1.0,\"weight\":1},{\"mean\":2.0,\"weight\":1},{\"mean\":3.0,\"weight\":1},{\"mean\":4.0,\"weight\":1},{\"mean\":5.0,\"weight\":1},{\"mean\":6.0,\"weight\":1},{\"mean\":7.0,\"weight\":1},{\"mean\":8.0,\"weight\":1},{\"mean\":9.0,\"weight\":1},{\"mean\":10.0,\"weight\":1},{\"mean\":11.0,\"weight\":1},{\"mean\":12.0,\"weight\":1},{\"mean\":13.0,\"weight\":1},{\"mean\":14.0,\"weight\":1},{\"mean\":15.0,\"weight\":1},{\"mean\":16.0,\"weight\":1},{\"mean\":17.0,\"weight\":1},{\"mean\":18.0,\"weight\":1},{\"mean\":19.0,\"weight\":1},{\"mean\":20.0,\"weight\":1},{\"mean\":21.0,\"weight\":1},{\"mean\":22.0,\"weight\":1},{\"mean\":23.0,\"weight\":1},{\"mean\":24.0,\"weight\":1},{\"mean\":25.0,\"weight\":1},{\"mean\":26.0,\"weight\":1},{\"mean\":27.0,\"weight\":1},{\"mean\":28.0,\"weight\":1},{\"mean\":29.0,\"weight\":1},{\"mean\":30.0,\"weight\":1},{\"mean\":31.0,\"weight\":1},{\"mean\":32.0,\"weight\":1},{\"mean\":33.0,\"weight\":1},{\"mean\":34.0,\"weight\":1},{\"mean\":35.0,\"weight\":1},{\"mean\":36.0,\"weight\":1},{\"mean\":37.0,\"weight\":1},{\"mean\":38.0,\"weight\":1},{\"mean\":39.0,\"weight\":1},{\"mean\":40.0,\"weight\":1},{\"mean\":41.0,\"weight\":1},{\"mean\":42.0,\"weight\":1},{\"mean\":43.0,\"weight\":1},{\"mean\":44.0,\"weight\":1},{\"mean\":45.0,\"weight\":1},{\"mean\":46.0,\"weight\":1},{\"mean\":47.0,\"weight\":1},{\"mean\":48.0,\"weight\":1},{\"mean\":49.0,\"weight\":1},{\"mean\":50.0,\"weight\":1},{\"mean\":51.0,\"weight\":1},{\"mean\":52.5,\"weight\":2},{\"mean\":54.5,\"weight\":2},{\"mean\":56.5,\"weight\":2},{\"mean\":58.5,\"weight\":2},{\"mean\":60.5,\"weight\":2},{\"mean\":62.5,\"weight\":2},{\"mean\":64.0,\"weight\":1},{\"mean\":65.5,\"weight\":2},{\"mean\":67.5,\"weight\":2},{\"mean\":69.0,\"weight\":1},{\"mean\":70.5,\"weight\":2},{\"mean\":72.0,\"weight\":1},{\"mean\":73.5,\"weight\":2},{\"mean\":75.0,\"weight\":1},{\"mean\":76.0,\"weight\":1},{\"mean\":77.5,\"weight\":2},{\"mean\":79.0,\"weight\":1},{\"mean\":80.0,\"weight\":1},{\"mean\":81.5,\"weight\":2},{\"mean\":83.0,\"weight\":1},{\"mean\":84.0,\"weight\":1},{\"mean\":85.0,\"weight\":1},{\"mean\":86.0,\"weight\":1},{\"mean\":87.0,\"weight\":1},{\"mean\":88.0,\"weight\":1},{\"mean\":89.0,\"weight\":1},{\"mean\":90.0,\"weight\":1},{\"mean\":91.0,\"weight\":1},{\"mean\":92.0,\"weight\":1},{\"mean\":93.0,\"weight\":1},{\"mean\":94.0,\"weight\":1},{\"mean\":95.0,\"weight\":1},{\"mean\":96.0,\"weight\":1},{\"mean\":97.0,\"weight\":1},{\"mean\":98.0,\"weight\":1},{\"mean\":99.0,\"weight\":1},{\"mean\":100.0,\"weight\":1}]}";
 
             assert_eq!(output, Some(expected.into()));
 
@@ -459,6 +549,56 @@ mod tests {
                 .first()
                 .get_one();
             assert_eq!(estimate, Some(90.5));
+        });
+    }
+
+    #[pg_test]
+    fn test_tdigest_compound_agg() {
+        Spi::execute(|client| {
+            client.select("CREATE TABLE new_test (device INTEGER, value DOUBLE PRECISION)", None, None);
+            client.select("INSERT INTO new_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
+
+            let sanity = client
+                .select("SELECT COUNT(*) FROM new_test", None, None)
+                .first()
+                .get_one::<i32>();
+            assert_eq!(Some(1010), sanity);
+
+            client.select(
+                "SET timescale_analytics_acknowledge_auto_drop TO 'true'",
+                None,
+                None,
+            );
+
+            client.select("CREATE VIEW digests AS \
+                SELECT device, timescale_analytics_experimental.tdigest(20, value) \
+                FROM new_test \
+                GROUP BY device", None, None);
+
+            client.select("CREATE VIEW composite AS \
+                SELECT timescale_analytics_experimental.tdigest(tdigest) \
+                FROM digests", None, None);
+
+            client.select("CREATE VIEW base AS \
+                SELECT timescale_analytics_experimental.tdigest(20, value) \
+                FROM new_test", None, None);
+                
+            let value= client
+                .select("SELECT \
+                    timescale_analytics_experimental.quantile(tdigest, 0.9) \
+                    FROM base", None, None)
+                .first()
+                .get_one::<f64>();
+                
+            let test_value = client
+                .select("SELECT \
+                    timescale_analytics_experimental.quantile(tdigest, 0.9) \
+                    FROM composite", None, None)
+                .first()
+                .get_one::<f64>();
+
+            apx_eql(test_value.unwrap(), value.unwrap(), 0.1);
+            apx_eql(test_value.unwrap(), 9.0, 0.1);
         });
     }
 }

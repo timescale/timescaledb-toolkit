@@ -10,3 +10,4 @@ asap.generated.sql
 counter_agg.generated.sql
 utilities.generated.sql
 stats_agg.generated.sql
+grant_usage.sql

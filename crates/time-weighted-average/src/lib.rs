@@ -54,10 +54,10 @@ impl TimeWeightSummary {
     }
 
     // This combine function is different than some other combine functions as it requires disjoint time ranges in order to work
-    // correctly. The aggregate will never be parallel safe in the Postgres formulation because of this. However in the continuous 
-    // aggregate context (and potentially in a multinode context) where we can be sure of disjoint time ranges, this will work. 
+    // correctly. The aggregate will never be parallel safe in the Postgres formulation because of this. However in the continuous
+    // aggregate context (and potentially in a multinode context) where we can be sure of disjoint time ranges, this will work.
     // If there are space partitions, the space partition keys should be included in the group bys in order to be sure of this, otherwise
-    // overlapping ranges will be created. 
+    // overlapping ranges will be created.
     pub fn combine(&self, next: &TimeWeightSummary) -> Result<TimeWeightSummary, TimeWeightError> {
         if self.method != next.method {
             return Err(TimeWeightError::MethodMismatch);
@@ -94,11 +94,6 @@ impl TimeWeightSummary {
         Ok(s)
     }
 
-    // Test with:
-    // 1 value only
-    // basic case
-    // wrong sort
-    // empty iter
     pub fn combine_sorted_iter<'a>(
         iter: impl IntoIterator<Item = &'a TimeWeightSummary>,
     ) -> Result<TimeWeightSummary, TimeWeightError> {
@@ -273,6 +268,43 @@ mod tests {
         assert_eq!(s.w_sum, -10.0);
     }
 
+    fn new_from_sorted_iter_test(t: TimeWeightMethod) {
+        // simple test
+        let mut s = TimeWeightSummary::new(TSPoint { ts: 0, val: 1.0 }, t);
+        s.accum(TSPoint { ts: 10, val: 0.0 }).unwrap();
+        s.accum(TSPoint { ts: 20, val: 2.0 }).unwrap();
+        s.accum(TSPoint { ts: 30, val: 1.0 }).unwrap();
+
+        let n = TimeWeightSummary::new_from_sorted_iter(
+            vec![
+                &TSPoint { ts: 0, val: 1.0 },
+                &TSPoint { ts: 10, val: 0.0 },
+                &TSPoint { ts: 20, val: 2.0 },
+                &TSPoint { ts: 30, val: 1.0 },
+            ],
+            t,
+        )
+        .unwrap();
+        assert_eq!(s, n);
+
+        //single value
+        let mut s = TimeWeightSummary::new(TSPoint { ts: 0, val: 1.0 }, t);
+        let n =
+            TimeWeightSummary::new_from_sorted_iter(vec![&TSPoint { ts: 0, val: 1.0 }], t).unwrap();
+        assert_eq!(s, n);
+
+        //no values should error
+        let n = TimeWeightSummary::new_from_sorted_iter(vec![], t);
+        assert_eq!(n, Err(TimeWeightError::EmptyIterator));
+
+    }
+
+    #[test]
+    fn test_new_from_sorted_iter(){
+        new_from_sorted_iter_test(TimeWeightMethod::LOCF);
+        new_from_sorted_iter_test(TimeWeightMethod::Linear);
+    }
+
     fn combine_test(t: TimeWeightMethod) {
         let s = TimeWeightSummary::new_from_sorted_iter(
             vec![
@@ -307,6 +339,7 @@ mod tests {
         combine_test(TimeWeightMethod::Linear);
     }
 
+
     fn order_accum_test(t: TimeWeightMethod) {
         let s = TimeWeightSummary::new_from_sorted_iter(
             vec![&TSPoint { ts: 0, val: 1.0 }, &TSPoint { ts: 10, val: 0.0 }],
@@ -320,11 +353,52 @@ mod tests {
         assert_eq!(s, o);
         o.accum(TSPoint { ts: 10, val: -1.0 }).unwrap();
         assert_eq!(s, o);
+
+        //but adding out of order points doesn't work
         assert_eq!(
             o.accum(TSPoint { ts: 5, val: -1.0 }),
             Err(TimeWeightError::OrderError)
         );
+        
+
+        //same for new_from_sorted_iter - test that multiple values only the first is taken
+        let n = TimeWeightSummary::new_from_sorted_iter(
+            vec![
+                &TSPoint { ts: 0, val: 1.0 },
+                &TSPoint { ts: 20, val: 2.0 },
+                &TSPoint { ts: 30, val: 4.0 },
+            ],
+            t,
+        ).unwrap();
+
+        let m = TimeWeightSummary::new_from_sorted_iter(
+            vec![
+                &TSPoint { ts: 0, val: 1.0 },
+                &TSPoint { ts: 20, val: 2.0 },
+                &TSPoint { ts: 20, val: 0.0 },
+                &TSPoint { ts: 40, val: 4.0 },
+            ],
+            t,
+        ).unwrap();
+        assert_eq(m, n);
+        
+        // but out of order inputs correctly error
+        let n = TimeWeightSummary::new_from_sorted_iter(
+            vec![
+                &TSPoint { ts: 0, val: 1.0 },
+                &TSPoint { ts: 20, val: 2.0 },
+                &TSPoint { ts: 10, val: 0.0 },
+            ],
+            t,
+        );
+        assert_eq!(n,  Err(TimeWeightError::OrderError));
     }
+    #[test]
+    fn test_order_accum() {
+        order_accum_test(TimeWeightMethod::LOCF);
+        order_accum_test(TimeWeightMethod::Linear);
+    }
+
     fn order_combine_test(t: TimeWeightMethod) {
         let s = TimeWeightSummary::new_from_sorted_iter(
             vec![&TSPoint { ts: 0, val: 1.0 }, &TSPoint { ts: 10, val: 0.0 }],
@@ -336,6 +410,7 @@ mod tests {
             t,
         )
         .unwrap();
+        // see note above, but 
         let equal = TimeWeightSummary::new_from_sorted_iter(
             vec![&TSPoint { ts: 10, val: 1.0 }, &TSPoint { ts: 15, val: 0.0 }],
             t,
@@ -346,11 +421,69 @@ mod tests {
         assert_eq!(s.combine(&equal), Err(TimeWeightError::OrderError));
     }
     #[test]
-    fn test_order() {
-        order_accum_test(TimeWeightMethod::LOCF);
-        order_accum_test(TimeWeightMethod::Linear);
+    fn test_order_combine(){
         order_combine_test(TimeWeightMethod::LOCF);
         order_combine_test(TimeWeightMethod::Linear);
+    }
+
+    fn combine_sorted_iter_test(t:TimeWeightMethod){
+        //simple case
+        let m = TimeWeightSummary::new_from_sorted_iter(
+            vec![
+                &TSPoint { ts: 0, val: 1.0 },
+                &TSPoint { ts: 20, val: 2.0 },
+                &TSPoint { ts: 30, val: 0.0 },
+                &TSPoint { ts: 40, val: 4.0 },
+            ],
+            t,
+        ).unwrap();
+        let a = TimeWeightSummary::new_from_sorted_iter(
+            vec![
+                &TSPoint { ts: 0, val: 1.0 },
+                &TSPoint { ts: 20, val: 2.0 },
+            ],
+            t,
+        ).unwrap();
+        let b =  let m = TimeWeightSummary::new_from_sorted_iter(
+            vec![
+                &TSPoint { ts: 30, val: 0.0 },
+                &TSPoint { ts: 40, val: 4.0 },
+            ],
+            t,
+        ).unwrap();
+        let n = TimeWeightSummary::combine_sorted_iter(vec![a, b]).unwrap();
+        assert_eq!(m, n);
+
+        //single values are no problem
+        let n = TimeWeightSummary::combine_sorted_iter(vec![m]).unwrap();
+        assert_eq!(m, n);
+
+        //single values in TimeWeightSummaries are no problem
+        let c = TimeWeightSummary::new(TSPoint { ts: 0, val: 1.0 }, t);
+        let d = TimeWeightSummary::new(TSPoint { ts: 20, val: 2.0 }, t);
+        let n = TimeWeightSummary::combine_sorted_iter(vec![c, d, b]).unwrap();
+        assert_eq!(m, n);
+        // whether single values come first or later
+        let e = TimeWeightSummary::new(TSPoint { ts: 30, val: 0.0 }, t);
+        let f = TimeWeightSummary::new(TSPoint { ts: 40, val: 4.0 }, t);
+        let n = TimeWeightSummary::combine_sorted_iter(vec![a, e, f]).unwrap();
+        assert_eq!(m, n);
+
+        // empty iterators error
+        assert_eq!(TimeWeightSummary::combine_sorted_iter(vec![]), Err(TimeWeightError::EmptyIterator);
+
+        // out of order values error
+        let n = TimeWeightSummary::combine_sorted_iter(vec![c, d, f, e]);
+        assert_eq!(n, Err(TimeWeightError::OrderError));
+
+        // even with two values
+        let n = TimeWeightSummary::combine_sorted_iter(vec![b, a]);
+        assert_eq!(n, Err(TimeWeightError::OrderError));
+    }
+    #[test]
+    fn test_combine_sorted_iter(){
+        combine_sorted_iter_test(TimeWeightMethod::LOCF);
+        combine_sorted_iter_test(TimeWeightMethod::Linear);        
     }
 
     #[test]
@@ -379,4 +512,8 @@ mod tests {
         .unwrap();
         assert_eq!(s1.combine(&s2), Err(TimeWeightError::MethodMismatch));
     }
+
+    //next steps:
+    // split with_prev / with_next and test
+    // add average tests
 }

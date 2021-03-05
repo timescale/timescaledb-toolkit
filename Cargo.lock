@@ -246,6 +246,7 @@ dependencies = [
  "atty",
  "bitflags",
  "strsim",
+ "term_size",
  "textwrap",
  "unicode-width",
  "vec_map",
@@ -595,6 +596,15 @@ checksum = "501466ecc8a30d1d3b7fc9229b122b2ce8ed6e9d9223f1138d4babb253e51817"
 dependencies = [
  "typenum",
  "version_check",
+]
+
+[[package]]
+name = "getopts"
+version = "0.2.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "14dbbfd5c71d70241ecf9e6f13737f7b5ce823821063188d7e46c41d371eebd5"
+dependencies = [
+ "unicode-width",
 ]
 
 [[package]]
@@ -1148,6 +1158,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "pulldown-cmark"
+version = "0.8.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ffade02495f22453cd593159ea2f59827aae7f53fa8323f756799b670881dcf8"
+dependencies = [
+ "bitflags",
+ "getopts",
+ "memchr",
+ "unicase",
+]
+
+[[package]]
 name = "quote"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1363,6 +1385,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71d301d4193d031abdd79ff7e3dd721168a9572ef3fe51a1517aba235bd8f86e"
 
 [[package]]
+name = "same-file"
+version = "1.0.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "93fc1dc3aaa9bfed95e02e6eadabb4baf7e3078b0bd1b4d7b6b0b68378900502"
+dependencies = [
+ "winapi-util",
+]
+
+[[package]]
 name = "scoped-tls"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1521,6 +1552,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "sql-doctester"
+version = "0.1.0"
+dependencies = [
+ "bytecount",
+ "clap",
+ "colored",
+ "postgres",
+ "pulldown-cmark",
+ "rayon",
+ "uuid",
+ "walkdir",
+]
+
+[[package]]
 name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1626,6 +1671,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "term_size"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1e4129646ca0ed8f45d09b929036bafad5377103edd06e50bf574b353d2b08d9"
+dependencies = [
+ "libc",
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "termcolor"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1640,6 +1695,7 @@ version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d326610f408c7a4eb6f51c37c330e496b08506c9457c9d34287ecc38809fb060"
 dependencies = [
+ "term_size",
  "unicode-width",
 ]
 
@@ -1902,6 +1958,17 @@ name = "version_check"
 version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b5a972e5669d67ba988ce3dc826706fb0a8b01471c088cb0b6110b805cc36aed"
+
+[[package]]
+name = "walkdir"
+version = "2.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "777182bc735b6424e1a57516d35ed72cb8019d85c8c9bf536dccb3445c1a2f7d"
+dependencies = [
+ "same-file",
+ "winapi 0.3.9",
+ "winapi-util",
+]
 
 [[package]]
 name = "wasi"

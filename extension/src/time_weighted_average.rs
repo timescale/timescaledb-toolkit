@@ -281,7 +281,8 @@ CREATE AGGREGATE timescale_analytics_experimental.time_weight(method text, ts ti
     combinefunc = timescale_analytics_experimental.time_weight_combine,
     serialfunc = timescale_analytics_experimental.time_weight_trans_serialize,
     deserialfunc = timescale_analytics_experimental.time_weight_trans_deserialize,
-    parallel = restricted
+    parallel = restricted,
+    finalfunc_modify = shareable
 );
 
 CREATE AGGREGATE timescale_analytics_experimental.time_weight(tws timescale_analytics_experimental.TimeWeightSummary)
@@ -304,7 +305,7 @@ pub fn time_weighted_average_average(
 ) -> Option<f64> {
     match tws {
         None => None,
-        Some(tws) => match tws.to_internal().time_weighted_average(None, None) {
+        Some(tws) => match tws.to_internal().time_weighted_average() {
             Ok(a) => Some(a),
             //without bounds, the average for a single value is undefined, but it probably shouldn't throw an error, we'll return null for now.
             Err(e) => {

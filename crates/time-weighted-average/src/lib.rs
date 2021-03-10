@@ -58,7 +58,10 @@ impl TimeWeightSummaryInternal {
     // aggregate context (and potentially in a multinode context) where we can be sure of disjoint time ranges, this will work.
     // If there are space partitions, the space partition keys should be included in the group bys in order to be sure of this, otherwise
     // overlapping ranges will be created.
-    pub fn combine(&self, next: &TimeWeightSummaryInternal) -> Result<TimeWeightSummaryInternal, TimeWeightError> {
+    pub fn combine(
+        &self,
+        next: &TimeWeightSummaryInternal,
+    ) -> Result<TimeWeightSummaryInternal, TimeWeightError> {
         if self.method != next.method {
             return Err(TimeWeightError::MethodMismatch);
         }
@@ -110,22 +113,20 @@ impl TimeWeightSummaryInternal {
         Ok(s)
     }
 
-    /// evaluate the time_weighted_average based on the summary, along with several other
-    /// parameters that determine how we extrapolate to the ends of time ranges. Notes on
-    /// behaviour in several cases:
+    /// Extrapolate a TimeWeightSummary to bounds using the method and provided points outside the bounds of the original summary.
+    /// This is especially useful for cases where you want to get an average for, say, a time_bucket, using points outside of that time_bucket. 
+    /// The initial aggregate will only have points within the time bucket, but outside of it, you will either have a point that you select 
+    /// or a TimeWeightSummary where the first or last point can be used depending on which bound you are extrapolating to.
     /// 1. The start_prev parameter is optional, but if a start is provided a previous point must be
-    /// provided (for both linear and locf weighting methods), if it is not provided the average
-    /// will be evaluated from the *observed* start
+    /// provided (for both linear and locf weighting methods).
     /// 2. The end_next parameter is also optional, if an end is provided and the locf weighting
     /// method is specified, a next parameter isn't needed, with the linear method, the next
-    /// point is needed and we will error if it is not provided. If an end is not specified, the
-    /// average will be evaluated to the *observed* end
-
-    pub fn time_weighted_average(
+    /// point is needed and we will error if it is not provided.
+    pub fn with_bounds(
         &self,
         start_prev: Option<(i64, TSPoint)>,
         end_next: Option<(i64, Option<TSPoint>)>,
-    ) -> Result<f64, TimeWeightError> {
+    ) -> Result<Self, TimeWeightError> {
         let mut calc = *self;
         if let Some((start, prev)) = start_prev {
             calc = self.with_prev(start, prev)?
@@ -134,13 +135,7 @@ impl TimeWeightSummaryInternal {
         if let Some((end, next)) = end_next {
             calc = self.with_next(end, next)?
         }
-
-        if calc.last.ts == calc.first.ts {
-            return Err(TimeWeightError::ZeroDuration);
-        }
-
-        let duration = (calc.last.ts - calc.first.ts) as f64;
-        Ok(calc.w_sum / duration)
+        Ok(calc)
     }
 
     fn with_prev(&self, start: i64, prev: TSPoint) -> Result<Self, TimeWeightError> {
@@ -178,6 +173,15 @@ impl TimeWeightSummaryInternal {
             w_sum,
             ..*self
         })
+    }
+
+    ///Evaluate the time_weighted_average from the summary.
+    pub fn time_weighted_average(&self) -> Result<f64, TimeWeightError> {
+        if self.last.ts == self.first.ts {
+            return Err(TimeWeightError::ZeroDuration);
+        }
+        let duration = (self.last.ts - self.first.ts) as f64;
+        Ok(self.w_sum / duration)
     }
 }
 
@@ -239,7 +243,8 @@ mod tests {
 
     #[test]
     fn test_simple_accum_locf() {
-        let mut s = TimeWeightSummaryInternal::new(TSPoint { ts: 0, val: 1.0 }, TimeWeightMethod::LOCF);
+        let mut s =
+            TimeWeightSummaryInternal::new(TSPoint { ts: 0, val: 1.0 }, TimeWeightMethod::LOCF);
         assert_eq!(s.w_sum, 0.0);
         s.accum(TSPoint { ts: 10, val: 0.0 }).unwrap();
         assert_eq!(s.w_sum, 10.0);
@@ -254,7 +259,8 @@ mod tests {
     }
     #[test]
     fn test_simple_accum_linear() {
-        let mut s = TimeWeightSummaryInternal::new(TSPoint { ts: 0, val: 1.0 }, TimeWeightMethod::Linear);
+        let mut s =
+            TimeWeightSummaryInternal::new(TSPoint { ts: 0, val: 1.0 }, TimeWeightMethod::Linear);
         assert_eq!(s.w_sum, 0.0);
         s.accum(TSPoint { ts: 10, val: 0.0 }).unwrap();
         assert_eq!(s.w_sum, 5.0);
@@ -290,17 +296,17 @@ mod tests {
         //single value
         let s = TimeWeightSummaryInternal::new(TSPoint { ts: 0, val: 1.0 }, t);
         let n =
-            TimeWeightSummaryInternal::new_from_sorted_iter(vec![&TSPoint { ts: 0, val: 1.0 }], t).unwrap();
+            TimeWeightSummaryInternal::new_from_sorted_iter(vec![&TSPoint { ts: 0, val: 1.0 }], t)
+                .unwrap();
         assert_eq!(s, n);
 
         //no values should error
         let n = TimeWeightSummaryInternal::new_from_sorted_iter(vec![], t);
         assert_eq!(n, Err(TimeWeightError::EmptyIterator));
-
     }
 
     #[test]
-    fn test_new_from_sorted_iter(){
+    fn test_new_from_sorted_iter() {
         new_from_sorted_iter_test(TimeWeightMethod::LOCF);
         new_from_sorted_iter_test(TimeWeightMethod::Linear);
     }
@@ -339,7 +345,6 @@ mod tests {
         combine_test(TimeWeightMethod::Linear);
     }
 
-
     fn order_accum_test(t: TimeWeightMethod) {
         let s = TimeWeightSummaryInternal::new_from_sorted_iter(
             vec![&TSPoint { ts: 0, val: 1.0 }, &TSPoint { ts: 10, val: 0.0 }],
@@ -359,7 +364,6 @@ mod tests {
             o.accum(TSPoint { ts: 5, val: -1.0 }),
             Err(TimeWeightError::OrderError)
         );
-        
 
         //same for new_from_sorted_iter - test that multiple values only the first is taken
         let n = TimeWeightSummaryInternal::new_from_sorted_iter(
@@ -369,7 +373,8 @@ mod tests {
                 &TSPoint { ts: 30, val: 4.0 },
             ],
             t,
-        ).unwrap();
+        )
+        .unwrap();
 
         let m = TimeWeightSummaryInternal::new_from_sorted_iter(
             vec![
@@ -379,9 +384,10 @@ mod tests {
                 &TSPoint { ts: 30, val: 4.0 },
             ],
             t,
-        ).unwrap();
+        )
+        .unwrap();
         assert_eq!(m, n);
-        
+
         // but out of order inputs correctly error
         let n = TimeWeightSummaryInternal::new_from_sorted_iter(
             vec![
@@ -391,7 +397,7 @@ mod tests {
             ],
             t,
         );
-        assert_eq!(n,  Err(TimeWeightError::OrderError));
+        assert_eq!(n, Err(TimeWeightError::OrderError));
     }
     #[test]
     fn test_order_accum() {
@@ -410,7 +416,7 @@ mod tests {
             t,
         )
         .unwrap();
-        // see note above, but 
+        // see note above, but
         let equal = TimeWeightSummaryInternal::new_from_sorted_iter(
             vec![&TSPoint { ts: 10, val: 1.0 }, &TSPoint { ts: 15, val: 0.0 }],
             t,
@@ -421,12 +427,12 @@ mod tests {
         assert_eq!(s.combine(&equal), Err(TimeWeightError::OrderError));
     }
     #[test]
-    fn test_order_combine(){
+    fn test_order_combine() {
         order_combine_test(TimeWeightMethod::LOCF);
         order_combine_test(TimeWeightMethod::Linear);
     }
 
-    fn combine_sorted_iter_test(t:TimeWeightMethod){
+    fn combine_sorted_iter_test(t: TimeWeightMethod) {
         //simple case
         let m = TimeWeightSummaryInternal::new_from_sorted_iter(
             vec![
@@ -436,21 +442,18 @@ mod tests {
                 &TSPoint { ts: 40, val: 4.0 },
             ],
             t,
-        ).unwrap();
+        )
+        .unwrap();
         let a = TimeWeightSummaryInternal::new_from_sorted_iter(
-            vec![
-                &TSPoint { ts: 0, val: 1.0 },
-                &TSPoint { ts: 20, val: 2.0 },
-            ],
+            vec![&TSPoint { ts: 0, val: 1.0 }, &TSPoint { ts: 20, val: 2.0 }],
             t,
-        ).unwrap();
+        )
+        .unwrap();
         let b = TimeWeightSummaryInternal::new_from_sorted_iter(
-            vec![
-                &TSPoint { ts: 30, val: 0.0 },
-                &TSPoint { ts: 40, val: 4.0 },
-            ],
+            vec![&TSPoint { ts: 30, val: 0.0 }, &TSPoint { ts: 40, val: 4.0 }],
             t,
-        ).unwrap();
+        )
+        .unwrap();
         let n = TimeWeightSummaryInternal::combine_sorted_iter(vec![&a, &b]).unwrap();
         assert_eq!(m, n);
 
@@ -470,7 +473,10 @@ mod tests {
         assert_eq!(m, n);
 
         // empty iterators error
-        assert_eq!(TimeWeightSummaryInternal::combine_sorted_iter(vec![]), Err(TimeWeightError::EmptyIterator));
+        assert_eq!(
+            TimeWeightSummaryInternal::combine_sorted_iter(vec![]),
+            Err(TimeWeightError::EmptyIterator)
+        );
 
         // out of order values error
         let n = TimeWeightSummaryInternal::combine_sorted_iter(vec![&c, &d, &f, &e]);
@@ -481,9 +487,9 @@ mod tests {
         assert_eq!(n, Err(TimeWeightError::OrderError));
     }
     #[test]
-    fn test_combine_sorted_iter(){
+    fn test_combine_sorted_iter() {
         combine_sorted_iter_test(TimeWeightMethod::LOCF);
-        combine_sorted_iter_test(TimeWeightMethod::Linear);        
+        combine_sorted_iter_test(TimeWeightMethod::Linear);
     }
 
     #[test]
@@ -516,4 +522,6 @@ mod tests {
     //next steps:
     // split with_prev / with_next and test
     // add average tests
+
+
 }

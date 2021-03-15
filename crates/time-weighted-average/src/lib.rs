@@ -1,7 +1,7 @@
 pub mod tspoint;
 #[cfg(feature = "use_serde")]
 use serde::{Deserialize, Serialize};
-use tspoint::TSPoint;
+pub use tspoint::TSPoint;
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[cfg_attr(feature = "use_serde", derive(Serialize, Deserialize))]
 #[repr(u8)]

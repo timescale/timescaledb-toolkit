@@ -280,6 +280,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "245097e9a4535ee1e3e3931fcfcd55a796a44c643e8596ff6566d68f09b87bbc"
 
 [[package]]
+name = "counter-agg"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "time_weighted_average",
+]
+
+[[package]]
 name = "cpuid-bool"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1783,6 +1791,7 @@ version = "0.2.0"
 dependencies = [
  "asap",
  "bincode",
+ "counter-agg",
  "flat_serialize",
  "flat_serialize_macro",
  "hyperloglog",

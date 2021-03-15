@@ -20,6 +20,7 @@ pgx-macros = {git="https://github.com/JLockerman/pgx.git", branch="timescale"}
 tdigest = {path="../crates/t-digest", features = ["use_serde"]}
 hyperloglog = {path="../crates/hyperloglog"}
 uddsketch = {path="../crates/udd-sketch"}
+counter-agg = {path="../crates/counter-agg"}
 time_weighted_average = {path="../crates/time-weighted-average", features = ["use_serde"]}
 asap = {path="../crates/asap"}
 

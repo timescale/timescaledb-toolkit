@@ -11,7 +11,8 @@ use flat_serialize::*;
 use pgx::*;
 
 use time_weighted_average::{
-    tspoint::TSPoint, TimeWeightError, TimeWeightMethod, TimeWeightSummaryInternal,
+    tspoint::TSPoint, TimeWeightError, TimeWeightMethod,
+    TimeWeightSummary as TimeWeightSummaryInternal,
 };
 
 // hack to allow us to qualify names with "timescale_analytics_experimental"
@@ -97,12 +98,10 @@ impl TimeWeightTransState {
             return;
         }
         self.point_buffer.sort_unstable_by_key(|p| p.ts);
-        self.summary_buffer
-            .push(
-                TimeWeightSummaryInternal::new_from_sorted_iter(
-                    &self.point_buffer, 
-                    self.method
-                ).unwrap());
+        self.summary_buffer.push(
+            TimeWeightSummaryInternal::new_from_sorted_iter(&self.point_buffer, self.method)
+                .unwrap(),
+        );
         self.point_buffer.clear();
     }
 
@@ -228,7 +227,7 @@ pub fn time_weight_combine(
                     let mut s = state1.clone();
                     s.combine_points();
                     Some(s.into())
-                } 
+                }
                 (Some(state1), Some(state2)) => {
                     let mut s1 = state1.clone(); // is there a way to avoid if it doesn't need it?
                     s1.combine_points();
@@ -325,7 +324,7 @@ mod tests {
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {
             $client
-                .select($stmt, None, None,)
+                .select($stmt, None, None)
                 .first()
                 .get_one::<$type>()
                 .unwrap()
@@ -335,28 +334,28 @@ mod tests {
     fn test_time_weight_aggregate() {
         Spi::execute(|client| {
             let stmt = "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)";
-            client.select(stmt, None, None,);
+            client.select(stmt, None, None);
 
             // set search_path after defining our table so we don't pollute the wrong schema
             let stmt = "SELECT format('timescale_analytics_experimental, %s',current_setting('search_path'))";
             let search_path = select_one!(client, stmt, String);
             let stmt = &format!("SET LOCAL search_path TO {}", search_path);
-            client.select(stmt, None, None,);
+            client.select(stmt, None, None);
 
             // add a couple points
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:00:00+00', 10.0), ('2020-01-01 00:01:00+00', 20.0)";
-            client.select(stmt, None, None,);
+            client.select(stmt, None, None);
 
             // test basic with 2 points
             let stmt = "SELECT average(time_weight('Linear', ts, val)) FROM test";
-            assert_eq!(select_one!(client, stmt, f64),  15.0);
+            assert_eq!(select_one!(client, stmt, f64), 15.0);
             let stmt = "SELECT average(time_weight('LOCF', ts, val)) FROM test";
             assert_eq!(select_one!(client, stmt, f64), 10.0);
 
             // more values evenly spaced
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)";
             client.select(stmt, None, None);
-            
+
             let stmt = "SELECT average(time_weight('Linear', ts, val)) FROM test";
             assert_eq!(select_one!(client, stmt, f64), 15.0);
             let stmt = "SELECT average(time_weight('LOCF', ts, val)) FROM test";
@@ -364,8 +363,8 @@ mod tests {
 
             //non-evenly spaced values
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:08:00+00', 30.0), ('2020-01-01 00:10:00+00', 10.0), ('2020-01-01 00:10:30+00', 20.0), ('2020-01-01 00:20:00+00', 30.0)";
-            client.select(stmt, None, None,);
-       
+            client.select(stmt, None, None);
+
             let stmt = "SELECT average(time_weight('Linear', ts, val)) FROM test";
             // expected =(15 +15 +15 +15 + 20*4 + 20*2 +15*.5 + 25*9.5) / 20 = 21.25 just taking the midpoints between each point and multiplying by minutes and dividing by total
             assert_eq!(select_one!(client, stmt, f64), 21.25);

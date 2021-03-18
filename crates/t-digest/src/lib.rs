@@ -43,7 +43,7 @@ use serde::{Deserialize, Serialize};
 #[repr(C)]
 pub struct Centroid {
     mean: OrderedFloat<f64>,
-    weight: OrderedFloat<f64>,
+    weight: u64,
 }
 
 impl PartialOrd for Centroid {
@@ -59,10 +59,10 @@ impl Ord for Centroid {
 }
 
 impl Centroid {
-    pub fn new(mean: f64, weight: f64) -> Self {
+    pub fn new(mean: f64, weight: u64) -> Self {
         Centroid {
             mean: OrderedFloat::from(mean),
-            weight: OrderedFloat::from(weight),
+            weight,
         }
     }
 
@@ -72,18 +72,18 @@ impl Centroid {
     }
 
     #[inline]
-    pub fn weight(&self) -> f64 {
-        self.weight.into_inner()
+    pub fn weight(&self) -> u64 {
+        self.weight
     }
 
-    pub fn add(&mut self, sum: f64, weight: f64) -> f64 {
-        let weight_: f64 = self.weight.into_inner();
+    pub fn add(&mut self, sum: f64, weight: u64) -> f64 {
+        let weight_: u64 = self.weight;
         let mean_: f64 = self.mean.into_inner();
 
-        let new_sum: f64 = sum + weight_ * mean_;
-        let new_weight: f64 = weight_ + weight;
-        self.weight = OrderedFloat::from(new_weight);
-        self.mean = OrderedFloat::from(new_sum / new_weight);
+        let new_sum: f64 = sum + weight_ as f64 * mean_;
+        let new_weight: u64 = weight_ + weight;
+        self.weight = new_weight;
+        self.mean = OrderedFloat::from(new_sum / new_weight as f64);
         new_sum
     }
 }
@@ -92,7 +92,7 @@ impl Default for Centroid {
     fn default() -> Self {
         Centroid {
             mean: OrderedFloat::from(0.0),
-            weight: OrderedFloat::from(1.0),
+            weight: 1,
         }
     }
 }
@@ -104,7 +104,7 @@ pub struct TDigest {
     centroids: Vec<Centroid>,
     max_size: usize,
     sum: OrderedFloat<f64>,
-    count: OrderedFloat<f64>,
+    count: u64,
     max: OrderedFloat<f64>,
     min: OrderedFloat<f64>,
 }
@@ -115,19 +115,19 @@ impl TDigest {
             centroids: Vec::new(),
             max_size,
             sum: OrderedFloat::from(0.0),
-            count: OrderedFloat::from(0.0),
+            count: 0,
             max: OrderedFloat::from(std::f64::NAN),
             min: OrderedFloat::from(std::f64::NAN),
         }
     }
 
-    pub fn new(centroids: Vec<Centroid>, sum: f64, count: f64, max: f64, min: f64, max_size: usize) -> Self {
+    pub fn new(centroids: Vec<Centroid>, sum: f64, count: u64, max: f64, min: f64, max_size: usize) -> Self {
         if centroids.len() <= max_size {
             TDigest {
                 centroids,
                 max_size,
                 sum: OrderedFloat::from(sum),
-                count: OrderedFloat::from(count),
+                count,
                 max: OrderedFloat::from(max),
                 min: OrderedFloat::from(min),
             }
@@ -148,11 +148,10 @@ impl TDigest {
 
     #[inline]
     pub fn mean(&self) -> f64 {
-        let count_: f64 = self.count.into_inner();
         let sum_: f64 = self.sum.into_inner();
 
-        if count_ > 0.0 {
-            sum_ / count_
+        if self.count > 0 {
+            sum_ / self.count as f64
         } else {
             0.0
         }
@@ -164,8 +163,8 @@ impl TDigest {
     }
 
     #[inline]
-    pub fn count(&self) -> f64 {
-        self.count.into_inner()
+    pub fn count(&self) -> u64 {
+        self.count
     }
 
     #[inline]
@@ -200,7 +199,7 @@ impl Default for TDigest {
             centroids: Vec::new(),
             max_size: 100,
             sum: OrderedFloat::from(0.0),
-            count: OrderedFloat::from(0.0),
+            count: 0,
             max: OrderedFloat::from(std::f64::NAN),
             min: OrderedFloat::from(std::f64::NAN),
         }
@@ -242,12 +241,12 @@ impl TDigest {
         }
 
         let mut result = TDigest::new_with_size(self.max_size());
-        result.count = OrderedFloat::from(self.count() + (sorted_values.len() as f64));
+        result.count = self.count() + (sorted_values.len() as u64);
 
         let maybe_min = OrderedFloat::from(*sorted_values.first().unwrap());
         let maybe_max = OrderedFloat::from(*sorted_values.last().unwrap());
 
-        if self.count() > 0.0 {
+        if self.count() > 0 {
             result.min = std::cmp::min(self.min, maybe_min);
             result.max = std::cmp::max(self.max, maybe_max);
         } else {
@@ -258,7 +257,7 @@ impl TDigest {
         let mut compressed: Vec<Centroid> = Vec::with_capacity(self.max_size);
 
         let mut k_limit: f64 = 1.0;
-        let mut q_limit_times_count: f64 = Self::k_to_q(k_limit, self.max_size as f64) * result.count.into_inner();
+        let mut q_limit_times_count: f64 = Self::k_to_q(k_limit, self.max_size as f64) * result.count as f64;
         k_limit += 1.0;
 
         let mut iter_centroids = self.centroids.iter().peekable();
@@ -269,41 +268,41 @@ impl TDigest {
             if c.mean() < curr {
                 iter_centroids.next().unwrap().clone()
             } else {
-                Centroid::new(*iter_sorted_values.next().unwrap(), 1.0)
+                Centroid::new(*iter_sorted_values.next().unwrap(), 1)
             }
         } else {
-            Centroid::new(*iter_sorted_values.next().unwrap(), 1.0)
+            Centroid::new(*iter_sorted_values.next().unwrap(), 1)
         };
 
-        let mut weight_so_far: f64 = curr.weight();
+        let mut weight_so_far: u64 = curr.weight();
 
         let mut sums_to_merge: f64 = 0.0;
-        let mut weights_to_merge: f64 = 0.0;
+        let mut weights_to_merge: u64 = 0;
 
         while iter_centroids.peek().is_some() || iter_sorted_values.peek().is_some() {
             let next: Centroid = if let Some(c) = iter_centroids.peek() {
                 if iter_sorted_values.peek().is_none() || c.mean() < **iter_sorted_values.peek().unwrap() {
                     iter_centroids.next().unwrap().clone()
                 } else {
-                    Centroid::new(*iter_sorted_values.next().unwrap(), 1.0)
+                    Centroid::new(*iter_sorted_values.next().unwrap(), 1)
                 }
             } else {
-                Centroid::new(*iter_sorted_values.next().unwrap(), 1.0)
+                Centroid::new(*iter_sorted_values.next().unwrap(), 1)
             };
 
-            let next_sum: f64 = next.mean() * next.weight();
+            let next_sum: f64 = next.mean() * next.weight() as f64;
             weight_so_far += next.weight();
 
-            if weight_so_far <= q_limit_times_count {
+            if weight_so_far as f64 <= q_limit_times_count {
                 sums_to_merge += next_sum;
                 weights_to_merge += next.weight();
             } else {
                 result.sum = OrderedFloat::from(result.sum.into_inner() + curr.add(sums_to_merge, weights_to_merge));
                 sums_to_merge = 0.0;
-                weights_to_merge = 0.0;
+                weights_to_merge = 0;
 
                 compressed.push(curr.clone());
-                q_limit_times_count = Self::k_to_q(k_limit, self.max_size as f64) * result.count();
+                q_limit_times_count = Self::k_to_q(k_limit, self.max_size as f64) * result.count() as f64;
                 k_limit += 1.0;
                 curr = next;
             }
@@ -370,7 +369,7 @@ impl TDigest {
         let mut centroids: Vec<Centroid> = Vec::with_capacity(n_centroids);
         let mut starts: Vec<usize> = Vec::with_capacity(digests.len());
 
-        let mut count: f64 = 0.0;
+        let mut count: u64 = 0;
         let mut min = OrderedFloat::from(std::f64::INFINITY);
         let mut max = OrderedFloat::from(std::f64::NEG_INFINITY);
 
@@ -378,8 +377,8 @@ impl TDigest {
         for digest in digests.into_iter() {
             starts.push(start);
 
-            let curr_count: f64 = digest.count();
-            if curr_count > 0.0 {
+            let curr_count: u64 = digest.count();
+            if curr_count > 0 {
                 min = std::cmp::min(min, digest.min);
                 max = std::cmp::max(max, digest.max);
                 count += curr_count;
@@ -418,20 +417,20 @@ impl TDigest {
 
         let mut iter_centroids = centroids.iter_mut();
         let mut curr = iter_centroids.next().unwrap();
-        let mut weight_so_far: f64 = curr.weight();
+        let mut weight_so_far: u64 = curr.weight();
         let mut sums_to_merge: f64 = 0.0;
-        let mut weights_to_merge: f64 = 0.0;
+        let mut weights_to_merge: u64 = 0;
 
         for centroid in iter_centroids {
             weight_so_far += centroid.weight();
 
-            if weight_so_far <= q_limit_times_count {
-                sums_to_merge += centroid.mean() * centroid.weight();
+            if weight_so_far as f64 <= q_limit_times_count {
+                sums_to_merge += centroid.mean() * centroid.weight() as f64;
                 weights_to_merge += centroid.weight();
             } else {
                 result.sum = OrderedFloat::from(result.sum.into_inner() + curr.add(sums_to_merge, weights_to_merge));
                 sums_to_merge = 0.0;
-                weights_to_merge = 0.0;
+                weights_to_merge = 0;
                 compressed.push(curr.clone());
                 q_limit_times_count = Self::k_to_q(k_limit, max_size as f64) * (count as f64);
                 k_limit += 1.0;
@@ -444,7 +443,7 @@ impl TDigest {
         compressed.shrink_to_fit();
         compressed.sort();
 
-        result.count = OrderedFloat::from(count as f64);
+        result.count = count;
         result.min = min;
         result.max = max;
         result.centroids = compressed;
@@ -466,27 +465,27 @@ impl TDigest {
         }
 
         let mut low_bound = self.min.into_inner();
-        let mut low_weight = 0.0;
+        let mut low_weight = 0;
         let mut hi_bound = self.max.into_inner();
-        let mut hi_weight = 0.0;
-        let mut accum_weight = 0.0;
+        let mut hi_weight = 0;
+        let mut accum_weight = 0;
 
         for cent in &self.centroids {
             if v < cent.mean.into_inner() {
                 hi_bound = cent.mean.into_inner();
-                hi_weight = cent.weight.into_inner();
+                hi_weight = cent.weight;
                 break;
             }
             low_bound = cent.mean.into_inner();
-            low_weight = cent.weight.into_inner();
+            low_weight = cent.weight;
             accum_weight += low_weight;
         }
 
-        let weighted_midpoint = low_bound + (hi_bound - low_bound) * low_weight / (low_weight + hi_weight);
+        let weighted_midpoint = low_bound + (hi_bound - low_bound) * low_weight as f64 / (low_weight + hi_weight) as f64;
         if v > weighted_midpoint {
-            (accum_weight + (v - weighted_midpoint) / (hi_bound - weighted_midpoint) * hi_weight / 2.0) / self.count.into_inner()
+            (accum_weight as f64 + (v - weighted_midpoint) / (hi_bound - weighted_midpoint) * hi_weight as f64 / 2.0) / self.count as f64
         } else {
-            (accum_weight - (weighted_midpoint - v) / (weighted_midpoint - low_bound) * low_weight / 2.0) / self.count.into_inner()
+            (accum_weight as f64 - (weighted_midpoint - v) / (weighted_midpoint - low_bound) * low_weight as f64 / 2.0) / self.count as f64
         }
     }
 
@@ -496,23 +495,22 @@ impl TDigest {
             return 0.0;
         }
 
-        let count_: f64 = self.count.into_inner();
-        let rank: f64 = q * count_;
+        let rank: f64 = q * self.count as f64;
 
         let mut pos: usize;
-        let mut t: f64;
+        let mut t: u64;
         if q > 0.5 {
             if q >= 1.0 {
                 return self.max();
             }
 
             pos = 0;
-            t = count_;
+            t = self.count;
 
             for (k, centroid) in self.centroids.iter().enumerate().rev() {
                 t -= centroid.weight();
 
-                if rank >= t {
+                if rank >= t as f64 {
                     pos = k;
                     break;
                 }
@@ -523,10 +521,10 @@ impl TDigest {
             }
 
             pos = self.centroids.len() - 1;
-            t = 0.0;
+            t = 0;
 
             for (k, centroid) in self.centroids.iter().enumerate() {
-                if rank < t + centroid.weight() {
+                if rank < (t + centroid.weight()) as f64 {
                     pos = k;
                     break;
                 }
@@ -553,7 +551,7 @@ impl TDigest {
             }
         }
 
-        let value = self.centroids[pos].mean() + ((rank - t) / self.centroids[pos].weight() - 0.5) * delta;
+        let value = self.centroids[pos].mean() + ((rank - t as f64) / self.centroids[pos].weight() as f64 - 0.5) * delta;
         Self::clamp(value, min, max)
     }
 }
@@ -775,9 +773,9 @@ mod tests {
             let test_quant = t.estimate_quantile_at_value(value);
 
             let percentage = (test_value - value).abs() / value;
-            assert!(percentage < 0.01, "Exceeded 1% error on quantile {}: expected {}, received {} (error% {})", quantile, value, test_value, (test_value - value).abs() / value);
+            assert!(percentage < 0.01, "Exceeded 1% error on quantile {}: expected {}, received {} (error% {})", quantile, value, test_value, (test_value - value).abs() / value * 100.0);
             let percentage = (test_quant - quantile).abs() / quantile;
-            assert!(percentage < 0.01, "Exceeded 1% error on quantile at value {}: expected {}, received {} (error% {})", value, quantile, test_quant, (test_quant - quantile).abs() / quantile);
+            assert!(percentage < 0.01, "Exceeded 1% error on quantile at value {}: expected {}, received {} (error% {})", value, quantile, test_quant, (test_quant - quantile).abs() / quantile * 100.0);
 
             let test = t.estimate_quantile_at_value(t.estimate_quantile(quantile));
             let percentage = (test - quantile).abs() / quantile;

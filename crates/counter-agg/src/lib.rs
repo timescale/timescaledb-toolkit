@@ -1,4 +1,4 @@
-
+pub mod regr;
 use time_weighted_average::tspoint::TSPoint;
 use serde::{Deserialize, Serialize};
 

@@ -16,7 +16,7 @@ pub struct XYPair {
 //regression partials
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub struct RegrSummary {
-    n: f64,   // count (as f64 for convenience)
+    n: u64,   // count (as f64 for convenience)
     sx: f64,  // sum(x)
     sxx: f64, // sum((x-sx/n)^2) (sum of squares)
     sy: f64,  // sum(y)
@@ -26,7 +26,7 @@ pub struct RegrSummary {
 impl RegrSummary {
     pub fn new() -> Self {
         RegrSummary {
-            n: 0.0,
+            n: 0,
             sx: 0.0,
             sxx: 0.0,
             sy: 0.0,
@@ -34,9 +34,13 @@ impl RegrSummary {
             sxy: 0.0,
         }
     }
+
+    pub fn n64(&self) -> f64{
+        self.n as f64
+    }
     /// accumulate an XYPair into a RegrSummary
     /// ```
-    /// use delta::*;
+    /// use counter_agg::regr::*;
     /// let mut p = RegrSummary::new();
     /// p.accum(XYPair{x:1.0, y:1.0,}).unwrap();
     /// p.accum(XYPair{x:2.0, y:2.0,}).unwrap();
@@ -57,13 +61,13 @@ impl RegrSummary {
             syy: self.syy,
             sxy: self.sxy,
         };
-        self.n += 1.0;
+        self.n += 1;
         self.sx += p.x;
         self.sy += p.y;
-        if old.n > 0.0 {
-            let tmpx = p.x * self.n - self.sx;
-            let tmpy = p.y * self.n - self.sy;
-            let scale = 1.0 / (self.n * old.n);
+        if old.n > 0 {
+            let tmpx = p.x * self.n64() - self.sx;
+            let tmpy = p.y * self.n64() - self.sy;
+            let scale = 1.0 / (self.n64() * old.n64());
             self.sxx += tmpx * tmpx * scale;
             self.syy += tmpy * tmpy * scale;
             self.sxy += tmpx * tmpy * scale;
@@ -100,8 +104,7 @@ impl RegrSummary {
         Result::Ok(())
     }
     fn has_infinite(&self) -> bool {
-        self.n.is_infinite() // not sure if this is necessary, may not be possible?
-                || self.sx.is_infinite()
+            self.sx.is_infinite()
                 || self.sxx.is_infinite()
                 || self.sy.is_infinite()
                 || self.syy.is_infinite()
@@ -122,8 +125,8 @@ impl RegrSummary {
 
     ///create a RegrSummary from a vector of XYPairs
     /// ```
-    /// use delta::RegrSummary;
-    /// use delta::XYPair;
+    /// use counter_agg::regr::RegrSummary;
+    /// use counter_agg::regr::XYPair;
     /// let mut p = RegrSummary::new();
     /// p.accum(XYPair{x:1.0, y:1.0,}).unwrap();
     /// p.accum(XYPair{x:2.0, y:2.0,}).unwrap();
@@ -140,8 +143,8 @@ impl RegrSummary {
     }
     /// combine two RegrSummarys
     /// ```
-    /// use delta::RegrSummary;
-    /// use delta::XYPair;
+    /// use counter_agg::regr::RegrSummary;
+    /// use counter_agg::regr::XYPair;
     /// let p = RegrSummary::new_from_vec(vec![XYPair{x:1.0, y:1.0,}, XYPair{x:2.0, y:2.0,}, XYPair{x:3.0, y:3.0,}, XYPair{x:4.0, y:4.0,}]).unwrap();
     /// let q = RegrSummary::new_from_vec(vec![XYPair{x:1.0, y:1.0,}, XYPair{x:2.0, y:2.0,},]).unwrap();
     /// let r = RegrSummary::new_from_vec(vec![XYPair{x:3.0, y:3.0,}, XYPair{x:4.0, y:4.0,},]).unwrap();
@@ -159,24 +162,24 @@ impl RegrSummary {
         // reasons. This is also a set of weird questions around the Rust compiler, so
         // easier to just add the copy trait here, may need to adjust or may make things
         // harder if we do generics.
-        if self.n < 1.0 && other.n < 1.0 {
+        if self.n == 0 && other.n == 0 {
             return Ok(RegrSummary::new());
-        } else if self.n < 1.0 {
+        } else if self.n == 0 {
             // handle the trivial n = 0 cases here, and don't worry about divide by zero errors later.
             return Ok(other);
-        } else if other.n < 1.0 {
+        } else if other.n == 0 {
             return Ok(*self);
         }
-        let tmpx = self.sx / self.n - other.sx / other.n;
-        let tmpy = self.sy / self.n - other.sy / other.n;
+        let tmpx = self.sx / self.n64() - other.sx / other.n64();
+        let tmpy = self.sy / self.n64() - other.sy / other.n64();
         let n = self.n + other.n;
         let r = RegrSummary {
             n: n,
             sx: self.sx + other.sx,
-            sxx: self.sxx + other.sxx + self.n * other.n * tmpx * tmpx / n,
+            sxx: self.sxx + other.sxx + self.n64() * other.n64() * tmpx * tmpx / n as f64,
             sy: self.sy + other.sy,
-            syy: self.syy + other.syy + self.n * other.n * tmpy * tmpy / n,
-            sxy: self.sxy + other.sxy + self.n * other.n * tmpx * tmpy / n,
+            syy: self.syy + other.syy + self.n64() * other.n64() * tmpy * tmpy / n as f64,
+            sxy: self.sxy + other.sxy + self.n64() * other.n64() * tmpx * tmpy / n as f64,
         };
         if r.has_infinite() && !self.has_infinite() && !other.has_infinite() {
             return Err(RegrError::DoubleOverflow);
@@ -197,8 +200,8 @@ impl RegrSummary {
     ///returns the sum of squares of both the independent (x) and dependent (y) variables
     ///as an XYPair, where the sum of squares is defined as: sum(x^2) - sum(x)^2 / n)
     ///```
-    /// use delta::RegrSummary;
-    /// use delta::XYPair;
+    /// use counter_agg::regr::RegrSummary;
+    /// use counter_agg::regr::XYPair;
     /// let p = RegrSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let ssx = (1.0_f64.powi(2) + 2.0_f64.powi(2) + 3.0_f64.powi(2)) - (1.0+2.0+3.0_f64).powi(2)/3.0;
     /// let ssy = (2.0_f64.powi(2) + 4.0_f64.powi(2) + 6.0_f64.powi(2)) - (2.0+4.0+6.0_f64).powi(2)/3.0;
@@ -209,7 +212,7 @@ impl RegrSummary {
     /// assert!(RegrSummary::new().sum_squares().is_none());
     /// ```
     pub fn sum_squares(&self) -> Option<XYPair> {
-        if self.n < 1.0 {
+        if self.n == 0 {
             return None;
         }
         Some(XYPair {
@@ -219,8 +222,8 @@ impl RegrSummary {
     }
     ///returns the "sum of products" of the dependent * independent variables sum(x * y) - sum(x) * sum(y) / n
     ///```
-    /// use delta::RegrSummary;
-    /// use delta::XYPair;
+    /// use counter_agg::regr::RegrSummary;
+    /// use counter_agg::regr::XYPair;
     /// let p = RegrSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let s = (2.0 * 1.0 + 4.0 * 2.0 + 6.0 * 3.0) - (2.0 + 4.0 + 6.0)*(1.0 + 2.0 + 3.0)/3.0;
     /// assert_eq!(p.sumxy().unwrap(), s);
@@ -228,15 +231,15 @@ impl RegrSummary {
     /// assert!(RegrSummary::new().sumxy().is_none());
     /// ```
     pub fn sumxy(&self) -> Option<f64> {
-        if self.n < 1.0 {
+        if self.n == 0 {
             return None;
         }
         Some(self.sxy)
     }
     ///returns the averages of the x and y variables
     ///```
-    /// use delta::RegrSummary;
-    /// use delta::XYPair;
+    /// use counter_agg::regr::RegrSummary;
+    /// use counter_agg::regr::XYPair;
     /// let p = RegrSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let avgx = (1.0 + 2.0 + 3.0)/3.0;
     /// let avgy = (2.0 + 4.0 + 6.0)/3.0;
@@ -247,18 +250,18 @@ impl RegrSummary {
     /// assert!(RegrSummary::new().avg().is_none());
     /// ```
     pub fn avg(&self) -> Option<XYPair> {
-        if self.n < 1.0 {
+        if self.n == 0 {
             return None;
         }
         Some(XYPair {
-            x: self.sx / self.n,
-            y: self.sy / self.n,
+            x: self.sx / self.n64(),
+            y: self.sy / self.n64(),
         })
     }
     ///returns the count of inputs as an i64
     ///```
-    /// use delta::RegrSummary;
-    /// use delta::XYPair;
+    /// use counter_agg::regr::RegrSummary;
+    /// use counter_agg::regr::XYPair;
 
     /// let p = RegrSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let s = 3;
@@ -271,8 +274,8 @@ impl RegrSummary {
     }
     ///returns the sums of x and y as an XYPair
     ///```
-    /// use delta::RegrSummary;
-    /// use delta::XYPair;
+    /// use counter_agg::regr::RegrSummary;
+    /// use counter_agg::regr::XYPair;
     /// let p = RegrSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let sumx = (1.0 + 2.0 + 3.0);
     /// let sumy = (2.0 + 4.0 + 6.0);
@@ -283,7 +286,7 @@ impl RegrSummary {
     /// assert!(RegrSummary::new().sum().is_none());
     /// ```
     pub fn sum(&self) -> Option<XYPair> {
-        if self.n < 1.0 {
+        if self.n == 0 {
             return None;
         }
         Some(XYPair {
@@ -293,23 +296,23 @@ impl RegrSummary {
     }
     ///returns the population standard deviation of both the independent and dependent variables as an XYPair
     pub fn stddev_pop(&self) -> Option<XYPair> {
-        if self.n < 1.0 {
+        if self.n == 0 {
             return None;
         }
         Some(XYPair {
-            x: (self.sxx / self.n).sqrt(),
-            y: (self.syy / self.n).sqrt(),
+            x: (self.sxx / self.n64()).sqrt(),
+            y: (self.syy / self.n64()).sqrt(),
         })
     }
 
     ///returns the sample standard deviation of both the independent and dependent variables as an XYPair
     pub fn stddev_samp(&self) -> Option<XYPair> {
-        if self.n < 2.0 {
+        if self.n <= 1 {
             return None;
         }
         Some(XYPair {
-            x: (self.sxx / self.n - 1.0).sqrt(),
-            y: (self.syy / self.n - 1.0).sqrt(),
+            x: (self.sxx / self.n64() - 1.0).sqrt(),
+            y: (self.syy / self.n64() - 1.0).sqrt(),
         })
     }
     /// returns the correlation coefficient, which is the covariance / (stddev(x) * stddev(y))
@@ -318,7 +321,7 @@ impl RegrSummary {
     /// also allows us to reduce our calculation to the sumxy / sqrt(sum_squares(x)*sum_squares(y))
     pub fn corr(&self) -> Option<f64> {
         // empty RegrSummarys, horizontal or vertical lines should return None
-        if self.n < 1.0 || self.sxx == 0.0 || self.syy == 0.0 {
+        if self.n == 0 || self.sxx == 0.0 || self.syy == 0.0 {
             return None;
         }
         Some(self.sxy / (self.sxx * self.syy).sqrt())
@@ -327,21 +330,21 @@ impl RegrSummary {
     pub fn slope(&self) -> Option<f64> {
         // the case of a single point will usually be triggered by the the second branch of this (which is also a test for a vertical line)
         //however, in cases where we had an infinite input, we will end up with NaN which is the expected behavior.
-        if self.n < 1.0 || self.sxx == 0.0 {
+        if self.n == 0 || self.sxx == 0.0 {
             return None;
         }
         Some(self.sxy / self.sxx)
     }
     /// returns the intercept of the least squares fit line
     pub fn intercept(&self) -> Option<f64> {
-        if self.n < 1.0 || self.sxx == 0.0 {
+        if self.n == 0 || self.sxx == 0.0 {
             return None;
         }
-        Some((self.sy - self.sx * self.sxy / self.sxx) / self.n)
+        Some((self.sy - self.sx * self.sxy / self.sxx) / self.n64())
     }
     /// returns the squared error of the least squares fit line
     pub fn square_error(&self) -> Option<f64> {
-        if self.n < 1.0 || self.sxx == 0.0 {
+        if self.n == 0 || self.sxx == 0.0 {
             return None;
         }
         //horizontal lines return 1.0 error
@@ -352,8 +355,8 @@ impl RegrSummary {
     }
     ///returns the sample covariance: (sumxy()/n-1)
     ///```
-    /// use delta::RegrSummary;
-    /// use delta::XYPair;
+    /// use counter_agg::regr::RegrSummary;
+    /// use counter_agg::regr::XYPair;
     /// let p = RegrSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let s = (2.0 * 1.0 + 4.0 * 2.0 + 6.0 * 3.0) - (2.0 + 4.0 + 6.0)*(1.0 + 2.0 + 3.0)/3.0;
     /// let s = s/2.0;
@@ -362,15 +365,15 @@ impl RegrSummary {
     /// assert!(RegrSummary::new().covar_samp().is_none());
     /// ```
     pub fn covar_samp(&self) -> Option<f64> {
-        if self.n < 2.0 {
+        if self.n <= 1 {
             return None;
         }
-        Some(self.sxy / (self.n - 1.0))
+        Some(self.sxy / (self.n64() - 1.0))
     }
     ///returns the population covariance: (sumxy()/n)
     ///```
-    /// use delta::RegrSummary;
-    /// use delta::XYPair;
+    /// use counter_agg::regr::RegrSummary;
+    /// use counter_agg::regr::XYPair;
     /// let p = RegrSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let s = (2.0 * 1.0 + 4.0 * 2.0 + 6.0 * 3.0) - (2.0 + 4.0 + 6.0)*(1.0 + 2.0 + 3.0)/3.0;
     /// let s = s/3.0;
@@ -379,10 +382,10 @@ impl RegrSummary {
     /// assert!(RegrSummary::new().covar_pop().is_none());
     /// ```
     pub fn covar_pop(&self) -> Option<f64> {
-        if self.n < 1.0 {
+        if self.n == 0 {
             return None;
         }
-        Some(self.sxy / self.n)
+        Some(self.sxy / self.n64())
     }
 }
 

@@ -19,7 +19,7 @@ Timescale's t-digest is implemented as an aggregate function in PostgreSQL.  The
 
 ---
 ## **hyperloglog** [](hyperloglog)
-```SQL
+```SQL,ignore
 timescale_analytics_experimental.hyperloglog(
     size INTEGER,
     value AnyElement¹
@@ -46,13 +46,13 @@ This will construct and return a Hyperloglog with at least the specified number 
 ### Sample Usages [](hyperloglog-examples)
 For this examples assume we have a table 'samples' with a column 'weights' holding `DOUBLE PRECISION` values.  The following will simply return a digest over that column
 
-```SQL
+```SQL ,ignore
 SELECT timescale_analytics_experimental.hyperloglog(64, data) FROM samples;
 ```
 
 It may be more useful to build a view from the aggregate that we can later pass to other tdigest functions.
 
-```SQL
+```SQL ,ignore
 CREATE VIEW digest AS SELECT timescale_analytics_experimental.hyperloglog(64, data) FROM samples;
 ```
 
@@ -60,7 +60,7 @@ CREATE VIEW digest AS SELECT timescale_analytics_experimental.hyperloglog(64, da
 
 ## **hyperloglog_count** [](hyperloglog_count)
 
-```SQL
+```SQL ,ignore
 timescale_analytics_experimental.hyperloglog_count(hyperloglog Hyperloglog) RETURNS BIGINT
 ```
 
@@ -82,10 +82,11 @@ Get the number of distinct values from a hyperloglog.
 ### Sample Usages [](hyperloglog_count-examples)
 
 ```SQL
-SELECT timescale_analytics_experimental.hyperloglog_count(hyperloglog(64, data))
-FROM generate_series(1, 100) data;
+SELECT timescale_analytics_experimental.hyperloglog_count(timescale_analytics_experimental.hyperloglog(64, data))
+FROM generate_series(1, 100) data
+```
+```output
  hyperloglog_count
 -------------------
                103
-(1 row)
 ```

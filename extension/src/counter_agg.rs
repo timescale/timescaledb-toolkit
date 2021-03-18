@@ -21,9 +21,7 @@ use time_weighted_average::{
 };
 
 use counter_agg::{
-    MetricSummary as InternalMetricSummary,
-//    MetricError,
-    MetricType,
+    CounterSummary as InternalCounterSummary,
 };
 
 // hack to allow us to qualify names with "timescale_analytics_experimental"
@@ -39,59 +37,61 @@ mod timescale_analytics_experimental {
 type bytea = pg_sys::Datum;
 
 extension_sql!(r#"
-CREATE TYPE timescale_analytics_experimental.MetricSummary;
+CREATE TYPE timescale_analytics_experimental.CounterSummary;
 "#);
 
 pg_type! {
     #[derive(Debug)]
-    struct MetricSummary {
+    struct CounterSummary {
         first: TSPoint,
         second: TSPoint,
         penultimate:TSPoint,
         last: TSPoint,
         reset_sum: f64,
-        kind: MetricType,
+        num_resets: u64,
+        num_changes: u64,
     }
 }
 
-json_inout_funcs!(MetricSummary);
+json_inout_funcs!(CounterSummary);
 
-impl<'input> MetricSummary<'input> {
-    fn to_internal_metric_summary(&self) -> InternalMetricSummary {
-        InternalMetricSummary{
-            kind: *self.kind,
+impl<'input> CounterSummary<'input> {
+    fn to_internal_counter_summary(&self) -> InternalCounterSummary {
+        InternalCounterSummary{
             first: *self.first,
             second: *self.second,
             penultimate: *self.penultimate,
             last: *self.last,
             reset_sum: *self.reset_sum,
+            num_resets: *self.num_resets,
+            num_changes: *self.num_changes,
         }
     }
 }
 
 extension_sql!(r#"
-CREATE OR REPLACE FUNCTION timescale_analytics_experimental.metric_summary_in(cstring) RETURNS timescale_analytics_experimental.MetricSummary IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C AS 'MODULE_PATHNAME', 'metricsummary_in_wrapper';
-CREATE OR REPLACE FUNCTION timescale_analytics_experimental.metric_summary_out(timescale_analytics_experimental.MetricSummary) RETURNS CString IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C AS 'MODULE_PATHNAME', 'metricsummary_out_wrapper';
+CREATE OR REPLACE FUNCTION timescale_analytics_experimental.counter_summary_in(cstring) RETURNS timescale_analytics_experimental.CounterSummary IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C AS 'MODULE_PATHNAME', 'countersummary_in_wrapper';
+CREATE OR REPLACE FUNCTION timescale_analytics_experimental.counter_summary_out(timescale_analytics_experimental.CounterSummary) RETURNS CString IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C AS 'MODULE_PATHNAME', 'countersummary_out_wrapper';
 
-CREATE TYPE timescale_analytics_experimental.MetricSummary (
+CREATE TYPE timescale_analytics_experimental.CounterSummary (
     INTERNALLENGTH = variable,
-    INPUT = timescale_analytics_experimental.metric_summary_in,
-    OUTPUT = timescale_analytics_experimental.metric_summary_out,
+    INPUT = timescale_analytics_experimental.counter_summary_in,
+    OUTPUT = timescale_analytics_experimental.counter_summary_out,
     STORAGE = extended
 );
 "#);
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct MetricSummaryTransState {
+pub struct CounterSummaryTransState {
     #[serde(skip)]
     point_buffer: Vec<TSPoint>,
     // We have a summary buffer here in order to deal with the fact that when the cmobine function gets called it
     // must first build up a buffer of InternalMetricSummaries, then sort them, then call the combine function in 
     // the correct order. 
-    summary_buffer: Vec<InternalMetricSummary>,
+    summary_buffer: Vec<InternalCounterSummary>,
 }
 
-impl MetricSummaryTransState {
+impl CounterSummaryTransState {
     fn push_point(&mut self, value: TSPoint) {
         self.point_buffer.push(value);
     }
@@ -102,14 +102,14 @@ impl MetricSummaryTransState {
         }
         self.point_buffer.sort_unstable_by_key(|p| p.ts);
         let mut iter = self.point_buffer.iter();
-        let mut summary = InternalMetricSummary::new(MetricType::Counter, iter.next().unwrap());
+        let mut summary = InternalCounterSummary::new( iter.next().unwrap());
         for p in iter {
-            summary.counter_add_point(p).unwrap();
+            summary.add_point(p).unwrap();
         }
         self.point_buffer.clear();
         self.summary_buffer.push(summary);
     }
-    fn push_summary(&mut self, other: &MetricSummaryTransState) {
+    fn push_summary(&mut self, other: &CounterSummaryTransState) {
         let sum_iter = other.summary_buffer.iter();
         for sum in sum_iter {
             self.summary_buffer.push(sum.clone());
@@ -125,36 +125,36 @@ impl MetricSummaryTransState {
         let mut sum_iter = self.summary_buffer.iter();
         let mut new_summary = sum_iter.next().unwrap().clone();
         for sum in sum_iter.next() {
-            new_summary.counter_combine(sum).unwrap();
+            new_summary.combine(sum).unwrap();
         }
         self.summary_buffer = vec![new_summary];
     }
 }
 
 #[pg_extern(schema = "timescale_analytics_experimental")]
-pub fn metric_summary_trans_serialize(
-    mut state: Internal<MetricSummaryTransState>,
+pub fn counter_summary_trans_serialize(
+    mut state: Internal<CounterSummaryTransState>,
 ) -> bytea {
     state.combine_summaries();
     crate::do_serialize!(state)
 }
 
 #[pg_extern(schema = "timescale_analytics_experimental", strict)]
-pub fn metric_summary_trans_deserialize(
+pub fn counter_summary_trans_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
-) -> Internal<MetricSummaryTransState> {
-    crate::do_deserialize!(bytes, MetricSummaryTransState)
+) -> Internal<CounterSummaryTransState> {
+    crate::do_deserialize!(bytes, CounterSummaryTransState)
 }
 
 
 #[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn counter_agg_trans(
-    state: Option<Internal<MetricSummaryTransState>>,
+    state: Option<Internal<CounterSummaryTransState>>,
     ts: Option<pg_sys::TimestampTz>,
     val: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<MetricSummaryTransState>> {
+) -> Option<Internal<CounterSummaryTransState>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let p = match (ts, val) {
@@ -164,7 +164,7 @@ pub fn counter_agg_trans(
             };
             match state {
                 None => {
-                    let mut s = MetricSummaryTransState{point_buffer: vec![], summary_buffer: vec![]};
+                    let mut s = CounterSummaryTransState{point_buffer: vec![], summary_buffer: vec![]};
                     s.push_point(p);
                     Some(s.into())
                 },
@@ -177,17 +177,17 @@ pub fn counter_agg_trans(
 
 #[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn counter_agg_summary_trans(
-    state: Option<Internal<MetricSummaryTransState>>,
-    value: Option<timescale_analytics_experimental::MetricSummary>,
+    state: Option<Internal<CounterSummaryTransState>>,
+    value: Option<timescale_analytics_experimental::CounterSummary>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<MetricSummaryTransState>> {
+) -> Option<Internal<CounterSummaryTransState>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state, value) {
                 (state, None) => state,
-                (None, Some(value)) => Some(MetricSummaryTransState{point_buffer: vec![], summary_buffer: vec![value.to_internal_metric_summary()]}.into()),
+                (None, Some(value)) => Some(CounterSummaryTransState{point_buffer: vec![], summary_buffer: vec![value.to_internal_counter_summary()]}.into()),
                 (Some(mut state), Some(value)) => {
-                    state.summary_buffer.push(value.to_internal_metric_summary());
+                    state.summary_buffer.push(value.to_internal_counter_summary());
                     Some(state)
                 }
             }
@@ -197,10 +197,10 @@ pub fn counter_agg_summary_trans(
 
 #[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn counter_agg_combine(
-    state1: Option<Internal<MetricSummaryTransState>>,
-    state2: Option<Internal<MetricSummaryTransState>>,
+    state1: Option<Internal<CounterSummaryTransState>>,
+    state2: Option<Internal<CounterSummaryTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
-)  -> Option<Internal<MetricSummaryTransState>> {
+)  -> Option<Internal<CounterSummaryTransState>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state1, state2) {
@@ -222,9 +222,9 @@ pub fn counter_agg_combine(
 
 #[pg_extern(schema = "timescale_analytics_experimental")]
 fn counter_agg_final(
-    state: Option<Internal<MetricSummaryTransState>>,
+    state: Option<Internal<CounterSummaryTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<timescale_analytics_experimental::MetricSummary<'static>> {
+) -> Option<timescale_analytics_experimental::CounterSummary<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let mut state = match state {
@@ -237,13 +237,14 @@ fn counter_agg_final(
                 None => None,
                 Some(st) => Some(
                     flatten!(
-                        MetricSummary {
-                            kind: &st.kind,
+                        CounterSummary {
                             first: &st.first,
                             second: &st.second,
                             penultimate: &st.penultimate,
                             last: &st.last,
                             reset_sum: &st.reset_sum,
+                            num_resets: &st.num_resets,
+                            num_changes: &st.num_changes,
                     }
                 ).into())
             }
@@ -259,31 +260,31 @@ CREATE AGGREGATE timescale_analytics_experimental.counter_agg( ts timestamptz, v
     stype = internal,
     finalfunc = timescale_analytics_experimental.counter_agg_final,
     combinefunc = timescale_analytics_experimental.counter_agg_combine,
-    serialfunc = timescale_analytics_experimental.metric_summary_trans_serialize,
-    deserialfunc = timescale_analytics_experimental.metric_summary_trans_deserialize,
+    serialfunc = timescale_analytics_experimental.counter_summary_trans_serialize,
+    deserialfunc = timescale_analytics_experimental.counter_summary_trans_deserialize,
     parallel = restricted
 );
 "#);
 
 extension_sql!(r#"
-CREATE AGGREGATE timescale_analytics_experimental.counter_agg(counter_agg timescale_analytics_experimental.MetricSummary)
+CREATE AGGREGATE timescale_analytics_experimental.counter_agg(counter_agg timescale_analytics_experimental.CounterSummary)
 (
     sfunc = timescale_analytics_experimental.counter_agg_summary_trans,
     stype = internal,
     finalfunc = timescale_analytics_experimental.counter_agg_final,
     combinefunc = timescale_analytics_experimental.counter_agg_combine,
-    serialfunc = timescale_analytics_experimental.metric_summary_trans_serialize,
-    deserialfunc = timescale_analytics_experimental.metric_summary_trans_deserialize,
+    serialfunc = timescale_analytics_experimental.counter_summary_trans_serialize,
+    deserialfunc = timescale_analytics_experimental.counter_summary_trans_deserialize,
     parallel = restricted
 );
 "#);
 
 #[pg_extern(name="delta", schema = "timescale_analytics_experimental")]
 fn counter_agg_delta(
-    summary: timescale_analytics_experimental::MetricSummary,
+    summary: timescale_analytics_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> f64 {
-    summary.to_internal_metric_summary().delta()
+    summary.to_internal_counter_summary().delta()
 }
 
 #[cfg(any(test, feature = "pg_test"))]
@@ -306,10 +307,10 @@ mod tests {
         });
     }
 
-    #[pg_test]
-    fn test_counter_combine_aggregate(){
-        Spi::execute(|client| {
+    // #[pg_test]
+    // fn test_combine_aggregate(){
+    //     Spi::execute(|client| {
             
-        });
-    }
+    //     });
+    // }
 }

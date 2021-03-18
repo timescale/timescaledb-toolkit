@@ -2,21 +2,14 @@ pub mod regr;
 use time_weighted_average::tspoint::TSPoint;
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
-#[repr(u8)]
-pub enum MetricType {
-    Counter,
-//    Gauge,
-}
 
 #[derive(Debug, PartialEq)]
-pub enum MetricError{
-    CounterOrderError,
+pub enum CounterError{
+    OrderError,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-pub struct MetricSummary {
-    pub kind: MetricType,
+pub struct CounterSummary {
     pub first: TSPoint,
     pub second: TSPoint,
     pub penultimate: TSPoint,
@@ -27,10 +20,9 @@ pub struct MetricSummary {
 }
 
 
-impl MetricSummary {
-    pub fn new(kind: MetricType, pt: &TSPoint) -> MetricSummary {
-        MetricSummary{
-            kind,
+impl CounterSummary {
+    pub fn new(pt: &TSPoint) -> CounterSummary {
+        CounterSummary{
             first: *pt,
             second: *pt,
             penultimate: *pt,
@@ -40,20 +32,14 @@ impl MetricSummary {
             num_changes: 0,
         }
     }
-    // pub fn add_point(&mut self, incoming: &TSPoint) -> Result<(), MetricError>{
-    //     match self.kind{
-    //         MetricType
-    //     }
-    //     Ok(())
-    // }
+
 
 
     // expects time-ordered input 
-    pub fn counter_add_point(&mut self, incoming: &TSPoint) -> Result<(), MetricError>{
-        debug_assert!(self.kind == MetricType::Counter);
+    pub fn add_point(&mut self, incoming: &TSPoint) -> Result<(), CounterError>{
 
         if incoming.ts < self.last.ts {
-            return Err(MetricError::CounterOrderError);
+            return Err(CounterError::OrderError);
         }
         
         if incoming.val < self.last.val {
@@ -78,12 +64,10 @@ impl MetricSummary {
     
 
     // combining can only happen for disjoint time ranges 
-    pub fn counter_combine(&mut self, incoming: &MetricSummary) -> Result<(), MetricError> {
-        debug_assert!(self.kind == MetricType::Counter);
-        debug_assert!(incoming.kind == MetricType::Counter);
+    pub fn combine(&mut self, incoming: &CounterSummary) -> Result<(), CounterError> {
         // this requires that self comes before incoming in time order
         if self.last.ts >= incoming.first.ts {
-            return Err(MetricError::CounterOrderError);
+            return Err(CounterError::OrderError);
         }
         if self.last.val != incoming.first.val{
             self.num_changes += 1;
@@ -119,8 +103,7 @@ mod tests {
     #[test]
     fn create() {
         let testpt = TSPoint{ts: 0, val:0.0};
-        let test = MetricSummary::new(MetricType::Counter, &testpt);
-        assert_eq!(test.kind , MetricType::Counter);
+        let test = CounterSummary::new(&testpt);
         assert_eq!(test.first, testpt);
         assert_eq!(test.second, testpt);
         assert_eq!(test.penultimate, testpt);
@@ -129,12 +112,11 @@ mod tests {
     }
     #[test]
     fn adding_point() {
-        let mut test = MetricSummary::new(MetricType::Counter, &TSPoint{ts: 0, val:0.0});
+        let mut test = CounterSummary::new( &TSPoint{ts: 0, val:0.0});
         let testpt = TSPoint{ts:5, val:10.0};
 
-        test.counter_add_point(&testpt).unwrap();
+        test.add_point(&testpt).unwrap();
         
-        assert_eq!(test.kind, MetricType::Counter);
         assert_eq!(test.first, TSPoint{ts: 0, val:0.0});
         assert_eq!(test.second, testpt);
         assert_eq!(test.penultimate, TSPoint{ts: 0, val:0.0});
@@ -148,15 +130,13 @@ mod tests {
     #[test]
     fn adding_points_to_counter() {
         let startpt = TSPoint{ts: 0, val:0.0};
-        let mut summary = MetricSummary::new(MetricType::Counter, &startpt);
+        let mut summary = CounterSummary::new( &startpt);
         
-        assert_eq!(summary.kind, MetricType::Counter);
-
-        summary.counter_add_point(&TSPoint{ts: 5, val:10.0}).unwrap();
-        summary.counter_add_point(&TSPoint{ts: 10, val:20.0}).unwrap();
-        summary.counter_add_point(&TSPoint{ts: 15, val:20.0}).unwrap();
-        summary.counter_add_point(&TSPoint{ts: 20, val:50.0}).unwrap();
-        summary.counter_add_point(&TSPoint{ts: 25, val:10.0}).unwrap();
+        summary.add_point(&TSPoint{ts: 5, val:10.0}).unwrap();
+        summary.add_point(&TSPoint{ts: 10, val:20.0}).unwrap();
+        summary.add_point(&TSPoint{ts: 15, val:20.0}).unwrap();
+        summary.add_point(&TSPoint{ts: 20, val:50.0}).unwrap();
+        summary.add_point(&TSPoint{ts: 25, val:10.0}).unwrap();
         
 
         assert_eq!(summary.first, startpt);
@@ -168,104 +148,74 @@ mod tests {
         assert_eq!(summary.num_changes, 4);
     }
 
-    // #[test]
-    // #[should_panic]
-    // fn add_counter_called_on_gauge(){
-    //     let startpt = TSPoint{ts: 0, val:0.0};
-    //     let mut summary = MetricSummary::new(MetricType::Gauge, &startpt);
-
-    //     assert_eq!(summary.kind, MetricType::Gauge);
-    //     summary.counter_add_point(&TSPoint{ts: 5, val:10.0});
-    // } 
-
     #[test]
     fn adding_out_of_order_counter(){
         let startpt = TSPoint{ts: 0, val:0.0};
-        let mut summary = MetricSummary::new(MetricType::Counter, &startpt);
+        let mut summary = CounterSummary::new( &startpt);
 
-        assert_eq!(summary.kind, MetricType::Counter);
-        summary.counter_add_point(&TSPoint{ts: 5, val:10.0}).unwrap();
-        assert_eq!(MetricError::CounterOrderError, summary.counter_add_point(&TSPoint{ts: 2, val:9.0}).unwrap_err());
+        summary.add_point(&TSPoint{ts: 5, val:10.0}).unwrap();
+        assert_eq!(CounterError::OrderError, summary.add_point(&TSPoint{ts: 2, val:9.0}).unwrap_err());
     } 
 
-    // #[test]
-    // fn adding_points_to_gauge() {
-    //     let startpt = TSPoint{ts: 0, val:0.0};
-    //     let mut summary = MetricSummary::new(MetricType::Gauge, &startpt);
-        
-    //     assert_eq!(summary.kind, MetricType::Gauge);
 
-    //     summary.add_point(&TSPoint{ts: 15, val:30.0});
-    //     summary.add_point(&TSPoint{ts: 5, val:10.0});
-    //     summary.add_point(&TSPoint{ts: 20, val:50.0});
-    //     summary.add_point(&TSPoint{ts: 25, val:10.0});
-    //     summary.add_point(&TSPoint{ts: 10, val:20.0});        
-
-    //     assert_eq!(summary.first, startpt);
-    //     assert_eq!(summary.second, TSPoint{ts: 5, val:10.0});
-    //     assert_eq!(summary.penultimate, TSPoint{ts: 20, val:50.0});
-    //     assert_eq!(summary.last, TSPoint{ts: 25, val:10.0});
-    //     assert_eq!(summary.reset_sum, 0.0);
-    // }
-    
     #[test]
     fn test_counter_delta(){
         let startpt = &TSPoint{ts: 0, val:10.0};
-        let mut summary = MetricSummary::new(MetricType::Counter, &startpt);
+        let mut summary = CounterSummary::new(&startpt);
 
         // with one point
         assert_eq!(summary.delta(), 0.0);
 
         // simple case
-        summary.counter_add_point(&TSPoint{ts: 10, val:20.0}).unwrap();
+        summary.add_point(&TSPoint{ts: 10, val:20.0}).unwrap();
         assert_eq!(summary.delta(), 10.0);
 
         //now with a reset
-        summary.counter_add_point(&TSPoint{ts: 20, val:10.0}).unwrap();
+        summary.add_point(&TSPoint{ts: 20, val:10.0}).unwrap();
         assert_eq!(summary.delta(), 20.0);
     }
 
     #[test]
-    fn test_counter_combine(){
-        let mut summary = MetricSummary::new(MetricType::Counter, &TSPoint{ts: 0, val:0.0});
-        summary.counter_add_point(&TSPoint{ts: 5, val:10.0}).unwrap();
-        summary.counter_add_point(&TSPoint{ts: 10, val:20.0}).unwrap();
-        summary.counter_add_point(&TSPoint{ts: 15, val:30.0}).unwrap();
-        summary.counter_add_point(&TSPoint{ts: 20, val:50.0}).unwrap();
-        summary.counter_add_point(&TSPoint{ts: 25, val:10.0}).unwrap();
+    fn test_combine(){
+        let mut summary = CounterSummary::new( &TSPoint{ts: 0, val:0.0});
+        summary.add_point(&TSPoint{ts: 5, val:10.0}).unwrap();
+        summary.add_point(&TSPoint{ts: 10, val:20.0}).unwrap();
+        summary.add_point(&TSPoint{ts: 15, val:30.0}).unwrap();
+        summary.add_point(&TSPoint{ts: 20, val:50.0}).unwrap();
+        summary.add_point(&TSPoint{ts: 25, val:10.0}).unwrap();
 
-        let mut part1 = MetricSummary::new(MetricType::Counter, &TSPoint{ts: 0, val:0.0});
-        part1.counter_add_point(&TSPoint{ts: 5, val:10.0}).unwrap();
-        part1.counter_add_point(&TSPoint{ts: 10, val:20.0}).unwrap();
+        let mut part1 = CounterSummary::new(&TSPoint{ts: 0, val:0.0});
+        part1.add_point(&TSPoint{ts: 5, val:10.0}).unwrap();
+        part1.add_point(&TSPoint{ts: 10, val:20.0}).unwrap();
 
-        let mut part2 = MetricSummary::new(MetricType::Counter, &TSPoint{ts: 15, val:30.0});
-        part2.counter_add_point(&TSPoint{ts: 20, val:50.0}).unwrap();
-        part2.counter_add_point(&TSPoint{ts: 25, val:10.0}).unwrap();
+        let mut part2 = CounterSummary::new(&TSPoint{ts: 15, val:30.0});
+        part2.add_point(&TSPoint{ts: 20, val:50.0}).unwrap();
+        part2.add_point(&TSPoint{ts: 25, val:10.0}).unwrap();
 
         let mut combined = part1.clone();
-        combined.counter_combine(&part2).unwrap();
+        combined.combine(&part2).unwrap();
         assert_eq!(summary, combined);
 
         // test error in wrong direction
-        assert_eq!(part2.counter_combine(&part1).unwrap_err(), MetricError::CounterOrderError);
+        assert_eq!(part2.combine(&part1).unwrap_err(), CounterError::OrderError);
     }
 
     #[test]
-    fn test_counter_combine_with_small_summary(){
-        let mut summary = MetricSummary::new(MetricType::Counter, &TSPoint{ts: 0, val:50.0});
-        summary.counter_add_point(&TSPoint{ts: 25, val:10.0}).unwrap();
+    fn test_combine_with_small_summary(){
+        let mut summary = CounterSummary::new( &TSPoint{ts: 0, val:50.0});
+        summary.add_point(&TSPoint{ts: 25, val:10.0}).unwrap();
 
         // also tests that a reset at the boundary works correctly
-        let part1 = MetricSummary::new(MetricType::Counter, &TSPoint{ts: 0, val:50.0});
-        let part2 = MetricSummary::new(MetricType::Counter, &TSPoint{ts: 25, val:10.0});
+        let part1 = CounterSummary::new( &TSPoint{ts: 0, val:50.0});
+        let part2 = CounterSummary::new( &TSPoint{ts: 25, val:10.0});
 
         let mut combined = part1.clone();
-        combined.counter_combine(&part2).unwrap();
+        combined.combine(&part2).unwrap();
         assert_eq!(summary, combined);
 
         // test error in wrong direction
         combined = part2.clone();
-        assert_eq!(combined.counter_combine(&part1).unwrap_err(), MetricError::CounterOrderError);
+        assert_eq!(combined.combine(&part1).unwrap_err(), CounterError::OrderError);
     }
 }
 

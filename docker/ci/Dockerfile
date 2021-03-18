@@ -34,4 +34,7 @@ RUN set -ex \
     && cd ~ \
     && rm -rf ~/timescaledb
 
+# install doctester
+RUN cargo install --git https://github.com/timescale/timescale-analytics.git --branch jl/doctester sql-doctester
+
 USER root

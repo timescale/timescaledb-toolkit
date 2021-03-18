@@ -48,3 +48,6 @@ jobs:
 
     - name: Run Postgres Tests
       run: cd extension && sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx test pg12"
+
+    - name: Run Doc Tests
+      run: sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg12 && /usr/local/cargo/bin/cargo pgx start pg12 && cd extension && /usr/local/cargo/bin/cargo pgx run pg12" && sql-doctester -h localhost -s 'CREATE EXTENSION timescaledb; CREATE EXTENSION timescale_analytics' -p 28812 docs

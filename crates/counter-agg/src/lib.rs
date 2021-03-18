@@ -21,7 +21,9 @@ pub struct MetricSummary {
     pub second: TSPoint,
     pub penultimate: TSPoint,
     pub last: TSPoint,
-    pub reset_sum: f64
+    pub reset_sum: f64,
+    pub num_resets: u64,
+    pub num_changes: u64,
 }
 
 
@@ -34,9 +36,10 @@ impl MetricSummary {
             penultimate: *pt,
             last: *pt,
             reset_sum: 0.0,
+            num_resets: 0,
+            num_changes: 0,
         }
     }
-
     // pub fn add_point(&mut self, incoming: &TSPoint) -> Result<(), MetricError>{
     //     match self.kind{
     //         MetricType
@@ -55,6 +58,10 @@ impl MetricSummary {
         
         if incoming.val < self.last.val {
             self.reset_sum += self.last.val;
+            self.num_resets+= 1;
+        }
+        if incoming.val != self.last.val{
+            self.num_changes += 1;
         }
         if self.first == self.second {
             self.second = *incoming;
@@ -78,9 +85,14 @@ impl MetricSummary {
         if self.last.ts >= incoming.first.ts {
             return Err(MetricError::CounterOrderError);
         }
-        if self.last.val > incoming.first.val {
-            self.reset_sum += self.last.val;
+        if self.last.val != incoming.first.val{
+            self.num_changes += 1;
+            if  incoming.first.val < self.last.val {
+                self.reset_sum += self.last.val;
+                self.num_resets += 1;
+            }
         }
+        
         if incoming.single_value() {
             self.penultimate = self.last;
         } else {
@@ -91,6 +103,8 @@ impl MetricSummary {
         }
         self.last = incoming.last;
         self.reset_sum += incoming.reset_sum;
+        self.num_resets += incoming.num_resets;
+        self.num_changes += incoming.num_changes;
         Ok(())
     }
 
@@ -113,7 +127,6 @@ mod tests {
         assert_eq!(test.last, testpt);
         assert_eq!(test.reset_sum, 0.0);
     }
-
     #[test]
     fn adding_point() {
         let mut test = MetricSummary::new(MetricType::Counter, &TSPoint{ts: 0, val:0.0});
@@ -127,6 +140,8 @@ mod tests {
         assert_eq!(test.penultimate, TSPoint{ts: 0, val:0.0});
         assert_eq!(test.last, testpt);
         assert_eq!(test.reset_sum, 0.0);
+        assert_eq!(test.num_resets, 0);
+        assert_eq!(test.num_changes, 1);
     }
 
     
@@ -139,7 +154,7 @@ mod tests {
 
         summary.counter_add_point(&TSPoint{ts: 5, val:10.0}).unwrap();
         summary.counter_add_point(&TSPoint{ts: 10, val:20.0}).unwrap();
-        summary.counter_add_point(&TSPoint{ts: 15, val:30.0}).unwrap();
+        summary.counter_add_point(&TSPoint{ts: 15, val:20.0}).unwrap();
         summary.counter_add_point(&TSPoint{ts: 20, val:50.0}).unwrap();
         summary.counter_add_point(&TSPoint{ts: 25, val:10.0}).unwrap();
         
@@ -149,6 +164,8 @@ mod tests {
         assert_eq!(summary.penultimate, TSPoint{ts: 20, val:50.0});
         assert_eq!(summary.last, TSPoint{ts: 25, val:10.0});
         assert_eq!(summary.reset_sum, 50.0);
+        assert_eq!(summary.num_resets, 1);
+        assert_eq!(summary.num_changes, 4);
     }
 
     // #[test]

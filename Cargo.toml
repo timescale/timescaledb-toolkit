@@ -7,6 +7,7 @@ members = [
     "crates/udd-sketch",
     "crates/time-weighted-average",
     "tools/sql-doctester",
+    "crates/asap",
 ]
 
 [profile.dev]

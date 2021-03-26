@@ -1,5 +1,5 @@
 comment = 'timescale_analytics'
-default_version = '0.1'
+default_version = '0.2'
 module_pathname = '$libdir/timescale_analytics'
 relocatable = false
 superuser = false

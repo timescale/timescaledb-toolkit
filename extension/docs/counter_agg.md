@@ -15,4 +15,12 @@ CREATE VIEW gauges AS SELECT time_bucket('1 hour', ts) as bucket, metric_id, gau
 
 CREATE VIEW both as SELECT * FROM counters UNION ALL SELECT * FROM gauges;
 
+WITH t as (SELECT time_bucket('5 min', ts) as bucket, counter_agg(ts, val, bounds => time_bucket_range('5 min', ts)) FROM foo)
+SELECT bucket, prometheus_rate(counter_agg), prometheus_delta(counter_agg), rate(counter_agg), delta(counter_agg), time_delta(counter_agg);
+
+WITH t as (SELECT time_bucket('5 min', ts) as bucket, time_bucket_range('5 min', bucket) as bucket_range, counter_agg(ts, val) FROM foo) 
+SELECT bucket, prometheus_rate(counter_agg, bucket_range ), prometheus_delta(counter_agg, bucket_range), rate(counter_agg), delta(counter_agg), time_delta(counter_agg);
+
+
+
 ```

@@ -1,31 +1,32 @@
-//regr implements the Youngs-Cramer algorithm and are based on the Postgres implementation
+//regress implements the Youngs-Cramer algorithm and are based on the Postgres implementation
 //here:
 //https://github.com/postgres/postgres/blob/472e518a44eacd9caac7d618f1b6451672ca4481/src/backend/utils/adt/float.c#L3260
 //
 
+use serde::{Deserialize, Serialize};
 #[derive(Debug, PartialEq)]
-pub enum RegrError {
+pub enum RegressionError {
     DoubleOverflow,
 }
-
 #[derive(Debug, PartialEq)]
 pub struct XYPair {
     pub x: f64,
     pub y: f64,
 }
 //regression partials
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub struct RegrSummary {
-    n: u64,   // count (as f64 for convenience)
-    sx: f64,  // sum(x)
-    sxx: f64, // sum((x-sx/n)^2) (sum of squares)
-    sy: f64,  // sum(y)
-    syy: f64, // sum((y-sy/n)^2) (sum of squares)
-    sxy: f64, // sum((x-sx/n)*(y-sy/n)) (sum of products)
+#[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
+#[repr(C)]
+pub struct RegressionSummary {
+    pub n: u64,   // count
+    pub sx: f64,  // sum(x)
+    pub sxx: f64, // sum((x-sx/n)^2) (sum of squares)
+    pub sy: f64,  // sum(y)
+    pub syy: f64, // sum((y-sy/n)^2) (sum of squares)
+    pub sxy: f64, // sum((x-sx/n)*(y-sy/n)) (sum of products)
 }
-impl RegrSummary {
+impl RegressionSummary {
     pub fn new() -> Self {
-        RegrSummary {
+        RegressionSummary {
             n: 0,
             sx: 0.0,
             sxx: 0.0,
@@ -35,13 +36,13 @@ impl RegrSummary {
         }
     }
 
-    pub fn n64(&self) -> f64{
+    pub fn n64(&self) -> f64 {
         self.n as f64
     }
-    /// accumulate an XYPair into a RegrSummary
+    /// accumulate an XYPair into a RegressionSummary
     /// ```
-    /// use counter_agg::regr::*;
-    /// let mut p = RegrSummary::new();
+    /// use counter_agg::regression::*;
+    /// let mut p = RegressionSummary::new();
     /// p.accum(XYPair{x:1.0, y:1.0,}).unwrap();
     /// p.accum(XYPair{x:2.0, y:2.0,}).unwrap();
     /// //we can add in infinite values and it will handle it properly.
@@ -49,11 +50,11 @@ impl RegrSummary {
     /// assert_eq!(p.sum().unwrap().x, f64::INFINITY);
     /// assert!(p.sum_squares().unwrap().x.is_nan()); // this is NaN because it involves multiplication of two infinite values
     ///
-    /// assert_eq!(p.accum(XYPair{y:f64::MAX, x:1.0,}), Err(RegrError::DoubleOverflow)); // we do error if we actually overflow however
+    /// assert_eq!(p.accum(XYPair{y:f64::MAX, x:1.0,}), Err(RegressionError::DoubleOverflow)); // we do error if we actually overflow however
     ///
     ///```
-    pub fn accum(&mut self, p: XYPair) -> Result<(), RegrError> {
-        let old = RegrSummary {
+    pub fn accum(&mut self, p: XYPair) -> Result<(), RegressionError> {
+        let old = RegressionSummary {
             n: self.n,
             sx: self.sx,
             sxx: self.sxx,
@@ -73,7 +74,7 @@ impl RegrSummary {
             self.sxy += tmpx * tmpy * scale;
             if self.has_infinite() {
                 if self.check_overflow(&old, p) {
-                    return Err(RegrError::DoubleOverflow);
+                    return Err(RegressionError::DoubleOverflow);
                 }
                 // sxx, syy, and sxy should be set to NaN if any of their inputs are
                 // infinite, so if they ended up as infinite and there wasn't an overflow,
@@ -104,13 +105,13 @@ impl RegrSummary {
         Result::Ok(())
     }
     fn has_infinite(&self) -> bool {
-            self.sx.is_infinite()
-                || self.sxx.is_infinite()
-                || self.sy.is_infinite()
-                || self.syy.is_infinite()
-                || self.sxy.is_infinite()
+        self.sx.is_infinite()
+            || self.sxx.is_infinite()
+            || self.sy.is_infinite()
+            || self.syy.is_infinite()
+            || self.sxy.is_infinite()
     }
-    fn check_overflow(&self, old: &RegrSummary, p: XYPair) -> bool {
+    fn check_overflow(&self, old: &RegressionSummary, p: XYPair) -> bool {
         //Only report overflow if we have finite inputs that lead to infinite results.
         ((self.sx.is_infinite() || self.sxx.is_infinite()) && old.sx.is_finite() && p.x.is_finite())
             || ((self.sy.is_infinite() || self.syy.is_infinite())
@@ -123,47 +124,47 @@ impl RegrSummary {
                 && p.y.is_finite())
     }
 
-    ///create a RegrSummary from a vector of XYPairs
+    ///create a RegressionSummary from a vector of XYPairs
     /// ```
-    /// use counter_agg::regr::RegrSummary;
-    /// use counter_agg::regr::XYPair;
-    /// let mut p = RegrSummary::new();
+    /// use counter_agg::regression::RegressionSummary;
+    /// use counter_agg::regression::XYPair;
+    /// let mut p = RegressionSummary::new();
     /// p.accum(XYPair{x:1.0, y:1.0,}).unwrap();
     /// p.accum(XYPair{x:2.0, y:2.0,}).unwrap();
     /// p.accum(XYPair{x:3.0, y:3.0,}).unwrap();
-    /// let q = RegrSummary::new_from_vec(vec![XYPair{x:1.0, y:1.0,}, XYPair{x:2.0, y:2.0,}, XYPair{x:3.0, y:3.0,}]).unwrap();
+    /// let q = RegressionSummary::new_from_vec(vec![XYPair{x:1.0, y:1.0,}, XYPair{x:2.0, y:2.0,}, XYPair{x:3.0, y:3.0,}]).unwrap();
     /// assert_eq!(p, q);
     ///```
-    pub fn new_from_vec(v: Vec<XYPair>) -> Result<Self, RegrError> {
-        let mut r = RegrSummary::new();
+    pub fn new_from_vec(v: Vec<XYPair>) -> Result<Self, RegressionError> {
+        let mut r = RegressionSummary::new();
         for p in v {
             r.accum(p)?;
         }
         Result::Ok(r)
     }
-    /// combine two RegrSummarys
+    /// combine two RegressionSummarys
     /// ```
-    /// use counter_agg::regr::RegrSummary;
-    /// use counter_agg::regr::XYPair;
-    /// let p = RegrSummary::new_from_vec(vec![XYPair{x:1.0, y:1.0,}, XYPair{x:2.0, y:2.0,}, XYPair{x:3.0, y:3.0,}, XYPair{x:4.0, y:4.0,}]).unwrap();
-    /// let q = RegrSummary::new_from_vec(vec![XYPair{x:1.0, y:1.0,}, XYPair{x:2.0, y:2.0,},]).unwrap();
-    /// let r = RegrSummary::new_from_vec(vec![XYPair{x:3.0, y:3.0,}, XYPair{x:4.0, y:4.0,},]).unwrap();
+    /// use counter_agg::regression::RegressionSummary;
+    /// use counter_agg::regression::XYPair;
+    /// let p = RegressionSummary::new_from_vec(vec![XYPair{x:1.0, y:1.0,}, XYPair{x:2.0, y:2.0,}, XYPair{x:3.0, y:3.0,}, XYPair{x:4.0, y:4.0,}]).unwrap();
+    /// let q = RegressionSummary::new_from_vec(vec![XYPair{x:1.0, y:1.0,}, XYPair{x:2.0, y:2.0,},]).unwrap();
+    /// let r = RegressionSummary::new_from_vec(vec![XYPair{x:3.0, y:3.0,}, XYPair{x:4.0, y:4.0,},]).unwrap();
     /// let r = r.combine(q).unwrap();
     /// assert_eq!(r, p);
     /// ```
-    // we combine two RegrSummarys via a generalization of the Youngs-Cramer algorithm, we follow what Postgres does here
+    // we combine two RegressionSummarys via a generalization of the Youngs-Cramer algorithm, we follow what Postgres does here
     //      n = n1 + n2
     //      sx = sx1 + sx2
     //      sxx = sxx1 + sxx2 + n1 * n2 * (sx1/n1 - sx2/n)^2 / n
     //      sy / syy analogous
     //      sxy = sxy1 + sxy2 + n1 * n2 * (sx1/n1 - sx2/n2) * (sy1/n1 - sy2/n2) / n
-    pub fn combine(&self, other: RegrSummary) -> Result<Self, RegrError> {
+    pub fn combine(&self, other: RegressionSummary) -> Result<Self, RegressionError> {
         // TODO: think about whether we want to just modify &self in place here for perf
         // reasons. This is also a set of weird questions around the Rust compiler, so
         // easier to just add the copy trait here, may need to adjust or may make things
         // harder if we do generics.
         if self.n == 0 && other.n == 0 {
-            return Ok(RegrSummary::new());
+            return Ok(RegressionSummary::new());
         } else if self.n == 0 {
             // handle the trivial n = 0 cases here, and don't worry about divide by zero errors later.
             return Ok(other);
@@ -173,7 +174,7 @@ impl RegrSummary {
         let tmpx = self.sx / self.n64() - other.sx / other.n64();
         let tmpy = self.sy / self.n64() - other.sy / other.n64();
         let n = self.n + other.n;
-        let r = RegrSummary {
+        let r = RegressionSummary {
             n: n,
             sx: self.sx + other.sx,
             sxx: self.sxx + other.sxx + self.n64() * other.n64() * tmpx * tmpx / n as f64,
@@ -182,34 +183,46 @@ impl RegrSummary {
             sxy: self.sxy + other.sxy + self.n64() * other.n64() * tmpx * tmpy / n as f64,
         };
         if r.has_infinite() && !self.has_infinite() && !other.has_infinite() {
-            return Err(RegrError::DoubleOverflow);
+            return Err(RegressionError::DoubleOverflow);
         }
         Ok(r)
     }
-    /// offsets all values accumulated in a RegrSummary by a given amount in X & Y. This
+    /// offsets all values accumulated in a RegressionSummary by a given amount in X & Y. This
     /// only works if all values are offset by that amount. This is used for allowing
     /// relative calculations in a local region and then allowing them to be combined with
     /// other regions where all points are offset by the same amount. The main use case
     /// for now is in the counter case where, when partials are combined you can get a new
     /// offset for all points in the counter.
-    // Note that
-    pub fn offset(&mut self, offset: XYPair) -> Result<(), RegrError> {
-        let _ = offset;
-        unimplemented!();
+    // Note that when offsetting, the offset of the previous partial  be multiplied by N and added to the Sy value. All the other values are 
+    // unaffected because they rely on the expression (Y-Sy/N), (and analogous for the X values) which is basically each value subtracted from the 
+    // average of all values and if all values are shifted by a constant, then the average shifts by the same constant so it cancels out: 
+    // i.e. If a constant C is added to each Y, then (Y-Sy/N) reduces back to itself as follows:
+        //(Y + C) - (Sy + NC)/N 
+        // Y + C - Sy/N - NC/N 
+        // Y + C - Sy/N - C 
+        // Y - Sy/N
+    pub fn offset(&mut self, offset: XYPair) -> Result<(), RegressionError> {
+        self.sx = self.sx + self.n64() * offset.x;
+        self.sy = self.sy + self.n64() * offset.y;
+        if self.has_infinite() && offset.x.is_finite() && offset.y.is_finite(){
+            return Err(RegressionError::DoubleOverflow);  
+        }
+        Ok(())      
     }
+
     ///returns the sum of squares of both the independent (x) and dependent (y) variables
     ///as an XYPair, where the sum of squares is defined as: sum(x^2) - sum(x)^2 / n)
     ///```
-    /// use counter_agg::regr::RegrSummary;
-    /// use counter_agg::regr::XYPair;
-    /// let p = RegrSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
+    /// use counter_agg::regression::RegressionSummary;
+    /// use counter_agg::regression::XYPair;
+    /// let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let ssx = (1.0_f64.powi(2) + 2.0_f64.powi(2) + 3.0_f64.powi(2)) - (1.0+2.0+3.0_f64).powi(2)/3.0;
     /// let ssy = (2.0_f64.powi(2) + 4.0_f64.powi(2) + 6.0_f64.powi(2)) - (2.0+4.0+6.0_f64).powi(2)/3.0;
     /// let ssp = p.sum_squares().unwrap();
     /// assert_eq!(ssp.x, ssx);
     /// assert_eq!(ssp.y, ssy);
-    /// //empty RegrSummarys return None
-    /// assert!(RegrSummary::new().sum_squares().is_none());
+    /// //empty RegressionSummarys return None
+    /// assert!(RegressionSummary::new().sum_squares().is_none());
     /// ```
     pub fn sum_squares(&self) -> Option<XYPair> {
         if self.n == 0 {
@@ -222,13 +235,13 @@ impl RegrSummary {
     }
     ///returns the "sum of products" of the dependent * independent variables sum(x * y) - sum(x) * sum(y) / n
     ///```
-    /// use counter_agg::regr::RegrSummary;
-    /// use counter_agg::regr::XYPair;
-    /// let p = RegrSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
+    /// use counter_agg::regression::RegressionSummary;
+    /// use counter_agg::regression::XYPair;
+    /// let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let s = (2.0 * 1.0 + 4.0 * 2.0 + 6.0 * 3.0) - (2.0 + 4.0 + 6.0)*(1.0 + 2.0 + 3.0)/3.0;
     /// assert_eq!(p.sumxy().unwrap(), s);
-    /// //empty RegrSummarys return None
-    /// assert!(RegrSummary::new().sumxy().is_none());
+    /// //empty RegressionSummarys return None
+    /// assert!(RegressionSummary::new().sumxy().is_none());
     /// ```
     pub fn sumxy(&self) -> Option<f64> {
         if self.n == 0 {
@@ -238,16 +251,16 @@ impl RegrSummary {
     }
     ///returns the averages of the x and y variables
     ///```
-    /// use counter_agg::regr::RegrSummary;
-    /// use counter_agg::regr::XYPair;
-    /// let p = RegrSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
+    /// use counter_agg::regression::RegressionSummary;
+    /// use counter_agg::regression::XYPair;
+    /// let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let avgx = (1.0 + 2.0 + 3.0)/3.0;
     /// let avgy = (2.0 + 4.0 + 6.0)/3.0;
     /// let avgp = p.avg().unwrap();
     /// assert_eq!(avgp.x, avgx);
     /// assert_eq!(avgp.y, avgy);
-    /// //empty RegrSummarys return None
-    /// assert!(RegrSummary::new().avg().is_none());
+    /// //empty RegressionSummarys return None
+    /// assert!(RegressionSummary::new().avg().is_none());
     /// ```
     pub fn avg(&self) -> Option<XYPair> {
         if self.n == 0 {
@@ -260,30 +273,30 @@ impl RegrSummary {
     }
     ///returns the count of inputs as an i64
     ///```
-    /// use counter_agg::regr::RegrSummary;
-    /// use counter_agg::regr::XYPair;
+    /// use counter_agg::regression::RegressionSummary;
+    /// use counter_agg::regression::XYPair;
 
-    /// let p = RegrSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
+    /// let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let s = 3;
     /// assert_eq!(p.count(), s);
-    /// //empty RegrSummarys return 0 count
-    /// assert_eq!(RegrSummary::new().count(), 0);
+    /// //empty RegressionSummarys return 0 count
+    /// assert_eq!(RegressionSummary::new().count(), 0);
     /// ```
     pub fn count(&self) -> i64 {
         self.n as i64
     }
     ///returns the sums of x and y as an XYPair
     ///```
-    /// use counter_agg::regr::RegrSummary;
-    /// use counter_agg::regr::XYPair;
-    /// let p = RegrSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
+    /// use counter_agg::regression::RegressionSummary;
+    /// use counter_agg::regression::XYPair;
+    /// let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let sumx = (1.0 + 2.0 + 3.0);
     /// let sumy = (2.0 + 4.0 + 6.0);
     /// let sump = p.sum().unwrap();
     /// assert_eq!(sump.x, sumx);
     /// assert_eq!(sump.y, sumy);
-    /// //empty RegrSummarys return None
-    /// assert!(RegrSummary::new().sum().is_none());
+    /// //empty RegressionSummarys return None
+    /// assert!(RegressionSummary::new().sum().is_none());
     /// ```
     pub fn sum(&self) -> Option<XYPair> {
         if self.n == 0 {
@@ -320,7 +333,7 @@ impl RegrSummary {
     /// population covariance and stddev, because we end up with a canceling n or n-1 term. This
     /// also allows us to reduce our calculation to the sumxy / sqrt(sum_squares(x)*sum_squares(y))
     pub fn corr(&self) -> Option<f64> {
-        // empty RegrSummarys, horizontal or vertical lines should return None
+        // empty RegressionSummarys, horizontal or vertical lines should return None
         if self.n == 0 || self.sxx == 0.0 || self.syy == 0.0 {
             return None;
         }
@@ -355,14 +368,14 @@ impl RegrSummary {
     }
     ///returns the sample covariance: (sumxy()/n-1)
     ///```
-    /// use counter_agg::regr::RegrSummary;
-    /// use counter_agg::regr::XYPair;
-    /// let p = RegrSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
+    /// use counter_agg::regression::RegressionSummary;
+    /// use counter_agg::regression::XYPair;
+    /// let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let s = (2.0 * 1.0 + 4.0 * 2.0 + 6.0 * 3.0) - (2.0 + 4.0 + 6.0)*(1.0 + 2.0 + 3.0)/3.0;
     /// let s = s/2.0;
     /// assert_eq!(p.covar_samp().unwrap(), s);
-    /// //empty RegrSummarys return None
-    /// assert!(RegrSummary::new().covar_samp().is_none());
+    /// //empty RegressionSummarys return None
+    /// assert!(RegressionSummary::new().covar_samp().is_none());
     /// ```
     pub fn covar_samp(&self) -> Option<f64> {
         if self.n <= 1 {
@@ -372,14 +385,14 @@ impl RegrSummary {
     }
     ///returns the population covariance: (sumxy()/n)
     ///```
-    /// use counter_agg::regr::RegrSummary;
-    /// use counter_agg::regr::XYPair;
-    /// let p = RegrSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
+    /// use counter_agg::regression::RegressionSummary;
+    /// use counter_agg::regression::XYPair;
+    /// let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let s = (2.0 * 1.0 + 4.0 * 2.0 + 6.0 * 3.0) - (2.0 + 4.0 + 6.0)*(1.0 + 2.0 + 3.0)/3.0;
     /// let s = s/3.0;
     /// assert_eq!(p.covar_pop().unwrap(), s);
-    /// //empty RegrSummarys return None
-    /// assert!(RegrSummary::new().covar_pop().is_none());
+    /// //empty RegressionSummarys return None
+    /// assert!(RegressionSummary::new().covar_pop().is_none());
     /// ```
     pub fn covar_pop(&self) -> Option<f64> {
         if self.n == 0 {

@@ -8,3 +8,7 @@ edition = "2018"
 [dependencies]
 serde = { package = "serde", version = "1.0", optional = false, default-features = false }
 time_weighted_average = {path="../time-weighted-average", features = ["use_serde"]}
+
+
+[dev-dependencies]
+approx = "0.4.0"

@@ -22,6 +22,8 @@ use time_weighted_average::{
 
 use counter_agg::{
     CounterSummary as InternalCounterSummary,
+    regression::RegressionSummary,
+    range::I64Range,
 };
 
 // hack to allow us to qualify names with "timescale_analytics_experimental"
@@ -43,6 +45,7 @@ CREATE TYPE timescale_analytics_experimental.CounterSummary;
 pg_type! {
     #[derive(Debug)]
     struct CounterSummary {
+        regress: RegressionSummary,
         first: TSPoint,
         second: TSPoint,
         penultimate:TSPoint,
@@ -65,6 +68,8 @@ impl<'input> CounterSummary<'input> {
             reset_sum: *self.reset_sum,
             num_resets: *self.num_resets,
             num_changes: *self.num_changes,
+            regress: *self.regress,
+            bounds: *self.bounds,
         }
     }
 }
@@ -183,7 +188,7 @@ pub fn counter_agg_summary_trans(
 ) -> Option<Internal<CounterSummaryTransState>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
-            match (state, value) {
+            match (state, value) { 
                 (state, None) => state,
                 (None, Some(value)) => Some(CounterSummaryTransState{point_buffer: vec![], summary_buffer: vec![value.to_internal_counter_summary()]}.into()),
                 (Some(mut state), Some(value)) => {
@@ -238,6 +243,7 @@ fn counter_agg_final(
                 Some(st) => Some(
                     flatten!(
                         CounterSummary {
+                            regress: &st.regress,
                             first: &st.first,
                             second: &st.second,
                             penultimate: &st.penultimate,
@@ -291,7 +297,6 @@ fn counter_agg_delta(
 mod tests {
     use pgx::*;
  
-
     #[pg_test]
     fn test_counter_aggregate(){
         Spi::execute(|client| {

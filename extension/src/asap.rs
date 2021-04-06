@@ -159,12 +159,12 @@ impl TimeSeries {
 // TODO: Can we have a single time-series object which can store either an
 // explicit or normal timeseries (without being stupidly inefficient)
 extension_sql!(r#"
-CREATE TYPE timescale_analytics_experimental.TimeSeriesNormal;
+CREATE TYPE timescale_analytics_experimental.NormalizedTimeSeries;
 "#);
 
 pg_type! {
     #[derive(Debug)]
-    struct TimeSeriesNormal {
+    struct NormalizedTimeSeries {
         start_ts: i64,
         step_interval: i64,
         num_vals: u64,  // required to be aligned
@@ -172,9 +172,9 @@ pg_type! {
     }
 }
 
-json_inout_funcs!(TimeSeriesNormal);
+json_inout_funcs!(NormalizedTimeSeries);
 
-impl<'input> TimeSeriesNormal<'input> {
+impl<'input> NormalizedTimeSeries<'input> {
     #[allow(dead_code)]
     fn to_normal_time_series(&self) -> NormalTimeSeries {
         NormalTimeSeries {
@@ -184,10 +184,10 @@ impl<'input> TimeSeriesNormal<'input> {
         }
     }
 
-    fn from_normal_time_series(series: &NormalTimeSeries) -> TimeSeriesNormal<'input> {
+    fn from_normal_time_series(series: &NormalTimeSeries) -> NormalizedTimeSeries<'input> {
         unsafe {
             flatten!(
-                TimeSeriesNormal {
+                NormalizedTimeSeries {
                     start_ts: &series.start_ts,
                     step_interval: &series.step_interval,
                     num_vals: &(series.values.len() as u64),
@@ -200,30 +200,34 @@ impl<'input> TimeSeriesNormal<'input> {
 
 extension_sql!(r#"
 CREATE OR REPLACE FUNCTION
-    timescale_analytics_experimental.TimeSeriesNormal_in(cstring)
-RETURNS timescale_analytics_experimental.TimeSeriesNormal
+    timescale_analytics_experimental.NormalizedTimeSeries_in(cstring)
+RETURNS timescale_analytics_experimental.NormalizedTimeSeries
 IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C
-AS 'MODULE_PATHNAME', 'timeseriesnormal_in_wrapper';
+AS 'MODULE_PATHNAME', 'normalizedtimeseries_in_wrapper';
 
 CREATE OR REPLACE FUNCTION
-    timescale_analytics_experimental.TimeSeriesNormal_out(timescale_analytics_experimental.TimeSeriesNormal)
+    timescale_analytics_experimental.NormalizedTimeSeries_out(timescale_analytics_experimental.NormalizedTimeSeries)
 RETURNS CString
 IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C
-AS 'MODULE_PATHNAME', 'timeseriesnormal_out_wrapper';
+AS 'MODULE_PATHNAME', 'normalizedtimeseries_out_wrapper';
 
-CREATE TYPE timescale_analytics_experimental.TimeSeriesNormal (
+CREATE TYPE timescale_analytics_experimental.NormalizedTimeSeries (
     INTERNALLENGTH = variable,
-    INPUT = timescale_analytics_experimental.TimeSeriesNormal_in,
-    OUTPUT = timescale_analytics_experimental.TimeSeriesNormal_out,
+    INPUT = timescale_analytics_experimental.NormalizedTimeSeries_in,
+    OUTPUT = timescale_analytics_experimental.NormalizedTimeSeries_out,
     STORAGE = extended
 );
 "#);
 
 #[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn unnest_series(
-    series: timescale_analytics_experimental::TimeSeriesNormal,
+    series: timescale_analytics_experimental::NormalizedTimeSeries,
 ) -> impl std::iter::Iterator<Item = (name!(time,TimestampTz),name!(value,f64))> + '_ {
-    (0..*series.num_vals).map(move |i| (*series.start_ts + i as i64 * *series.step_interval, series.values[i as usize]))
+    (0..*series.num_vals).map(move |i| {
+        let num_steps = i as i64;
+        let step_interval = *series.step_interval;
+        (*series.start_ts + num_steps * step_interval, series.values[i as usize])
+    })
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -234,19 +238,6 @@ pub struct ASAPTransState {
 
 #[allow(non_camel_case_types)]
 type bytea = pg_sys::Datum;
-
-#[pg_extern(schema = "timescale_analytics_experimental")]
-pub fn asap_serialize(state: Internal<ASAPTransState>) -> bytea {
-    crate::do_serialize!(state)
-}
-
-#[pg_extern(schema = "timescale_analytics_experimental", strict)]
-pub fn asap_deserialize(
-    bytes: bytea,
-    _internal: Option<Internal<()>>,
-) -> Internal<ASAPTransState> {
-    crate::do_deserialize!(bytes, ASAPTransState)
-}
 
 #[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn asap_trans(
@@ -302,14 +293,14 @@ fn find_downsample_interval(series: &ExplicitTimeSeries, resolution: i64) -> i64
     }
     diffs.sort();
     let median = diffs[diffs.len() / 2];
-    candidate / median * median
+    candidate / median * median  // Truncate candidate to a multiple of median
 }
 
 #[pg_extern(schema = "timescale_analytics_experimental")]
 fn asap_final(
     state: Option<Internal<ASAPTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<timescale_analytics_experimental::TimeSeriesNormal<'static>> {
+) -> Option<timescale_analytics_experimental::NormalizedTimeSeries<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let state = match state {
@@ -345,7 +336,7 @@ fn asap_final(
                 // Set the step interval for the asap result so that it covers the same interval
                 // as the passed in data
                 result.step_interval = normal.step_interval * normal.values.len() as i64 / result.values.len() as i64;
-                Some(TimeSeriesNormal::from_normal_time_series(&result))
+                Some(NormalizedTimeSeries::from_normal_time_series(&result))
             } else {
                 panic!("Unexpected timeseries format encountered");
             }
@@ -359,9 +350,7 @@ extension_sql!(r#"
 CREATE AGGREGATE timescale_analytics_experimental.asap_smooth(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution INT) (
     sfunc = timescale_analytics_experimental.asap_trans,
     stype = internal,
-    finalfunc = timescale_analytics_experimental.asap_final,
-    serialfunc = timescale_analytics_experimental.asap_serialize,
-    deserialfunc = timescale_analytics_experimental.asap_deserialize
+    finalfunc = timescale_analytics_experimental.asap_final
 );
 "#);
 
@@ -375,25 +364,23 @@ mod tests {
             client.select("CREATE TABLE asap_test (date timestamptz, value DOUBLE PRECISION)", None, None);
 
             // Create a table with some cyclic data
-            client.select("insert into asap_test select '1-1-2020'::timestamptz + make_interval(days=>foo), 10 + 5 * cos(foo) from generate_series(0,1000) foo", None, None);
+            client.select("insert into asap_test select '2020-1-1 UTC'::timestamptz + make_interval(days=>foo), 10 + 5 * cos(foo) from generate_series(0,1000) foo", None, None);
             // Gap from [1001,1040] then continue cycle
-            client.select("insert into asap_test select '1-1-2020'::timestamptz + make_interval(days=>foo), 10 + 5 * cos(foo) from generate_series(1041,2000) foo", None, None);
+            client.select("insert into asap_test select '2020-1-1 UTC'::timestamptz + make_interval(days=>foo), 10 + 5 * cos(foo) from generate_series(1041,2000) foo", None, None);
             // Values in [2001,2200] are 2 less than normal
-            client.select("insert into asap_test select '1-1-2020'::timestamptz + make_interval(days=>foo), 8 + 5 * cos(foo) from generate_series(2001,2200) foo", None, None);
+            client.select("insert into asap_test select '2020-1-1 UTC'::timestamptz + make_interval(days=>foo), 8 + 5 * cos(foo) from generate_series(2001,2200) foo", None, None);
             // And fill out to 3000
-            client.select("insert into asap_test select '1-1-2020'::timestamptz + make_interval(days=>foo), 10 + 5 * cos(foo) from generate_series(2201,3000) foo", None, None);
+            client.select("insert into asap_test select '2020-1-1 UTC'::timestamptz + make_interval(days=>foo), 10 + 5 * cos(foo) from generate_series(2201,3000) foo", None, None);
 
-            // Smoothing to resolution 100 gives us 96 points so our hole should be around index 32-33
+            // Smoothing to resolution 100 gives us 95 points so our hole should be around index 32-33
             // and our decreased values should be around 64-72.  However, since the output is
             // rolling averages, expect these values to impact the results around these ranges as well.
 
             client.select("create table asap_vals as SELECT * FROM timescale_analytics_experimental.unnest_series((SELECT timescale_analytics_experimental.asap_smooth(date, value, 100) FROM asap_test ))", None, None);
             
-            // TODO: In `pgx test` this gets a 95 point graph, exact same commands in `pgx run`
-            // ends up with 96 points, this needs to be investigated
-            // let sanity = client.select("SELECT COUNT(*) FROM asap_vals", None, None).first()
-            // .get_one::<i32>().unwrap();
-            // assert_eq!(sanity, 96);
+            let sanity = client.select("SELECT COUNT(*) FROM asap_vals", None, None).first()
+                .get_one::<i32>().unwrap();
+            assert_eq!(sanity, 95);
 
             // First check that our smoothed values away from our impacted ranges are about 10
             let test_val = client

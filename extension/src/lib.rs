@@ -5,6 +5,7 @@ pub mod tdigest;
 pub mod hyperloglog;
 pub mod uddsketch;
 pub mod time_weighted_average;
+pub mod asap;
 
 mod palloc;
 mod aggregate_utils;

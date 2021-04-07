@@ -1,9 +1,8 @@
 
 use pgx::*;
 use asap::*;
-use pg_sys::{Datum, TimestampTz};
+use pg_sys::TimestampTz;
 use serde::{Deserialize, Serialize};
-use std::slice;
 
 use crate::{
     aggregate_utils::in_aggregate_context, flatten, json_inout_funcs, palloc::Internal, pg_type,
@@ -40,7 +39,7 @@ pub struct ExplicitTimeSeries {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct NormalTimeSeries {
     start_ts: i64,
-    step_interval: i64,    // ts delta between values 
+    step_interval: i64,    // ts delta between values
     values: Vec<f64>
 }
 
@@ -219,8 +218,8 @@ CREATE TYPE timescale_analytics_experimental.NormalizedTimeSeries (
 );
 "#);
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
-pub fn unnest_series(
+#[pg_extern(name = "unnest_series", schema = "timescale_analytics_experimental")]
+pub fn unnest_normalized_series(
     series: timescale_analytics_experimental::NormalizedTimeSeries,
 ) -> impl std::iter::Iterator<Item = (name!(time,TimestampTz),name!(value,f64))> + '_ {
     (0..*series.num_vals).map(move |i| {
@@ -235,9 +234,6 @@ pub struct ASAPTransState {
     ts: TimeSeries,
     resolution: i32,
 }
-
-#[allow(non_camel_case_types)]
-type bytea = pg_sys::Datum;
 
 #[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn asap_trans(
@@ -279,7 +275,7 @@ pub fn asap_trans(
 
 fn find_downsample_interval(series: &ExplicitTimeSeries, resolution: i64) -> i64 {
     assert!(series.ordered);
-    
+
     // First candidate is simply the total range divided into even size buckets
     let candidate = (series.points.last().unwrap().ts - series.points.first().unwrap().ts) / resolution;
 
@@ -377,7 +373,7 @@ mod tests {
             // rolling averages, expect these values to impact the results around these ranges as well.
 
             client.select("create table asap_vals as SELECT * FROM timescale_analytics_experimental.unnest_series((SELECT timescale_analytics_experimental.asap_smooth(date, value, 100) FROM asap_test ))", None, None);
-            
+
             let sanity = client.select("SELECT COUNT(*) FROM asap_vals", None, None).first()
                 .get_one::<i32>().unwrap();
             assert_eq!(sanity, 95);

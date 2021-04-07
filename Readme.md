@@ -35,6 +35,28 @@ to help shape the project's direction! Have a look at the
 and feel free to comment on the features, expand the list, or
 hop on the [Discussions forum](https://github.com/timescale/timescale-analytics/discussions) for more in-depth discussions.
 
+### 🔨 Building ###
+
+The extension is built using a [fork](https://github.com/JLockerman/pgx/tree/timescale)
+of [pgx](https://github.com/zombodb/pgx). To install pgx use
+
+```bash
+cargo install --git https://github.com/JLockerman/pgx.git --branch timescale cargo-pgx && cargo pgx init
+```
+
+Once you have `pgx` installed, you can run tests against a postgres version
+`pg12`, or `pg13` using
+
+```
+cargo pgx test ${postgres_version}
+```
+
+to install the extension to a postgres install locatable using `pg_config` use
+
+```bash
+cargo pgx install --release
+```
+
 ## 🐯 About TimescaleDB
 
 **[TimescaleDB](https://github.com/timescale/timescaledb)** is a

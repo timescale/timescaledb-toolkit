@@ -1,4 +1,4 @@
-//regress implements the Youngs-Cramer algorithm and are based on the Postgres implementation
+//regression is a small statistical regression lib that implements the Youngs-Cramer algorithm and is based on the Postgres implementation
 //here:
 //https://github.com/postgres/postgres/blob/472e518a44eacd9caac7d618f1b6451672ca4481/src/backend/utils/adt/float.c#L3260
 //
@@ -210,6 +210,9 @@ impl RegressionSummary {
         Ok(())      
     }
 
+    //TODO: Add tests for offsets  
+
+    
     ///returns the sum of squares of both the independent (x) and dependent (y) variables
     ///as an XYPair, where the sum of squares is defined as: sum(x^2) - sum(x)^2 / n)
     ///```
@@ -328,6 +331,7 @@ impl RegressionSummary {
             y: (self.syy / self.n64() - 1.0).sqrt(),
         })
     }
+
     /// returns the correlation coefficient, which is the covariance / (stddev(x) * stddev(y))
     /// Note that it makes no difference whether we choose the sample or
     /// population covariance and stddev, because we end up with a canceling n or n-1 term. This
@@ -339,6 +343,7 @@ impl RegressionSummary {
         }
         Some(self.sxy / (self.sxx * self.syy).sqrt())
     }
+
     /// returns the slope of the least squares fit line
     pub fn slope(&self) -> Option<f64> {
         // the case of a single point will usually be triggered by the the second branch of this (which is also a test for a vertical line)
@@ -348,6 +353,7 @@ impl RegressionSummary {
         }
         Some(self.sxy / self.sxx)
     }
+
     /// returns the intercept of the least squares fit line
     pub fn intercept(&self) -> Option<f64> {
         if self.n == 0 || self.sxx == 0.0 {
@@ -355,8 +361,25 @@ impl RegressionSummary {
         }
         Some((self.sy - self.sx * self.sxy / self.sxx) / self.n64())
     }
-    /// returns the squared error of the least squares fit line
-    pub fn square_error(&self) -> Option<f64> {
+
+    /// returns the x intercept of the least squares fit line
+    // y = mx + b (y = 0)
+    // -b = mx
+    // x = -b / m 
+    pub fn x_intercept(&self) -> Option<f64> {
+        // vertical line does have an x intercept
+        if self.n > 1 && self.sxx == 0.0 {
+            return Some(self.sx / self.n64())
+        }
+        // horizontal lines have no x intercepts
+        if self.syy == 0.0 {
+            return None;
+        }
+        Some(-1.0 * self.intercept()? / self.slope()?) 
+    }
+    
+    /// returns the square of the correlation coefficent (aka the coefficient of determination)
+    pub fn determination_coeff(&self) -> Option<f64> {
         if self.n == 0 || self.sxx == 0.0 {
             return None;
         }
@@ -366,6 +389,7 @@ impl RegressionSummary {
         }
         Some(self.sxy * self.sxy / (self.sxx * self.syy))
     }
+
     ///returns the sample covariance: (sumxy()/n-1)
     ///```
     /// use counter_agg::regression::RegressionSummary;
@@ -383,6 +407,7 @@ impl RegressionSummary {
         }
         Some(self.sxy / (self.n64() - 1.0))
     }
+
     ///returns the population covariance: (sumxy()/n)
     ///```
     /// use counter_agg::regression::RegressionSummary;
@@ -402,3 +427,40 @@ impl RegressionSummary {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_linear(){
+        let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
+        assert_eq!(p.slope().unwrap(), 2.0);
+        assert_eq!(p.intercept().unwrap(), 0.0);
+        assert_eq!(p.x_intercept().unwrap(), 0.0);
+
+        let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:2.0,}, XYPair{y:4.0, x:3.0,}, XYPair{y:6.0, x:4.0,}]).unwrap();
+        assert_eq!(p.slope().unwrap(), 2.0);
+        assert_eq!(p.intercept().unwrap(), -2.0);
+        assert_eq!(p.x_intercept().unwrap(), 1.0);
+
+        // empty
+        let p = RegressionSummary::new();
+        assert_eq!(p.slope(), None);
+        assert_eq!(p.intercept(), None);
+        assert_eq!(p.x_intercept(), None);
+        // singleton
+        let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:2.0,}, ]).unwrap();
+        assert_eq!(p.slope(), None);
+        assert_eq!(p.intercept(), None);
+        assert_eq!(p.x_intercept(), None);
+        //vertical
+        let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:2.0,}, XYPair{y:4.0, x:2.0,},]).unwrap();
+        assert_eq!(p.slope(), None);
+        assert_eq!(p.intercept(), None);
+        assert_eq!(p.x_intercept().unwrap(), 2.0);
+        //horizontal
+        let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:2.0,}, XYPair{y:2.0, x:4.0,},]).unwrap();
+        assert_eq!(p.slope().unwrap(), 0.0);
+        assert_eq!(p.intercept().unwrap(), 2.0);
+        assert_eq!(p.x_intercept(), None);
+    }
+}

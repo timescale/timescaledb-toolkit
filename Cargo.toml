@@ -7,11 +7,8 @@ members = [
     "crates/udd-sketch",
     "crates/time-weighted-average",
     "tools/sql-doctester",
-<<<<<<< HEAD
     "crates/asap",
-=======
     "crates/counter-agg",
->>>>>>> WIP counter-agg pairing with Brian
 ]
 
 [profile.dev]

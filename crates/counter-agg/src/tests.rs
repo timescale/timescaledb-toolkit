@@ -1,20 +1,21 @@
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use approx::assert_relative_eq;
     use crate::range::I64Range;
     use crate::*;
     fn to_micro(t: f64) -> f64{
-        t * 1_000_000 as f64
+        t * 1_000_000.0
     }
     //do proper numerical comparisons on the values where that matters, use exact where it should be exact.
-    fn assert_close_enough(p1:&CounterSummary, p2:&CounterSummary) {
-        assert_eq!(p1.first, p2.first);
-        assert_eq!(p1.second, p2.second);
-        assert_eq!(p1.penultimate, p2.penultimate);
-        assert_eq!(p1.last, p2.last);
-        assert_eq!(p1.num_changes, p2.num_changes);
-        assert_eq!(p1.num_resets, p2.num_resets);
-        assert_eq!(p1.regress.n, p2.regress.n);
+    #[track_caller]
+    pub fn assert_close_enough(p1:&CounterSummary, p2:&CounterSummary) {
+        assert_eq!(p1.first, p2.first, "first");
+        assert_eq!(p1.second, p2.second, "second");
+        assert_eq!(p1.penultimate, p2.penultimate, "penultimate");
+        assert_eq!(p1.last, p2.last, "last");
+        assert_eq!(p1.num_changes, p2.num_changes, "num_changes");
+        assert_eq!(p1.num_resets, p2.num_resets, "num_resets");
+        assert_eq!(p1.regress.n, p2.regress.n, "n");
         assert_relative_eq!(p1.regress.sx, p2.regress.sx);
         assert_relative_eq!(p1.regress.sxx, p2.regress.sxx);
         assert_relative_eq!(p1.regress.sy, p2.regress.sy);
@@ -68,7 +69,7 @@ mod tests {
         assert_eq!(summary.num_resets, 1);
         assert_eq!(summary.num_changes, 4);
         assert_eq!(summary.regress.count(), 6);
-        assert_relative_eq!(summary.regress.sum().unwrap().x, 75.0);
+        assert_relative_eq!(summary.regress.sum().unwrap().x, to_seconds(75.0));
         // non obvious one here, sumy should be the sum of all values including the resets at the time.
         assert_relative_eq!(summary.regress.sum().unwrap().y, 0.0 + 10.0 + 20.0 + 20.0 + 50.0 + 60.0);
     }
@@ -135,6 +136,7 @@ mod tests {
         let mut summary = CounterSummary::new( &TSPoint{ts: 0, val:50.0}, None);
         summary.add_point(&TSPoint{ts: 25, val:10.0}).unwrap();
 
+
         // also tests that a reset at the boundary works correctly
         let part1 = CounterSummary::new( &TSPoint{ts: 0, val:50.0}, None);
         let part2 = CounterSummary::new( &TSPoint{ts: 25, val:10.0}, None);
@@ -169,7 +171,7 @@ mod tests {
         assert_eq!(summary.num_resets, 2);
         assert_eq!(summary.num_changes, 6);
         assert_eq!(summary.regress.count(), 7);
-        assert_relative_eq!(summary.regress.sum().unwrap().x, 105.0);
+        assert_relative_eq!(summary.regress.sum().unwrap().x, to_seconds(105.0));
         // non obvious one here, sy should be the sum of all values including the resets at the time they were added. 
         assert_relative_eq!(summary.regress.sum().unwrap().y, 0.0 + 10.0 + 20.0 + 30.0 + 60.0 + 80.0 + 100.0);
 

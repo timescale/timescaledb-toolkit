@@ -7,10 +7,12 @@ use serde::{Deserialize, Serialize};
 // between ranges like [0, 10) and [0, 9]
 // None values denote infinite bounds on that side
 #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
+#[repr(C)]
 pub struct I64Range {
     pub left: Option<i64>,
     pub right: Option<i64>
 }
+
 
 impl I64Range {
     pub fn has_infinite(&self)-> bool{
@@ -19,17 +21,15 @@ impl I64Range {
     
     pub fn is_valid(&self) -> bool{
         match (self.left, self.right) {
-            (None, _) => true,
-            (_, None) => true,
             (Some(a), Some(b)) => a <= b, 
+            _ => true,
         }
     }
 
     pub fn is_singleton(&self) -> bool{
         match (self.left, self.right) {
-            (None, _) => false,
-            (_, None) => false,
             (Some(a), Some(b)) => a == b, 
+            _ => false,
         }
     }
 
@@ -48,14 +48,12 @@ impl I64Range {
     }
 
     pub fn contains(&self, pt: i64) -> bool {
-        (match self.left {
-            Some(v) => pt >= v,
-            None => true
-        }) && 
-        (match self.right {
-            Some(v) => pt < v,
-            None => true,
-        })
+        match (self.left, self.right) {
+            (Some(l), Some(r)) => pt >= l && pt < r, 
+            (Some(l), None) => pt >= l,
+            (None, Some(r)) => pt < r, 
+            (None, None) => true,
+        }
     }
     
     // pub fn contains(&self, other: I64Range) -> bool{

@@ -28,18 +28,22 @@ pub struct CounterSummary {
 // Note that this can lose fidelity with the timestamp, but it would only lose it in the microseconds, 
 // this is likely okay in most applications. However, if you need better regression analysis at the subsecond level, 
 // you can always subtract a common near value from all your times, then add it back in, the regression analysis will be unchanged.
-// TODO Should this be a method?
+// Note that convert the timestamp into seconds rather than microseconds here so that the slope and any other regression analysis, is done on a per-second basis.
+// For instance, the slope will be the per-second slope, not the per-microsecond slope. The x intercept value will need to be converted back to microseconds so you get a timestamp out.
 fn ts_to_xy(pt: TSPoint) -> XYPair{
     XYPair{
-        x: pt.ts as f64,
+        x: to_seconds(pt.ts as f64),
         y: pt.val,
     }
 }
 
-pub fn to_seconds(t: f64)-> f64{
+fn to_seconds(t: f64)-> f64{
     t / 1_000_000 as f64// by default postgres timestamps have microsecond precision
 }
 
+/// CounterSummary tracks monotonically increasing counters that may reset, ie every time the value decreases
+/// it is treated as a reset of the counter and the previous value is added to the "true value" of the 
+/// counter at that timestamp.
 impl CounterSummary {
     pub fn new(pt: &TSPoint, bounds:Option<range::I64Range>) -> CounterSummary {
         let mut n = CounterSummary{
@@ -62,6 +66,12 @@ impl CounterSummary {
 
         if incoming.ts < self.last.ts {
             return Err(CounterError::OrderError);
+        }
+        //TODO: test this
+        if incoming.ts == self.last.ts {
+            // if two points are equal we only use the first we see
+            // see discussion at https://github.com/timescale/timescale-analytics/discussions/65
+            return Ok(());
         }
         if incoming.val < self.last.val {
             self.reset_sum += self.last.val;
@@ -131,7 +141,7 @@ impl CounterSummary {
     }
 
     pub fn rate(&self) -> Option<f64> {
-        if self.last.ts == self.first.ts {
+        if self.single_value() {
             return None;
         }
         Some(self.delta() / self.time_delta())
@@ -156,7 +166,7 @@ impl CounterSummary {
     }
 
     pub fn irate_left(&self) -> Option<f64>{
-        if self.second.ts == self.first.ts{
+        if self.single_value(){
             None
         } else {
             Some(self.idelta_left() / to_seconds((self.second.ts - self.first.ts) as f64))
@@ -164,15 +174,13 @@ impl CounterSummary {
     }
     
     pub fn irate_right(&self) -> Option<f64>{
-        if self.last.ts == self.penultimate.ts{
+        if self.single_value() {
             None
         } else {
             Some(self.idelta_right() / to_seconds((self.last.ts - self.penultimate.ts) as f64))
         }
     }
     
-    
-
     pub fn bounds_valid(&self) -> bool {
         match self.bounds{
             None => true,  // unbounded contains everything
@@ -198,7 +206,7 @@ impl CounterSummary {
             return Err(CounterError::BoundsInvalid);
         }
         //must have at least 2 values
-        if self.first == self.last || self.bounds.unwrap().is_singleton(){ //technically, the is_singleton check is redundant, it's included for clarity (any singleton bound that is valid can only be one point)
+        if self.single_value() || self.bounds.unwrap().is_singleton(){ //technically, the is_singleton check is redundant, it's included for clarity (any singleton bound that is valid can only be one point)
             return Ok(None);
         }
 

@@ -1,10 +1,20 @@
 use std::convert::TryInto;
 use std::slice;
-use pgx::pg_sys;
+use serde::{Serialize, Deserialize};
+use pgx::{extension_sql, pg_sys};
 use counter_agg::range::I64Range;
 
 #[allow(non_camel_case_types)]
 pub type tstzrange = *mut pg_sys::varlena;
+
+// hack to allow us to qualify names with "timescale_analytics_experimental"
+// so that pgx generates the correct SQL
+mod timescale_analytics_experimental {
+    pub(crate) use super::*;
+    extension_sql!(r#"
+        CREATE SCHEMA IF NOT EXISTS timescale_analytics_experimental;
+    "#);
+}
 
 // Derived from Postgres' range_deserialize: https://github.com/postgres/postgres/blob/27e1f14563cf982f1f4d71e21ef247866662a052/src/backend/utils/adt/rangetypes.c#L1779
 // but we modify because we only allow specific types of ranges, namely [) inclusive on left and exclusive on right, as this makes a lot of logic simpler, and allows for a standard way to represent a range.
@@ -72,4 +82,85 @@ fn rbound_inclusive(flags: u8) -> bool {
     flags & RANGE_UB_INC != 0
 }
 
+// `Option<...>` is not suitable for disk storage. `Option<...>` does not have a
+// well-defined layout, for instance, an `Option<u32>` takes 8 bytes while an
+// `Option<NonZeroU32>` only takes up 4 bytes, despite them both representing
+// 32-bit numbers. Worse from our perspective is that the layouts of these are
+// not stable and they can change arbitrarily in the future, so an `Option<u32>`
+// as created by rust 1.50 may not have the same bytes as one created by rust
+// 1.51. `DiskOption<...>` is `repr(C, u64)` and thus does have a well-defined
+// layout: 8 bytes for the tag-bit determining if it's `None` or `Some` followed
+// by `size_of::<T>()` bytes in which the type can be stored.
+// Before stabalization we should probably change the layout to
+// ```
+// flat_serialize! {
+//     is_some: bool,
+//     value: [T; self.is_some as u8],
+// }
+// ```
+#[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
+#[repr(C, u64)]
+pub enum DiskOption<T> {
+    None,
+    Some(T),
+}
 
+impl<T> From<Option<T>> for DiskOption<T> {
+    fn from(t: Option<T>) -> Self {
+        match t {
+            Some(t) => Self::Some(t),
+            None => Self::None,
+        }
+    }
+}
+
+impl<T> Into<Option<T>> for DiskOption<T> {
+    fn into(self) -> Option<T> {
+        match self {
+            Self::Some(t) => Some(t),
+            Self::None => None,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
+#[repr(C)]
+pub struct DiskI64Range {
+    left: DiskOption<i64>,
+    right: DiskOption<i64>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[repr(transparent)]
+pub struct I64RangeWrapper {
+    bounds : DiskOption<DiskI64Range>,
+}
+impl I64RangeWrapper {
+    pub fn to_i64range(&self) -> Option<I64Range> {
+        match self.bounds {
+            DiskOption::None => None,
+            DiskOption::Some(b) => Some(I64Range{
+                left: b.left.into(),
+                right: b.right.into(),
+            })
+        }
+    }
+
+    pub fn from_i64range(b: Option<I64Range>) -> Self {
+        I64RangeWrapper {
+            bounds: b.map(|b| DiskI64Range {
+                left: b.left.into(),
+                right: b.right.into(),
+            }).into(),
+        }
+    }
+}
+
+// this introduces a timescaledb dependency, but only kind of, 
+extension_sql!(r#"
+CREATE OR REPLACE FUNCTION timescale_analytics_experimental.time_bucket_range( bucket_width interval, ts timestamptz) 
+RETURNS tstzrange as $$
+SELECT tstzrange(time_bucket(bucket_width, ts), time_bucket(bucket_width, ts + bucket_width), '[)');
+$$
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE;
+"#);

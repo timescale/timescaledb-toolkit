@@ -1,6 +1,5 @@
 #![allow(non_camel_case_types)]
 
-use pg_sys::Datum;
 use serde::{Deserialize, Serialize};
 use std::slice;
 
@@ -61,14 +60,14 @@ impl<'input> TimeWeightSummary<'input> {
 
 extension_sql!(
     r#"
-CREATE OR REPLACE FUNCTION timescale_analytics_experimental.TimeWeightSummary_in(cstring) 
-RETURNS timescale_analytics_experimental.TimeWeightSummary 
-IMMUTABLE STRICT PARALLEL SAFE 
+CREATE OR REPLACE FUNCTION timescale_analytics_experimental.TimeWeightSummary_in(cstring)
+RETURNS timescale_analytics_experimental.TimeWeightSummary
+IMMUTABLE STRICT PARALLEL SAFE
 LANGUAGE C AS 'MODULE_PATHNAME', 'timeweightsummary_in_wrapper'; -- This is case sensitive and is generated lowercase
 
-CREATE OR REPLACE FUNCTION timescale_analytics_experimental.TimeWeightSummary_out(timescale_analytics_experimental.TimeWeightSummary) 
-RETURNS CString 
-IMMUTABLE STRICT PARALLEL SAFE 
+CREATE OR REPLACE FUNCTION timescale_analytics_experimental.TimeWeightSummary_out(timescale_analytics_experimental.TimeWeightSummary)
+RETURNS CString
+IMMUTABLE STRICT PARALLEL SAFE
 LANGUAGE C AS 'MODULE_PATHNAME', 'timeweightsummary_out_wrapper'; -- This is case sensitive and is generated lowercase
 
 CREATE TYPE timescale_analytics_experimental.TimeWeightSummary (

@@ -51,6 +51,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "asap"
+version = "0.1.0"
+
+[[package]]
 name = "async-trait"
 version = "0.1.42"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1777,6 +1781,7 @@ dependencies = [
 name = "timescale_analytics"
 version = "0.2.0"
 dependencies = [
+ "asap",
  "bincode",
  "flat_serialize",
  "flat_serialize_macro",

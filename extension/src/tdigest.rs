@@ -4,7 +4,6 @@ use std::{convert::TryInto, mem::replace, ops::Deref, slice};
 use serde::{Serialize, Deserialize};
 
 use pgx::*;
-use pg_sys::Datum;
 
 use flat_serialize::*;
 
@@ -582,14 +581,14 @@ mod tests {
             client.select("CREATE VIEW base AS \
                 SELECT timescale_analytics_experimental.tdigest(20, value) \
                 FROM new_test", None, None);
-                
+
             let value= client
                 .select("SELECT \
                     timescale_analytics_experimental.quantile(tdigest, 0.9) \
                     FROM base", None, None)
                 .first()
                 .get_one::<f64>();
-                
+
             let test_value = client
                 .select("SELECT \
                     timescale_analytics_experimental.quantile(tdigest, 0.9) \

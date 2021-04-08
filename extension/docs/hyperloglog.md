@@ -10,7 +10,7 @@ Timescale analytics provides an implementation of the [Hyperloglog estimator](ht
 
 ## Details [](hyperloglog-details)
 
-Timescale's t-digest is implemented as an aggregate function in PostgreSQL.  They do not support moving-aggregate mode, and are not ordered-set aggregates.  It is restricted to values that have an extended hash function.  They are partializable and are good candidates for [continuous aggregation](https://docs.timescale.com/latest/using-timescaledb/continuous-aggregates).
+Timescale's HyperLogLog is implemented as an aggregate function in PostgreSQL.  They do not support moving-aggregate mode, and are not ordered-set aggregates.  It is restricted to values that have an extended hash function.  They are partializable and are good candidates for [continuous aggregation](https://docs.timescale.com/latest/using-timescaledb/continuous-aggregates).
 
 
 ## Command List (A-Z) [](hyperloglog-api)

@@ -50,7 +50,7 @@ macro_rules! pg_type {
             }
 
             impl<'input> pgx::FromDatum for $name<'input> {
-                unsafe fn from_datum(datum: Datum, is_null: bool, _: pg_sys::Oid) -> Option<Self>
+                unsafe fn from_datum(datum: pgx::pg_sys::Datum, is_null: bool, _: pg_sys::Oid) -> Option<Self>
                 where
                     Self: Sized,
                 {
@@ -64,7 +64,7 @@ macro_rules! pg_type {
                         ptr = pg_sys::pg_detoast_datum_copy(ptr);
                     }
                     let data_len = pgx::varsize_any(ptr);
-                    let bytes = slice::from_raw_parts(ptr as *mut u8, data_len);
+                    let bytes = std::slice::from_raw_parts(ptr as *mut u8, data_len);
                     let (data, _) = match [<$name Data>]::try_ref(bytes) {
                         Ok(wrapped) => wrapped,
                         Err(e) => error!(concat!("invalid ", stringify!($name), " {:?}, got len {}"), e, bytes.len()),
@@ -75,10 +75,10 @@ macro_rules! pg_type {
             }
 
             impl<'input> pgx::IntoDatum for $name<'input> {
-                fn into_datum(self) -> Option<Datum> {
+                fn into_datum(self) -> Option<pgx::pg_sys::Datum> {
                     let datum = match self.1 {
-                        Some(bytes) => bytes.as_ptr() as Datum,
-                        None => self.0.to_pg_bytes().as_ptr() as Datum,
+                        Some(bytes) => bytes.as_ptr() as pgx::pg_sys::Datum,
+                        None => self.0.to_pg_bytes().as_ptr() as pgx::pg_sys::Datum,
                     };
                     Some(datum)
                 }

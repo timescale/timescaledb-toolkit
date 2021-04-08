@@ -4,7 +4,6 @@ use std::{
 };
 
 use pgx::*;
-use pg_sys::Datum;
 
 use flat_serialize::*;
 
@@ -403,7 +402,7 @@ mod tests {
             client.select("CREATE VIEW base AS \
                 SELECT timescale_analytics_experimental.uddsketch(20, 0.01, value) \
                 FROM new_test", None, None);
-                
+
             let (value, error) = client
                 .select("SELECT \
                     timescale_analytics_experimental.quantile(uddsketch, 0.9), \
@@ -411,7 +410,7 @@ mod tests {
                     FROM base", None, None)
                 .first()
                 .get_two::<f64, f64>();
-                
+
             let (test_value, test_error) = client
                 .select("SELECT \
                     timescale_analytics_experimental.quantile(uddsketch, 0.9), \

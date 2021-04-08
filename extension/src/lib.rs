@@ -6,6 +6,7 @@ pub mod hyperloglog;
 pub mod uddsketch;
 pub mod time_weighted_average;
 pub mod asap;
+pub mod lttb;
 
 mod palloc;
 mod aggregate_utils;

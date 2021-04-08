@@ -1,5 +1,24 @@
 # Changelog #
 
+## 0.2.0 ##
+
+This release contains more [experimental](/extension/docs/README.md#tag-notes)
+features, along with additional functionality for prior features.
+
+New [Experimental](/extension/docs/README.md#tag-notes) features:
+
+- [ASAP Smoothing](/extension/docs/asap.md) – A graph smoothing algorithm that
+highlights changes.
+- [Counter Aggregates](/extension/docs/counter_agg.md) – Tools to ease working
+with reset-able counters.
+- [Largest Triangle Three Buckets](/extension/docs/lttb.md) – A downsampling
+algorithm that tries to preserve visual similarity.
+- Time Bucket Range – A version of [`time_bucket()`](https://docs.timescale.com/latest/api#time_bucket) that outputs the `[start, end)` times of the bucket.
+
+In addition, we've updated [UddSketch](/extension/docs/uddsketch.md) with an
+aggregate that merges multiple UddSketchs and various internal improvements.
+
+
 ## 0.1.0 ##
 
 First release. Currently all features are

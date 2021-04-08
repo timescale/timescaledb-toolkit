@@ -4,10 +4,10 @@
     "excludeFiles":[
         "*.p12",
         "*.cer",
-        "token"
+        "token"    
     ],
     "hideFiles": [
-        "target",
-        "extension/target"
+        "bin",
+        "obj"
     ]
 }

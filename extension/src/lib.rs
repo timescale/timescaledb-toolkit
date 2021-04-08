@@ -7,6 +7,8 @@ pub mod uddsketch;
 pub mod time_weighted_average;
 pub mod asap;
 pub mod lttb;
+pub mod counter_agg;
+pub mod range;
 
 mod palloc;
 mod aggregate_utils;

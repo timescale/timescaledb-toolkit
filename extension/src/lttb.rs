@@ -14,14 +14,9 @@ use flat_serialize::*;
 // so that pgx generates the correct SQL
 mod timescale_analytics_experimental {
     pub(crate) use super::*;
-    extension_sql!(r#"
-        CREATE SCHEMA IF NOT EXISTS timescale_analytics_experimental;
-    "#);
-}
 
-extension_sql!(r#"
-CREATE TYPE timescale_analytics_experimental.SortedTimeseries;
-"#);
+    varlena_type!(SortedTimeseries);
+}
 
 pg_type! {
     #[derive(Debug)]
@@ -32,25 +27,6 @@ pg_type! {
 }
 
 json_inout_funcs!(SortedTimeseries);
-
-extension_sql!(r#"
-CREATE OR REPLACE FUNCTION
-    timescale_analytics_experimental.SortedTimeseries_in(cstring)
-RETURNS timescale_analytics_experimental.SortedTimeseries
-IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C
-AS 'MODULE_PATHNAME', 'sortedtimeseries_in_wrapper';
-CREATE OR REPLACE FUNCTION
-    timescale_analytics_experimental.SortedTimeseries_out(timescale_analytics_experimental.SortedTimeseries)
-RETURNS CString
-IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C
-AS 'MODULE_PATHNAME', 'sortedtimeseries_out_wrapper';
-CREATE TYPE timescale_analytics_experimental.SortedTimeseries (
-    INTERNALLENGTH = variable,
-    INPUT = timescale_analytics_experimental.SortedTimeseries_in,
-    OUTPUT = timescale_analytics_experimental.SortedTimeseries_out,
-    STORAGE = extended
-);
-"#);
 
 #[pg_extern(name = "unnest_series", schema = "timescale_analytics_experimental")]
 pub fn unnest_sorted_series(

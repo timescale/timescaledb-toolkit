@@ -23,9 +23,8 @@ use tdigest::{
 // so that pgx generates the correct SQL
 mod timescale_analytics_experimental {
     pub(crate) use super::*;
-    extension_sql!(r#"
-        CREATE SCHEMA IF NOT EXISTS timescale_analytics_experimental;
-    "#);
+
+    varlena_type!(TDigest);
 }
 
 // Intermediate state kept in postgres.  This is a tdigest object paired
@@ -141,10 +140,6 @@ pub fn tdigest_deserialize(
     crate::do_deserialize!(bytes, TDigestTransState)
 }
 
-extension_sql!(r#"
-CREATE TYPE timescale_analytics_experimental.TDigest;
-"#);
-
 // PG object for the digest.
 pg_type! {
     #[derive(Debug)]
@@ -217,25 +212,6 @@ fn tdigest_final(
 
 
 extension_sql!(r#"
-CREATE OR REPLACE FUNCTION
-    timescale_analytics_experimental.TDigest_in(cstring)
-RETURNS timescale_analytics_experimental.TDigest
-IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C
-AS 'MODULE_PATHNAME', 'tdigest_in_wrapper';
-
-CREATE OR REPLACE FUNCTION
-    timescale_analytics_experimental.TDigest_out(timescale_analytics_experimental.TDigest)
-RETURNS CString
-IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C
-AS 'MODULE_PATHNAME', 'tdigest_out_wrapper';
-
-CREATE TYPE timescale_analytics_experimental.TDigest (
-    INTERNALLENGTH = variable,
-    INPUT = timescale_analytics_experimental.TDigest_in,
-    OUTPUT = timescale_analytics_experimental.TDigest_out,
-    STORAGE = extended
-);
-
 CREATE AGGREGATE timescale_analytics_experimental.tdigest(size int, value DOUBLE PRECISION)
 (
     sfunc = timescale_analytics_experimental.tdigest_trans,

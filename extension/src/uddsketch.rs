@@ -23,9 +23,8 @@ use crate::{
 // so that pgx generates the correct SQL
 mod timescale_analytics_experimental {
     pub(crate) use super::*;
-    extension_sql!(r#"
-        CREATE SCHEMA IF NOT EXISTS timescale_analytics_experimental;
-    "#);
+
+    varlena_type!(UddSketch);
 }
 
 #[allow(non_camel_case_types)]
@@ -98,10 +97,6 @@ pub fn uddsketch_deserialize(
     crate::do_deserialize!(bytes, UddSketchInternal)
 }
 
-extension_sql!(r#"
-CREATE TYPE timescale_analytics_experimental.UddSketch;
-"#);
-
 // PG object for the sketch.
 pg_type! {
     struct UddSketch {
@@ -165,23 +160,6 @@ fn uddsketch_final(
 }
 
 extension_sql!(r#"
-CREATE OR REPLACE FUNCTION timescale_analytics_experimental.UddSketch_in(cstring)
-RETURNS timescale_analytics_experimental.UddSketch
-IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C
-AS 'MODULE_PATHNAME', 'uddsketch_in_wrapper';
-
-CREATE OR REPLACE FUNCTION timescale_analytics_experimental.UddSketch_out(
-    timescale_analytics_experimental.UddSketch
-) RETURNS CString IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C
-AS 'MODULE_PATHNAME', 'uddsketch_out_wrapper';
-
-CREATE TYPE timescale_analytics_experimental.UddSketch (
-    INTERNALLENGTH = variable,
-    INPUT = timescale_analytics_experimental.UddSketch_in,
-    OUTPUT = timescale_analytics_experimental.UddSketch_out,
-    STORAGE = extended
-);
-
 CREATE AGGREGATE timescale_analytics_experimental.uddsketch(
     size int, max_error DOUBLE PRECISION, value DOUBLE PRECISION
 ) (

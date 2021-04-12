@@ -18,21 +18,12 @@ use time_weighted_average::{
 // so that pgx generates the correct SQL
 mod timescale_analytics_experimental {
     pub(crate) use super::*;
-    extension_sql!(
-        r#"
-        CREATE SCHEMA IF NOT EXISTS timescale_analytics_experimental;
-    "#
-    );
+
+    varlena_type!(TimeWeightSummary);
 }
 
 #[allow(non_camel_case_types)]
 type bytea = pg_sys::Datum;
-
-extension_sql!(
-    r#"
-CREATE TYPE timescale_analytics_experimental.TimeWeightSummary;
-"#
-);
 
 pg_type! {
     #[derive(Debug)]
@@ -57,27 +48,6 @@ impl<'input> TimeWeightSummary<'input> {
         }
     }
 }
-
-extension_sql!(
-    r#"
-CREATE OR REPLACE FUNCTION timescale_analytics_experimental.TimeWeightSummary_in(cstring)
-RETURNS timescale_analytics_experimental.TimeWeightSummary
-IMMUTABLE STRICT PARALLEL SAFE
-LANGUAGE C AS 'MODULE_PATHNAME', 'timeweightsummary_in_wrapper'; -- This is case sensitive and is generated lowercase
-
-CREATE OR REPLACE FUNCTION timescale_analytics_experimental.TimeWeightSummary_out(timescale_analytics_experimental.TimeWeightSummary)
-RETURNS CString
-IMMUTABLE STRICT PARALLEL SAFE
-LANGUAGE C AS 'MODULE_PATHNAME', 'timeweightsummary_out_wrapper'; -- This is case sensitive and is generated lowercase
-
-CREATE TYPE timescale_analytics_experimental.TimeWeightSummary (
-    INTERNALLENGTH = variable,
-    INPUT = timescale_analytics_experimental.TimeWeightSummary_in,
-    OUTPUT = timescale_analytics_experimental.TimeWeightSummary_out,
-    STORAGE = extended
-);
-"#
-);
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TimeWeightTransState {

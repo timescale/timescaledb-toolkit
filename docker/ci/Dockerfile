@@ -1,4 +1,4 @@
-FROM rust:1.48 AS pgx_builder
+FROM rust:1.51.0 AS pgx_builder
 
 RUN apt-get update \
     && apt-get install -y clang libclang1 sudo bash cmake \
@@ -12,7 +12,7 @@ RUN cargo install --git https://github.com/JLockerman/pgx.git --branch timescale
 
 # only use pg12 for now timescaledb doesn't support 13
 RUN set -ex \
-    && cargo pgx init --pg12 download \
+    && cargo pgx init --pg12 download --pg13 download \
     && cargo pgx start pg12 \
     && cargo pgx stop pg12
 
@@ -35,6 +35,6 @@ RUN set -ex \
     && rm -rf ~/timescaledb
 
 # install doctester
-RUN cargo install --git https://github.com/timescale/timescale-analytics.git --branch jl/doctester sql-doctester
+RUN cargo install --git https://github.com/timescale/timescale-analytics.git --branch main sql-doctester
 
 USER root

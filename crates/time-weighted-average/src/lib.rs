@@ -1,17 +1,15 @@
 pub mod tspoint;
-#[cfg(feature = "use_serde")]
+
 use serde::{Deserialize, Serialize};
 pub use tspoint::TSPoint;
-#[derive(Clone, Copy, PartialEq, Debug)]
-#[cfg_attr(feature = "use_serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum TimeWeightMethod {
     LOCF,
     Linear,
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
-#[cfg_attr(feature = "use_serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 pub struct TimeWeightSummary {
     pub method: TimeWeightMethod,
     pub first: TSPoint,

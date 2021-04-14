@@ -5,3 +5,4 @@
 /target
 *.iml
 sql/*.generated.sql
+/target-analyzer

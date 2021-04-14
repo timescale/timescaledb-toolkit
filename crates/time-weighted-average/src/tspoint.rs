@@ -1,9 +1,7 @@
 
-#[cfg(feature = "use_serde")]
 use serde::{Deserialize, Serialize};
 
-#[derive(Clone, Copy, PartialEq, Debug)]
-#[cfg_attr(feature = "use_serde", derive(Serialize, Deserialize))]
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 #[repr(C)]
 pub struct TSPoint {
     pub ts: i64,
@@ -23,7 +21,7 @@ impl TSPoint {
         // using point slope form of a line iteratively y = y2 - y1 / (x2 - x1) * (x - x1) + y1
         let duration = (p2.ts - self.ts) as f64; // x2 - x1
         let dinterp = (ts - self.ts) as f64; // x - x1
-        Ok((p2.val - self.val) * dinterp / duration + self.val) 
+        Ok((p2.val - self.val) * dinterp / duration + self.val)
     }
 }
 

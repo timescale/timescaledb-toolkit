@@ -14,7 +14,9 @@ RUN cargo install --git https://github.com/JLockerman/pgx.git --branch timescale
 RUN set -ex \
     && cargo pgx init --pg12 download --pg13 download \
     && cargo pgx start pg12 \
-    && cargo pgx stop pg12
+    && cargo pgx stop pg12 \
+    && cargo pgx start pg13 \
+    && cargo pgx stop pg13
 
 # install timescaledb
 # TODO make seperate image from ^
@@ -22,19 +24,26 @@ RUN set -ex \
     && cd ~ \
     && git clone https://github.com/timescale/timescaledb.git \
     && cd timescaledb \
-    && git checkout 2.0.0
-
-RUN set -ex \
+    && git checkout 2.2.x \
     && cd ~/timescaledb \
-    && ./bootstrap -DPG_CONFIG=~/.pgx/12.6/pgx-install/bin/pg_config -DCMAKE_BUILD_TYPE="RelWithDebInfo" -DUSE_OPENSSL=false -DSEND_TELEMETRY_DEFAULT=false -DREGRESS_CHECKS=false \
-    && cd build \
-    && make -j4 \
-    && make -j4 install \
-    && echo "shared_preload_libraries = 'timescaledb'" >> ~/.pgx/data-12/postgresql.conf \
+        && ./bootstrap -DPG_CONFIG=~/.pgx/12.6/pgx-install/bin/pg_config -DCMAKE_BUILD_TYPE="RelWithDebugInfo" -DUSE_OPENSSL=false -DSEND_TELEMETRY_DEFAULT=false -DREGRESS_CHECKS=false \
+        && cd build \
+        && make -j4 \
+        && make -j4 install \
+        && echo "shared_preload_libraries = 'timescaledb'" >> ~/.pgx/data-12/postgresql.conf \
+    && cd .. \
+    && rm -rf ./build \
+        && ./bootstrap -DPG_CONFIG=~/.pgx/13.2/pgx-install/bin/pg_config -DCMAKE_BUILD_TYPE="RelWithDebugInfo" -DUSE_OPENSSL=false -DSEND_TELEMETRY_DEFAULT=false -DREGRESS_CHECKS=false \
+        && cd build \
+        && make -j4 \
+        && make -j4 install \
+        && echo "shared_preload_libraries = 'timescaledb'" >> ~/.pgx/data-13/postgresql.conf \
     && cd ~ \
     && rm -rf ~/timescaledb
 
 # install doctester
 RUN cargo install --git https://github.com/timescale/timescale-analytics.git --branch main sql-doctester
+
+FROM pgx_builder AS rust-pgx
 
 USER root

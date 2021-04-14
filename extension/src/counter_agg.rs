@@ -13,7 +13,7 @@ use crate::{
     aggregate_utils::in_aggregate_context,
     json_inout_funcs,
     flatten,
-    palloc::Internal, 
+    palloc::Internal,
     pg_type,
     range::*,
 };
@@ -30,22 +30,9 @@ use counter_agg::{
 
 #[allow(non_camel_case_types)]
 type tstzrange = Datum;
-// hack to allow us to qualify names with "timescale_analytics_experimental"
-// so that pgx generates the correct SQL
-mod timescale_analytics_experimental {
-    pub(crate) use super::*;
-    extension_sql!(r#"
-        CREATE SCHEMA IF NOT EXISTS timescale_analytics_experimental;
-    "#);
-}
 
 #[allow(non_camel_case_types)]
 type bytea = pg_sys::Datum;
-
-
-extension_sql!(r#"
-CREATE TYPE timescale_analytics_experimental.CounterSummary;
-"#);
 
 pg_type! {
     #[derive(Debug, PartialEq)]
@@ -63,6 +50,14 @@ pg_type! {
 }
 
 json_inout_funcs!(CounterSummary);
+
+// hack to allow us to qualify names with "timescale_analytics_experimental"
+// so that pgx generates the correct SQL
+mod timescale_analytics_experimental {
+    pub(crate) use super::*;
+
+    varlena_type!(CounterSummary);
+}
 
 impl<'input> CounterSummary<'input> {
     fn to_internal_counter_summary(&self) -> InternalCounterSummary {
@@ -99,18 +94,6 @@ impl<'input> CounterSummary<'input> {
     // }
 }
 
-extension_sql!(r#"
-CREATE OR REPLACE FUNCTION timescale_analytics_experimental.counter_summary_in(cstring) RETURNS timescale_analytics_experimental.CounterSummary IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C AS 'MODULE_PATHNAME', 'countersummary_in_wrapper';
-CREATE OR REPLACE FUNCTION timescale_analytics_experimental.counter_summary_out(timescale_analytics_experimental.CounterSummary) RETURNS CString IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C AS 'MODULE_PATHNAME', 'countersummary_out_wrapper';
-
-CREATE TYPE timescale_analytics_experimental.CounterSummary (
-    INTERNALLENGTH = variable,
-    INPUT = timescale_analytics_experimental.counter_summary_in,
-    OUTPUT = timescale_analytics_experimental.counter_summary_out,
-    STORAGE = extended
-);
-"#);
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct CounterSummaryTransState {
     #[serde(skip)]
@@ -118,8 +101,8 @@ pub struct CounterSummaryTransState {
     #[serde(skip)]
     bounds: Option<I64Range>, // stores bounds until we combine points, after which, the bounds are stored in each summary
     // We have a summary buffer here in order to deal with the fact that when the cmobine function gets called it
-    // must first build up a buffer of InternalMetricSummaries, then sort them, then call the combine function in 
-    // the correct order. 
+    // must first build up a buffer of InternalMetricSummaries, then sort them, then call the combine function in
+    // the correct order.
     summary_buffer: Vec<InternalCounterSummary>,
 }
 
@@ -238,7 +221,7 @@ pub fn counter_agg_summary_trans(
 ) -> Option<Internal<CounterSummaryTransState>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
-            match (state, value) { 
+            match (state, value) {
                 (state, None) => state,
                 (None, Some(value)) => Some(
                     CounterSummaryTransState{point_buffer: vec![], bounds: None, summary_buffer: vec![value.to_internal_counter_summary()]}.into()),
@@ -317,7 +300,7 @@ CREATE AGGREGATE timescale_analytics_experimental.counter_agg( ts timestamptz, v
 );
 "#);
 
-// allow calling counter agg without bounds provided. 
+// allow calling counter agg without bounds provided.
 extension_sql!(r#"
 CREATE AGGREGATE timescale_analytics_experimental.counter_agg( ts timestamptz, value DOUBLE PRECISION )
 (
@@ -503,7 +486,7 @@ fn counter_agg_counter_zero_time(
 
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {
-    
+
     use approx::assert_relative_eq;
     use pgx::*;
     use super::*;
@@ -568,7 +551,7 @@ mod tests {
 
             let stmt = "SELECT extrapolated_rate(counter_agg(ts, val, '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00+00)'), 'prometheus') FROM test";
             assert_relative_eq!(select_one!(client, stmt, f64), 20.0 / 120.0);
-            
+
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)";
             client.select(stmt, None, None);
 
@@ -610,7 +593,7 @@ mod tests {
     // #[pg_test]
     // fn test_combine_aggregate(){
     //     Spi::execute(|client| {
-            
+
     //     });
     // }
 }

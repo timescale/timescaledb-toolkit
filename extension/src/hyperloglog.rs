@@ -23,15 +23,6 @@ use crate::{
 
 use hyperloglog::{HyperLogLog as HLL, HyperLogLogger};
 
-// hack to allow us to qualify names with "timescale_analytics_experimental"
-// so that pgx generates the correct SQL
-mod timescale_analytics_experimental {
-    pub(crate) use super::*;
-    extension_sql!(r#"
-        CREATE SCHEMA IF NOT EXISTS timescale_analytics_experimental;
-    "#);
-}
-
 #[derive(Clone, Serialize, Deserialize)]
 pub struct HyperLogLogTrans {
     logger: HyperLogLogger<Datum, DatumHashBuilder>,
@@ -115,12 +106,6 @@ pub fn hyperloglog_deserialize(
     crate::do_deserialize!(bytes, HyperLogLogTrans)
 }
 
-extension_sql!(
-    r#"
-CREATE TYPE timescale_analytics_experimental.Hyperloglog;
-"#
-);
-
 pg_type! {
     #[derive(Debug)]
     struct HyperLogLog {
@@ -132,6 +117,14 @@ pg_type! {
         b: u32,
         registers: [u8; (1 as usize) << self.b],
     }
+}
+
+// hack to allow us to qualify names with "timescale_analytics_experimental"
+// so that pgx generates the correct SQL
+mod timescale_analytics_experimental {
+    pub(crate) use super::*;
+
+    varlena_type!(Hyperloglog);
 }
 
 json_inout_funcs!(HyperLogLog);
@@ -155,24 +148,6 @@ fn hyperloglog_final(
 
 extension_sql!(
     r#"
-CREATE OR REPLACE FUNCTION timescale_analytics_experimental.Hyperloglog_in(cstring)
-RETURNS timescale_analytics_experimental.Hyperloglog
-IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C
-AS 'MODULE_PATHNAME', 'hyperloglog_in_wrapper';
-
-CREATE OR REPLACE FUNCTION timescale_analytics_experimental.Hyperloglog_out(
-    timescale_analytics_experimental.Hyperloglog
-) RETURNS CString
-IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C
-AS 'MODULE_PATHNAME', 'hyperloglog_out_wrapper';
-
-CREATE TYPE timescale_analytics_experimental.Hyperloglog (
-    INTERNALLENGTH = variable,
-    INPUT = timescale_analytics_experimental.Hyperloglog_in,
-    OUTPUT = timescale_analytics_experimental.Hyperloglog_out,
-    STORAGE = extended
-);
-
 CREATE AGGREGATE timescale_analytics_experimental.hyperloglog(size int, value AnyElement)
 (
     stype = internal,

@@ -12,15 +12,6 @@ use flat_serialize::*;
 
 use time_weighted_average::tspoint::TSPoint;
 
-// hack to allow us to qualify names with "timescale_analytics_experimental"
-// so that pgx generates the correct SQL
-mod timescale_analytics_experimental {
-    pub(crate) use super::*;
-    extension_sql!(r#"
-        CREATE SCHEMA IF NOT EXISTS timescale_analytics_experimental;
-    "#);
-}
-
 // This is included for debug purposes and probably should not leave experimental
 #[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn asap_smooth_raw(
@@ -157,10 +148,6 @@ impl TimeSeries {
 
 // TODO: Can we have a single time-series object which can store either an
 // explicit or normal timeseries (without being stupidly inefficient)
-extension_sql!(r#"
-CREATE TYPE timescale_analytics_experimental.NormalizedTimeSeries;
-"#);
-
 pg_type! {
     #[derive(Debug)]
     struct NormalizedTimeSeries {
@@ -171,7 +158,16 @@ pg_type! {
     }
 }
 
+
 json_inout_funcs!(NormalizedTimeSeries);
+
+// hack to allow us to qualify names with "timescale_analytics_experimental"
+// so that pgx generates the correct SQL
+mod timescale_analytics_experimental {
+    pub(crate) use super::*;
+
+    varlena_type!(NormalizedTimeSeries);
+}
 
 impl<'input> NormalizedTimeSeries<'input> {
     #[allow(dead_code)]
@@ -196,27 +192,6 @@ impl<'input> NormalizedTimeSeries<'input> {
         }
     }
 }
-
-extension_sql!(r#"
-CREATE OR REPLACE FUNCTION
-    timescale_analytics_experimental.NormalizedTimeSeries_in(cstring)
-RETURNS timescale_analytics_experimental.NormalizedTimeSeries
-IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C
-AS 'MODULE_PATHNAME', 'normalizedtimeseries_in_wrapper';
-
-CREATE OR REPLACE FUNCTION
-    timescale_analytics_experimental.NormalizedTimeSeries_out(timescale_analytics_experimental.NormalizedTimeSeries)
-RETURNS CString
-IMMUTABLE STRICT PARALLEL SAFE LANGUAGE C
-AS 'MODULE_PATHNAME', 'normalizedtimeseries_out_wrapper';
-
-CREATE TYPE timescale_analytics_experimental.NormalizedTimeSeries (
-    INTERNALLENGTH = variable,
-    INPUT = timescale_analytics_experimental.NormalizedTimeSeries_in,
-    OUTPUT = timescale_analytics_experimental.NormalizedTimeSeries_out,
-    STORAGE = extended
-);
-"#);
 
 #[pg_extern(name = "unnest_series", schema = "timescale_analytics_experimental")]
 pub fn unnest_normalized_series(

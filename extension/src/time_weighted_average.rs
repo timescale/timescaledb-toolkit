@@ -14,25 +14,8 @@ use time_weighted_average::{
     TimeWeightSummary as TimeWeightSummaryInternal,
 };
 
-// hack to allow us to qualify names with "timescale_analytics_experimental"
-// so that pgx generates the correct SQL
-mod timescale_analytics_experimental {
-    pub(crate) use super::*;
-    extension_sql!(
-        r#"
-        CREATE SCHEMA IF NOT EXISTS timescale_analytics_experimental;
-    "#
-    );
-}
-
 #[allow(non_camel_case_types)]
 type bytea = pg_sys::Datum;
-
-extension_sql!(
-    r#"
-CREATE TYPE timescale_analytics_experimental.TimeWeightSummary;
-"#
-);
 
 pg_type! {
     #[derive(Debug)]
@@ -46,6 +29,14 @@ pg_type! {
 
 json_inout_funcs!(TimeWeightSummary);
 
+// hack to allow us to qualify names with "timescale_analytics_experimental"
+// so that pgx generates the correct SQL
+mod timescale_analytics_experimental {
+    pub(crate) use super::*;
+
+    varlena_type!(TimeWeightSummary);
+}
+
 impl<'input> TimeWeightSummary<'input> {
     #[allow(non_snake_case)]
     fn to_internal(&self) -> TimeWeightSummaryInternal {
@@ -57,27 +48,6 @@ impl<'input> TimeWeightSummary<'input> {
         }
     }
 }
-
-extension_sql!(
-    r#"
-CREATE OR REPLACE FUNCTION timescale_analytics_experimental.TimeWeightSummary_in(cstring)
-RETURNS timescale_analytics_experimental.TimeWeightSummary
-IMMUTABLE STRICT PARALLEL SAFE
-LANGUAGE C AS 'MODULE_PATHNAME', 'timeweightsummary_in_wrapper'; -- This is case sensitive and is generated lowercase
-
-CREATE OR REPLACE FUNCTION timescale_analytics_experimental.TimeWeightSummary_out(timescale_analytics_experimental.TimeWeightSummary)
-RETURNS CString
-IMMUTABLE STRICT PARALLEL SAFE
-LANGUAGE C AS 'MODULE_PATHNAME', 'timeweightsummary_out_wrapper'; -- This is case sensitive and is generated lowercase
-
-CREATE TYPE timescale_analytics_experimental.TimeWeightSummary (
-    INTERNALLENGTH = variable,
-    INPUT = timescale_analytics_experimental.TimeWeightSummary_in,
-    OUTPUT = timescale_analytics_experimental.TimeWeightSummary_out,
-    STORAGE = extended
-);
-"#
-);
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct TimeWeightTransState {

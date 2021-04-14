@@ -106,10 +106,37 @@ This normalize time, value pairs over a given interval and return a smoothed rep
 <br>
 
 ### Sample Usages [](asap-examples)
-For this examples assume we have a table 'metrics' with columns 'date' and 'reading' which contains some interesting measurment we've accumulated over a large interval.  The following example would take that data and give us a smoothed representation of approximately 200 points which would still show any anomolous readings:
+For this examples assume we have a table 'metrics' with columns 'date' and 'reading' which contains some interesting measurment we've accumulated over a large interval.  The following example would take that data and give us a smoothed representation of approximately 10 points which would still show any anomolous readings:
 
-```SQL ,ignore
+<div hidden>
+
+```SQL ,non-transactional
+SET TIME ZONE 'UTC';
+CREATE TABLE metrics(date TIMESTAMPTZ, reading DOUBLE PRECISION);
+INSERT INTO metrics 
+SELECT
+    '2020-1-1 UTC'::timestamptz + make_interval(hours=>foo), 
+    (5 + 5 * sin(foo / 12.0 * PI()))
+    FROM generate_series(1,168) foo;
+
+```
+
+</div>
+
+```SQL
 SELECT * FROM timescale_analytics_experimental.unnest_series(
-    (SELECT timescale_analytics_experimental.asap_smooth(date, reading, 200)
+    (SELECT timescale_analytics_experimental.asap_smooth(date, reading, 8)
      FROM metrics));
+```
+```output
+          time          |        value        
+------------------------+---------------------
+ 2020-01-01 01:00:00+00 | 5.3664814565722665
+ 2020-01-01 21:00:00+00 |  5.949469264090644
+ 2020-01-02 17:00:00+00 |  5.582987807518377
+ 2020-01-03 13:00:00+00 |  4.633518543427733
+ 2020-01-04 09:00:00+00 |  4.050530735909357
+ 2020-01-05 05:00:00+00 |  4.417012192481623
+ 2020-01-06 01:00:00+00 |  5.366481456572268
+ 2020-01-06 21:00:00+00 |  5.949469264090643
 ```

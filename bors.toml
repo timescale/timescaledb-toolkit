@@ -1,3 +1,3 @@
-status = ["Test PG 12"]
+status = ["Test PG 12", "Test PG 13"]
 delete-merged-branches = true
 timeout_sec = 1200 # 20 min

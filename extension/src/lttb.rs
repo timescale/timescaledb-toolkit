@@ -10,14 +10,6 @@ use time_weighted_average::tspoint::TSPoint;
 
 use flat_serialize::*;
 
-// hack to allow us to qualify names with "timescale_analytics_experimental"
-// so that pgx generates the correct SQL
-mod timescale_analytics_experimental {
-    pub(crate) use super::*;
-
-    varlena_type!(SortedTimeseries);
-}
-
 pg_type! {
     #[derive(Debug)]
     struct SortedTimeseries {
@@ -27,6 +19,14 @@ pg_type! {
 }
 
 json_inout_funcs!(SortedTimeseries);
+
+// hack to allow us to qualify names with "timescale_analytics_experimental"
+// so that pgx generates the correct SQL
+mod timescale_analytics_experimental {
+    pub(crate) use super::*;
+
+    varlena_type!(SortedTimeseries);
+}
 
 #[pg_extern(name = "unnest_series", schema = "timescale_analytics_experimental")]
 pub fn unnest_sorted_series(

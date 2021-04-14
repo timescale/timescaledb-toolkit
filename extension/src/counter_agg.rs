@@ -30,13 +30,6 @@ use counter_agg::{
 
 #[allow(non_camel_case_types)]
 type tstzrange = Datum;
-// hack to allow us to qualify names with "timescale_analytics_experimental"
-// so that pgx generates the correct SQL
-mod timescale_analytics_experimental {
-    pub(crate) use super::*;
-
-    varlena_type!(CounterSummary);
-}
 
 #[allow(non_camel_case_types)]
 type bytea = pg_sys::Datum;
@@ -57,6 +50,14 @@ pg_type! {
 }
 
 json_inout_funcs!(CounterSummary);
+
+// hack to allow us to qualify names with "timescale_analytics_experimental"
+// so that pgx generates the correct SQL
+mod timescale_analytics_experimental {
+    pub(crate) use super::*;
+
+    varlena_type!(CounterSummary);
+}
 
 impl<'input> CounterSummary<'input> {
     fn to_internal_counter_summary(&self) -> InternalCounterSummary {

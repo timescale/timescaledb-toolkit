@@ -19,14 +19,6 @@ use crate::{
     palloc::Internal, pg_type
 };
 
-// hack to allow us to qualify names with "timescale_analytics_experimental"
-// so that pgx generates the correct SQL
-mod timescale_analytics_experimental {
-    pub(crate) use super::*;
-
-    varlena_type!(UddSketch);
-}
-
 #[allow(non_camel_case_types)]
 type int = u32;
 
@@ -109,6 +101,14 @@ pg_type! {
         keys: [uddsketch::SketchHashKey; self.num_buckets],
         counts: [u64; self.num_buckets],
     }
+}
+
+// hack to allow us to qualify names with "timescale_analytics_experimental"
+// so that pgx generates the correct SQL
+mod timescale_analytics_experimental {
+    pub(crate) use super::*;
+
+    varlena_type!(UddSketch);
 }
 
 json_inout_funcs!(UddSketch);

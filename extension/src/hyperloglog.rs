@@ -23,14 +23,6 @@ use crate::{
 
 use hyperloglog::{HyperLogLog as HLL, HyperLogLogger};
 
-// hack to allow us to qualify names with "timescale_analytics_experimental"
-// so that pgx generates the correct SQL
-mod timescale_analytics_experimental {
-    pub(crate) use super::*;
-
-    varlena_type!(Hyperloglog);
-}
-
 #[derive(Clone, Serialize, Deserialize)]
 pub struct HyperLogLogTrans {
     logger: HyperLogLogger<Datum, DatumHashBuilder>,
@@ -125,6 +117,14 @@ pg_type! {
         b: u32,
         registers: [u8; (1 as usize) << self.b],
     }
+}
+
+// hack to allow us to qualify names with "timescale_analytics_experimental"
+// so that pgx generates the correct SQL
+mod timescale_analytics_experimental {
+    pub(crate) use super::*;
+
+    varlena_type!(Hyperloglog);
 }
 
 json_inout_funcs!(HyperLogLog);

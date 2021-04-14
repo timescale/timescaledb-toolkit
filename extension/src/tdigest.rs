@@ -19,14 +19,6 @@ use tdigest::{
     Centroid,
 };
 
-// hack to allow us to qualify names with "timescale_analytics_experimental"
-// so that pgx generates the correct SQL
-mod timescale_analytics_experimental {
-    pub(crate) use super::*;
-
-    varlena_type!(TDigest);
-}
-
 // Intermediate state kept in postgres.  This is a tdigest object paired
 // with a vector of values that still need to be inserted.
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -155,6 +147,14 @@ pg_type! {
 }
 
 json_inout_funcs!(TDigest);
+
+// hack to allow us to qualify names with "timescale_analytics_experimental"
+// so that pgx generates the correct SQL
+mod timescale_analytics_experimental {
+    pub(crate) use super::*;
+
+    varlena_type!(TDigest);
+}
 
 impl<'input> TDigest<'input> {
     fn to_internal_tdigest(&self) -> InternalTDigest {

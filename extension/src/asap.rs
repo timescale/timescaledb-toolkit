@@ -12,14 +12,6 @@ use flat_serialize::*;
 
 use time_weighted_average::tspoint::TSPoint;
 
-// hack to allow us to qualify names with "timescale_analytics_experimental"
-// so that pgx generates the correct SQL
-mod timescale_analytics_experimental {
-    pub(crate) use super::*;
-
-    varlena_type!(NormalizedTimeSeries);
-}
-
 // This is included for debug purposes and probably should not leave experimental
 #[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn asap_smooth_raw(
@@ -168,6 +160,14 @@ pg_type! {
 
 
 json_inout_funcs!(NormalizedTimeSeries);
+
+// hack to allow us to qualify names with "timescale_analytics_experimental"
+// so that pgx generates the correct SQL
+mod timescale_analytics_experimental {
+    pub(crate) use super::*;
+
+    varlena_type!(NormalizedTimeSeries);
+}
 
 impl<'input> NormalizedTimeSeries<'input> {
     #[allow(dead_code)]

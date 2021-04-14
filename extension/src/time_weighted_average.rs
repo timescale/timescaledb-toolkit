@@ -14,14 +14,6 @@ use time_weighted_average::{
     TimeWeightSummary as TimeWeightSummaryInternal,
 };
 
-// hack to allow us to qualify names with "timescale_analytics_experimental"
-// so that pgx generates the correct SQL
-mod timescale_analytics_experimental {
-    pub(crate) use super::*;
-
-    varlena_type!(TimeWeightSummary);
-}
-
 #[allow(non_camel_case_types)]
 type bytea = pg_sys::Datum;
 
@@ -36,6 +28,14 @@ pg_type! {
 }
 
 json_inout_funcs!(TimeWeightSummary);
+
+// hack to allow us to qualify names with "timescale_analytics_experimental"
+// so that pgx generates the correct SQL
+mod timescale_analytics_experimental {
+    pub(crate) use super::*;
+
+    varlena_type!(TimeWeightSummary);
+}
 
 impl<'input> TimeWeightSummary<'input> {
     #[allow(non_snake_case)]

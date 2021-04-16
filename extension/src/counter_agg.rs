@@ -315,7 +315,7 @@ CREATE AGGREGATE timescale_analytics_experimental.counter_agg( ts timestamptz, v
 "#);
 
 extension_sql!(r#"
-CREATE AGGREGATE timescale_analytics_experimental.counter_agg(counter_agg timescale_analytics_experimental.CounterSummary)
+CREATE AGGREGATE timescale_analytics_experimental.counter_agg(cs timescale_analytics_experimental.CounterSummary)
 (
     sfunc = timescale_analytics_experimental.counter_agg_summary_trans,
     stype = internal,

@@ -7,23 +7,17 @@ on [the features we're planning to work on](https://github.com/timescale/timesca
 and [the problems we're trying to solve](https://github.com/timescale/timescale-analytics/labels/feature-request),
 and our [Discussions forum](https://github.com/timescale/timescale-analytics/discussions) contains ongoing conversation.
 
-We provide an experimental docker image containing a nightly build of the [`main`](https://github.com/timescale/timescale-analytics/tree/main)
-branch of the repo, along with TimescaleDB 2.0, at
-[`timescaledev/timescale-analytics:nightly`](https://hub.docker.com/r/timescaledev/timescale-.analytics/tags?page=1&ordering=last_updated).
-This image is perma-unstable and _will_ break from night to night; only use it to try out new features or as a canary in a CI setup.
-
 Documentation for this version of the Timescale Analytics extension can be found
 in this repository at [`extension/docs`](https://github.com/timescale/timescale-analytics/tree/main/extension/docs).
 
+
 ## 🖥 Try It Out ##
 
-Run
-```bash
-docker run -d --name timescaledb -p 5432:5432 -e POSTGRES_PASSWORD=password timescaledev/timescale-analytics:nightly
-```
+The extension comes pre-installed on all [Timescale Forge](https://console.forge.timescale.com/) instances, and also on our full-featured [`timescale/timescaledb-ha` docker image](https://hub.docker.com/r/timescale/timescaledb-ha).
 
-The extension contains experimental features in the `timecale_analytics_experimental`, schema
-see [our docs section on experimental features](/extension/docs/README.md#tag-notes) for
+We also provide nightly builds as a docker images in `timescaledev/timescale-analytics:nightly`.
+
+All versions of the extension contain experimental features in the `timecale_analytics_experimental`, schema see [our docs section on experimental features](/extension/docs/README.md#tag-notes) for
 more details.
 
 ## ✏️ Get Involved ##

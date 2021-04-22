@@ -2,7 +2,7 @@
 ---
 The Timescale Analytics project contains a number of utilities for working with time-series data.  This documentation is further broken down by utility or feature in the list [below](#analytics-features).
 
-## A note on tags [](tag-notes)
+## A note on tags <a id="tag-notes"></a>
 Functionality within the Timescale Analytics repository is intended to be introduced in varying stages of completeness.  To clarify which releases a given feature or function can be found in, the following tags are used:
  - **Experimental** - Denotes functionality that is still under very active development and may have poor performance, not handle corner cases or errors, etc.  Experimental APIs will change across releases, and extension-update will drop database objects that depend on experimental features. Do not use them unless you're willing ot deal with the object you've created (the view, table, continuous aggregates, function, etc.) being dropped on update. This is particularly important for Forge users, as automatic extension updates WILL DELETE database objects. Experimental features and functions can be found exclusively in the `timescale_analytics_experimental` schema.
  - **Stable** ***release id*** - Functionality in this state should be correct and performant.  Stable APIs will be found in our releases and should not be broken in future releases.  Note that this tag will also be accompanied with the version in which the feature was originally released, such as: Feature Foo<sup><mark>stable-1.2</mark></sup>.
@@ -10,7 +10,7 @@ Functionality within the Timescale Analytics repository is intended to be introd
 
 Note that tags can be applied at either a feature or function scope.  The function tag takes precedence, but defaults to the feature scope if not present.  For example, if we have a feature `Foo` which is tagged `stable`, we would assume that an untagged function `FooCount` within that feature would be present in the current beta release.  However, if function `FooSum` were explicitly tagged `experimental` then we would only expect to find it in the nightly build.
 
-## Analytics features [](analytics-features)
+## Analytics features <a id="analytics-features"></a>
 
 The following links lead to pages for the different features in the Timescale Analytics repository.
 

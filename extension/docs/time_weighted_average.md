@@ -7,7 +7,7 @@
 > [Interpolation Methods Details](#time-weight-methods)<br>
 
 
-## Description [](time-weighted-average-description)
+## Description <a id="time-weighted-average-description"></a>
 
 Time weighted averages are commonly used in cases where a time series is not evenly sampled, so a traditional average will give misleading results. Consider a voltage sensor that sends readings once every 5 minutes or whenever the value changes by more than 1 V from the previous reading. If the results are generally stable, but with some quick moving transients, a simple average over all of the points will tend to over-weight the transients instead of the stable readings. A time weighted average weights each value by the duration over which it occured based on the points around it and produces correct results for unevenly spaced series.
 
@@ -16,7 +16,7 @@ Timescale Analytics' time weighted average is implemented as an aggregate which 
 Additionally, [see the notes on parallelism and ordering](#time-weight-ordering) for a deeper dive into considerations for use with parallelism and some discussion of the internal data structures.
 
 ---
-## Example Usage [](time-weighted-average-examples)
+## Example Usage <a id="time-weighted-average-examples"></a>
 For these examples we'll assume a table `foo` defined as follows:
 ```SQL ,ignore
 CREATE TABLE foo (
@@ -104,13 +104,13 @@ GROUP BY measure_id
 ```
 ---
 
-## Command List (A-Z) [](time-weighted-average-api)
+## Command List (A-Z) <a id="time-weighted-average-api"></a>
 > - [time_weight() (point form)](#time_weight_point)
 > - [time_weight() (summary form)](#time-weight-summary)
 > - [average()](#time-weight-average)
 
 ---
-## **time_weight() (point form)** [](time_weight_point)
+## **time_weight() (point form)** <a id="time_weight_point"></a>
 ```SQL ,ignore
 timescale_analytics_experimental.time_weight(
     method TEXT¹,
@@ -122,7 +122,7 @@ timescale_analytics_experimental.time_weight(
 
 An aggregate that produces a `TimeWeightSummary` from timestamps and associated values.
 
-### Required Arguments² [](time-weight-point-required-arguments)
+### Required Arguments² <a id="time-weight-point-required-arguments"></a>
 |Name| Type |Description|
 |---|---|---|
 | `method` | `TEXT` | The weighting method we should use, options are 'linear' or 'LOCF', not case sensitive |
@@ -155,7 +155,7 @@ SELECT
 FROM t;
 ```
 
-## **time_weight() (summary form)** [](time-weight-summary)
+## **time_weight() (summary form)** <a id="time-weight-summary"></a>
 ```SQL ,ignore
 timescale_analytics_experimental.time_weight(
     tws TimeWeightSummary
@@ -164,7 +164,7 @@ timescale_analytics_experimental.time_weight(
 
 An aggregate to compute a combined `TimeWeightSummary` from a series of non-overlapping `TimeWeightSummaries`. Non-disjoint `TimeWeightSummaries` will cause errors. See [Notes on Parallelism and Ordering](#time-weight-ordering) for more information.
 
-### Required Arguments² [](time-weight-summary-required-arguments)
+### Required Arguments² <a id="time-weight-summary-required-arguments"></a>
 |Name| Type |Description|
 |---|---|---|
 | `tws` | `TimeWeightSummary` | The input TimeWeightSummary from a previous `time_weight` (point form) call, often from a [continuous aggregate](https://docs.timescale.com/latest/using-timescaledb/continuous-aggregates)|
@@ -196,7 +196,7 @@ SELECT
 FROM t;
 ```
 
-## **average()** [](time-weight-average)
+## **average()** <a id="time-weight-average"></a>
 ```SQL ,ignore
 timescale_analytics_experimental.average(
     tws TimeWeightSummary
@@ -205,7 +205,7 @@ timescale_analytics_experimental.average(
 
 A function to compute a time weighted average from a `TimeWeightSummary`.
 
-### Required Arguments [](time-weight-summary-required-arguments)
+### Required Arguments <a id="time-weight-summary-required-arguments"></a>
 |Name| Type |Description|
 |---|---|---|
 | `tws` | `TimeWeightSummary` | The input TimeWeightSummary from a `time_weight` call.|
@@ -232,7 +232,7 @@ FROM (
 ) t
 ```
 ---
-## Notes on Parallelism and Ordering [](time-weight-ordering)
+## Notes on Parallelism and Ordering <a id="time-weight-ordering"></a>
 
 The time weighted average calculations we perform require a strict ordering of inputs and therefore the calculations are not parallelizable in the strict Postgres sense. This is because when Postgres does parallelism it hands out rows randomly, basically as it sees them to workers. However, if your parallelism can guarantee disjoint (in time) sets of rows, the algorithm can be parallelized, just so long as within some time range, all rows go to the same worker. This is the case for both [continuous aggregates](https://docs.timescale.com/latest/using-timescaledb/continuous-aggregates) and for [distributed hypertables](https://docs.timescale.com/latest/using-timescaledb/distributed-hypertables) (as long as the partitioning keys are in the group by, though the aggregate itself doesn't horribly make sense otherwise).
 
@@ -271,7 +271,7 @@ GROUP BY measure_id;
 Moving aggregate mode is not supported by `time_weight` and its use as a window function may be quite inefficient.
 
 ---
-## Interpolation Methods Details [](time-weight-methods)
+## Interpolation Methods Details <a id="time-weight-methods"></a>
 
 Discrete time values don't always allow for an obvious calculation of the time weighted average. In order to calculate a time weighted average we need to choose how to weight each value. The two methods we currently use are last observation carried forward (LOCF) and linear interpolation.
 

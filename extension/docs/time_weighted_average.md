@@ -130,7 +130,7 @@ An aggregate that produces a `TimeWeightSummary` from timestamps and associated 
 | `value` | `DOUBLE PRECISION` | The value at each point to use for the time weighted average|
 <br>
 
-² Note that `ts` and `value` can be `null`, however the aggregate is not evaluated on `null` values and will return `null`, but it will not error on `null` inputs.
+##### ² Note that `ts` and `value` can be `null`, however the aggregate is not evaluated on `null` values and will return `null`, but it will not error on `null` inputs.
 
 ### Returns
 
@@ -192,7 +192,7 @@ WITH t as (
 SELECT
     dt,
     timescale_analytics_experimental.average(tw),  -- extract the average from the time weight summary
-    timescale_analytics_experimental.average(tw) / (SELECT full_tw FROM q LIMIT 1)  as normalized -- get the normalized average
+    timescale_analytics_experimental.average(tw) / (SELECT timescale_analytics_experimental.average(full_tw) FROM q LIMIT 1)  as normalized -- get the normalized average
 FROM t;
 ```
 
@@ -205,7 +205,7 @@ timescale_analytics_experimental.average(
 
 A function to compute a time weighted average from a `TimeWeightSummary`.
 
-### Required Arguments² [](time-weight-summary-required-arguments)
+### Required Arguments [](time-weight-summary-required-arguments)
 |Name| Type |Description|
 |---|---|---|
 | `tws` | `TimeWeightSummary` | The input TimeWeightSummary from a `time_weight` call.|

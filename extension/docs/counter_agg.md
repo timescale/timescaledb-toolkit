@@ -1,14 +1,13 @@
 # Counter Aggregates [<sup><mark>experimental</mark></sup>](/extension/docs/README.md#tag-notes)
 
 > [Description](#counter-agg-description)<br>
-> [Example Usage](counter-agg-examples)<br>
+> [Example Usage](#counter-agg-examples)<br>
 > [API](#counter-agg-api) <br>
 > [Notes on Parallelism and Ordering](#counter-agg-ordering)<br>
 > [Extrapolation Methods and Considerations](#counter-agg-methods)<br>
 
 
-## Description 
-[](counter-agg-description)
+## Description <a id="counter-agg-description"></a>
 
 Metrics generally come in a few different varieties, which many systems have come to call *gauges* and *counters*. A gauge is a typical metric that can vary up or down, something like temperature or percent utilization. A counter is meant to be monotonically increasing. So it keeps track of, say, the total number of visitors to a website.
 
@@ -19,8 +18,7 @@ Accounting for resets is hard in pure SQL, so we've developed aggregate and acce
 Additionally, [see the notes on parallelism and ordering](#counter-agg-ordering) for a deeper dive into considerations for use with parallelism and some discussion of the internal data structures.
 
 ---
-## Example Usage 
-[](counter-agg-examples)
+## Example Usage <a id="counter-agg-examples"></a>
 For these examples we'll assume a table `foo` defined as follows:
 ```SQL ,ignore
 CREATE TABLE foo (
@@ -55,7 +53,7 @@ GROUP BY measure_id, time_bucket('15 min'::interval, ts);
 
 This will allow us to search for 15 minute periods where the counter increased by a larger or smaller amount.
 
-If series are less regular and so the deltas are affected by the number of samples in the 15 minute period, you can use the `extrapolated_delta` function. For this we'll need to provide bounds so we know where to extrapolate to, for this we'll use the `time_bucket_range` function, which works just like `time_bucket` but produces the open ended range `[start, end)` of all the times in the bucket. We'll also use a CTE to do the `counter_agg` just so it's a little easier to understand what's going on in each part:
+If series are less regular and so the deltas are affected by the number of samples in the 15 minute period, you can use the `extrapolated_delta` function. For this we'll need to provide bounds so we know where to extrapolate to, for this we'll use the `time_bucket_range` function, which works just like `time_bucket` but produces the open ended range `[start, end)` of all the times in the bucket. We'll also use a CTE to do the [`counter_agg`](#counter-agg-point) just so it's a little easier to understand what's going on in each part:
 
 ```SQL ,ignore
 with t as (
@@ -89,7 +87,7 @@ FROM foo
 GROUP BY measure_id, time_bucket('15 min'::interval, ts);
 ```
 
-Note that here, we just use the `counter_agg` function. It's often better to do that and simply run the accessor functions on the result, it's much more flexible that way, as there are many accessor functions, and the data is there so you can run multiple of them over the same aggregate. 
+Note that here, we just use the [`counter_agg`](#counter-agg-point) function. It's often better to do that and simply run the accessor functions on the result, it's much more flexible that way, as there are many accessor functions, and the data is there so you can run multiple of them over the same aggregate. 
 ```SQL ,ignore
 SELECT
     measure_id,
@@ -120,15 +118,12 @@ There are several other accessor functions which we haven't described in the exa
 
 ---
 
-# Command List  
-[](counter-agg-api)
+# Command List  <a id="counter-agg-api"></a>
 
-### Aggregate Functions
-[](counter-agg-api-aggregates)
+### [Aggregate Functions](#counter-agg-api-aggregates)
 > - [counter_agg() (point form)](#counter-agg-point)
 > - [counter_agg() (summary form)](#counter-agg-summary)
-### Accessor Functions (A-Z)
-[](counter-agg-api-accessors)
+### [Accessor Functions (A-Z)](#counter-agg-api-accessors)
 > - [corr()](#counter-agg-corr)
 > - [counter_zero_time()](#counter-agg-counter-zero-time)
 > - [delta()](#counter-agg-delta)
@@ -145,19 +140,16 @@ There are several other accessor functions which we haven't described in the exa
 > - [rate()](#counter-agg-rate)
 > - [slope()](#counter-agg-slope)
 > - [time_delta()](#counter-agg-time-delta)
-### Utility Functions
-[](counter-agg-api-utilities)
+### [Utility Functions](#counter-agg-api-utilities)
 > - [with_bounds()](#counter-agg-with-bounds)
 ---
 
 
-# Aggregate Functions 
-[](counter-agg-api-aggregates)
+# Aggregate Functions <a id="counter-agg-api-aggregates"></a>
 Aggregating a counter to produce a `CounterSummary` is the first step in performing any calculations on it. There are two basic forms, one which takes in timestamps and values (the point form) and one which can combine multiple `CounterSummaries` together to form a larger summary spanning a larger amount of time. (See [Notes on Parallelism and Ordering](#counter-agg-ordering) for more information on how that works). 
 
 ---
-## **counter_agg() (point form)** 
-[](counter-agg-point)
+## **counter_agg() (point form)** <a id="counter-agg-point"></a>
 ```SQL ,ignore
 timescale_analytics_experimental.counter_agg(
     ts TIMESTAMPTZ,
@@ -210,8 +202,7 @@ FROM t;
 ```
 
 ---
-## **counter_agg() (summary form)**
-[](counter-agg-summary)
+## **counter_agg() (summary form)**<a id="counter-agg-summary"></a>
 ```SQL ,ignore
 timescale_analytics_experimental.counter_agg(
     cs CounterSummary
@@ -223,14 +214,14 @@ An aggregate to compute a combined `CounterSummary` from a series of non-overlap
 ### Required Arguments² 
 |Name| Type |Description|
 |---|---|---|
-| `cs` | `CounterSummary` | The input CounterSummary from a previous `counter_agg` (point form) call, often from a [continuous aggregate](https://docs.timescale.com/latest/using-timescaledb/continuous-aggregates)|
+| `cs` | `CounterSummary` | The input CounterSummary from a previous [`counter_agg`](#counter-agg-point) (point form) call, often from a [continuous aggregate](https://docs.timescale.com/latest/using-timescaledb/continuous-aggregates)|
 
 ##### ² Note that `summary` can be `null`, however the aggregate is not evaluated on `null` values and will return `null`, but it will not error on `null` inputs.
 ### Returns
 
 |Column|Type|Description|
 |---|---|---|
-| `counter_agg` | `CounterSummary` |  A CounterSummary object that can be passed to [accessor functions](counter-agg-api-accessors) or other objects in the counter aggregate API|
+| `counter_agg` | `CounterSummary` |  A CounterSummary object that can be passed to [accessor functions](#counter-agg-api-accessors) or other objects in the counter aggregate API|
 <br>
 
 ### Sample Usage
@@ -252,8 +243,7 @@ SELECT
     timescale_analytics_experimental.delta(counter_summary) / (SELECT timescale_analytics_experimental.delta(full_cs) FROM q LIMIT 1)  as normalized -- get the fraction of the delta that happened each day compared to the full change of the counter
 FROM t;
 ```
-# Accessor Functions 
-[](counter-agg-api-accessors)
+# Accessor Functions <a id="counter-agg-api-accessors"></a>
 
 ## Accessor Function List (by family)
 ### [Change over time (delta) functions](#counter-agg-delta-fam)
@@ -263,7 +253,7 @@ FROM t;
 > - [idelta_right()](#counter-agg-idelta-right)
 > - [time_delta()](#counter-agg-time-delta)
 
-### [Rate of change over time (rate) functions](#counter-agg-rate-fam)
+### Rate of change over time (rate) functions
 > - [rate()](#counter-agg-rate)
 > - [extrapolated_rate()](#counter-agg-extrapolated-rate)
 > - [irate_left()](#counter-agg-irate-left)
@@ -283,13 +273,11 @@ FROM t;
 
 
 ---
-## **Change over time (delta) functions** 
-[](counter-agg-delta-fam)
+## **Change over time (delta) functions** <a id="counter-agg-delta-fam"></a>
 Functions in the delta family are dedicated to finding the change in a value (or observed time, in the case of `time_delta`) of a counter during a time period, taking into account any counter resets that may have occurred. 
 
 ---
-## **delta()** 
-[](counter-agg-delta)
+## **delta()** <a id="counter-agg-delta"></a>
 ```SQL ,ignore
 timescale_analytics_experimental.delta(
     summary CounterSummary
@@ -301,7 +289,7 @@ The change in the counter over the time period. This is the raw or simple delta 
 ### Required Arguments
 |Name| Type |Description|
 |---|---|---|
-| `summary` | `CounterSummary` | The input CounterSummary from a `counter_agg` call.|
+| `summary` | `CounterSummary` | The input CounterSummary from a [`counter_agg`](#counter-agg-point) call.|
 
 ### Returns
 
@@ -310,8 +298,7 @@ The change in the counter over the time period. This is the raw or simple delta 
 | `delta` | `DOUBLE PRECISION` | The delta computed from the `CounterSummary`|
 <br>
 
-### Sample Usage 
-[](counter-agg-delta-sample)
+### Sample Usage <a id="counter-agg-delta-sample"></a>
 
 ```SQL ,ignore
 SELECT
@@ -327,8 +314,7 @@ FROM (
 ```
 
 ---
-## **extrapolated_delta()** 
-[](counter-agg-extrapolated-delta)
+## **extrapolated_delta()** <a id="counter-agg-extrapolated-delta"></a>
 ```SQL ,ignore
 timescale_analytics_experimental.extrapolated_delta(
     summary CounterSummary, 
@@ -344,7 +330,7 @@ The `bounds` must be specified for the `extrapolated_delta` function to work, th
 ### Required Arguments
 |Name| Type |Description|
 |---|---|---|
-| `summary` | `CounterSummary` | The input CounterSummary from a `counter_agg` call.|
+| `summary` | `CounterSummary` | The input CounterSummary from a [`counter_agg`](#counter-agg-point) call.|
 | `method` | `TEXT` | The extrapolation method to use, the only option currently is 'prometheus', not case sensitive.|
 
 ### Returns
@@ -354,8 +340,7 @@ The `bounds` must be specified for the `extrapolated_delta` function to work, th
 | `extrapolated_delta` | `DOUBLE PRECISION` | The delta computed from the `CounterSummary`|
 <br>
 
-### Sample Usage 
-[](counter-agg-extrapolated-delta-sample)
+### Sample Usage <a id="counter-agg-extrapolated-delta-sample"></a>
 
 ```SQL ,ignore
 SELECT
@@ -378,8 +363,7 @@ FROM (
 ```
 
 ---
-## **idelta_left()** 
-[](counter-agg-idelta-left)
+## **idelta_left()** <a id="counter-agg-idelta-left"></a>
 ```SQL ,ignore
 timescale_analytics_experimental.idelta_left(
     summary CounterSummary
@@ -392,7 +376,7 @@ The instantaneous change in the counter at the left (earlier) side of the time r
 ### Required Arguments
 |Name| Type |Description|
 |---|---|---|
-| `summary` | `CounterSummary` | The input CounterSummary from a `counter_agg` call.|
+| `summary` | `CounterSummary` | The input CounterSummary from a [`counter_agg`](#counter-agg-point) call.|
 
 ### Returns
 
@@ -401,8 +385,7 @@ The instantaneous change in the counter at the left (earlier) side of the time r
 | `idelta_left` | `DOUBLE PRECISION` | The instantaneous delta computed from left (earlier) side of the `CounterSummary`|
 <br>
 
-### Sample Usage 
-[](counter-agg-idelta_left-sample)
+### Sample Usage <a id="counter-agg-idelta_left-sample"></a>
 
 ```SQL ,ignore
 SELECT
@@ -420,8 +403,7 @@ FROM (
 ```
 
 ---
-## **idelta_right()** 
-[](counter-agg-idelta-right)
+## **idelta_right()** <a id="counter-agg-idelta-right"></a>
 ```SQL ,ignore
 timescale_analytics_experimental.idelta_right(
     summary CounterSummary
@@ -434,7 +416,7 @@ The instantaneous change in the counter at the right (later) side of the time ra
 ### Required Arguments
 |Name| Type |Description|
 |---|---|---|
-| `summary` | `CounterSummary` | The input CounterSummary from a `counter_agg` call.|
+| `summary` | `CounterSummary` | The input CounterSummary from a [`counter_agg`](#counter-agg-point) call.|
 
 ### Returns
 
@@ -443,8 +425,7 @@ The instantaneous change in the counter at the right (later) side of the time ra
 | `idelta_right` | `DOUBLE PRECISION` | The instantaneous delta computed from right (later) side of the `CounterSummary`|
 <br>
 
-### Sample Usage 
-[](counter-agg-idelta_left-sample)
+### Sample Usage <a id="counter-agg-idelta_left-sample"></a>
 
 ```SQL ,ignore
 SELECT
@@ -462,8 +443,7 @@ FROM (
 ```
 
 ---
-## **time_delta()** 
-[](counter-agg-time-delta)
+## **time_delta()** <a id="counter-agg-time-delta"></a>
 ```SQL ,ignore
 timescale_analytics_experimental.time_delta(
     summary CounterSummary
@@ -476,7 +456,7 @@ The observed change in time (`last time - first time`) over the period aggregate
 ### Required Arguments
 |Name| Type |Description|
 |---|---|---|
-| `summary` | `CounterSummary` | The input CounterSummary from a `counter_agg` call.|
+| `summary` | `CounterSummary` | The input CounterSummary from a [`counter_agg`](#counter-agg-point)  call.|
 
 ### Returns
 
@@ -485,8 +465,7 @@ The observed change in time (`last time - first time`) over the period aggregate
 | `time_delta` | `DOUBLE PRECISION` | The total duration in seconds between the first and last observed times in the `CounterSummary`|
 <br>
 
-### Sample Usage 
-[](counter-agg-time-delta-sample)
+### Sample Usage <a id="counter-agg-time-delta-sample"></a>
 
 ```SQL ,ignore
 SELECT
@@ -504,12 +483,11 @@ FROM (
 ```
 
 ---
-## **Rate of change over time (rate) functions** 
-[](counter-agg-rate-fam)
+## **Rate of change over time (rate) functions** <a id="counter-agg-rate-fam"></a>
 The rate family of functions find the reset-adjusted rate of change (`delta(value)/delta(time)`) of a counter on a per-second basis.
 
 ---
-## **rate()** [](counter-agg-rate)
+## **rate()** <a id="counter-agg-rate"></a>
 ```SQL ,ignore
 timescale_analytics_experimental.rate(
     summary CounterSummary
@@ -521,7 +499,7 @@ The rate of change of the counter over the observed time period.  This is the ra
 ### Required Arguments
 |Name| Type |Description|
 |---|---|---|
-| `summary` | `CounterSummary` | The input CounterSummary from a `counter_agg` call.|
+| `summary` | `CounterSummary` | The input CounterSummary from a [`counter_agg`](#counter-agg-point) call.|
 
 ### Returns
 
@@ -530,7 +508,7 @@ The rate of change of the counter over the observed time period.  This is the ra
 | `rate` | `DOUBLE PRECISION` | The per second observed rate computed from the `CounterSummary`|
 <br>
 
-### Sample Usage [](counter-agg-rate-sample)
+### Sample Usage <a id="counter-agg-rate-sample"></a>
 
 ```SQL ,ignore
 SELECT
@@ -546,7 +524,7 @@ FROM (
 ```
 
 ---
-## **extrapolated_rate()** [](counter-agg-extrapolated-rate)
+## **extrapolated_rate()** <a id="counter-agg-extrapolated-rate"></a>
 ```SQL ,ignore
 timescale_analytics_experimental.extrapolated_rate(
     summary CounterSummary, 
@@ -562,7 +540,7 @@ The `bounds` must be specified for the `extrapolated_rate` function to work, the
 ### Required Arguments
 |Name| Type |Description|
 |---|---|---|
-| `summary` | `CounterSummary` | The input CounterSummary from a `counter_agg` call.|
+| `summary` | `CounterSummary` | The input CounterSummary from a [`counter_agg`](#counter-agg-point) call.|
 | `method` | `TEXT` | The extrapolation method to use, the only option currently is 'prometheus', not case sensitive.|
 
 ### Returns
@@ -572,7 +550,7 @@ The `bounds` must be specified for the `extrapolated_rate` function to work, the
 | `extrapolated_rate` | `DOUBLE PRECISION` | The per-second rate of change of the counter computed from the `CounterSummary` extrapolated to the `bounds` specified there. |
 <br>
 
-### Sample Usage [](counter-agg-extrapolated-rate-sample)
+### Sample Usage <a id="counter-agg-extrapolated-rate-sample"></a>
 
 ```SQL ,ignore
 SELECT
@@ -595,20 +573,20 @@ FROM (
 ```
 
 ---
-## **irate_left()** [](counter-agg-irate-left)
+## **irate_left()** <a id="counter-agg-irate-left"></a>
 ```SQL ,ignore
 timescale_analytics_experimental.irate_left(
     summary CounterSummary
 ) RETURNS DOUBLE PRECISION
 ```
 
-The instantaneous rate of change of the counter at the left (earlier) side of the time range. Essentially, the [`idelta_left`](counter-agg-idelta-left) divided by the duration between the first and second observed points in the `CounterSummary`. This can be especially useful for fast moving counters. 
+The instantaneous rate of change of the counter at the left (earlier) side of the time range. Essentially, the [`idelta_left`](#counter-agg-idelta-left) divided by the duration between the first and second observed points in the `CounterSummary`. This can be especially useful for fast moving counters. 
 
 
 ### Required Arguments
 |Name| Type |Description|
 |---|---|---|
-| `summary` | `CounterSummary` | The input CounterSummary from a `counter_agg` call.|
+| `summary` | `CounterSummary` | The input CounterSummary from a [`counter_agg`](#counter-agg-point) call.|
 
 ### Returns
 
@@ -617,7 +595,7 @@ The instantaneous rate of change of the counter at the left (earlier) side of th
 | `irate_left` | `DOUBLE PRECISION` | The instantaneous rate computed from left (earlier) side of the `CounterSummary`|
 <br>
 
-### Sample Usage [](counter-agg-irate-left-sample)
+### Sample Usage <a id="counter-agg-irate-left-sample"></a>
 
 ```SQL ,ignore
 SELECT
@@ -635,7 +613,7 @@ FROM (
 ```
 
 ---
-## **irate_right()** [](counter-agg-irate-right)
+## **irate_right()** <a id="counter-agg-irate-right"></a>
 
 ```SQL ,ignore
 timescale_analytics_experimental.irate_right(
@@ -643,13 +621,13 @@ timescale_analytics_experimental.irate_right(
 ) RETURNS DOUBLE PRECISION
 ```
 
-The instantaneous rate of change of the counter at the right (later) side of the time range. Essentially, the [`idelta_right`](counter-agg-idelta-right) divided by the duration between the first and second observed points in the `CounterSummary`. This can be especially useful for fast moving counters. 
+The instantaneous rate of change of the counter at the right (later) side of the time range. Essentially, the [`idelta_right`](#counter-agg-idelta-right) divided by the duration between the first and second observed points in the `CounterSummary`. This can be especially useful for fast moving counters. 
 
 
 ### Required Arguments
 |Name| Type |Description|
 |---|---|---|
-| `summary` | `CounterSummary` | The input CounterSummary from a `counter_agg` call.|
+| `summary` | `CounterSummary` | The input CounterSummary from a [`counter_agg`](#counter-agg-point) call.|
 
 ### Returns
 
@@ -658,7 +636,7 @@ The instantaneous rate of change of the counter at the right (later) side of the
 | `irate_right` | `DOUBLE PRECISION` | The instantaneous rate computed from right (later) side of the `CounterSummary`|
 <br>
 
-### Sample Usage [](counter-agg-irate-right-sample)
+### Sample Usage <a id="counter-agg-irate-right-sample"></a>
 
 ```SQL ,ignore
 SELECT
@@ -675,11 +653,11 @@ FROM (
 ) t
 ```
 --- 
-# **Counting functions** [](counter-agg-api-counting)
-The counting functions comprise several accessor functions that calculate the number of times a certain thing occured while calculating the `counter_agg`. 
+# **Counting functions** <a id="counter-agg-api-counting"></a>
+The counting functions comprise several accessor functions that calculate the number of times a certain thing occured while calculating the [`counter_agg`](#counter-agg-point). 
 
 ---
-## **num_changes()** [](counter-agg-num-changes)
+## **num_changes()** <a id="counter-agg-num-changes"></a>
 
 ```SQL ,ignore
 timescale_analytics_experimental.num_changes(
@@ -692,7 +670,7 @@ The number of times the value changed within the period over which the `CounterS
 ### Required Arguments
 |Name| Type |Description|
 |---|---|---|
-| `summary` | `CounterSummary` | The input CounterSummary from a `counter_agg` call.|
+| `summary` | `CounterSummary` | The input CounterSummary from a [`counter_agg`](#counter-agg-point) call.|
 
 ### Returns
 
@@ -701,7 +679,7 @@ The number of times the value changed within the period over which the `CounterS
 | `num_changes` | `BIGINT` | The number of times the value changed|
 <br>
 
-### Sample Usage [](counter-agg-num-changes-sample)
+### Sample Usage <a id="counter-agg-num-changes-sample"></a>
 
 ```SQL ,ignore
 SELECT
@@ -719,7 +697,7 @@ FROM (
 ```
 
 ---
-## **num_elements()** [](counter-agg-num-elements)
+## **num_elements()** <a id="counter-agg-num-elements"></a>
 
 ```SQL ,ignore
 timescale_analytics_experimental.num_elements(
@@ -732,16 +710,16 @@ The total number of points we saw in calculating the `CounterSummary`. Only poin
 ### Required Arguments
 |Name| Type |Description|
 |---|---|---|
-| `summary` | `CounterSummary` | The input `CounterSummary` from a `counter_agg` call.|
+| `summary` | `CounterSummary` | The input `CounterSummary` from a [`counter_agg`](#counter-agg-point) call.|
 
 ### Returns
 
 |Column|Type|Description|
 |---|---|---|
-| `num_elements` | `BIGINT` | The number of points seen during the `counter_agg` call|
+| `num_elements` | `BIGINT` | The number of points seen during the [`counter_agg`](#counter-agg-point) call|
 <br>
 
-### Sample Usage [](counter-agg-num-elements-sample)
+### Sample Usage <a id="counter-agg-num-elements-sample"></a>
 
 ```SQL ,ignore
 SELECT
@@ -759,7 +737,7 @@ FROM (
 ```
 
 ---
-## **num_elements()** [](counter-agg-num-resets)
+## **num_elements()** <a id="counter-agg-num-resets"></a>
 
 ```SQL ,ignore
 timescale_analytics_experimental.num_resets(
@@ -772,16 +750,16 @@ The total number of times we detected a counter reset while calculating the `Cou
 ### Required Arguments
 |Name| Type |Description|
 |---|---|---|
-| `summary` | `CounterSummary` | The input `CounterSummary` from a `counter_agg` call.|
+| `summary` | `CounterSummary` | The input `CounterSummary` from a [`counter_agg`](#counter-agg-point) call.|
 
 ### Returns
 
 |Column|Type|Description|
 |---|---|---|
-| `num_elements` | `BIGINT` | The number of resets detected during the `counter_agg` call|
+| `num_elements` | `BIGINT` | The number of resets detected during the [`counter_agg`](#counter-agg-point) call|
 <br>
 
-### Sample Usage [](counter-agg-num-resets-sample)
+### Sample Usage <a id="counter-agg-num-resets-sample"></a>
 
 ```SQL ,ignore
 SELECT
@@ -798,13 +776,13 @@ FROM (
 ) t
 ```
 --- 
-# **Statistical regression functions** [](counter-agg-api-regression-fam)
+# **Statistical regression functions** <a id="counter-agg-api-regression-fam"></a>
 The statistical regression family of functions contains several functions derived from a least squares fit of the adjusted value of the counter. All counter values have resets accounted for before being fed into the linear regression algorithm (and any combined `CounterSummaries` have the proper adjustments performed for resets to enable the proper regression analysis to be performed). 
 
 ###### NB: Note that the timestamps input are converted from their their internal representation (microseconds since the Postgres Epoch (which is 2000-01-01 00:00:00+00, for some reason), to double precision numbers representing seconds from the Postgres Epoch, with decimal places as fractional seconds, before running the linear regression. Because the internal representation of the timestamp is actually 64-bit integer representing microseconds from the Postgres Epoch, it provides more precision for very large timestamps (the representable range goes out to 294276-12-31). If you want to have accurate, microsecond level precision on your regression analysis dealing with dates at the edge of this range (first off, who are you and *what the heck are you working on???*) we recommend subtracting a large static date from your timestamps and then adding it back after the analysis has concluded. Very small timestamps should be fine as the range does not extend beyond 4714-11-01 BCE, beyond which Julian dates [are not considered reliable by Postgres](https://github.com/postgres/postgres/blob/c30f54ad732ca5c8762bb68bbe0f51de9137dd72/src/include/datatype/timestamp.h#L131). This means that the negative integers are not fully utilized in the timestamp representation and you don't have to worry about imprecision in your computed slopes if you have traveled back in time and are timing chariot races to the microsecond. However, if you travel much further back in time, you're still SOL, as we can't represent the timestamp in the Julian calendar. 
 
 ---
-## **slope()** [](counter-agg-slope)
+## **slope()** <a id="counter-agg-slope"></a>
 
 ```SQL ,ignore
 timescale_analytics_experimental.slope(
@@ -818,7 +796,7 @@ The slope of the least squares fit line computed from the adjusted counter value
 ### Required Arguments
 |Name| Type |Description|
 |---|---|---|
-| `summary` | `CounterSummary` | The input CounterSummary from a `counter_agg` call.|
+| `summary` | `CounterSummary` | The input CounterSummary from a [`counter_agg`](#counter-agg-point) call.|
 
 ### Returns
 
@@ -827,7 +805,7 @@ The slope of the least squares fit line computed from the adjusted counter value
 | `slope` | `DOUBLE PRECISION` | The per second rate of change computed by taking the slope of the least squares fit of the points input in the `CounterSummary`|
 <br>
 
-### Sample Usage [](counter-agg-slope-sample)
+### Sample Usage <a id="counter-agg-slope-sample"></a>
 
 ```SQL ,ignore
 SELECT
@@ -844,7 +822,7 @@ FROM (
 ) t
 ```
 ---
-## **intercept()** [](counter-agg-intercept)
+## **intercept()** <a id="counter-agg-intercept"></a>
 
 ```SQL ,ignore
 timescale_analytics_experimental.intercept(
@@ -858,7 +836,7 @@ The intercept of the least squares fit line computed from the adjusted counter v
 ### Required Arguments
 |Name| Type |Description|
 |---|---|---|
-| `summary` | `CounterSummary` | The input CounterSummary from a `counter_agg` call.|
+| `summary` | `CounterSummary` | The input CounterSummary from a [`counter_agg`](#counter-agg-point) call.|
 
 ### Returns
 
@@ -867,7 +845,7 @@ The intercept of the least squares fit line computed from the adjusted counter v
 | `intercept` | `DOUBLE PRECISION` | The intercept of the least squares fit line computed from the points input to the `CounterSummary`|
 <br>
 
-### Sample Usage [](counter-agg-intercept-sample)
+### Sample Usage <a id="counter-agg-intercept-sample"></a>
 
 ```SQL ,ignore
 SELECT
@@ -884,7 +862,7 @@ FROM (
 ) t
 ```
 --- 
-## **counter_zero_time()** [](counter-agg-counter-zero-time)
+## **counter_zero_time()** <a id="counter-agg-counter-zero-time"></a>
 
 ```SQL ,ignore
 timescale_analytics_experimental.counter_zero_time(
@@ -898,7 +876,7 @@ The time at which the counter value is predicted to have been zero based on the 
 ### Required Arguments
 |Name| Type |Description|
 |---|---|---|
-| `summary` | `CounterSummary` | The input CounterSummary from a `counter_agg` call.|
+| `summary` | `CounterSummary` | The input CounterSummary from a [`counter_agg`](#counter-agg-point) call.|
 
 ### Returns
 
@@ -907,7 +885,7 @@ The time at which the counter value is predicted to have been zero based on the 
 | `counter_zero_time` | `TIMESTAMPTZ` | The time at which the counter value is predicted to have been zero based onthe least squares fit of the points input to the `CounterSummary`|
 <br>
 
-### Sample Usage [](counter-agg-counter-zero-time-sample)
+### Sample Usage <a id="counter-agg-counter-zero-time-sample"></a>
 
 ```SQL ,ignore
 SELECT
@@ -925,7 +903,7 @@ FROM (
 ```
 
 ---
-## **corr())** [](counter-agg-corr)
+## **corr())** <a id="counter-agg-corr"></a>
 
 ```SQL ,ignore
 timescale_analytics_experimental.corr(
@@ -939,7 +917,7 @@ The correlation coefficient of the least squares fit line of the adjusted counte
 ### Required Arguments
 |Name| Type |Description|
 |---|---|---|
-| `summary` | `CounterSummary` | The input CounterSummary from a `counter_agg` call.|
+| `summary` | `CounterSummary` | The input CounterSummary from a [`counter_agg`](#counter-agg-point) call.|
 
 ### Returns
 
@@ -948,7 +926,7 @@ The correlation coefficient of the least squares fit line of the adjusted counte
 | `corr` | `DOUBLE PRECISION` | The correlation coefficient computed from the least squares fit of the adjusted counter values input to the `CounterSummary`|
 <br>
 
-### Sample Usage [](counter-agg-corr-sample)
+### Sample Usage <a id="counter-agg-corr-sample"></a>
 
 ```SQL ,ignore
 SELECT
@@ -965,9 +943,9 @@ FROM (
 ) t
 ```
 
-# **Utility Functions** [](counter-agg-api-utilities)
+# **Utility Functions** <a id="counter-agg-api-utilities"></a>
 ---
-## **with_bounds() **[](counter-agg-with-bounds)
+## **with_bounds() **<a id="counter-agg-with-bounds"></a>
 ```SQL ,ignore
 timescale_analytics_experimental.with_bounds(
     summary CounterSummary,
@@ -986,7 +964,7 @@ A utility function to add bounds to an already-computed `CounterSummary`. The bo
 ### Returns
 |Column|Type|Description|
 |---|---|---|
-| `counter_agg` | `CounterSummary` |  A CounterSummary object that can be passed to [accessor functions](counter-agg-api-accessors) or other objects in the counter aggregate API|
+| `counter_agg` | `CounterSummary` |  A CounterSummary object that can be passed to [accessor functions](#counter-agg-api-accessors) or other objects in the counter aggregate API|
 <br>
 
 ### Sample Usage
@@ -1010,7 +988,7 @@ FROM (
 ) t
 ```
 ---
-# Notes on Parallelism and Ordering [](counter-agg-ordering)
+# Notes on Parallelism and Ordering <a id="counter-agg-ordering"></a>
 
 The counter reset calculations we perform require a strict ordering of inputs and therefore the calculations are not parallelizable in the strict Postgres sense. This is because when Postgres does parallelism it hands out rows randomly, basically as it sees them to workers. However, if your parallelism can guarantee disjoint (in time) sets of rows, the algorithm can be parallelized, just so long as within some time range, all rows go to the same worker. This is the case for both [continuous aggregates](https://docs.timescale.com/latest/using-timescaledb/continuous-aggregates) and for [distributed hypertables](https://docs.timescale.com/latest/using-timescaledb/distributed-hypertables) (as long as the partitioning keys are in the group by, though the aggregate itself doesn't horribly make sense otherwise).
 
@@ -1056,7 +1034,7 @@ SELECT measure_id,
 FROM foo
 GROUP BY measure_id;
 ```
-If I were to instead, compute the `counter_agg` over, say daily buckets and then combine the aggregates, I might be able to avoid OOM issues, as each day will be computed separately first and then combined, like so: 
+If I were to instead, compute the [`counter_agg`](#counter-agg-point) over, say daily buckets and then combine the aggregates, I might be able to avoid OOM issues, as each day will be computed separately first and then combined, like so: 
 
 ```SQL ,ignore
 WITH t as (SELECT measure_id,
@@ -1071,8 +1049,8 @@ SELECT measure_id, \
 FROM t;
 ```
 
-Moving aggregate mode is not supported by `counter_agg` and its use as a window function may be quite inefficient.
+Moving aggregate mode is not supported by [`counter_agg`](#counter-agg-point) and its use as a window function may be quite inefficient.
 
 ---
-# Extrapolation Methods Details [](counter-agg-methods)
+# Extrapolation Methods Details <a id="counter-agg-methods"></a>
 #TODO

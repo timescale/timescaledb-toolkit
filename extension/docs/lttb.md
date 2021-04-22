@@ -4,7 +4,7 @@
 > [Example](#example)<br>
 > [API](#api)
 
-## Description [](description)
+## Description <a id="description"></a>
 
 [Largest Triangle Three Buckets](https://github.com/sveinn-steinarsson/flot-downsample)
 is a downsampling method that tries to retain visual similarity between the
@@ -13,7 +13,7 @@ implementation of this which takes `(timestamp, value)` pairs, sorts them if
 needed, and downsamples them.
 
 
-## Usage Example [](details)
+## Usage Example <a id="details"></a>
 
 In this example we're going to examine downsampling a 101 point cosine wave
 generated like so
@@ -150,11 +150,11 @@ FROM timescale_analytics_experimental.unnest_series((
 
 ![Raw data](images/lttb_8.png)
 
-## Command List (A-Z) [](api)
+## Command List (A-Z) <a id="api"></a>
 > - [lttb](#lttb)
 
 ---
-## **lttb** [](lttb)
+## **lttb** <a id="lttb"></a>
 ```SQL,ignore
 timescale_analytics_experimental.lttb(
     time TIMESTAMPTZ,
@@ -167,7 +167,7 @@ This will construct and return a sorted timeseries with at most `resolution`
 points. `timescale_analytics_experimental.unnest_series(...)` can be used to
 extract the `(time, value)` pairs from this series
 
-### Required Arguments [](lttb-required-arguments)
+### Required Arguments <a id="lttb-required-arguments"></a>
 |Name| Type |Description|
 |---|---|---|
 | `time` | `TIMESTAMPTZ` | Time (x) value for the data point. |
@@ -175,7 +175,7 @@ extract the `(time, value)` pairs from this series
 | `resolution` | `INTEGER` | Number of points the output should have. |
 <br>
 
-### Sample Usage [](lttb-examples)
+### Sample Usage <a id="lttb-examples"></a>
 
 ```SQL
 SELECT time, value

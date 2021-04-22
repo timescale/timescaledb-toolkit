@@ -5,7 +5,7 @@
 > [Example](#uddsketch-example)<br>
 > [API](#uddsketch-api)
 
-## Description [](uddsketch-description)
+## Description <a id="uddsketch-description"></a>
 
 [UddSketch](https://arxiv.org/pdf/2004.08604.pdf) is a specialization of the [DDSketch](https://arxiv.org/pdf/1908.10693.pdf) data structure.  It follows the same approach of breaking the data range into a series of logarithmically sized buckets such that it can guarantee a maximum relative error for any quantile estimate as long as it knows which bucket that quantile falls in.
 
@@ -13,11 +13,11 @@ Where UddSketch differs from DDSketch in its behavior when the number of buckets
 
 As an example, assume both sketches were trying to capture an large set of values to be able to estimate quantiles with 1% relative error but were given too few buckets to do so.  The DDSketch implementation would still guarantee 1% relative error, but may only be able to provides estimates in the range (0.05, 0.95).  The UddSketch implementation however, might end up only able to guarantee 2% relative error, but would still be able to estimate all quantiles at that error.
 
-## Details [](uddsketch-details)
+## Details <a id="uddsketch-details"></a>
 
 Timescale's UddSketch implementation is provided as an aggregate function in PostgreSQL.  It does not support moving-aggregate mode, and is not a ordered-set aggregate.  It currently only works with `DOUBLE PRECISION` types, but we're intending to relax this constraint as needed.  UddSketches are partializable and are good candidates for [continuous aggregation](https://docs.timescale.com/latest/using-timescaledb/continuous-aggregates).
 
-## Usage Example [](uddsketch-example)
+## Usage Example <a id="uddsketch-example"></a>
 
 For this example we're going to start with a table containing some NOAA weather data for a few weather stations across the US over the past 20 years.
 
@@ -111,7 +111,7 @@ FROM daily_rain;
 (4 rows)
 ```
 
-## Command List (A-Z) [](uddsketch-api)
+## Command List (A-Z) <a id="uddsketch-api"></a>
 > - [uddsketch](#uddsketch)
 > - [uddsketch_count](#uddsketch_count)
 > - [uddsketch_error](#uddsketch_error)
@@ -121,7 +121,7 @@ FROM daily_rain;
 
 
 ---
-## **uddsketch** [](uddsketch)
+## **uddsketch** <a id="uddsketch"></a>
 ```SQL ,ignore
 timescale_analytics_experimental.uddsketch(
     size INTEGER,
@@ -132,7 +132,7 @@ timescale_analytics_experimental.uddsketch(
 
 This will construct and return a new UddSketch with at most `size` buckets.  The maximum relative error of the UddSketch will be bounded by `max_error` unless it is impossible to do so while with the bucket bound.  If the sketch has had to combine buckets, the new error can be found with the [uddsketch_error](#uddsketch_error) command.
 
-### Required Arguments [](uddsketch-required-arguments)
+### Required Arguments <a id="uddsketch-required-arguments"></a>
 |Name| Type |Description|
 |---|---|---|
 | `size` | `INTEGER` | Maximum number of buckets in the sketch.  Providing a larger value here will make it more likely that the aggregate will able to maintain the desired error, though will potentially increase the memory usage. |
@@ -147,7 +147,7 @@ This will construct and return a new UddSketch with at most `size` buckets.  The
 | `uddsketch` | `UddSketch` | A UddSketch object which may be passed to other UddSketch APIs. |
 <br>
 
-### Sample Usages [](uddsketch-examples)
+### Sample Usages <a id="uddsketch-examples"></a>
 For this examples assume we have a table 'samples' with a column 'weights' holding `DOUBLE PRECISION` values.  The following will simply return a sketch over that column
 
 ```SQL ,ignore
@@ -163,7 +163,7 @@ CREATE VIEW sketch AS
 ```
 
 ---
-## **uddsketch_count** [](uddsketch_count)
+## **uddsketch_count** <a id="uddsketch_count"></a>
 
 ```SQL ,ignore
 timescale_analytics_experimental.get_count(sketch UddSketch) RETURNS DOUBLE PRECISION
@@ -171,7 +171,7 @@ timescale_analytics_experimental.get_count(sketch UddSketch) RETURNS DOUBLE PREC
 
 Get the number of values contained in a UddSketch.
 
-### Required Arguments [](uddsketch_count-required-arguments)
+### Required Arguments <a id="uddsketch_count-required-arguments"></a>
 |Name|Type|Description|
 |---|---|---|
 | `sketch` | `UddSketch` | The sketch to extract the number of values from. |
@@ -183,7 +183,7 @@ Get the number of values contained in a UddSketch.
 | `uddsketch_count` | `DOUBLE PRECISION` | The number of values entered into the UddSketch. |
 <br>
 
-### Sample Usage [](uddsketch_count-examples)
+### Sample Usage <a id="uddsketch_count-examples"></a>
 
 ```SQL
 SELECT timescale_analytics_experimental.get_count(
@@ -198,7 +198,7 @@ SELECT timescale_analytics_experimental.get_count(
 
 ---
 
-## **uddsketch_error** [](uddsketch_error)
+## **uddsketch_error** <a id="uddsketch_error"></a>
 
 ```SQL ,ignore
 timescale_analytics_experimental.error(sketch UddSketch) RETURNS DOUBLE PRECISION
@@ -206,7 +206,7 @@ timescale_analytics_experimental.error(sketch UddSketch) RETURNS DOUBLE PRECISIO
 
 This returns the maximum relative error that a quantile estimate will have (relative to the correct value).  This will initially be the same as the `max_error` used to construct the UddSketch, but if the sketch has needed to combine buckets this function will return the new maximum error.
 
-### Required Arguments [](uddsketch_error-required-arguments)
+### Required Arguments <a id="uddsketch_error-required-arguments"></a>
 |Name|Type|Description|
 |---|---|---|
 | `sketch` | `UddSketch` | The sketch to determine the error of. |
@@ -219,7 +219,7 @@ This returns the maximum relative error that a quantile estimate will have (rela
 | `uddsketch_error` | `DOUBLE PRECISION` | The maximum relative error of any quantile estimate. |
 <br>
 
-### Sample Usages [](uddsketch_error-examples)
+### Sample Usages <a id="uddsketch_error-examples"></a>
 
 ```SQL
 SELECT timescale_analytics_experimental.error(
@@ -233,7 +233,7 @@ SELECT timescale_analytics_experimental.error(
 ```
 
 ---
-## **uddsketch_mean** [](uddsketch_mean)
+## **uddsketch_mean** <a id="uddsketch_mean"></a>
 
 ```SQL ,ignore
 timescale_analytics_experimental.mean(sketch UddSketch) RETURNS DOUBLE PRECISION
@@ -241,7 +241,7 @@ timescale_analytics_experimental.mean(sketch UddSketch) RETURNS DOUBLE PRECISION
 
 Get the average of all the values contained in a UddSketch.
 
-### Required Arguments [](uddsketch_mean-required-arguments)
+### Required Arguments <a id="uddsketch_mean-required-arguments"></a>
 |Name|Type|Description|
 |---|---|---|
 | `sketch` | `UddSketch` |  The sketch to extract the mean value from. |
@@ -253,7 +253,7 @@ Get the average of all the values contained in a UddSketch.
 | `mean` | `DOUBLE PRECISION` | The average of the values entered into the UddSketch. |
 <br>
 
-### Sample Usage [](uddsketch_mean-examples)
+### Sample Usage <a id="uddsketch_mean-examples"></a>
 
 ```SQL
 SELECT timescale_analytics_experimental.mean(
@@ -267,7 +267,7 @@ SELECT timescale_analytics_experimental.mean(
 ```
 
 ---
-## **uddsketch_quantile** [](uddsketch_quantile)
+## **uddsketch_quantile** <a id="uddsketch_quantile"></a>
 
 ```SQL ,ignore
 timescale_analytics_experimental.quantile(
@@ -278,7 +278,7 @@ timescale_analytics_experimental.quantile(
 
 Get the approximate value at a quantile from a UddSketch.
 
-### Required Arguments [](uddsketch_quantile-required-arguments)
+### Required Arguments <a id="uddsketch_quantile-required-arguments"></a>
 |Name|Type|Description|
 |---|---|---|
 | `sketch` | `UddSketch` | The sketch to compute the quantile on. |
@@ -291,7 +291,7 @@ Get the approximate value at a quantile from a UddSketch.
 | `quantile` | `DOUBLE PRECISION` | The estimated value at the requested quantile. |
 <br>
 
-### Sample Usage [](uddsketch_quantile-examples)
+### Sample Usage <a id="uddsketch_quantile-examples"></a>
 
 ```SQL
 SELECT timescale_analytics_experimental.quantile(
@@ -306,7 +306,7 @@ SELECT timescale_analytics_experimental.quantile(
 ```
 
 ---
-## **uddsketch_quantile_at_value** [](uddsketch_quantile_at_value)
+## **uddsketch_quantile_at_value** <a id="uddsketch_quantile_at_value"></a>
 
 ```SQL ,ignore
 timescale_analytics_experimental.quantile_at_value(
@@ -317,7 +317,7 @@ timescale_analytics_experimental.quantile_at_value(
 
 Estimate what quantile a given value would be located at in a UddSketch.
 
-### Required Arguments [](uddsketch_quantile_at_value-required-arguments)
+### Required Arguments <a id="uddsketch_quantile_at_value-required-arguments"></a>
 |Name|Type|Description|
 |---|---|---|
 | `sketch` | `UddSketch` | The sketch to compute the quantile on. |
@@ -330,7 +330,7 @@ Estimate what quantile a given value would be located at in a UddSketch.
 | `quantile_at_value` | `DOUBLE PRECISION` | The estimated quantile associated with the provided value. |
 <br>
 
-### Sample Usage [](uddsketch_quantile_at_value-examples)
+### Sample Usage <a id="uddsketch_quantile_at_value-examples"></a>
 
 ```SQL
 SELECT timescale_analytics_experimental.quantile_at_value(

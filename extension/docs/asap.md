@@ -5,17 +5,17 @@
 > [Example](#asap-example)<br>
 > [API](#asap-api)
 
-## Description [](asap-description)
+## Description <a id="asap-description"></a>
 
 The [ASAP smoothing alogrithm](https://arxiv.org/pdf/1703.00983.pdf) is designed create human readable graphs which preserve the rough shape and larger trends of the input data while minimizing the local variance between points.  Timescale analytics provides an implementation of this which will take `(timestamp, value)` pairs, normalize them to the target interval, and return the ASAP smoothed values.
 
-## Details [](asap-details)
+## Details <a id="asap-details"></a>
 
 Timescale's ASAP smoothing is implemented as a PostgresQL aggregate over a series of timestamps and values, with an additional target resolution used to control the output size.  The implementation will take the incoming data and attempt to bucket the points into even sized buckets such the number of buckets approximates the target resolution and each bucket contains a similar number of points (if necessary, gaps will be filled by interpolating the buckets on either side at this point).  It will then attempt to identify good candidate intervals for smoothing the data (using the Wiener-Khinchin theorem to find periods of high autocorrelation), and then choose the candidate that produces the smoothest graph while having the same degree of outlier values.
 
 The output of the postgres aggregate is a timescale timeseries object describing the start and step interval times and listing the values.  This can be passed to our `unnest_series` API to produce a table of time, value points.  The aggreates are also currently not partializeable or combinable.
 
-## Usage Example [](asap-example)
+## Usage Example <a id="asap-example"></a>
 
 In this example we're going to examine about 250 years of monthly temperature readings from England (raw data can be found [here](http://futuredata.stanford.edu/asap/Temp.csv), though timestamps need to have a day added to be readable by PostgresQL).  
 
@@ -75,11 +75,11 @@ Note the use of the `unnest_series` here to unpack the results of the `asap_smoo
 ![Smoothed data](images/ASAP_smoothed.png)
 
 
-## Command List (A-Z) [](asap-api)
+## Command List (A-Z) <a id="asap-api"></a>
 > - [asap_smooth](#asap_smooth)
 
 ---
-## **asap_smooth** [](asap_smooth)
+## **asap_smooth** <a id="asap_smooth"></a>
 ```SQL ,ignore
 timescale_analytics_experimental.asap_smooth(
     ts TIMESTAMPTZ,
@@ -90,7 +90,7 @@ timescale_analytics_experimental.asap_smooth(
 
 This normalize time, value pairs over a given interval and return a smoothed representation of those points.
 
-### Required Arguments [](asap-required-arguments)
+### Required Arguments <a id="asap-required-arguments"></a>
 |Name| Type |Description|
 |---|---|---|
 | `ts` | `TIMESTAMPTZ` | Column of timestamps corresponding to the values to aggregate |
@@ -105,7 +105,7 @@ This normalize time, value pairs over a given interval and return a smoothed rep
 | `normalizedtimeseries` | `NormalizedTimeSeries` | A object representing a series of values occurring at set intervals from a starting time.  It can be unpacked via `unnest_series` |
 <br>
 
-### Sample Usages [](asap-examples)
+### Sample Usages <a id="asap-examples"></a>
 For this examples assume we have a table 'metrics' with columns 'date' and 'reading' which contains some interesting measurment we've accumulated over a large interval.  The following example would take that data and give us a smoothed representation of approximately 10 points which would still show any anomolous readings:
 
 <div hidden>

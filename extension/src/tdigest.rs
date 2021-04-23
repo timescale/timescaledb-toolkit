@@ -64,7 +64,8 @@ pub fn tdigest_trans(
         in_aggregate_context(fcinfo, || {
             let value = match value {
                 None => return state,
-                Some(value) => value,
+                // NaNs are nonsensical in the context of a percentile, so exclude them
+                Some(value) => if value.is_nan() {return state} else {value},
             };
             let mut state = match state {
                 None => TDigestTransState{

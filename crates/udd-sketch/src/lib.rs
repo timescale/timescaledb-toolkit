@@ -18,16 +18,12 @@ extern crate quickcheck_macros;
 // based on a logarithmic scale, we need to track negative values separately from positive values, and
 // zero also needs special casing.
 #[derive(Serialize, Deserialize, Hash, PartialEq, Eq, Copy, Clone, Ord, Debug)]
-#[repr(C, u64)]
 pub enum SketchHashKey {
     Negative(i64),
     Zero,
     Positive(i64),
     Invalid,
 }
-
-// we're going to write SketchHashKey's to disk, so ensure they have no padding/are the correct size
-const _: () = [()][(std::mem::size_of::<SketchHashKey>() != 16) as u8 as usize];
 
 // Invalid is treated as greater than valid values (making it a nice boundary value for list end)
 impl std::cmp::PartialOrd for SketchHashKey {
@@ -89,6 +85,7 @@ impl std::ops::Index<SketchHashKey> for SketchHashMap {
 }
 
 // Iterator for a SketchHashMap will travel through the map in order of increasing key value and return the (key, count) pairs
+#[derive(Clone)]
 pub struct SketchHashIterator<'a> {
     container: &'a SketchHashMap,
     next_key: SketchHashKey,
@@ -219,18 +216,21 @@ impl UDDSketch {
         compactions: u64,
         values: u64,
         sum: f64,
-        keys: Vec<SketchHashKey>,
-        counts: Vec<u64>,
+        keys: impl Iterator<Item=SketchHashKey>,
+        counts: impl Iterator<Item=u64>
     ) -> Self {
-        let mut sketch = UDDSketch {
+        let mut sketch =UDDSketch {
             buckets: SketchHashMap::new(),
             alpha: current_error,
-            gamma: (1.0 + current_error) / (1.0 - current_error),
+            gamma: gamma(current_error),
             compactions: compactions as u32,
             max_buckets: max_buckets,
             num_values: values,
             values_sum: sum,
         };
+        // TODO
+        let keys: Vec<_> = keys.collect();
+        let counts: Vec<_> = counts.collect();
         assert_eq!(keys.len(), counts.len());
         // assert!(keys.is_sorted());
         for i in 0..keys.len() {
@@ -257,27 +257,7 @@ impl UDDSketch {
 impl UDDSketch {
     // For a given value return the index of it's bucket in the current sketch.
     fn key(&self, value: f64) -> SketchHashKey {
-        let negative = value < 0.0;
-        let value = value.abs();
-
-        if value == 0.0 {
-            SketchHashKey::Zero
-        } else if negative {
-            SketchHashKey::Negative(value.log(self.gamma).ceil() as i64)
-        } else {
-            SketchHashKey::Positive(value.log(self.gamma).ceil() as i64)
-        }
-    }
-
-    /// inverse of `key()` within alpha
-    fn bucket_to_value(&self, bucket: SketchHashKey) -> f64 {
-        // When taking gamma ^ i below we have to use powf as powi only takes a u32, and i can exceed 2^32 for small alphas
-        match bucket {
-            SketchHashKey::Zero => 0.0,
-            SketchHashKey::Positive(i) => self.gamma.powf(i as f64 - 1.0) * (1.0 + self.alpha),
-            SketchHashKey::Negative(i) => -(self.gamma.powf(i as f64 - 1.0) * (1.0 + self.alpha)),
-            SketchHashKey::Invalid => panic!("Unable to convert invalid bucket id to value"),
-        }
+        key(value, self.gamma)
     }
 
     pub fn compact_buckets(&mut self) {
@@ -288,18 +268,8 @@ impl UDDSketch {
         self.alpha = 2.0 * self.alpha / (1.0 + self.alpha.powi(2)); // See https://arxiv.org/pdf/2004.08604.pdf Equation 4
     }
 
-    pub fn bucket_iter(&mut self) -> SketchHashIterator {
+    pub fn bucket_iter(&self) -> SketchHashIterator {
         self.buckets.iter()
-    }
-
-    // Look up the value of the last bucket
-    // This is not an efficient operation
-    fn last_bucket_value(&self) -> f64 {
-        let mut cur = self.buckets.head;
-        for _ in 0..self.buckets.len() - 1 {
-            cur = self.buckets.map[&cur].next;
-        }
-        self.bucket_to_value(cur)
     }
 }
 
@@ -395,44 +365,101 @@ impl UDDSketch {
     }
 
     pub fn estimate_quantile(&self, quantile: f64) -> f64 {
-        assert!(quantile >= 0.0 && quantile <= 1.0);
-
-        let mut remaining = (self.num_values as f64 * quantile) as u64 + 1;
-        if remaining >= self.num_values {
-            return self.last_bucket_value();
-        }
-
-        for entry in self.buckets.iter() {
-            let (key, count) = entry;
-            if remaining <= count {
-                return self.bucket_to_value(key);
-            } else {
-                remaining -= count;
-            }
-        }
-        unreachable!();
+        estimate_quantile(quantile, self.alpha, self.gamma, self.num_values, self.buckets.iter())
     }
 
-    // This relative error isn't bounded by alpha, what is the bound?
     pub fn estimate_quantile_at_value(&self, value: f64) -> f64 {
-        let mut count = 0.0;
-        let target = self.key(value);
-
-        for entry in self.buckets.iter() {
-            let (key, value) = entry;
-            if target > key {
-                count += value as f64;
-            } else {
-                if target == key {
-                    // If the value falls in the target bucket, assume it's greater than half the other values
-                    count += value as f64 / 2.0;
-                }
-                return count / self.num_values as f64;
-            }
-        }
-
-        1.0 // Greater than anything in the sketch
+        estimate_quantile_at_value(value, self.gamma, self.num_values, self.buckets.iter())
     }
+}
+
+pub fn estimate_quantile(
+    quantile: f64,
+    alpha: f64,
+    gamma: f64,
+    num_values: u64,
+    buckets: impl Iterator<Item=(SketchHashKey, u64)>,
+) -> f64  {
+    assert!(quantile >= 0.0 && quantile <= 1.0);
+
+    let mut remaining = (num_values as f64 * quantile) as u64 + 1;
+    if remaining >= num_values {
+        return last_bucket_value(alpha, gamma, buckets);
+    }
+
+    for entry in buckets {
+        let (key, count) = entry;
+        if remaining <= count {
+            return bucket_to_value(alpha, gamma, key);
+        } else {
+            remaining -= count;
+        }
+    }
+    unreachable!();
+}
+
+// Look up the value of the last bucket
+// This is not an efficient operation
+fn last_bucket_value(
+    alpha: f64,
+    gamma: f64,
+    buckets: impl Iterator<Item=(SketchHashKey, u64)>
+) -> f64 {
+    let (key, _) = buckets.last().unwrap();
+    bucket_to_value(alpha, gamma, key)
+}
+
+/// inverse of `key()` within alpha
+fn bucket_to_value(alpha: f64, gamma: f64, bucket: SketchHashKey) -> f64 {
+    // When taking gamma ^ i below we have to use powf as powi only takes a u32, and i can exceed 2^32 for small alphas
+    match bucket {
+        SketchHashKey::Zero => 0.0,
+        SketchHashKey::Positive(i) => gamma.powf(i as f64 - 1.0) * (1.0 + alpha),
+        SketchHashKey::Negative(i) => -(gamma.powf(i as f64 - 1.0) * (1.0 + alpha)),
+        SketchHashKey::Invalid => panic!("Unable to convert invalid bucket id to value"),
+    }
+}
+
+pub fn estimate_quantile_at_value(
+    value: f64,
+    gamma: f64,
+    num_values: u64,
+    buckets: impl Iterator<Item=(SketchHashKey, u64)>,
+) -> f64 {
+    let mut count = 0.0;
+    let target = key(value, gamma);
+
+    for entry in buckets {
+        let (key, value) = entry;
+        if target > key {
+            count += value as f64;
+        } else {
+            if target == key {
+                // If the value falls in the target bucket, assume it's greater than half the other values
+                count += value as f64 / 2.0;
+            }
+            return count / num_values as f64;
+        }
+    }
+
+    1.0 // Greater than anything in the sketch
+}
+
+fn key(value: f64, gamma: f64) -> SketchHashKey {
+    let negative = value < 0.0;
+    let value = value.abs();
+
+    if value == 0.0 {
+        SketchHashKey::Zero
+    } else if negative {
+        SketchHashKey::Negative(value.log(gamma).ceil() as i64)
+    } else {
+        SketchHashKey::Positive(value.log(gamma).ceil() as i64)
+    }
+}
+
+pub fn gamma(alpha: f64) -> f64 {
+    (1.0 + alpha) / (1.0 - alpha)
 }
 
 #[cfg(test)]

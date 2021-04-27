@@ -1,15 +1,13 @@
 
-use std::{
-    slice,
-};
+use std::slice;
 
 use pgx::*;
 
 use flat_serialize::*;
 
-use uddsketch::{
-    UDDSketch as UddSketchInternal
-};
+use encodings::{delta, prefix_varint};
+
+use uddsketch::{SketchHashKey, UDDSketch as UddSketchInternal};
 
 
 use crate::{
@@ -92,7 +90,8 @@ type bytea = pg_sys::Datum;
 pub fn uddsketch_serialize(
     state: Internal<UddSketchInternal>,
 ) -> bytea {
-    crate::do_serialize!(state)
+    let serializable = &SerializedUddSketch::from(&*state);
+    crate::do_serialize!(serializable)
 }
 
 #[pg_extern(strict)]
@@ -100,11 +99,55 @@ pub fn uddsketch_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
 ) -> Internal<UddSketchInternal> {
-    crate::do_deserialize!(bytes, UddSketchInternal)
+    let sketch: UddSketchInternal = crate::do_deserialize!(bytes, SerializedUddSketch);
+    sketch.into()
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct SerializedUddSketch {
+    alpha: f64,
+    max_buckets: u32,
+    num_buckets: u32,
+    compactions: u32,
+    count: u64,
+    sum: f64,
+    buckets: CompressedBuckets,
+}
+
+impl From<&UddSketchInternal> for SerializedUddSketch {
+    fn from(sketch: &UddSketchInternal) -> Self {
+        let buckets = compress_buckets(&*sketch);
+        SerializedUddSketch {
+            alpha: sketch.max_error(),
+            max_buckets: sketch.max_allowed_buckets() as u32,
+            num_buckets: sketch.current_buckets_count() as u32,
+            compactions: sketch.times_compacted(),
+            count: sketch.count(),
+            sum: sketch.sum(),
+            buckets,
+        }
+    }
+}
+
+impl Into<UddSketchInternal> for SerializedUddSketch {
+    fn into(self) -> UddSketchInternal {
+        UddSketchInternal::new_from_data(self.max_buckets as u64, self.alpha, self.compactions as u64, self.count, self.sum, self.keys(), self.counts())
+    }
+}
+
+impl SerializedUddSketch {
+    fn keys(&self) -> impl Iterator<Item=SketchHashKey> + '_ {
+        decompress_keys(&*self.buckets.negative_indexes, self.buckets.zero_bucket_count != 0, &*self.buckets.positive_indexes)
+    }
+
+    fn counts(&self) -> impl Iterator<Item=u64> + '_ {
+        decompress_counts(&*self.buckets.negative_counts, self.buckets.zero_bucket_count, &*self.buckets.positive_counts)
+    }
 }
 
 // PG object for the sketch.
 pg_type! {
+    #[derive(Debug)]
     struct UddSketch {
         alpha: f64,
         max_buckets: u32,
@@ -112,8 +155,15 @@ pg_type! {
         compactions: u64,
         count: u64,
         sum: f64,
-        keys: [uddsketch::SketchHashKey; self.num_buckets],
-        counts: [u64; self.num_buckets],
+        zero_bucket_count: u64,
+        neg_indexes_bytes: u32,
+        neg_buckets_bytes: u32,
+        pos_indexes_bytes: u32,
+        pos_buckets_bytes: u32,
+        negative_indexes: [u8; self.neg_indexes_bytes],
+        negative_counts: [u8; self.neg_buckets_bytes],
+        positive_indexes: [u8; self.pos_indexes_bytes],
+        positive_counts: [u8; self.pos_buckets_bytes],
     }
 }
 
@@ -121,8 +171,16 @@ varlena_type!(UddSketch);
 json_inout_funcs!(UddSketch);
 
 impl<'input> UddSketch<'input> {
+    fn keys(&self) -> impl Iterator<Item=SketchHashKey> + '_ {
+        decompress_keys(self.negative_indexes, *self.zero_bucket_count != 0, self.positive_indexes)
+    }
+
+    fn counts(&self) -> impl Iterator<Item=u64> + '_ {
+        decompress_counts(self.negative_counts, *self.zero_bucket_count, self.positive_counts)
+    }
+
     fn to_uddsketch(&self) -> UddSketchInternal {
-        UddSketchInternal::new_from_data(*self.max_buckets as u64, *self.alpha, *self.compactions, *self.count, *self.sum, Vec::from(self.keys), Vec::from(self.counts))
+        UddSketchInternal::new_from_data(*self.max_buckets as u64, *self.alpha, *self.compactions, *self.count, *self.sum, self.keys(), self.counts())
     }
 }
 
@@ -134,19 +192,19 @@ fn uddsketch_final(
 ) -> Option<UddSketch<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
-            let mut state = match state {
+            let state = match state {
                 None => return None,
                 Some(state) => state,
             };
 
-            let mut keys = Vec::new();
-            let mut counts = Vec::new();
+            let CompressedBuckets {
+                negative_indexes,
+                negative_counts,
+                zero_bucket_count,
+                positive_indexes,
+                positive_counts,
+            } = compress_buckets(&*state);
 
-            for entry in state.bucket_iter() {
-                let (key, value) = entry;
-                keys.push(key);
-                counts.push(value);
-            }
 
             // we need to flatten the vector to a single buffer that contains
             // both the size, the data, and the varlen header
@@ -158,12 +216,95 @@ fn uddsketch_final(
                     compactions: &(state.times_compacted() as u64),
                     count: &state.count(),
                     sum: &state.sum(),
-                    keys: &keys,
-                    counts: &counts,
+                    zero_bucket_count: &zero_bucket_count,
+                    neg_indexes_bytes: &(negative_indexes.len() as u32),
+                    neg_buckets_bytes: &(negative_counts.len() as u32),
+                    pos_indexes_bytes: &(positive_indexes.len() as u32),
+                    pos_buckets_bytes: &(positive_counts.len() as u32),
+                    negative_indexes: &negative_indexes,
+                    negative_counts: &negative_counts,
+                    positive_indexes: &positive_indexes,
+                    positive_counts: &positive_counts,
                 }
             ).into()
         })
     }
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct CompressedBuckets {
+    negative_indexes: Vec<u8>,
+    negative_counts: Vec<u8>,
+    zero_bucket_count: u64,
+    positive_indexes: Vec<u8>,
+    positive_counts: Vec<u8>,
+}
+
+fn compress_buckets(sketch: &UddSketchInternal) -> CompressedBuckets {
+    let mut negative_indexes = prefix_varint::I64Compressor::with(delta::i64_encoder());
+    let mut negative_counts = prefix_varint::U64Compressor::with(delta::u64_encoder());
+    let mut zero_bucket_count = 0;
+    let mut positive_indexes = prefix_varint::I64Compressor::with(delta::i64_encoder());
+    let mut positive_counts = prefix_varint::U64Compressor::with(delta::u64_encoder());
+    for (k, b) in sketch.bucket_iter() {
+        match k {
+            SketchHashKey::Negative(i) => {
+                negative_indexes.push(i);
+                negative_counts.push(b);
+            },
+            SketchHashKey::Zero => {
+                zero_bucket_count = b
+            },
+            SketchHashKey::Positive(i) => {
+                positive_indexes.push(i);
+                positive_counts.push(b);
+            },
+            SketchHashKey::Invalid => unreachable!(),
+        }
+
+    }
+    let negative_indexes = negative_indexes.finish();
+    let negative_counts = negative_counts.finish();
+    let positive_indexes = positive_indexes.finish();
+    let positive_counts = positive_counts.finish();
+    CompressedBuckets {
+        negative_indexes,
+        negative_counts,
+        zero_bucket_count,
+        positive_indexes,
+        positive_counts,
+    }
+}
+
+
+fn decompress_keys<'i>(
+    negative_indexes: &'i [u8],
+    zero_bucket: bool,
+    positive_indexes: &'i [u8]
+) -> impl Iterator<Item=SketchHashKey> + 'i {
+    let negatives = prefix_varint::i64_decompressor(negative_indexes)
+        .map(delta::i64_decoder())
+        .map(SketchHashKey::Negative);
+
+    let zero = zero_bucket.then(|| uddsketch::SketchHashKey::Zero);
+
+    let positives = prefix_varint::i64_decompressor(positive_indexes)
+        .map(delta::i64_decoder())
+        .map(SketchHashKey::Positive);
+
+    negatives.chain(zero).chain(positives)
+}
+
+fn decompress_counts<'b>(
+    negative_buckets: &'b [u8],
+    zero_bucket: u64,
+    positive_buckets: &'b [u8],
+) -> impl Iterator<Item=u64> + 'b {
+    let negatives = prefix_varint::u64_decompressor(negative_buckets).map(delta::u64_decoder());
+    let zero = (zero_bucket != 0).then(|| zero_bucket);
+    let positives = prefix_varint::u64_decompressor(positive_buckets).map(delta::u64_decoder());
+
+    negatives.chain(zero).chain(positives)
 }
 
 extension_sql!(r#"
@@ -181,7 +322,7 @@ CREATE AGGREGATE uddsketch(
 "#);
 
 extension_sql!(r#"
-CREATE AGGREGATE percentile_agg(value DOUBLE PRECISION) 
+CREATE AGGREGATE percentile_agg(value DOUBLE PRECISION)
 (
     sfunc = percentile_agg_trans,
     stype = internal,
@@ -250,7 +391,13 @@ pub fn uddsketch_approx_percentile(
     percentile: f64,
     sketch: UddSketch,
 ) -> f64 {
-    sketch.to_uddsketch().estimate_quantile(percentile)
+    uddsketch::estimate_quantile(
+        percentile,
+        *sketch.alpha,
+        uddsketch::gamma(*sketch.alpha),
+        *sketch.count,
+        sketch.keys().zip(sketch.counts()),
+    )
 }
 
 // Approximate the approx_percentile at the given value
@@ -259,7 +406,12 @@ pub fn uddsketch_approx_percentile_at_value(
     value: f64,
     sketch: UddSketch,
 ) -> f64 {
-    sketch.to_uddsketch().estimate_quantile_at_value(value)
+    uddsketch::estimate_quantile_at_value(
+        value,
+        uddsketch::gamma(*sketch.alpha),
+        *sketch.count,
+        sketch.keys().zip(sketch.counts()),
+    )
 }
 
 // Number of elements from which the sketch was built.

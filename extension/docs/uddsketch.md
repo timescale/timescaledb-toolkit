@@ -1,4 +1,4 @@
-# UddSketch [<sup><mark>experimental</mark></sup>](/extension/docs/README.md#tag-notes)
+# UddSketch
 
 > [Description](#uddsketch-description)<br>
 > [Details](#uddsketch-details)<br>
@@ -8,11 +8,11 @@
 
 ## Description <a id="uddsketch-description"></a>
 
-[UddSketch](https://arxiv.org/pdf/2004.08604.pdf) is a specialization of the [DDSketch](https://arxiv.org/pdf/1908.10693.pdf) data structure.  It follows the same approach of breaking the data range into a series of logarithmically sized buckets such that it can guarantee a maximum relative error for any quantile estimate as long as it knows which bucket that quantile falls in.
+[UddSketch](https://arxiv.org/pdf/2004.08604.pdf) is a specialization of the [DDSketch](https://arxiv.org/pdf/1908.10693.pdf) data structure.  It follows the same approach of breaking the data range into a series of logarithmically sized buckets such that it can guarantee a maximum relative error for any percentile estimate as long as it knows which bucket that percentile falls in.
 
-Where UddSketch differs from DDSketch in its behavior when the number of buckets required by a set of values exceeds some predefined maximum.  In these cirumstances DDSketch will maintain it's original error bound, but only for a subset of the range of quantiles.  UddSketch, on the other hand, will combine buckets in such a way that it loosens the error bound, but can still estimate all quantile values.
+Where UddSketch differs from DDSketch in its behavior when the number of buckets required by a set of values exceeds some predefined maximum.  In these cirumstances DDSketch will maintain it's original error bound, but only for a subset of the range of percentiles.  UddSketch, on the other hand, will combine buckets in such a way that it loosens the error bound, but can still estimate all percentile values.
 
-As an example, assume both sketches were trying to capture an large set of values to be able to estimate quantiles with 1% relative error but were given too few buckets to do so.  The DDSketch implementation would still guarantee 1% relative error, but may only be able to provides estimates in the range (0.05, 0.95).  The UddSketch implementation however, might end up only able to guarantee 2% relative error, but would still be able to estimate all quantiles at that error.
+As an example, assume both sketches were trying to capture an large set of values to be able to estimate percentiles with 1% relative error but were given too few buckets to do so.  The DDSketch implementation would still guarantee 1% relative error, but may only be able to provides estimates in the range (0.05, 0.95).  The UddSketch implementation however, might end up only able to guarantee 2% relative error, but would still be able to estimate all percentiles at that error.
 
 ## Details <a id="uddsketch-details"></a>
 
@@ -43,18 +43,18 @@ Now let's create some UddSketches for our different stations and verify that the
 
 ```SQL ,ignore
 CREATE VIEW daily_rain AS
-    SELECT name, timescale_analytics_experimental.uddsketch(100, 0.005, prcp)
+    SELECT name, uddsketch(100, 0.005, prcp)
     FROM weather
     GROUP BY name;
 
 SELECT
     name,
-    timescale_analytics_experimental.get_count(uddsketch),
-    timescale_analytics_experimental.error(uddsketch)
+    num_vals(uddsketch),
+    error(uddsketch)
 FROM daily_rain;
 ```
 ```
-                 name                  | get_count |               error
+                 name                  | num_vals |               error
 ---------------------------------------+-----------+---------------------
  PORTLAND INTERNATIONAL AIRPORT, OR US |      7671 |  0.0199975003624472
  LITCHFIELD PARK, AZ US                |      5904 |               0.005
@@ -65,15 +65,15 @@ FROM daily_rain;
 
 Notice that 100 buckets proved to be insufficient to maintain 0.5% relative error for three of our data sets, but they've automatically adjusted their bucket size to maintain the desired bucket limit.
 
-We can then check some rainfall quantiles to see how our stations compare.
+We can then check some rainfall percentiles to see how our stations compare.
 ```SQL ,ignore
 SELECT
     name,
-    timescale_analytics_experimental.quantile(uddsketch, 0.6)
+    approx_percentile(0.6, uddsketch)
 FROM daily_rain;
 ```
 ```
-                 name                  |             quantile
+                 name                  |             approx_percentile
 ---------------------------------------+----------------------
  PORTLAND INTERNATIONAL AIRPORT, OR US | 0.009850446542334412
  LITCHFIELD PARK, AZ US                |                    0
@@ -84,11 +84,11 @@ FROM daily_rain;
 ```SQL ,ignore
 SELECT
     name,
-    timescale_analytics_experimental.quantile(uddsketch, 0.9)
+    approx_percentile(0.9, uddsketch)
 FROM daily_rain;
 ```
 ```
-                 name                  |           quantile
+                 name                  |           approx_percentile
 ---------------------------------------+--------------------
  PORTLAND INTERNATIONAL AIRPORT, OR US | 0.3072142710699281
  LITCHFIELD PARK, AZ US                |                  0
@@ -99,11 +99,11 @@ FROM daily_rain;
 ```SQL ,ignore
 SELECT
     name,
-    timescale_analytics_experimental.quantile(uddsketch, 0.995)
+    approx_percentile( 0.995, uddsketch)
 FROM daily_rain;
 ```
 ```
-                 name                  |           quantile
+                 name                  |           approx_percentile
 ---------------------------------------+--------------------
  PORTLAND INTERNATIONAL AIRPORT, OR US | 1.1969797510556823
  LITCHFIELD PARK, AZ US                | 0.7671946655927083
@@ -112,7 +112,7 @@ FROM daily_rain;
 (4 rows)
 ```
 
-## Example Using TimeScale Continuous Aggregates (uddsketch-cagg-example)
+## Example Using TimeScale Continuous Aggregates <a id="uddsketch-cagg-example"></a>
 To have a UddSketch over a PostgresQL table which automatically updates as more data is added, we can make use of continuous aggregates.  First, let us create a simple hypertable:
 
 ```SQL ,non-transactional,ignore-output
@@ -127,7 +127,7 @@ CREATE MATERIALIZED VIEW weekly_sketch
 WITH (timescaledb.continuous)
 AS SELECT
     time_bucket('7 day'::interval, time) as week,
-    timescale_analytics_experimental.uddsketch(100, 0.005, value)
+    uddsketch(100, 0.005, value)
 FROM test
 GROUP BY time_bucket('7 day'::interval, time);
 ```
@@ -136,7 +136,7 @@ Next we'll use one of our utility functions, `generate_periodic_normal_series`, 
 ```SQL ,non-transactional
 INSERT INTO test
     SELECT time, value
-    FROM timescale_analytics_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, NULL, NULL, NULL, NULL, NULL, NULL, rng_seed => 12345678); 
+    FROM generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, NULL, NULL, NULL, NULL, NULL, NULL, rng_seed => 12345678); 
 ```
 ```
 INSERT 0 4032
@@ -146,10 +146,10 @@ Finally, we can query the aggregate to see various approximate percentiles from 
 ```SQL
 SELECT 
     week,
-    timescale_analytics_experimental.error(uddsketch), 
-    timescale_analytics_experimental.quantile(uddsketch, 0.01) AS low, 
-    timescale_analytics_experimental.quantile(uddsketch, 0.5) AS mid, 
-    timescale_analytics_experimental.quantile(uddsketch, 0.99) AS high 
+    error(uddsketch), 
+    approx_percentile(0.01, uddsketch) AS low, 
+    approx_percentile(0.5, uddsketch) AS mid, 
+    approx_percentile(0.99, uddsketch) AS high 
 FROM weekly_sketch
 ORDER BY week;
 ```
@@ -164,26 +164,30 @@ ORDER BY week;
 ```
 
 ## Command List (A-Z) <a id="uddsketch-api"></a>
->>>>>>> d1d4e2e... Adding continuous aggregate example to UddSketch documentation.
-> - [uddsketch](#uddsketch)
-> - [uddsketch_count](#uddsketch_count)
-> - [uddsketch_error](#uddsketch_error)
-> - [uddsketch_mean](#uddsketch_mean)
-> - [uddsketch_quantile](#uddsketch_quantile)
-> - [uddsketch_quantile_at_value](#uddsketch_quantile_at_value)
+Aggregate Functions
+> - [uddsketch - point form](#uddsketch-point)
+> - [uddsketch - summary form](#uddsketch-summary)
+
+Accessor Functions
+
+> - [error](#error)
+> - [mean](#mean)
+> - [num_vals](#num-vals)
+> - [approx_percentile](#approx_percentile)
+> - [approx_percentile_at_value](#approx_percentile-at-value)
 
 
 ---
-## **uddsketch** <a id="uddsketch"></a>
+## **uddsketch (point form) ** <a id="uddsketch-point"></a>
 ```SQL ,ignore
-timescale_analytics_experimental.uddsketch(
+uddsketch(
     size INTEGER,
     max_error DOUBLE PRECISION,
     value DOUBLE PRECISION
 ) RETURNS UddSketch
 ```
 
-This will construct and return a new UddSketch with at most `size` buckets.  The maximum relative error of the UddSketch will be bounded by `max_error` unless it is impossible to do so while with the bucket bound.  If the sketch has had to combine buckets, the new error can be found with the [uddsketch_error](#uddsketch_error) command.
+This will construct and return a new UddSketch with at most `size` buckets.  The maximum relative error of the UddSketch will be bounded by `max_error` unless it is impossible to do so while with the bucket bound.  If the sketch has had to combine buckets, the new error can be found with the [uddsketch_error](#error) command.
 
 ### Required Arguments <a id="uddsketch-required-arguments"></a>
 |Name| Type |Description|
@@ -204,62 +208,36 @@ This will construct and return a new UddSketch with at most `size` buckets.  The
 For this examples assume we have a table 'samples' with a column 'weights' holding `DOUBLE PRECISION` values.  The following will simply return a sketch over that column
 
 ```SQL ,ignore
-SELECT timescale_analytics_experimental.uddsketch(100, 0.01, data) FROM samples;
+SELECT uddsketch(100, 0.01, data) FROM samples;
 ```
 
 It may be more useful to build a view from the aggregate that we can later pass to other uddsketch functions.
 
 ```SQL ,ignore
 CREATE VIEW sketch AS
-    SELECT timescale_analytics_experimental.uddsketch(100, 0.01, data)
+    SELECT uddsketch(100, 0.01, data)
     FROM samples;
 ```
 
----
-## **uddsketch_count** <a id="uddsketch_count"></a>
-
+## **uddsketch (summary form) ** <a id="uddsketch-summary"></a>
 ```SQL ,ignore
-timescale_analytics_experimental.get_count(sketch UddSketch) RETURNS DOUBLE PRECISION
-```
-
-Get the number of values contained in a UddSketch.
-
-### Required Arguments <a id="uddsketch_count-required-arguments"></a>
-|Name|Type|Description|
-|---|---|---|
-| `sketch` | `UddSketch` | The sketch to extract the number of values from. |
-<br>
-
-### Returns
-|Column|Type|Description|
-|---|---|---|
-| `uddsketch_count` | `DOUBLE PRECISION` | The number of values entered into the UddSketch. |
-<br>
-
-### Sample Usage <a id="uddsketch_count-examples"></a>
-
-```SQL
-SELECT timescale_analytics_experimental.get_count(
-    timescale_analytics_experimental.uddsketch(100, 0.01, data)
-) FROM generate_series(1, 100) data;
-```
-```output
- get_count
------------
-       100
+uddsketch(
+    sketch uddsketch
+) RETURNS UddSketch
 ```
 
 ---
 
-## **uddsketch_error** <a id="uddsketch_error"></a>
+
+## **error** <a id="error"></a>
 
 ```SQL ,ignore
-timescale_analytics_experimental.error(sketch UddSketch) RETURNS DOUBLE PRECISION
+error(sketch UddSketch) RETURNS DOUBLE PRECISION
 ```
 
-This returns the maximum relative error that a quantile estimate will have (relative to the correct value).  This will initially be the same as the `max_error` used to construct the UddSketch, but if the sketch has needed to combine buckets this function will return the new maximum error.
+This returns the maximum relative error that a percentile estimate will have (relative to the correct value).  This will initially be the same as the `max_error` used to construct the UddSketch, but if the sketch has needed to combine buckets this function will return the new maximum error.
 
-### Required Arguments <a id="uddsketch_error-required-arguments"></a>
+### Required Arguments <a id="error-required-arguments"></a>
 |Name|Type|Description|
 |---|---|---|
 | `sketch` | `UddSketch` | The sketch to determine the error of. |
@@ -269,14 +247,14 @@ This returns the maximum relative error that a quantile estimate will have (rela
 
 |Column|Type|Description|
 |---|---|---|
-| `uddsketch_error` | `DOUBLE PRECISION` | The maximum relative error of any quantile estimate. |
+| `error` | `DOUBLE PRECISION` | The maximum relative error of any percentile estimate. |
 <br>
 
-### Sample Usages <a id="uddsketch_error-examples"></a>
+### Sample Usages <a id="error-examples"></a>
 
 ```SQL
-SELECT timescale_analytics_experimental.error(
-    timescale_analytics_experimental.uddsketch(100, 0.01, data)
+SELECT error(
+    uddsketch(100, 0.01, data)
 ) FROM generate_series(1, 100) data;
 ```
 ```output
@@ -286,15 +264,15 @@ SELECT timescale_analytics_experimental.error(
 ```
 
 ---
-## **uddsketch_mean** <a id="uddsketch_mean"></a>
+## **mean** <a id="mean"></a>
 
 ```SQL ,ignore
-timescale_analytics_experimental.mean(sketch UddSketch) RETURNS DOUBLE PRECISION
+mean(sketch UddSketch) RETURNS DOUBLE PRECISION
 ```
 
 Get the average of all the values contained in a UddSketch.
 
-### Required Arguments <a id="uddsketch_mean-required-arguments"></a>
+### Required Arguments <a id="mean-required-arguments"></a>
 |Name|Type|Description|
 |---|---|---|
 | `sketch` | `UddSketch` |  The sketch to extract the mean value from. |
@@ -306,11 +284,11 @@ Get the average of all the values contained in a UddSketch.
 | `mean` | `DOUBLE PRECISION` | The average of the values entered into the UddSketch. |
 <br>
 
-### Sample Usage <a id="uddsketch_mean-examples"></a>
+### Sample Usage <a id="mean-examples"></a>
 
 ```SQL
-SELECT timescale_analytics_experimental.mean(
-    timescale_analytics_experimental.uddsketch(100, 0.01, data)
+SELECT mean(
+    uddsketch(100, 0.01, data)
 ) FROM generate_series(1, 100) data;
 ```
 ```output
@@ -318,81 +296,114 @@ SELECT timescale_analytics_experimental.mean(
 ------
  50.5
 ```
-
----
-## **uddsketch_quantile** <a id="uddsketch_quantile"></a>
+## **num_vals** <a id="num-vals"></a>
 
 ```SQL ,ignore
-timescale_analytics_experimental.quantile(
-    sketch UddSketch,
-    quantile DOUBLE PRECISION
-) RETURNS UddSketch
+num_vals(sketch UddSketch) RETURNS DOUBLE PRECISION
 ```
 
-Get the approximate value at a quantile from a UddSketch.
+Get the number of values contained in a UddSketch.
 
-### Required Arguments <a id="uddsketch_quantile-required-arguments"></a>
+### Required Arguments <a id="num-vals-required-arguments"></a>
 |Name|Type|Description|
 |---|---|---|
-| `sketch` | `UddSketch` | The sketch to compute the quantile on. |
-| `quantile` | `DOUBLE PRECISION` | The desired quantile (0.0-1.0) to approximate. |
+| `sketch` | `UddSketch` | The sketch to extract the number of values from. |
 <br>
 
 ### Returns
 |Column|Type|Description|
 |---|---|---|
-| `quantile` | `DOUBLE PRECISION` | The estimated value at the requested quantile. |
+| `uddsketch_count` | `DOUBLE PRECISION` | The number of values entered into the UddSketch. |
 <br>
 
-### Sample Usage <a id="uddsketch_quantile-examples"></a>
+### Sample Usage <a id="num-vals-examples"></a>
 
 ```SQL
-SELECT timescale_analytics_experimental.quantile(
-    timescale_analytics_experimental.uddsketch(100, 0.01, data),
-    0.90
+SELECT num_vals(
+    uddsketch(100, 0.01, data)
 ) FROM generate_series(1, 100) data;
 ```
 ```output
-           quantile
+ num_vals
+-----------
+       100
+```
+
+---
+---
+## **approx_percentile** <a id="approx_percentile"></a>
+
+```SQL ,ignore
+approx_percentile(
+    approx_percentile DOUBLE PRECISION, 
+    sketch  uddsketch
+) RETURNS UddSketch
+```
+
+Get the approximate value at a percentile from a UddSketch.
+
+### Required Arguments <a id="approx_percentile-required-arguments"></a>
+|Name|Type|Description|
+|---|---|---|
+| `approx_percentile` | `DOUBLE PRECISION` | The desired percentile (0.0-1.0) to approximate. |
+| `sketch` | `UddSketch` | The sketch to compute the approx_percentile on. |
+<br>
+
+### Returns
+|Column|Type|Description|
+|---|---|---|
+| `approx_percentile` | `DOUBLE PRECISION` | The estimated value at the requested percentile. |
+<br>
+
+### Sample Usage <a id="approx_percentile-examples"></a>
+
+```SQL
+SELECT approx_percentile(
+    0.90
+    uddsketch(100, 0.01, data),
+) FROM generate_series(1, 100) data;
+```
+```output
+           approx_percentile
 --------------------
   90.93094205022494
 ```
 
 ---
-## **uddsketch_quantile_at_value** <a id="uddsketch_quantile_at_value"></a>
+## **approx_percentile_at_value** <a id="approx_percentile_at_value"></a>
 
 ```SQL ,ignore
-timescale_analytics_experimental.quantile_at_value(
-    sketch UddSketch,
-    value DOUBLE PRECISION
+approx_percentile_at_value(
+    value DOUBLE PRECISION,
+    sketch UddSketch
 ) RETURNS UddSketch
 ```
 
-Estimate what quantile a given value would be located at in a UddSketch.
+Estimate what percentile a given value would be located at in a UddSketch.
 
-### Required Arguments <a id="uddsketch_quantile_at_value-required-arguments"></a>
+### Required Arguments <a id="approx_percentile_at_value-required-arguments"></a>
 |Name|Type|Description|
 |---|---|---|
-| `sketch` | `UddSketch` | The sketch to compute the quantile on. |
-| `value` | `DOUBLE PRECISION` |  The value to estimate the quantile of. |
+| `value` | `DOUBLE PRECISION` |  The value to estimate the percentile of. |
+| `sketch` | `UddSketch` | The sketch to compute the percentile on. |
 <br>
 
 ### Returns
 |Column|Type|Description|
 |---|---|---|
-| `quantile_at_value` | `DOUBLE PRECISION` | The estimated quantile associated with the provided value. |
+| `approx_percentile_at_value` | `DOUBLE PRECISION` | The estimated percentile associated with the provided value. |
 <br>
 
-### Sample Usage <a id="uddsketch_quantile_at_value-examples"></a>
+### Sample Usage <a id="approx_percentile_at_value-examples"></a>
 
 ```SQL
-SELECT timescale_analytics_experimental.quantile_at_value(
-    timescale_analytics_experimental.uddsketch(100, 0.01, data),
-    90
+SELECT approx_percentile_at_value(
+    90,
+    uddsketch(100, 0.01, data)
 ) FROM generate_series(1, 100) data;
 ```
 ```output
- quantile_at_value
+ approx_percentile_at_value
 -------------------
              0.89
 ```

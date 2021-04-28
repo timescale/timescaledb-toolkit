@@ -205,13 +205,13 @@ An aggregate that produces a `TimeWeightSummary` from timestamps and associated 
 <br>
 
 ### Sample Usage
-```SQL ,ignore
+```SQL ,ignore-output
 WITH t as (
     SELECT
         time_bucket('1 day'::interval, ts) as dt,
         timescale_analytics_experimental.time_weight('Linear', ts, val) AS tw -- get a time weight summary
     FROM foo
-    WHERE id = 'bar'
+    WHERE measure_id = 10
     GROUP BY time_bucket('1 day'::interval, ts)
 )
 SELECT
@@ -242,14 +242,14 @@ An aggregate to compute a combined `TimeWeightSummary` from a series of non-over
 <br>
 
 ### Sample Usage
-```SQL ,ignore
+```SQL ,ignore-output
 WITH t as (
     SELECT
         date_trunc('day', ts) as dt,
         timescale_analytics_experimental.time_weight('Linear', ts, val) AS tw -- get a time weight summary
     FROM foo
-    WHERE id = 'bar'
-    GROUP BY date_trunc('day')
+    WHERE measure_id = 10
+    GROUP BY date_trunc('day', ts)
 ), q as (
     SELECT timescale_analytics_experimental.time_weight(tw) AS full_tw -- do a second level of aggregation to get the full time weighted average
     FROM t
@@ -303,7 +303,7 @@ The time weighted average calculations we perform require a strict ordering of i
 
 We throw an error if there is an attempt to combine overlapping `TimeWeightSummaries`, for instance, in our example above, if you were to try to combine summaries across `measure_id`s it would error. This is because the interpolation techniques really only make sense within a given time series determined by a single `measure_id`. However, given that the time weighted average produced is a dimensionless quantity, a simple average of time weighted average should better represent the variation across devices, so the recommendation for things like baselines across many timeseries would be something like:
 
-```SQL ,ignore
+```SQL ,ignore-output
 WITH t as (SELECT measure_id,
         timescale_analytics_experimental.average(
             timescale_analytics_experimental.time_weight('LOCF', ts, val)
@@ -318,7 +318,7 @@ Internally, the first and last points seen as well as the calculated weighted su
 
 Because they require ordered sets, the aggregates build up a buffer of input data, sort it and then perform the proper aggregation steps. In cases where memory is proving to be too small to build up a buffer of points causing OOMs or other issues, a multi-level aggregate can be useful. Following our example from above:
 
-```SQL ,ignore
+```SQL ,ignore-output
 WITH t as (SELECT measure_id,
     time_bucket('1 day'::interval, ts),
     timescale_analytics_experimental.time_weight('LOCF', ts, val)

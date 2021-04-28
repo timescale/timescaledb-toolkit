@@ -4,6 +4,16 @@
 use serde::{Serialize, Deserialize};
 use std::collections::HashMap;
 
+#[cfg(test)]
+use ordered_float::OrderedFloat;
+#[cfg(test)]
+use std::collections::HashSet;
+#[cfg(test)]
+extern crate quickcheck;
+#[cfg(test)]
+#[macro_use(quickcheck)]
+extern crate quickcheck_macros;
+
 // This is used to index the buckets of the UddSketch.  In particular, because UddSketch stores values
 // based on a logarithmic scale, we need to track negative values separately from positive values, and
 // zero also needs special casing.
@@ -46,6 +56,8 @@ impl SketchHashKey {
         use SketchHashKey::*;
 
         match *self {
+            Negative(i64::MAX) => *self,  // Infinite buckets remain infinite
+            Positive(i64::MAX) => *self,
             Negative(x) => Negative(if x > 0 {x+1} else {x} /2),
             Positive(x) => Positive(if x > 0 {x+1} else {x} /2),
             x => x.clone(),  // Zero and Invalid don't compact
@@ -178,7 +190,7 @@ pub struct UDDSketch {
 
 impl UDDSketch {
     pub fn new(max_buckets: u64, initial_error: f64) -> Self {
-        assert!(initial_error > 0.0);
+        assert!(initial_error >= 1e-12 && initial_error < 1.0);
         UDDSketch {
             buckets: SketchHashMap::new(),
             alpha: initial_error,
@@ -233,10 +245,11 @@ impl UDDSketch {
 
     /// inverse of `key()` within alpha
     fn bucket_to_value(&self, bucket: SketchHashKey) -> f64 {
+        // When taking gamma ^ i below we have to use powf as powi only takes a u32, and i can exceed 2^32 for small alphas
         match bucket {
             SketchHashKey::Zero => 0.0,
-            SketchHashKey::Positive(i) => self.gamma.powi(i as i32 - 1) * (1.0 + self.alpha),
-            SketchHashKey::Negative(i) => -(self.gamma.powi(i as i32 - 1) * (1.0 + self.alpha)),
+            SketchHashKey::Positive(i) => self.gamma.powf(i as f64 - 1.0) * (1.0 + self.alpha),
+            SketchHashKey::Negative(i) => -(self.gamma.powf(i as f64 - 1.0) * (1.0 + self.alpha)),
             SketchHashKey::Invalid => panic!("Unable to convert invalid bucket id to value"),
         }
     }
@@ -251,6 +264,16 @@ impl UDDSketch {
 
     pub fn bucket_iter(&mut self) -> SketchHashIterator {
         self.buckets.iter()
+    }
+
+    // Look up the value of the last bucket
+    // This is not an efficient operation
+    fn last_bucket_value(&self) -> f64 {
+        let mut cur = self.buckets.head;
+        for _ in 0..self.buckets.len() - 1  {
+            cur = self.buckets.map[&cur].next;
+        }
+        self.bucket_to_value(cur)
     }
 }
 
@@ -344,7 +367,12 @@ impl UDDSketch {
 
     pub fn estimate_quantile(&self, quantile: f64) -> f64 {
         assert!(quantile >= 0.0 && quantile <= 1.0);
-        let mut remaining = (self.num_values as f64 * quantile) as u64;
+
+        let mut remaining = (self.num_values as f64 * quantile) as u64 + 1;
+        if remaining >= self.num_values {
+            return self.last_bucket_value();
+        }
+
         for entry in self.buckets.iter() {
             let (key, count) = entry;
             if remaining <= count {
@@ -501,18 +529,19 @@ mod tests {
         for i in 1..=100 {
             let value = i as f64;
             let quantile = value / 100.0;
+            let quantile_value = value + 0.01; // correct value for quantile should be next number > value
 
             let test_value = sketch.estimate_quantile(quantile);
             let test_quant = sketch.estimate_quantile_at_value(value);
 
-            let percentage = (test_value - value).abs() / value;
+            let percentage = (test_value - quantile_value).abs() / quantile_value;
             assert!(
                 percentage <= 0.1,
                 "Exceeded 10% error on quantile {}: expected {}, received {} (error% {})",
                 quantile,
-                value,
+                quantile_value,
                 test_value,
-                (test_value - value).abs() / value
+                (test_value - quantile_value).abs() / quantile_value
             );
             let percentage = (test_quant - quantile).abs() / quantile;
             assert!(
@@ -560,5 +589,62 @@ mod tests {
             ((sketch.estimate_quantile((i as f64 + 1.0) / 100.0) / bounds[i]) - 1.0).abs() / bounds[i].abs(),
             sketch.max_error());
         }
+    }
+
+    use quickcheck::*;
+
+    #[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
+    struct OrderedF64(OrderedFloat<f64>);
+
+    impl Arbitrary for OrderedF64 {
+        fn arbitrary(g: &mut Gen) -> Self {
+            OrderedF64(f64::arbitrary(g).into())
+        }
+    }
+
+    #[quickcheck]
+    // Use multiple hashsets as input to allow a small number of duplicate values without getting ridiculous levels of duplication (as quickcheck is inclined to create)
+    fn fuzzing_test(batch1: HashSet<OrderedF64>, batch2: HashSet<OrderedF64>, batch3: HashSet<OrderedF64>, batch4: HashSet<OrderedF64>) -> TestResult {
+        let mut master: Vec<f64> = batch1.into_iter().chain(batch2.into_iter()).chain(batch3.into_iter()).chain(batch4.into_iter()).map(|x|x.0.into()).filter(|x:&f64|!x.is_nan()).collect();
+
+        if master.len() < 100 {
+            return TestResult::discard();
+        }
+        let mut sketch = UDDSketch::new(100, 0.000001);
+        for value in &master {
+            sketch.add_value(*value);
+        }
+
+        let quantile_tests = vec!(0.01, 0.1, 0.25, 0.5, 0.6, 0.8, 0.95);
+
+        master.sort_by(|a,b| a.partial_cmp(b).unwrap());
+
+        for i in 0..quantile_tests.len() {
+            let quantile = quantile_tests[i];
+
+            let mut test_val = sketch.estimate_quantile(quantile);
+
+            // If test_val is infinite, use the most extreme finite value to test relative error
+            if test_val.is_infinite() {
+                if test_val.is_sign_negative() {
+                    test_val = f64::MIN;
+                } else {
+                    test_val = f64::MAX;
+                }
+            }
+
+            // Compute target quantile using nearest rank definition
+            let master_idx = (quantile * master.len() as f64).floor() as usize;
+            let target = master[master_idx];
+            if target.is_infinite() {
+                continue;  // trivially correct...or NaN, depending how you define it
+            }
+            let error = if target == 0.0 {test_val} else {(test_val - target).abs() / target.abs()};
+
+            assert!(error <= sketch.max_error(), "sketch with error {} estimated {} quantile as {}, true value is {} resulting in relative error {}
+            values: {:?}", sketch.max_error(), quantile, test_val, target, error, master);
+        }
+
+        TestResult::passed()
     }
 }

@@ -126,7 +126,14 @@ impl TDigest {
         }
     }
 
-    pub fn new(centroids: Vec<Centroid>, sum: f64, count: u64, max: f64, min: f64, max_size: usize) -> Self {
+    pub fn new(
+        centroids: Vec<Centroid>,
+        sum: f64,
+        count: u64,
+        max: f64,
+        min: f64,
+        max_size: usize,
+    ) -> Self {
         if centroids.len() <= max_size {
             TDigest {
                 centroids,
@@ -223,7 +230,10 @@ impl TDigest {
     }
 
     pub fn merge_unsorted(&self, unsorted_values: Vec<f64>) -> TDigest {
-        let mut sorted_values: Vec<OrderedFloat<f64>> = unsorted_values.into_iter().map(OrderedFloat::from).collect();
+        let mut sorted_values: Vec<OrderedFloat<f64>> = unsorted_values
+            .into_iter()
+            .map(OrderedFloat::from)
+            .collect();
         sorted_values.sort();
         let sorted_values = sorted_values.into_iter().map(|f| f.into_inner()).collect();
 
@@ -231,7 +241,11 @@ impl TDigest {
     }
 
     // Allow f64 overflow to create centroids with infinite mean, but make sure our min/max are updated
-    fn update_bounds_on_overflow(value: OrderedFloat<f64>, lower_bound: &mut OrderedFloat<f64>, upper_bound: &mut OrderedFloat<f64>) {
+    fn update_bounds_on_overflow(
+        value: OrderedFloat<f64>,
+        lower_bound: &mut OrderedFloat<f64>,
+        upper_bound: &mut OrderedFloat<f64>,
+    ) {
         if value < *lower_bound {
             *lower_bound = value;
         }
@@ -262,7 +276,8 @@ impl TDigest {
         let mut compressed: Vec<Centroid> = Vec::with_capacity(self.max_size);
 
         let mut k_limit: f64 = 1.0;
-        let mut q_limit_times_count: f64 = Self::k_to_q(k_limit, self.max_size as f64) * result.count as f64;
+        let mut q_limit_times_count: f64 =
+            Self::k_to_q(k_limit, self.max_size as f64) * result.count as f64;
         k_limit += 1.0;
 
         let mut iter_centroids = self.centroids.iter().peekable();
@@ -286,7 +301,9 @@ impl TDigest {
 
         while iter_centroids.peek().is_some() || iter_sorted_values.peek().is_some() {
             let next: Centroid = if let Some(c) = iter_centroids.peek() {
-                if iter_sorted_values.peek().is_none() || c.mean() < **iter_sorted_values.peek().unwrap() {
+                if iter_sorted_values.peek().is_none()
+                    || c.mean() < **iter_sorted_values.peek().unwrap()
+                {
                     iter_centroids.next().unwrap().clone()
                 } else {
                     Centroid::new(*iter_sorted_values.next().unwrap(), 1)
@@ -302,19 +319,23 @@ impl TDigest {
                 sums_to_merge += next_sum;
                 weights_to_merge += next.weight();
             } else {
-                result.sum = OrderedFloat::from(result.sum.into_inner() + curr.add(sums_to_merge, weights_to_merge));
+                result.sum = OrderedFloat::from(
+                    result.sum.into_inner() + curr.add(sums_to_merge, weights_to_merge),
+                );
                 sums_to_merge = 0.0;
                 weights_to_merge = 0;
                 TDigest::update_bounds_on_overflow(curr.mean, &mut result.min, &mut result.max);
 
                 compressed.push(curr.clone());
-                q_limit_times_count = Self::k_to_q(k_limit, self.max_size as f64) * result.count() as f64;
+                q_limit_times_count =
+                    Self::k_to_q(k_limit, self.max_size as f64) * result.count() as f64;
                 k_limit += 1.0;
                 curr = next;
             }
         }
 
-        result.sum = OrderedFloat::from(result.sum.into_inner() + curr.add(sums_to_merge, weights_to_merge));
+        result.sum =
+            OrderedFloat::from(result.sum.into_inner() + curr.add(sums_to_merge, weights_to_merge));
         TDigest::update_bounds_on_overflow(curr.mean, &mut result.min, &mut result.max);
         compressed.push(curr);
         compressed.shrink_to_fit();
@@ -435,7 +456,9 @@ impl TDigest {
                 sums_to_merge += centroid.mean() * centroid.weight() as f64;
                 weights_to_merge += centroid.weight();
             } else {
-                result.sum = OrderedFloat::from(result.sum.into_inner() + curr.add(sums_to_merge, weights_to_merge));
+                result.sum = OrderedFloat::from(
+                    result.sum.into_inner() + curr.add(sums_to_merge, weights_to_merge),
+                );
                 sums_to_merge = 0.0;
                 weights_to_merge = 0;
                 TDigest::update_bounds_on_overflow(curr.mean, &mut min, &mut max);
@@ -446,7 +469,8 @@ impl TDigest {
             }
         }
 
-        result.sum = OrderedFloat::from(result.sum.into_inner() + curr.add(sums_to_merge, weights_to_merge));
+        result.sum =
+            OrderedFloat::from(result.sum.into_inner() + curr.add(sums_to_merge, weights_to_merge));
         TDigest::update_bounds_on_overflow(curr.mean, &mut min, &mut max);
         compressed.push(curr.clone());
         compressed.shrink_to_fit();
@@ -490,11 +514,17 @@ impl TDigest {
             accum_weight += low_weight;
         }
 
-        let weighted_midpoint = low_bound + (hi_bound - low_bound) * low_weight as f64 / (low_weight + hi_weight) as f64;
+        let weighted_midpoint = low_bound
+            + (hi_bound - low_bound) * low_weight as f64 / (low_weight + hi_weight) as f64;
         if v > weighted_midpoint {
-            (accum_weight as f64 + (v - weighted_midpoint) / (hi_bound - weighted_midpoint) * hi_weight as f64 / 2.0) / self.count as f64
+            (accum_weight as f64
+                + (v - weighted_midpoint) / (hi_bound - weighted_midpoint) * hi_weight as f64 / 2.0)
+                / self.count as f64
         } else {
-            (accum_weight as f64 - (weighted_midpoint - v) / (weighted_midpoint - low_bound) * low_weight as f64 / 2.0) / self.count as f64
+            (accum_weight as f64
+                - (weighted_midpoint - v) / (weighted_midpoint - low_bound) * low_weight as f64
+                    / 2.0)
+                / self.count as f64
         }
     }
 
@@ -551,19 +581,47 @@ impl TDigest {
             self.centroids[pos].mean()
         } else if centroid_weight < 0.5 {
             let weighted_lower_bound = if pos == 0 {
-                weighted_average(self.min(), 0, self.centroids[pos].mean(), self.centroids[pos].weight())
+                weighted_average(
+                    self.min(),
+                    0,
+                    self.centroids[pos].mean(),
+                    self.centroids[pos].weight(),
+                )
             } else {
-                weighted_average(self.centroids[pos - 1].mean(), self.centroids[pos - 1].weight(), self.centroids[pos].mean(), self.centroids[pos].weight())
+                weighted_average(
+                    self.centroids[pos - 1].mean(),
+                    self.centroids[pos - 1].weight(),
+                    self.centroids[pos].mean(),
+                    self.centroids[pos].weight(),
+                )
             };
 
-            interpolate(weighted_lower_bound, self.centroids[pos].mean(), centroid_weight * 2.0)
+            interpolate(
+                weighted_lower_bound,
+                self.centroids[pos].mean(),
+                centroid_weight * 2.0,
+            )
         } else {
-            let weighted_upper_bound =  if pos == self.centroids.len() - 1 {
-                weighted_average(self.centroids[pos].mean(), self.centroids[pos].weight(), self.max(), 0)
+            let weighted_upper_bound = if pos == self.centroids.len() - 1 {
+                weighted_average(
+                    self.centroids[pos].mean(),
+                    self.centroids[pos].weight(),
+                    self.max(),
+                    0,
+                )
             } else {
-                weighted_average(self.centroids[pos].mean(), self.centroids[pos].weight(), self.centroids[pos + 1].mean(), self.centroids[pos + 1].weight())
+                weighted_average(
+                    self.centroids[pos].mean(),
+                    self.centroids[pos].weight(),
+                    self.centroids[pos + 1].mean(),
+                    self.centroids[pos + 1].weight(),
+                )
             };
-            interpolate(self.centroids[pos].mean(), weighted_upper_bound, (centroid_weight - 0.5) * 2.0)
+            interpolate(
+                self.centroids[pos].mean(),
+                weighted_upper_bound,
+                (centroid_weight - 0.5) * 2.0,
+            )
         };
 
         // Helper functions for quantile calculation
@@ -793,7 +851,7 @@ mod tests {
     #[test]
     fn test_quantile_and_value_estimates() {
         let t = TDigest::new_with_size(100);
-        let values: Vec<f64> = (1..=10000).map(|v| f64::from(v)/100.0).collect();
+        let values: Vec<f64> = (1..=10000).map(|v| f64::from(v) / 100.0).collect();
 
         let t = t.merge_sorted(values);
 
@@ -805,9 +863,23 @@ mod tests {
             let test_quant = t.estimate_quantile_at_value(value);
 
             let percentage = (test_value - value).abs() / value;
-            assert!(percentage < 0.01, "Exceeded 1% error on quantile {}: expected {}, received {} (error% {})", quantile, value, test_value, (test_value - value).abs() / value * 100.0);
+            assert!(
+                percentage < 0.01,
+                "Exceeded 1% error on quantile {}: expected {}, received {} (error% {})",
+                quantile,
+                value,
+                test_value,
+                (test_value - value).abs() / value * 100.0
+            );
             let percentage = (test_quant - quantile).abs() / quantile;
-            assert!(percentage < 0.01, "Exceeded 1% error on quantile at value {}: expected {}, received {} (error% {})", value, quantile, test_quant, (test_quant - quantile).abs() / quantile * 100.0);
+            assert!(
+                percentage < 0.01,
+                "Exceeded 1% error on quantile at value {}: expected {}, received {} (error% {})",
+                value,
+                quantile,
+                test_quant,
+                (test_quant - quantile).abs() / quantile * 100.0
+            );
 
             let test = t.estimate_quantile_at_value(t.estimate_quantile(quantile));
             let percentage = (test - quantile).abs() / quantile;
@@ -845,23 +917,51 @@ mod tests {
     }
 
     #[quickcheck]
-    fn fuzzing_test(batch1: HashSet<OrderedF64>, batch2: HashSet<OrderedF64>, batch3: HashSet<OrderedF64>, batch4: HashSet<OrderedF64>) -> TestResult {
-        let batch1: Vec<f64> = batch1.into_iter().map(|x|x.0.into()).filter(|x:&f64|!x.is_nan()).collect();
-        let batch2: Vec<f64> = batch2.into_iter().map(|x|x.0.into()).filter(|x:&f64|!x.is_nan()).collect();
-        let batch3: Vec<f64> = batch3.into_iter().map(|x|x.0.into()).filter(|x:&f64|!x.is_nan()).collect();
-        let batch4: Vec<f64> = batch4.into_iter().map(|x|x.0.into()).filter(|x:&f64|!x.is_nan()).collect();
+    fn fuzzing_test(
+        batch1: HashSet<OrderedF64>,
+        batch2: HashSet<OrderedF64>,
+        batch3: HashSet<OrderedF64>,
+        batch4: HashSet<OrderedF64>,
+    ) -> TestResult {
+        let batch1: Vec<f64> = batch1
+            .into_iter()
+            .map(|x| x.0.into())
+            .filter(|x: &f64| !x.is_nan())
+            .collect();
+        let batch2: Vec<f64> = batch2
+            .into_iter()
+            .map(|x| x.0.into())
+            .filter(|x: &f64| !x.is_nan())
+            .collect();
+        let batch3: Vec<f64> = batch3
+            .into_iter()
+            .map(|x| x.0.into())
+            .filter(|x: &f64| !x.is_nan())
+            .collect();
+        let batch4: Vec<f64> = batch4
+            .into_iter()
+            .map(|x| x.0.into())
+            .filter(|x: &f64| !x.is_nan())
+            .collect();
         let digest1 = TDigest::new_with_size(20).merge_unsorted(batch1.clone());
         let digest1 = digest1.merge_unsorted(batch2.clone());
         let digest2 = TDigest::new_with_size(20).merge_unsorted(batch3.clone());
-        let digest2 =  digest2.merge_unsorted(batch4.clone());
+        let digest2 = digest2.merge_unsorted(batch4.clone());
 
-        let digest = TDigest::merge_digests(vec!(digest1, digest2));
+        let digest = TDigest::merge_digests(vec![digest1, digest2]);
 
-        let quantile_tests = vec!(0.01, 0.1, 0.25, 0.5, 0.6, 0.8, 0.95);
-        let tolerated_percentile_error = vec!(0.010001, 0.100001, 0.2, 0.30, 0.275, 0.1725, 0.050001);  // .000001 cases are to handle rounding errors on cases that might return infinities
+        let quantile_tests = vec![0.01, 0.1, 0.25, 0.5, 0.6, 0.8, 0.95];
+        let tolerated_percentile_error =
+            vec![0.010001, 0.100001, 0.2, 0.30, 0.275, 0.1725, 0.050001]; // .000001 cases are to handle rounding errors on cases that might return infinities
 
-        let mut master: Vec<f64> = batch1.iter().chain(batch2.iter()).chain(batch3.iter()).chain(batch4.iter()).map(|x| *x).collect();
-        master.sort_by(|a,b| a.partial_cmp(b).unwrap());
+        let mut master: Vec<f64> = batch1
+            .iter()
+            .chain(batch2.iter())
+            .chain(batch3.iter())
+            .chain(batch4.iter())
+            .map(|x| *x)
+            .collect();
+        master.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
         if master.len() < 100 {
             return TestResult::discard();
@@ -876,7 +976,9 @@ mod tests {
             let target_allowed_error = master.len() as f64 * error_bound;
             let mut test_idx = 0;
             if test_val != f64::INFINITY {
-                while test_idx < master.len() && master[test_idx] < test_val { test_idx += 1; }
+                while test_idx < master.len() && master[test_idx] < test_val {
+                    test_idx += 1;
+                }
             } else {
                 // inequality checking against infinity is wonky
                 test_idx = master.len();

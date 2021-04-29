@@ -302,7 +302,7 @@ SELECT timescale_analytics_experimental.quantile(
 ```output
            quantile
 --------------------
-  89.13032933635797
+  90.93094205022494
 ```
 
 ---

@@ -9,4 +9,7 @@ edition = "2018"
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
+ordered-float = {version = "1.0", features = ["serde"] }
 rand = "0.8.3"
+quickcheck = "1"
+quickcheck_macros = "1"

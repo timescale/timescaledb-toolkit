@@ -47,7 +47,7 @@ jobs:
       run: sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo test --workspace --features 'pg12 pg_test'"
 
     - name: Run Doc Tests
-      run: sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg12 && /usr/local/cargo/bin/cargo pgx start pg12 && cd extension && /usr/local/cargo/bin/cargo pgx run pg12" && sql-doctester -h localhost -s 'CREATE EXTENSION timescaledb; CREATE EXTENSION timescale_analytics' -p 28812 docs
+      run: sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg12 && /usr/local/cargo/bin/cargo pgx start pg12 && cd extension && /usr/local/cargo/bin/cargo pgx run pg12" && sql-doctester -h localhost -s "CREATE EXTENSION timescaledb; CREATE EXTENSION timescale_analytics; SET SESSION TIMEZONE TO 'UTC'" -p 28812 docs
 
 
   test13:
@@ -89,4 +89,4 @@ jobs:
       run: sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo test --workspace --features 'pg13 pg_test'"
 
     - name: Run Doc Tests
-      run: sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg13 && /usr/local/cargo/bin/cargo pgx start pg13 && cd extension && /usr/local/cargo/bin/cargo pgx run pg13" && sql-doctester -h localhost -s 'CREATE EXTENSION timescaledb; CREATE EXTENSION timescale_analytics' -p 28813 docs
+      run: sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg13 && /usr/local/cargo/bin/cargo pgx start pg13 && cd extension && /usr/local/cargo/bin/cargo pgx run pg13" && sql-doctester -h localhost -s "CREATE EXTENSION timescaledb; CREATE EXTENSION timescale_analytics; SET SESSION TIMEZONE TO 'UTC'" -p 28813 docs

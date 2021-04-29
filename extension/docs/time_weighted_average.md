@@ -17,90 +17,155 @@ Additionally, [see the notes on parallelism and ordering](#time-weight-ordering)
 
 ---
 ## Example Usage <a id="time-weighted-average-examples"></a>
-For these examples we'll assume a table `foo` defined as follows:
-```SQL ,ignore
-CREATE TABLE foo (
+For these examples we'll assume a table `foo` defined as follows, with a bit of example data:
+
+
+```SQL ,non-transactional
+ CREATE TABLE foo (
     measure_id      BIGINT,
     ts              TIMESTAMPTZ ,
     val             DOUBLE PRECISION,
     PRIMARY KEY (measure_id, ts)
 );
-
+INSERT INTO foo VALUES 
+( 1, '2020-01-01 00:00:00+00', 10.0), 
+( 1, '2020-01-01 00:01:00+00', 20.0), 
+( 1, '2020-01-01 00:02:00+00',10.0), 
+( 1, '2020-01-01 00:03:00+00', 20.0), 
+( 1, '2020-01-01 00:04:00+00', 15.0), 
+( 2, '2020-01-01 00:00:00+00', 10.0), 
+( 2, '2020-01-01 00:01:00+00', 20.0), 
+( 2, '2020-01-01 00:02:00+00',10.0), 
+( 2, '2020-01-01 00:03:00+00', 20.0), 
+( 2, '2020-01-01 00:04:00+00', 10.0), 
+( 2, '2020-01-01 00:08:00+00', 10.0), 
+( 2, '2020-01-01 00:10:00+00', 30.0), 
+( 2, '2020-01-01 00:10:30+00',10.0), 
+( 2, '2020-01-01 00:16:30+00', 35.0), 
+( 2, '2020-01-01 00:30:00+00', 60.0); 
+```
+```output
+INSERT 0 15
 ```
 Where the measure_id defines a series of related points. A simple use would be to calculate the time weighted average over the whole set of points for each `measure_id`. We'll use the LOCF method for weighting:
 
-```SQL ,ignore
+```SQL 
 SELECT measure_id,
     timescale_analytics_experimental.average(
         timescale_analytics_experimental.time_weight('LOCF', ts, val)
     )
 FROM foo
-GROUP BY measure_id;
+GROUP BY measure_id
+ORDER BY measure_id;
+```
+```output
+ measure_id | average 
+------------+---------
+          1 |      15
+          2 |   22.25
 ```
 (And of course a where clause can be used to limit the time period we are averaging, the measures we're using etc.).
 
 
 We can also use the [`time_bucket` function](https://docs.timescale.com/latest/api#time_bucket) to produce a series averages in 15 minute buckets:
-```SQL ,ignore
+```SQL
 SELECT measure_id,
-    time_bucket('15 min'::interval, ts) as bucket,
+    time_bucket('5 min'::interval, ts) as bucket,
     timescale_analytics_experimental.average(
         timescale_analytics_experimental.time_weight('LOCF', ts, val)
     )
 FROM foo
-GROUP BY measure_id, time_bucket('15 min'::interval, ts);
+GROUP BY measure_id, time_bucket('5 min'::interval, ts) 
+ORDER BY measure_id, time_bucket('5 min'::interval, ts);
 ```
+```output
+ measure_id |         bucket         | average 
+------------+------------------------+---------
+          1 | 2020-01-01 00:00:00+00 |      15
+          2 | 2020-01-01 00:00:00+00 |      15
+          2 | 2020-01-01 00:05:00+00 |        
+          2 | 2020-01-01 00:10:00+00 |      30
+          2 | 2020-01-01 00:15:00+00 |        
+          2 | 2020-01-01 00:30:00+00 |        
+```
+Note that in this case, there are several `time_buckets` that have only a single value, these return `NULL` as the average as we cannot take a time weighted average with only a single point in a bucket and no information about points outside the bucket. In many cases we'll have significantly more data here, but for the example we wanted to keep our data set small. 
+
 
 Of course this might be more useful if we make a continuous aggregate out of it. We'll first have to make it a hypertable partitioned on the ts column, with a relatively large chunk_time_interval because the data isn't too high rate:
 
-```SQL ,ignore
+```SQL ,non-transactional,ignore-output
 SELECT create_hypertable('foo', 'ts', chunk_time_interval=> '15 days'::interval, migrate_data => true);
 ```
 
 Now we can make our continuous aggregate:
 
-```SQL ,ignore
-CREATE MATERIALIZED VIEW foo_15
+```SQL ,non-transactional, ignore-output
+CREATE MATERIALIZED VIEW foo_5
 WITH (timescaledb.continuous)
 AS SELECT measure_id,
-    time_bucket('15 min'::interval, ts) as bucket,
+    time_bucket('5 min'::interval, ts) as bucket,
     timescale_analytics_experimental.time_weight('LOCF', ts, val)
 FROM foo
-GROUP BY measure_id, time_bucket('15 min'::interval, ts);
+GROUP BY measure_id, time_bucket('5 min'::interval, ts);
 ```
 
+
 Note that here, we just use the `time_weight` function. It's often better to do that and simply run the `average` function when selecting from the view like so:
-```SQL ,ignore
+```SQL 
 SELECT
     measure_id,
     bucket,
     timescale_analytics_experimental.average(time_weight)
-FROM foo_15
+FROM foo_5
+ORDER BY measure_id, bucket;
 ```
+```output
+ measure_id |         bucket         | average 
+------------+------------------------+---------
+          1 | 2020-01-01 00:00:00+00 |      15
+          2 | 2020-01-01 00:00:00+00 |      15
+          2 | 2020-01-01 00:05:00+00 |        
+          2 | 2020-01-01 00:10:00+00 |      30
+          2 | 2020-01-01 00:15:00+00 |        
+          2 | 2020-01-01 00:30:00+00 |        
+```
+And we get the same results as before. It also allows us to re-aggregate from the continuous aggregate into a larger bucket size quite simply:
 
-It also allows us to re-aggregate from the continuous aggregate into a larger bucket size quite simply:
-
-```SQL ,ignore
+```SQL 
 SELECT
     measure_id,
     time_bucket('1 day'::interval, bucket),
     timescale_analytics_experimental.average(
             timescale_analytics_experimental.time_weight(time_weight)
     )
-FROM foo_15
-GROUP BY measure_id, time_bucket('1 day'::interval, bucket);
+FROM foo_5
+GROUP BY measure_id, time_bucket('1 day'::interval, bucket)
+ORDER BY measure_id, time_bucket('1 day'::interval, bucket);
+```
+```output
+ measure_id |      time_bucket       | average 
+------------+------------------------+---------
+          1 | 2020-01-01 00:00:00+00 |      15
+          2 | 2020-01-01 00:00:00+00 |   22.25
 ```
 
-We can also use this to speed up our initial calculation where we're only grouping by measure_id and producing a full average (assuming we have a fair number of points per 15 minute period):
+We can also use this to speed up our initial calculation where we're only grouping by measure_id and producing a full average (assuming we have a fair number of points per 5 minute period, here it's not going to do much because of our limited example data, but you get the gist):
 
-```SQL ,ignore
+```SQL 
 SELECT
     measure_id,
     timescale_analytics_experimental.average(
         timescale_analytics_experimental.time_weight(time_weight)
     )
-FROM foo_15
+FROM foo_5
 GROUP BY measure_id
+ORDER BY measure_id;
+```
+```output
+ measure_id | average 
+------------+---------
+          1 |      15
+          2 |   22.25
 ```
 ---
 
@@ -140,13 +205,13 @@ An aggregate that produces a `TimeWeightSummary` from timestamps and associated 
 <br>
 
 ### Sample Usage
-```SQL ,ignore
+```SQL ,ignore-output
 WITH t as (
     SELECT
         time_bucket('1 day'::interval, ts) as dt,
         timescale_analytics_experimental.time_weight('Linear', ts, val) AS tw -- get a time weight summary
     FROM foo
-    WHERE id = 'bar'
+    WHERE measure_id = 10
     GROUP BY time_bucket('1 day'::interval, ts)
 )
 SELECT
@@ -177,14 +242,14 @@ An aggregate to compute a combined `TimeWeightSummary` from a series of non-over
 <br>
 
 ### Sample Usage
-```SQL ,ignore
+```SQL ,ignore-output
 WITH t as (
     SELECT
         date_trunc('day', ts) as dt,
         timescale_analytics_experimental.time_weight('Linear', ts, val) AS tw -- get a time weight summary
     FROM foo
-    WHERE id = 'bar'
-    GROUP BY date_trunc('day')
+    WHERE measure_id = 10
+    GROUP BY date_trunc('day', ts)
 ), q as (
     SELECT timescale_analytics_experimental.time_weight(tw) AS full_tw -- do a second level of aggregation to get the full time weighted average
     FROM t
@@ -238,7 +303,7 @@ The time weighted average calculations we perform require a strict ordering of i
 
 We throw an error if there is an attempt to combine overlapping `TimeWeightSummaries`, for instance, in our example above, if you were to try to combine summaries across `measure_id`s it would error. This is because the interpolation techniques really only make sense within a given time series determined by a single `measure_id`. However, given that the time weighted average produced is a dimensionless quantity, a simple average of time weighted average should better represent the variation across devices, so the recommendation for things like baselines across many timeseries would be something like:
 
-```SQL ,ignore
+```SQL ,ignore-output
 WITH t as (SELECT measure_id,
         timescale_analytics_experimental.average(
             timescale_analytics_experimental.time_weight('LOCF', ts, val)
@@ -253,7 +318,7 @@ Internally, the first and last points seen as well as the calculated weighted su
 
 Because they require ordered sets, the aggregates build up a buffer of input data, sort it and then perform the proper aggregation steps. In cases where memory is proving to be too small to build up a buffer of points causing OOMs or other issues, a multi-level aggregate can be useful. Following our example from above:
 
-```SQL ,ignore
+```SQL ,ignore-output
 WITH t as (SELECT measure_id,
     time_bucket('1 day'::interval, ts),
     timescale_analytics_experimental.time_weight('LOCF', ts, val)

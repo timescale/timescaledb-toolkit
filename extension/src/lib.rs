@@ -9,6 +9,7 @@ pub mod asap;
 pub mod lttb;
 pub mod counter_agg;
 pub mod range;
+pub mod utilities;
 
 mod palloc;
 mod aggregate_utils;

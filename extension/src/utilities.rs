@@ -1,0 +1,63 @@
+use pgx::*;
+use pg_sys::{TimestampTz};
+
+#[pg_extern(schema = "timescale_analytics_experimental")]
+pub fn generate_periodic_normal_series(
+    series_start: pg_sys::TimestampTz,
+    series_len: Option<i64>, //pg_sys::Interval,
+    sample_interval: Option<i64>, //pg_sys::Interval,
+    base_value: Option<f64>,
+    period: Option<i64>, //pg_sys::Interval,
+    periodic_magnitude: Option<f64>,
+    standard_deviation: Option<f64>,
+    rng_seed: Option<i64>,
+) -> impl std::iter::Iterator<Item = (name!(time,TimestampTz),name!(value,f64))> + 'static {
+    // Convenience consts to make defaults more readable
+    const SECOND: i64 = 1000000;
+    const MIN: i64 = 60 * SECOND;
+    const HOUR: i64 = 60 * MIN;
+    const DAY: i64 = 24 * HOUR;
+
+    // TODO: exposing defaults in the PG function definition would be much nicer
+    let series_len = match series_len {
+        Some(v) => v,
+        None => 28 * DAY
+    };
+    let sample_interval = match sample_interval {
+        Some(v) => v,
+        None => 10 * MIN
+    };
+    let base_value = match base_value {
+        Some(v) => v,
+        None => 1000.0
+    };
+    let period = match period {
+        Some(v) => v,
+        None => 1 * DAY
+    };
+    let periodic_magnitude = match periodic_magnitude {
+        Some(v) => v,
+        None => 100.0
+    };
+    let standard_deviation = match standard_deviation {
+        Some(v) => v,
+        None => 100.0
+    };
+    let rng_seed = match rng_seed {
+        Some(v) => v as u64,
+        None => 0  // TODO, random seed if not specified
+    };
+
+    use rand_distr::Distribution;
+    use rand::SeedableRng;
+
+    let distribution = rand_distr::Normal::new(0.0, standard_deviation).unwrap();
+    let mut rng = rand::rngs::StdRng::seed_from_u64(rng_seed);
+    
+    (0..series_len).step_by(sample_interval as usize).map(move |accum| {
+        let time = series_start + accum;
+        let base = base_value + f64::sin(accum as f64 / (2.0 * std::f64::consts::PI * period as f64)) * periodic_magnitude;
+        let error = distribution.sample(&mut rng);
+        (time, base + error)
+    })
+}

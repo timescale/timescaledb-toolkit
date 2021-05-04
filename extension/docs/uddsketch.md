@@ -3,6 +3,7 @@
 > [Description](#uddsketch-description)<br>
 > [Details](#uddsketch-details)<br>
 > [Example](#uddsketch-example)<br>
+> [Example in a Continuous Aggregates](#uddsketch-cagg-example)<br>
 > [API](#uddsketch-api)
 
 ## Description <a id="uddsketch-description"></a>
@@ -111,7 +112,59 @@ FROM daily_rain;
 (4 rows)
 ```
 
+## Example Using TimeScale Continuous Aggregates (uddsketch-cagg-example)
+To have a UddSketch over a PostgresQL table which automatically updates as more data is added, we can make use of continuous aggregates.  First, let us create a simple hypertable:
+
+```SQL ,non-transactional,ignore-output
+SET TIME ZONE 'UTC';
+CREATE TABLE test(time TIMESTAMPTZ, value DOUBLE PRECISION);
+SELECT create_hypertable('test', 'time');
+```
+
+Now we'll create a continuous aggregate which will group all the points for each week into a UddSketch:
+```SQL ,non-transactional,ignore-output
+CREATE MATERIALIZED VIEW weekly_sketch
+WITH (timescaledb.continuous)
+AS SELECT
+    time_bucket('7 day'::interval, time) as week,
+    timescale_analytics_experimental.uddsketch(100, 0.005, value)
+FROM test
+GROUP BY time_bucket('7 day'::interval, time);
+```
+
+Next we'll use one of our utility functions, `generate_periodic_normal_series`, to add some data to the table.  Using default arguments, this function will add 28 days of data points at 10 minute intervals.
+```SQL ,non-transactional
+INSERT INTO test
+    SELECT time, value
+    FROM timescale_analytics_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, NULL, NULL, NULL, NULL, NULL, NULL, rng_seed => 12345678); 
+```
+```
+INSERT 0 4032
+```
+
+Finally, we can query the aggregate to see various approximate percentiles from different weeks.
+```SQL
+SELECT 
+    week,
+    timescale_analytics_experimental.error(uddsketch), 
+    timescale_analytics_experimental.quantile(uddsketch, 0.01) AS low, 
+    timescale_analytics_experimental.quantile(uddsketch, 0.5) AS mid, 
+    timescale_analytics_experimental.quantile(uddsketch, 0.99) AS high 
+FROM weekly_sketch
+ORDER BY week;
+```
+```output
+          week          | error |        low        |        mid         |        high        
+------------------------+-------+-------------------+--------------------+--------------------
+ 2019-12-30 00:00:00+00 | 0.005 | 808.3889305072331 |  1037.994095858188 | 1280.5527834239035
+ 2020-01-06 00:00:00+00 | 0.005 | 858.3773394302965 |  1091.213645863754 | 1306.4218833642865
+ 2020-01-13 00:00:00+00 | 0.005 | 816.5134423716273 | 1058.9631440308738 | 1293.4226606442442
+ 2020-01-20 00:00:00+00 | 0.005 | 731.4599430896668 |   958.188678537264 | 1205.9785918127336
+ 2020-01-27 00:00:00+00 | 0.005 | 688.8626877028054 |  911.4568854686239 | 1135.7472981488002
+```
+
 ## Command List (A-Z) <a id="uddsketch-api"></a>
+>>>>>>> d1d4e2e... Adding continuous aggregate example to UddSketch documentation.
 > - [uddsketch](#uddsketch)
 > - [uddsketch_count](#uddsketch_count)
 > - [uddsketch_error](#uddsketch_error)

@@ -415,19 +415,23 @@ impl UDDSketch {
 
     // This relative error isn't bounded by alpha, what is the bound?
     pub fn estimate_quantile_at_value(&self, value: f64) -> f64 {
-        let mut count = 0;
+        let mut count = 0.0;
         let target = self.key(value);
 
         for entry in self.buckets.iter() {
             let (key, value) = entry;
             if target > key {
-                count += value;
+                count += value as f64;
             } else {
-                return (count as f64 + value as f64 / 2.0) / self.num_values as f64;
+                if target == key {
+                    // If the value falls in the target bucket, assume it's greater than half the other values
+                    count += value as f64 / 2.0;
+                }
+                return count / self.num_values as f64;
             }
         }
 
-        unreachable!();
+        1.0 // Greater than anything in the sketch
     }
 }
 
@@ -584,6 +588,21 @@ mod tests {
         }
 
         assert!((sketch.mean() - 50.005).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_extreme_quantile_at_value() {
+        let mut sketch = UDDSketch::new(50, 0.1);
+        for v in 1..=10000 {
+            sketch.add_value(v as f64 / 100.0);
+        }
+
+        assert_eq!(sketch.estimate_quantile_at_value(-100.0), 0.0);
+        assert_eq!(sketch.estimate_quantile_at_value(0.0), 0.0);
+        assert_eq!(sketch.estimate_quantile_at_value(0.0001), 0.0);
+        assert_eq!(sketch.estimate_quantile_at_value(1000.0), 1.0);
+        assert!(sketch.estimate_quantile_at_value(0.01) < 0.0001);
+        assert!(sketch.estimate_quantile_at_value(100.0) > 0.9);
     }
 
     #[test]

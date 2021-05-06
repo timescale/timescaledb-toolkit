@@ -31,6 +31,8 @@ hop on the [Discussions forum](https://github.com/timescale/timescale-analytics/
 
 ### 🔨 Building ###
 
+Building the extension requires a valid rust install see [the website](https://www.rust-lang.org/tools/install) for instructions.
+
 The extension is built using a [fork](https://github.com/JLockerman/pgx/tree/timescale)
 of [pgx](https://github.com/zombodb/pgx). To install pgx use
 

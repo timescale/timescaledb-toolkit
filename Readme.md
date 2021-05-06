@@ -38,7 +38,11 @@ of [pgx](https://github.com/zombodb/pgx). To install pgx use
 cargo install --git https://github.com/JLockerman/pgx.git --branch timescale cargo-pgx && cargo pgx init
 ```
 
-Once you have `pgx` installed, you can run tests against a postgres version
+Once you have `pgx` installed, clone this repo and swich into the extension directory, e.g
+```bash
+cd timescale_analytics/extension
+```
+you can run tests against a postgres version
 `pg12`, or `pg13` using
 
 ```

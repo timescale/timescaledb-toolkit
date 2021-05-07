@@ -136,7 +136,7 @@ Next we'll use one of our utility functions, `generate_periodic_normal_series`, 
 ```SQL ,non-transactional
 INSERT INTO test
     SELECT time, value
-    FROM generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, NULL, NULL, NULL, NULL, NULL, NULL, rng_seed => 12345678); 
+    FROM timescale_analytics_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, NULL, NULL, NULL, NULL, NULL, NULL, rng_seed => 12345678); 
 ```
 ```
 INSERT 0 4032
@@ -205,7 +205,7 @@ This will construct and return a new UddSketch with at most `size` buckets.  The
 <br>
 
 ### Sample Usages <a id="uddsketch-examples"></a>
-For this examples assume we have a table 'samples' with a column 'weights' holding `DOUBLE PRECISION` values.  The following will simply return a sketch over that column
+For this examples assume we have a table 'samples' with a column 'data' holding `DOUBLE PRECISION` values.  The following will simply return a sketch over that column
 
 ```SQL ,ignore
 SELECT uddsketch(100, 0.01, data) FROM samples;
@@ -218,12 +218,47 @@ CREATE VIEW sketch AS
     SELECT uddsketch(100, 0.01, data)
     FROM samples;
 ```
+---
 
-## **uddsketch (summary form) ** <a id="uddsketch-summary"></a>
+## **uddsketch (summary form)** <a id="uddsketch-summary"></a>
 ```SQL ,ignore
 uddsketch(
     sketch uddsketch
 ) RETURNS UddSketch
+```
+
+This will combine multiple already constructed UddSketches, they must have the same size in order to be combined. This is very useful for re-aggregating already constructed uddsketches using the [point form](#uddsketch-point).
+
+### Required Arguments <a id="uddsketch-summary-required-arguments"></a>
+|Name| Type |Description|
+|---|---|---|
+| `sketch` | `UddSketch` | The already constructed uddsketch from a previous [uddsketch() (point form)](#uddsketch-point) call. |
+<br>
+
+### Returns
+
+|Column|Type|Description|
+|---|---|---|
+| `uddsketch` | `UddSketch` | A UddSketch object which may be passed to other UddSketch APIs. |
+<br>
+
+### Sample Usages <a id="uddsketch-examples"></a>
+For this examples assume we have a table 'samples' with a column 'data' holding `DOUBLE PRECISION` values, and an 'id' column that holds the what series the data belongs to, we can create a view to get the UddSketches for each `id` using the [point form](#uddsketch-point) like so:
+
+```SQL ,ignore
+CREATE VIEW sketch AS
+    SELECT 
+        id, 
+        uddsketch(100, 0.01, data) as sketched
+    FROM samples
+    GROUP BY id;
+```
+
+Then we can use that view to get the full aggregate like so: 
+
+```SQL ,ignore
+SELECT uddsketch(sketched)
+FROM sketch;
 ```
 
 ---
@@ -335,9 +370,9 @@ SELECT num_vals(
 
 ```SQL ,ignore
 approx_percentile(
-    approx_percentile DOUBLE PRECISION, 
+    percentile DOUBLE PRECISION, 
     sketch  uddsketch
-) RETURNS UddSketch
+) RETURNS DOUBLE PRECISION
 ```
 
 Get the approximate value at a percentile from a UddSketch.
@@ -345,7 +380,7 @@ Get the approximate value at a percentile from a UddSketch.
 ### Required Arguments <a id="approx_percentile-required-arguments"></a>
 |Name|Type|Description|
 |---|---|---|
-| `approx_percentile` | `DOUBLE PRECISION` | The desired percentile (0.0-1.0) to approximate. |
+| `percentile` | `DOUBLE PRECISION` | The desired percentile (0.0-1.0) to approximate. |
 | `sketch` | `UddSketch` | The sketch to compute the approx_percentile on. |
 <br>
 
@@ -359,8 +394,8 @@ Get the approximate value at a percentile from a UddSketch.
 
 ```SQL
 SELECT approx_percentile(
-    0.90
-    uddsketch(100, 0.01, data),
+    0.90,
+    uddsketch(100, 0.01, data)
 ) FROM generate_series(1, 100) data;
 ```
 ```output

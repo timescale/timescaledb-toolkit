@@ -64,7 +64,7 @@ SELECT
     approx_percentile(0.9, val) as p90 
 FROM foo;
 ```
-the optimizer would be forced to do the exact same calculation three times over rather than one calculation and just extract what we need at the end.
+the optimizer would be forced to build up the necessary internal state three times rather than just once.
 
 This is even more apparent when you want to use multiple accessor functions, which may have different numbers or types of inputs:
 
@@ -80,7 +80,7 @@ FROM foo;
 The optimizer can easily optimize away the redundant `percentile_agg(val)` calls, but would have much more trouble in the one-step approach.
 
 ### Explicit association of parameters with either the aggregation or access step <a id="philosophy-explicit-association"></a>
-This leads us to our second benefit of the two-step approach, namely that a number of our accessor functions (both completed and planned) take inputs that don't affect how we aggregate the underlying data, but do affect how we extract data from the computed aggregate, if we combine everything into one function, it makes it less clear which is which. 
+This leads us to our second benefit of the two-step approach. A number of our accessor functions (both completed and planned) take inputs that don't affect how we aggregate the underlying data, but do affect how we extract data from the computed aggregate. If we combine everything into one function, it makes it less clear which is which. 
 
 Now, our `percentile_agg` implementation uses the `uddsketch` algorithm under the hood and has some default values for parameters, namely the number of buckets it stores and the target error, but there are cases where we might want to use the full algorithm with custom parameters like so: 
 ```SQL , ignore
@@ -90,9 +90,9 @@ SELECT
     approx_percentile(0.5, uddsketch(100, 0.01, val)) as less_accurate_median -- modify the terms for the aggregate get a new approximation
 FROM foo;
 ```
-Here we can see that the parameters for the `uddsketch` aggregate (the number of buckets and the target error) affect the aggregate, whereas the argument to `approx_percentile` (the approx_percentile we want to extract) only affects what we are choosing to extract from the underlying aggregate. The optimizer will correctly combine the calls for the first two but not for the third. It is also more clear to the user what is going on, and that I can't set my target error at read time, but rather only at calculation time (this is especially helpful for understanding the behavior [continuous aggregates](https://docs.timescale.com/latest/using-timescaledb/continuous-aggregates)). 
+Here we can see which parameters are for the `uddsketch` aggregate (the number of buckets and the target error), and which arguments are for`approx_percentile` (the approx_percentile we want to extract). The optimizer will correctly combine the calls for the first two `uddsketch` calls but not for the third. It is also more clear to the user what is going on, and that I can't set my target error at read time, but rather only at calculation time (this is especially helpful for understanding the behavior of [continuous aggregates](https://docs.timescale.com/latest/using-timescaledb/continuous-aggregates)). 
 
-Combining all of these into one function, so we can use the one-step approach can get unwieldy and unclear very quickly (ie imagine something like `approx_percentile_uddsketch(0.5, 1000, 0.001)`).
+Combining all of these into one function, so we can use the one-step approach, can get unwieldy and unclear very quickly (ie imagine something like `approx_percentile_uddsketch(0.5, 1000, 0.001)`).
 <br>
 ### Stacked aggregates and [continuous aggregate](https://docs.timescale.com/latest/using-timescaledb/continuous-aggregates) integration <a id="philosophy-reagg"></a>
 Aggregates can be divided into two classes: ones that are "stackable" in their final form and ones that are not.
@@ -109,6 +109,7 @@ FROM
 ```
 
 A non-stackable aggregate like `avg` doesn't have this property:
+```SQL , ignore
 SELECT avg(val) FROM foo;
 -- is NOT equivalent to:
 SELECT avg(avg) 
@@ -122,7 +123,7 @@ Or to say it more succinctly: the `sum` of a `sum` is the `sum` but the `avg` of
 
 This is not to say that the `avg` of an `avg` is not a useful piece of information, it can be in some cases, but it isn't always what you want and it can be difficult to actually get the true value for non-stackable aggregates, for instance, for `avg` we can take the `count` and `sum` and divide the `sum` by the `count`, but for many aggregates this is not so obvious and for something like `percentile_agg` __LINK__ with a one-step aggregate, the user would simply have to re-implement most of the algorithm in SQL in order to get the result they want. 
 
-Two-step aggregates expose the internal, re-aggregateable form to the user so they can much more easily do this work, so we've tried to provide two-step aggregates wherever we can. This is especially useful for working with  [continuous aggregates](https://docs.timescale.com/latest/using-timescaledb/continuous-aggregates), so if I create a continuous aggregate like so:
+Two-step aggregates expose the internal, re-aggregateable form to the user so they can much more easily do this work, so we've tried to provide two-step aggregates wherever we can. This is especially useful for working with [continuous aggregates](https://docs.timescale.com/latest/using-timescaledb/continuous-aggregates), so if I create a continuous aggregate like so:
 
 ```SQL , ignore
 CREATE MATERIALIZED VIEW foo_15

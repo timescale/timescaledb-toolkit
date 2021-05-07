@@ -1,7 +1,7 @@
 # Approximate Percentiles
 > [Why To Use Approximate Percentiles](#why-use)<br>
 > [API](#percentile-approx-api) <br> 
-> [Advanced Usage: Algorithms and How to Choose](#algorithms)<br>
+> [Advanced Usage: Algorithms and How to Choose](#advanced-usage)<br>
 
 ###### A note on terminology: Technically, a percentile divides the group into 100 equally sized (by frequency) buckets, while a quantile would divide the group into an arbitrary number of buckets, we use percentile here with the recognition that quantile the technically more "correct" one for anything with more precision than the hundredths place, but we've chosen to go with the more commonly used percentile throughout so that we aren't switching back and forth all the time.
 
@@ -12,6 +12,7 @@ There are really two things to cover here:  1) [why use percentiles at all](#why
 To better understand this, we'll use the common example of a server that's running APIs for a company and tracking the response times for the various APIs it's running. So, for our example, we have a table something like this: 
 
 ```SQL , non-transactional, ignore-output
+SET SESSION TIME ZONE 'UTC'; -- so we get consistent output
 CREATE TABLE response_times (
     ts timestamptz,
     api_id int,
@@ -65,31 +66,33 @@ ORDER BY 3 DESC LIMIT 15;
 ```output
          bucket         | api_id |        avg        |       median       
 ------------------------+--------+-------------------+--------------------
- 2020-01-01 00:00:00-05 |     12 | 957.3300074102655 |  714.7792776452128
- 2020-01-01 12:00:00-05 |     12 | 952.2981359887485 |  699.4961287221906
- 2020-01-01 00:00:00-05 |     11 | 833.4469472490307 |  627.2483710078043
- 2020-01-01 11:00:00-05 |     11 |  825.591115495885 |   586.144811277349
- 2020-01-01 22:00:00-05 |     11 | 818.2994213030709 |    627.57106274261
- 2020-01-01 00:00:00-05 |      9 |  721.585843481516 |  558.8211532758091
- 2020-01-01 09:00:00-05 |      9 | 709.0516956912517 |  531.0335521031565
- 2020-01-01 00:00:00-05 |     10 | 704.4238835054174 |  519.6845181743456
- 2020-01-01 18:00:00-05 |      9 |  697.206933868508 |  514.1638163837733
- 2020-01-01 20:00:00-05 |     10 | 695.8335731245254 |  504.3263060866259
- 2020-01-01 10:00:00-05 |     10 | 689.5839792685773 | 484.66032971925443
- 2020-01-01 00:00:00-05 |      8 |  614.043390687057 |  458.7690229164113
- 2020-01-01 08:00:00-05 |      8 | 606.2064760230946 |  441.5522223012488
- 2020-01-01 16:00:00-05 |      8 | 604.1360469272314 |  443.9829264778399
- 2020-01-01 01:00:00-05 |     12 | 518.4530780875233 | 395.26063972604095
+ 2020-01-01 00:00:00+00 |     12 | 963.7133258896499 |  718.5239744582293
+ 2020-01-01 12:00:00+00 |     12 | 960.3215509841885 |  702.5533421145439
+ 2020-01-01 00:00:00+00 |     11 |  869.080106405452 |  672.3239155837705
+ 2020-01-01 11:00:00+00 |     11 | 812.3980672261094 |  601.0977895428585
+ 2020-01-01 22:00:00+00 |     11 |   807.60170292334 |  588.4594427003582
+ 2020-01-01 09:00:00+00 |      9 | 734.5715252282495 |  568.5874170077199
+ 2020-01-01 18:00:00+00 |      9 |  729.741678409908 |  579.9545806754643
+ 2020-01-01 10:00:00+00 |     10 | 706.3354550201176 |  530.2212934454012
+ 2020-01-01 20:00:00+00 |     10 | 703.3774391502177 |  547.2229083613446
+ 2020-01-01 00:00:00+00 |      9 | 699.8381999820344 |  512.9664729583037
+ 2020-01-01 00:00:00+00 |     10 |  693.538069162809 |  520.2452823525146
+ 2020-01-02 00:00:00+00 |     11 | 664.6499866911574 |  526.0170528091467
+ 2020-01-01 08:00:00+00 |      8 | 614.0102251830702 | 450.32913344205554
+ 2020-01-01 16:00:00+00 |      8 | 600.1665981310882 |  448.3521427192275
+ 2020-01-01 00:00:00+00 |      8 |  598.260875149253 | 430.92118195891203
  ```
 
 So, this returns some interesting results, maybe something like what those of you who read over our [data generation](#data-generation) code would expect. Given how we generate the data, we expect that the larger `api_ids` will have longer generated response times but that it will be cyclic with `hour % api_id`, so we can see that here. 
 
 But what happens if we introduce some aberrant data points? They could have come from anywhere, maybe a user ran a weird query, maybe there's an odd bug in the code that causes some timings to get multiplied in an odd code path, who knows, here we'll introduce just 10 outlier points out of half a million:
 
-```SQL , non-transactional
+```SQL , non-transactional, ignore-output
 SELECT setseed(0.43); --make sure we've got a consistent seed so the output is consistent.
 WITH rand_points as (SELECT ts, api_id, user_id FROM response_times ORDER BY random() LIMIT 10)
 UPDATE response_times SET response_time_ms = 10000 * response_time_ms WHERE (ts, api_id, user_id) IN (SELECT * FROM rand_points); 
+```
+```SQL 
 SELECT 
     time_bucket('1 h'::interval, ts) as bucket, 
     api_id, 
@@ -103,21 +106,21 @@ ORDER BY 3 DESC LIMIT 15;
 ```output
          bucket         | api_id |        avg         |       median       
 ------------------------+--------+--------------------+--------------------
- 2020-01-01 11:00:00-05 |     10 | 3997.6772824820628 |  266.2854035932881
- 2020-01-01 18:00:00-05 |      3 |  3825.633846384715 |  187.5657753606962
- 2020-01-01 14:00:00-05 |      3 |  1522.639783107579 |  62.67658879283886
- 2020-01-01 20:00:00-05 |     12 | 1424.5403899234598 |  82.09740378674013
- 2020-01-01 15:00:00-05 |      9 | 1102.3972294841913 |   82.0713285695133
- 2020-01-01 00:00:00-05 |     12 |  957.3300074102655 |  714.7792776452128
- 2020-01-01 12:00:00-05 |     12 |   952.298135988748 |  699.4961287221906
- 2020-01-01 01:00:00-05 |      8 |  900.1847737194663 | 240.30560772652052
- 2020-01-01 10:00:00-05 |      6 |  885.9202907985747 |  76.30628539306436
- 2020-01-01 00:00:00-05 |     11 |  833.4469472490299 |  627.2483710078043
- 2020-01-01 11:00:00-05 |     11 |  825.5911154958851 |   586.144811277349
- 2020-01-01 22:00:00-05 |     11 |  818.2994213030717 |    627.57106274261
- 2020-01-01 00:00:00-05 |      9 |  721.5858434815163 |  558.8211532758091
- 2020-01-01 09:00:00-05 |      9 |  709.0516956912516 |  531.0335521031565
- 2020-01-01 00:00:00-05 |     10 |  704.4238835054174 |  519.6845181743456
+ 2020-01-01 09:00:00+00 |      9 | 11508.507742106061 |  568.5874170077199
+ 2020-01-01 13:00:00+00 |     11 | 11406.136516310735 |  218.6133315749926
+ 2020-01-01 00:00:00+00 |      8 | 10795.154988400745 | 430.92118195891203
+ 2020-01-01 02:00:00+00 |     11 |  6982.659433972783 | 231.99713608466845
+ 2020-01-01 21:00:00+00 |      8 |  4166.715331816164 |  80.90204788382914
+ 2020-01-01 12:00:00+00 |      5 |   1417.81186884559 |  97.16190172907324
+ 2020-01-01 18:00:00+00 |     12 | 1382.2166820029004 |  110.6070630315704
+ 2020-01-01 19:00:00+00 |      9 | 1152.8696063521115 | 300.07408283070794
+ 2020-01-01 23:00:00+00 |      6 | 1025.7105719733838 |  68.24708016025141
+ 2020-01-01 00:00:00+00 |     12 |    963.71332588965 |  718.5239744582293
+ 2020-01-01 12:00:00+00 |     12 |   960.321550984189 |  702.5533421145439
+ 2020-01-01 00:00:00+00 |     11 |  869.0801064054518 |  672.3239155837705
+ 2020-01-01 11:00:00+00 |     11 |  812.3980672261094 |  601.0977895428585
+ 2020-01-01 22:00:00+00 |     11 |    807.60170292334 |  588.4594427003582
+ 2020-01-01 18:00:00+00 |      9 |  729.7416784099084 |  579.9545806754643
  ```
 
 Now, `avg` is giving horribly misleading results and not showing us the underlying patterns in our data anymore. But if I order by the `median` instead:
@@ -132,23 +135,23 @@ GROUP BY 1, 2
 ORDER BY 4 DESC LIMIT 15;
 ```
 ```output
-         bucket         | api_id |        avg        |       median       
-------------------------+--------+-------------------+--------------------
- 2020-01-01 00:00:00-05 |     12 | 957.3300074102655 |  714.7792776452128
- 2020-01-01 12:00:00-05 |     12 |  952.298135988748 |  699.4961287221906
- 2020-01-01 22:00:00-05 |     11 | 818.2994213030717 |    627.57106274261
- 2020-01-01 00:00:00-05 |     11 | 833.4469472490299 |  627.2483710078043
- 2020-01-01 11:00:00-05 |     11 | 825.5911154958851 |   586.144811277349
- 2020-01-01 00:00:00-05 |      9 | 721.5858434815163 |  558.8211532758091
- 2020-01-01 09:00:00-05 |      9 | 709.0516956912516 |  531.0335521031565
- 2020-01-01 00:00:00-05 |     10 | 704.4238835054174 |  519.6845181743456
- 2020-01-01 18:00:00-05 |      9 |  697.206933868508 |  514.1638163837733
- 2020-01-01 20:00:00-05 |     10 | 695.8335731245255 |  504.3263060866259
- 2020-01-01 10:00:00-05 |     10 |  689.583979268577 | 484.66032971925443
- 2020-01-01 00:00:00-05 |      8 | 614.0433906870569 |  458.7690229164113
- 2020-01-01 16:00:00-05 |      8 | 604.1360469272315 |  443.9829264778399
- 2020-01-01 08:00:00-05 |      8 | 606.2064760230944 |  441.5522223012488
- 2020-01-01 01:00:00-05 |     12 | 518.4530780875242 | 395.26063972604095
+         bucket         | api_id |        avg         |       median       
+------------------------+--------+--------------------+--------------------
+ 2020-01-01 00:00:00+00 |     12 |    963.71332588965 |  718.5239744582293
+ 2020-01-01 12:00:00+00 |     12 |   960.321550984189 |  702.5533421145439
+ 2020-01-01 00:00:00+00 |     11 |  869.0801064054518 |  672.3239155837705
+ 2020-01-01 11:00:00+00 |     11 |  812.3980672261094 |  601.0977895428585
+ 2020-01-01 22:00:00+00 |     11 |    807.60170292334 |  588.4594427003582
+ 2020-01-01 18:00:00+00 |      9 |  729.7416784099084 |  579.9545806754643
+ 2020-01-01 09:00:00+00 |      9 | 11508.507742106061 |  568.5874170077199
+ 2020-01-01 20:00:00+00 |     10 |  703.3774391502178 |  547.2229083613446
+ 2020-01-01 10:00:00+00 |     10 |  706.3354550201176 |  530.2212934454012
+ 2020-01-02 00:00:00+00 |     11 |  664.6499866911576 |  526.0170528091467
+ 2020-01-01 00:00:00+00 |     10 |  693.5380691628102 |  520.2452823525146
+ 2020-01-01 00:00:00+00 |      9 |  699.8381999820344 |  512.9664729583037
+ 2020-01-01 08:00:00+00 |      8 |  614.0102251830706 | 450.32913344205554
+ 2020-01-01 16:00:00+00 |      8 |   600.166598131088 |  448.3521427192275
+ 2020-01-01 00:00:00+00 |      8 | 10795.154988400745 | 430.92118195891203
  ```
  I can see the pattern in my data again! The median was much better at dealing with outliers than `avg` was, and percentiles in general are much less noisy. This becomes even more obvious where we might want to measure the worst case scenario for users. So we might want to use the `max`, but often the 99th percentile value gives a better representation of the *likely* worst outcome for users than the max response time, which might be due to unrealistic parameters, an error, or some other non-representative condition. The maximum response time becomes something useful for engineers to investigate, ie to find errors or other weird outlier use cases, but less useful for, say, measuring overall user experience and how it changes over time. Both are useful for different circumstances, but often the 95th or 99th or other percentile outcome becomes the design parameter and what we measure success against. 
 
@@ -173,27 +176,27 @@ GROUP BY 1, 2
 ORDER BY 5 DESC LIMIT 15;
 ```
 ```output
-         bucket         | api_id |        avg        |    true_median     |   approx_median    
-------------------------+--------+-------------------+--------------------+--------------------
- 2020-01-01 00:00:00-05 |     12 | 957.3300074102655 |  714.7792776452128 |  717.5726503686043
- 2020-01-01 12:00:00-05 |     12 |  952.298135988748 |  699.4961287221906 |  694.9738275889493
- 2020-01-01 22:00:00-05 |     11 | 818.2994213030717 |    627.57106274261 |  631.3586942706065
- 2020-01-01 00:00:00-05 |     11 | 833.4469472490299 |  627.2483710078043 |  631.3586942706065
- 2020-01-01 11:00:00-05 |     11 | 825.5911154958851 |   586.144811277349 |   592.217599089039
- 2020-01-01 00:00:00-05 |      9 | 721.5858434815163 |  558.8211532758091 |  555.5030569048643
- 2020-01-01 09:00:00-05 |      9 | 709.0516956912516 |  531.0335521031565 |  538.0083612387168
- 2020-01-01 00:00:00-05 |     10 | 704.4238835054174 |  519.6845181743456 |  521.0646335153136
- 2020-01-01 18:00:00-05 |      9 |  697.206933868508 |  514.1638163837733 |  521.0646335153136
- 2020-01-01 20:00:00-05 |     10 | 695.8335731245255 |  504.3263060866259 |  512.5971054008514
- 2020-01-01 10:00:00-05 |     10 |  689.583979268577 | 484.66032971925443 |  480.8186373535084
- 2020-01-01 00:00:00-05 |      8 | 614.0433906870569 |  458.7690229164113 |  458.4604589902221
- 2020-01-01 08:00:00-05 |      8 | 606.2064760230944 |  441.5522223012488 | 444.02196741884285
- 2020-01-01 16:00:00-05 |      8 | 604.1360469272315 |  443.9829264778399 | 444.02196741884285
- 2020-01-01 01:00:00-05 |     12 | 518.4530780875242 | 395.26063972604095 |  390.6742117791449
+                  bucket         | api_id |        avg         |    true_median     |   approx_median    
+------------------------+--------+--------------------+--------------------+--------------------
+ 2020-01-01 00:00:00+00 |     12 |    963.71332588965 |  718.5239744582293 |   717.572650368603
+ 2020-01-01 12:00:00+00 |     12 |   960.321550984189 |  702.5533421145439 |   694.973827588948
+ 2020-01-01 00:00:00+00 |     11 |  869.0801064054518 |  672.3239155837705 |  673.0867192130734
+ 2020-01-01 22:00:00+00 |     11 |    807.60170292334 |  588.4594427003582 |  592.2175990890378
+ 2020-01-01 11:00:00+00 |     11 |  812.3980672261094 |  601.0977895428585 |  592.2175990890378
+ 2020-01-01 18:00:00+00 |      9 |  729.7416784099084 |  579.9545806754643 |  592.2175990890378
+ 2020-01-01 09:00:00+00 |      9 | 11508.507742106061 |  568.5874170077199 |  573.5666366228246
+ 2020-01-01 20:00:00+00 |     10 |  703.3774391502178 |  547.2229083613446 |  555.5030569048633
+ 2020-01-01 10:00:00+00 |     10 |  706.3354550201176 |  530.2212934454012 |  538.0083612387158
+ 2020-01-02 00:00:00+00 |     11 |  664.6499866911576 |  526.0170528091467 |  525.8424211721613
+ 2020-01-01 00:00:00+00 |     10 |  693.5380691628102 |  520.2452823525146 |  521.0646335153127
+ 2020-01-01 00:00:00+00 |      9 |  699.8381999820344 |  512.9664729583037 |  521.0646335153127
+ 2020-01-01 08:00:00+00 |      8 |  614.0102251830706 | 450.32913344205554 | 444.02196741884205
+ 2020-01-01 16:00:00+00 |      8 |   600.166598131088 |  448.3521427192275 | 444.02196741884205
+ 2020-01-01 00:00:00+00 |      8 | 10795.154988400745 | 430.92118195891203 | 430.03819344582666
  ```
 Pretty darn close! We can definitely still see the patterns in the data. Note that the calling conventions are a bit different for ours, partially because it's no longer an [ordered set aggregate](), and partially because we use [two-step aggregation](), see the [API documentation]() below for exactly how to use. 
 
-The approximation algorithms can provide better performance than algorithms that need the whole sorted data set, especially on very large data sets that can't be easily sorted in memory. Not only that, but  they are able to be incorporated into [continuous aggregates](), because they have partializable forms, can be used in [parallel]() and [partitionwise]() aggregation, and can be [re-aggregated](link to example?) over larger time frames, or over different axes. 
+The approximation algorithms can provide better performance than algorithms that need the whole sorted data set, especially on very large data sets that can't be easily sorted in memory. Not only that, but they are able to be incorporated into [continuous aggregates](), because they have partializable forms, can be used in [parallel]() and [partitionwise]() aggregation. They are used very frequently in continous aggregates as that's where they give the largest benefit over the usual Postgres percentile algorithms, which can't be used at all because they require the entire ordered data set to function. 
 
 Let's do this with our example, we can't use `percentile_disc` anymore as ordered set aggregates are not supported. 
 
@@ -206,7 +209,7 @@ AS SELECT
     avg(response_time_ms),
     percentile_agg(response_time_ms)
 FROM response_times
-GROUP BY 1, 2
+GROUP BY 1, 2;
 ```
 Note that we only do the aggregation step of our [two-step aggregation](), we'll save the accessor step for our selects from the view, and we'll start by just getting the same data as our previous example like so:
 
@@ -220,23 +223,23 @@ FROM response_times_hourly
 ORDER BY 4 DESC LIMIT 15;
 ```
 ```output
-         bucket         | api_id |        avg        |   approx_median    
-------------------------+--------+-------------------+--------------------
- 2020-01-01 00:00:00-05 |     12 |  957.330007410265 |  717.5726503686043
- 2020-01-01 12:00:00-05 |     12 | 952.2981359887486 |  694.9738275889493
- 2020-01-01 00:00:00-05 |     11 | 833.4469472490314 |  631.3586942706065
- 2020-01-01 22:00:00-05 |     11 | 818.2994213030719 |  631.3586942706065
- 2020-01-01 11:00:00-05 |     11 | 825.5911154958854 |   592.217599089039
- 2020-01-01 00:00:00-05 |      9 | 721.5858434815136 |  555.5030569048643
- 2020-01-01 09:00:00-05 |      9 | 709.0516956912521 |  538.0083612387168
- 2020-01-01 18:00:00-05 |      9 | 697.2069338685094 |  521.0646335153136
- 2020-01-01 00:00:00-05 |     10 | 704.4238835054173 |  521.0646335153136
- 2020-01-01 20:00:00-05 |     10 | 695.8335731245246 |  512.5971054008514
- 2020-01-01 10:00:00-05 |     10 | 689.5839792685764 |  480.8186373535084
- 2020-01-01 00:00:00-05 |      8 | 614.0433906870558 |  458.4604589902221
- 2020-01-01 08:00:00-05 |      8 | 606.2064760230948 | 444.02196741884285
- 2020-01-01 16:00:00-05 |      8 | 604.1360469272308 | 444.02196741884285
- 2020-01-01 00:00:00-05 |      7 |  518.260705892737 |  390.6742117791449
+         bucket         | api_id |        avg         |   approx_median    
+------------------------+--------+--------------------+--------------------
+ 2020-01-01 00:00:00+00 |     12 |    963.71332588965 |   717.572650368603
+ 2020-01-01 12:00:00+00 |     12 |   960.321550984189 |   694.973827588948
+ 2020-01-01 00:00:00+00 |     11 |  869.0801064054518 |  673.0867192130734
+ 2020-01-01 22:00:00+00 |     11 |    807.60170292334 |  592.2175990890378
+ 2020-01-01 11:00:00+00 |     11 |  812.3980672261094 |  592.2175990890378
+ 2020-01-01 18:00:00+00 |      9 |  729.7416784099084 |  592.2175990890378
+ 2020-01-01 09:00:00+00 |      9 | 11508.507742106061 |  573.5666366228246
+ 2020-01-01 20:00:00+00 |     10 |  703.3774391502178 |  555.5030569048633
+ 2020-01-01 10:00:00+00 |     10 |  706.3354550201176 |  538.0083612387158
+ 2020-01-02 00:00:00+00 |     11 |  664.6499866911576 |  525.8424211721613
+ 2020-01-01 00:00:00+00 |     10 |  693.5380691628102 |  521.0646335153127
+ 2020-01-01 00:00:00+00 |      9 |  699.8381999820344 |  521.0646335153127
+ 2020-01-01 08:00:00+00 |      8 |  614.0102251830706 | 444.02196741884205
+ 2020-01-01 16:00:00+00 |      8 |   600.166598131088 | 444.02196741884205
+ 2020-01-01 00:00:00+00 |      8 | 10795.154988400745 | 430.03819344582666
  ```
 
 So, that's nifty, and much faster, especially for large data sets. But what's even cooler is I can do aggregates over the aggregates and speed those up, let's look at the median by `api_id`: 
@@ -245,23 +248,24 @@ SELECT
     api_id,
     approx_percentile(0.5, percentile_agg(percentile_agg)) as approx_median
 FROM response_times_hourly
-GROUP BY api_id;
+GROUP BY api_id
+ORDER BY api_id;
 ```
 ```output
  api_id |   approx_median    
 --------+--------------------
-      1 | 54.570280444259595
-      2 |  80.11711874054426
-      3 | 103.49151551904819
-      4 |  91.05735575711863
-      5 | 110.33152038490614
-      6 |  117.6235977354534
-      7 | 110.33152038490614
-      8 |  117.6235977354534
-      9 | 142.52105459674107
-     10 |  117.6235977354534
-     11 |   133.685458898177
-     12 |   133.685458898177
+      1 |  54.57028044425955
+      2 |  80.11711874054421
+      3 |  97.07555689493275
+      4 |  91.05735575711857
+      5 | 110.33152038490607
+      6 | 117.62359773545333
+      7 | 110.33152038490607
+      8 | 117.62359773545333
+      9 | 133.68545889817688
+     10 | 117.62359773545333
+     11 | 125.39762613589876
+     12 | 133.68545889817688
 ```
 
 You'll notice that I didn't include the average response time here, that's because `avg` is not a [two-step aggregate](), and doesn't actually give you the average if you stack calls using it. But it turns out, we can derive the true average from the sketch we use to calculate the approximate percentiles! (We call that accessor function `mean` because there would otherwise be odd conflicts with `avg` in terms of how they're called).
@@ -271,23 +275,24 @@ SELECT
     mean(percentile_agg(percentile_agg)) as avg,
     approx_percentile(0.5, percentile_agg(percentile_agg)) as approx_median
 FROM response_times_hourly
-GROUP BY api_id;
+GROUP BY api_id
+ORDER BY api_id;
 ```
 ```output
  api_id |        avg         |   approx_median    
 --------+--------------------+--------------------
-      1 |  72.33502661563753 | 54.570280444259595
-      2 | 116.19832913566916 |  80.11711874054426
-      3 |  359.6251042486034 | 103.49151551904819
-      4 | 151.34792844065697 |  91.05735575711863
-      5 | 180.45501348645712 | 110.33152038490614
-      6 |  243.3608186338227 |  117.6235977354534
-      7 | 203.59208681247378 | 110.33152038490614
-      8 | 234.95379212561386 |  117.6235977354534
-      9 |  290.9090915449227 | 142.52105459674107
-     10 | 408.90710586132195 |  117.6235977354534
-     11 | 267.13533347022087 |   133.685458898177
-     12 |  312.5189463905521 |   133.685458898177
+      1 |  71.55322907526075 |  54.57028044425955
+      2 |  116.1446200551691 |  80.11711874054421
+      3 |  151.6943183529463 |  97.07555689493275
+      4 | 151.80546818776745 |  91.05735575711857
+      5 | 240.73218897526579 | 110.33152038490607
+      6 | 242.39094418199042 | 117.62359773545333
+      7 | 204.31667016105945 | 110.33152038490607
+      8 |  791.7213027346409 | 117.62359773545333
+      9 |  730.1077688899509 | 133.68545889817688
+     10 |   237.621813523762 | 117.62359773545333
+     11 | 1006.1587809419943 | 125.39762613589876
+     12 |  308.5952922205141 | 133.68545889817688
 ```
 
 We have several other accessor functions, including `error` which returns the maximum relative error for the percentile estimate, `num_vals` which returns the number of elements in the estimator, and perhaps the most interesting one, `approx_percentile_at_value`, which gives the hypothetical percentile for a given value. Let's say we really don't want our apis to go over 1s in response time (1000 ms), we can use that to figure out what fraction of users waited over a second for each api:
@@ -295,13 +300,304 @@ We have several other accessor functions, including `error` which returns the ma
 ```SQL
 SELECT
     api_id,
-    (1 - approx_percentile_at_value(percentile_agg(percentile_agg), 1000)) * 100 as percent_over_1s
+    ((1 - approx_percentile_at_value(250, percentile_agg(percentile_agg))) * 100)::numeric(6,2) as percent_over_1s
 FROM response_times_hourly
-GROUP BY api_id;
+GROUP BY api_id
+ORDER BY api_id;
 ```
 
 
 ## API <a id="percentile-approx-api"></a>
+Aggregate Functions <a id="aggregate-functions">
+> - [percentile_agg - point form](#point-form)
+> - [percentile_agg - summary form](#summary-form)
+
+Accessor Functions <a id="accesor-functions">
+
+> - [error](#error)
+> - [mean](#mean)
+> - [num_vals](#num-vals)
+> - [approx_percentile](#approx_percentile)
+> - [approx_percentile_at_value](#approx_percentile-at-value)
 
 
-## Advanced Usage: Percentile Approximation Algorithms and How to Choose <a id="algorithms"></a>
+---
+## **percentile_agg (point form) ** <a id="point-form"></a>
+```SQL ,ignore
+percentile_agg(
+    value DOUBLE PRECISION
+) RETURNS UddSketch
+```
+
+This is the default percentile aggregation function. Under the hood, it uses the [UddSketch algorithm](/extension/docs/uddsketch.md) with 200 buckets and an initial max error of 0.001. This should be good for most common use cases of percentile approximation. For more advanced usage of the uddsketch algorithm or use cases for other percentile approximation algorithms see [advanced usage](#advanced-usage). This is the aggregation step of the [two-step aggregate](/extension/docs/two-step_aggregation.md), it is usually used with the [approx_percentile()](#approx_percentile) accessor function in order to extract an approximate percentile, however it is in a form that can be re-aggregated using the [summary form](#summary-form) of the function and any of the other [accessor functions](#accessor-functions).
+
+
+### Required Arguments <a id="point-form-required-arguments"></a>
+|Name| Type |Description|
+|---|---|---|
+| `value` | `DOUBLE PRECISION` |  Column to aggregate.
+<br>
+
+### Returns
+
+|Column|Type|Description|
+|---|---|---|
+| `percentile_agg` | `UddSketch` | A UddSketch object which may be passed to other percentile approximation APIs|
+
+Because the `percentile_agg` function uses the [UddSketch algorithm](/extension/docs/uddsketch.md), it returns the UddSketch data structure for use in further calls. 
+<br>
+
+### Sample Usages <a id="point-form-examples"></a>
+
+Get the approximate first percentile using the `percentile_agg()` point form plus the [`approx_percentile`](#approx_percentile) accessor function.
+```SQL 
+SELECT 
+    approx_percentile(0.01, percentile_agg(data))
+FROM generate_series(0, 100) data;
+```
+```output
+approx_percentile 
+-------------------
+             0.999
+```
+
+They are often used to create [continuous aggregates]() after which we can use multiple [accessors](#accessor-functions) for [retrospective analysis](/extension/docs/two-step_aggregation.md#retrospective-analysis).
+
+```SQL ,ignore
+CREATE MATERIALIZED VIEW foo_hourly
+WITH (timescaledb.continuous)
+AS SELECT 
+    time_bucket('1 h'::interval, ts) as bucket,  
+    percentile_agg(value) as pct_agg
+FROM foo
+GROUP BY 1;
+```
+---
+
+## **percentile_agg (summary form)** <a id="summary-form"></a>
+```SQL ,ignore
+percentile_agg(
+    sketch uddsketch
+) RETURNS UddSketch
+```
+
+This will combine multiple outputs from the [point form](#point-form) of the `percentile_agg()` function, this is especially useful for re-aggregation in the [continuous aggregate]() context (ie bucketing by a larger [`time_bucket`](), or re-grouping on other dimensions included in an aggregation). 
+
+### Required Arguments <a id="summary-form-required-arguments"></a>
+|Name| Type |Description|
+|---|---|---|
+| `sketch` | `UddSketch` | The already constructed uddsketch from a previous [percentile_agg() (point form)](#point-form) call. |
+<br>
+
+### Returns
+
+|Column|Type|Description|
+|---|---|---|
+| `uddsketch` | `UddSketch` | A UddSketch object which may be passed to other UddSketch APIs. |
+
+Because the `percentile_agg` function uses the [UddSketch algorithm](/extension/docs/uddsketch.md), it returns the UddSketch data structure for use in further calls. 
+<br>
+
+### Sample Usages <a id="summary-form-examples"></a>
+Let's presume we created the [continuous aggregate]() in the [point form example](#point-form-examples):
+
+We can then use the summary form of the percentile_agg function to re-aggregate the results from the `foo_hourly` view and the [`approx_percentile`](#approx_percentile) accessor function to get the 95th and 99th percentiles over each day:
+
+```SQL , ignore
+SELECT
+    time_bucket('1 day'::interval, bucket) as bucket,
+    approx_percentile(0.95, percentile_agg(pct_agg)) as p95,
+    approx_percentile(0.99, percentile_agg(pct_agg)) as p99
+FROM foo_hourly
+GROUP BY 1;
+```
+
+---
+
+
+## **error** <a id="error"></a>
+
+```SQL ,ignore
+error(sketch UddSketch) RETURNS DOUBLE PRECISION
+```
+
+This returns the maximum relative error that a percentile estimate will have (relative to the correct value). This means the actual value will fall in the range defined by `approx_percentile(sketch) +/- approx_percentile(sketch)*error(sketch)`.
+
+### Required Arguments <a id="error-required-arguments"></a>
+|Name|Type|Description|
+|---|---|---|
+| `sketch` | `UddSketch` | The sketch to determine the error of, usually from a [`percentile_agg()`](#aggregate-functions) call. |
+<br>
+
+### Returns
+
+|Column|Type|Description|
+|---|---|---|
+| `error` | `DOUBLE PRECISION` | The maximum relative error of any percentile estimate. |
+<br>
+
+### Sample Usages <a id="error-examples"></a>
+
+```SQL
+SELECT error(percentile_agg(data)) 
+FROM generate_series(0, 100) data;
+```
+```output
+ error 
+-------
+ 0.001
+```
+
+---
+## **mean** <a id="mean"></a>
+
+```SQL ,ignore
+mean(sketch UddSketch) RETURNS DOUBLE PRECISION
+```
+
+Get the exact average of all the values in the percentile estimate. (Percentiles returned are estimates, the average is exact.
+
+### Required Arguments <a id="mean-required-arguments"></a>
+|Name|Type|Description|
+|---|---|---|
+| `sketch` | `UddSketch` |  The sketch to extract the mean value from, usually from a [`percentile_agg()`](#aggregate-functions) call. |
+<br>
+
+### Returns
+|Column|Type|Description|
+|---|---|---|
+| `mean` | `DOUBLE PRECISION` | The average of the values in the percentile estimate. |
+<br>
+
+### Sample Usage <a id="mean-examples"></a>
+
+```SQL
+SELECT mean(percentile_agg(data)) 
+FROM generate_series(0, 100) data;
+```
+```output
+ mean
+------
+ 50
+```
+## **num_vals** <a id="num-vals"></a>
+
+```SQL ,ignore
+num_vals(sketch UddSketch) RETURNS DOUBLE PRECISION
+```
+
+Get the number of values contained in a percentile estimate.
+
+### Required Arguments <a id="num-vals-required-arguments"></a>
+|Name|Type|Description|
+|---|---|---|
+| `sketch` | `UddSketch` | The sketch to extract the number of values from, usually from a [`percentile_agg()`](#aggregate-functions) call. |
+<br>
+
+### Returns
+|Column|Type|Description|
+|---|---|---|
+| `uddsketch_count` | `DOUBLE PRECISION` | The number of values in the percentile estimate |
+<br>
+
+### Sample Usage <a id="num-vals-examples"></a>
+
+```SQL
+SELECT num_vals(percentile_agg(data)) 
+FROM generate_series(0, 100) data;
+```
+```output
+ num_vals
+-----------
+       101
+```
+
+---
+---
+## **approx_percentile** <a id="approx_percentile"></a>
+
+```SQL ,ignore
+approx_percentile(
+    percentile DOUBLE PRECISION, 
+    sketch  uddsketch
+) RETURNS DOUBLE PRECISION 
+```
+
+Get the approximate value at a percentile from a percentile estimate.
+
+### Required Arguments <a id="approx_percentile-required-arguments"></a>
+|Name|Type|Description|
+|---|---|---|
+| `approx_percentile` | `DOUBLE PRECISION` | The desired percentile (0.0-1.0) to approximate. |
+| `sketch` | `UddSketch` | The sketch to compute the approx_percentile on, usually from a [`percentile_agg()`](#aggregate-functions) call. |
+<br>
+
+### Returns
+|Column|Type|Description|
+|---|---|---|
+| `approx_percentile` | `DOUBLE PRECISION` | The estimated value at the requested percentile. |
+<br>
+
+### Sample Usage <a id="approx_percentile-examples"></a>
+
+```SQL 
+SELECT 
+    approx_percentile(0.01, percentile_agg(data))
+FROM generate_series(0, 100) data;
+```
+```output
+approx_percentile 
+-------------------
+             0.999
+```
+
+---
+## **approx_percentile_at_value** <a id="approx_percentile_at_value"></a>
+
+```SQL ,ignore
+approx_percentile_at_value(
+    value DOUBLE PRECISION,
+    sketch UddSketch
+) RETURNS UddSketch
+```
+
+Estimate what percentile a given value would be located at in a UddSketch.
+
+### Required Arguments <a id="approx_percentile_at_value-required-arguments"></a>
+|Name|Type|Description|
+|---|---|---|
+| `value` | `DOUBLE PRECISION` |  The value to estimate the percentile of. |
+| `sketch` | `UddSketch` | The sketch to compute the percentile on. |
+<br>
+
+### Returns
+|Column|Type|Description|
+|---|---|---|
+| `approx_percentile_at_value` | `DOUBLE PRECISION` | The estimated percentile associated with the provided value. |
+<br>
+
+### Sample Usage <a id="approx_percentile_at_value-examples"></a>
+
+```SQL 
+SELECT 
+    approx_percentile_at_value(99, percentile_agg(data))
+FROM generate_series(0, 100) data;
+```
+```output
+ approx_percentile_at_value 
+----------------------------
+         0.9851485148514851
+```
+
+
+
+## Advanced Usage: Percentile Approximation Algorithms and How to Choose <a id="advanced-usage"></a>
+While the simple `percentile_agg` interface will be sufficient for many users, we provide two different lower level algorithms for percentile approximation for advanced users who want more control of how the approximation is performed:
+
+- [T-Digest](/extension/docs/tdigest.md) [<sup><mark>experimental</mark></sup>](/extension/docs/README.md#tag-notes) – A quantile estimate sketch optimized to provide more accurate estimates near the tails (i.e. 0.001 or 0.995) than conventional approaches. ([Methods](tdigest#tdigest_api))
+- [UddSketch](/extension/docs/uddsketch.md) – A quantile estimate sketch which provides a guaranteed maximum relative error. ([Methods](uddsketch.md#uddsketch_api))
+
+
+Their docs pages provide links to full papers explaining the algorithms. When trying to figure out which is best for your use case, often the best thing to do is to construct some simple queries using each of the candidate algorithms as well as the exact [`percentile_cont`]() that Postgres provides in order to understand the error tradeoffs for your typical data distribution. However, there are a few things to note about the two algorithms:
+1) UddSketch provides a maximum relative error for all of its estimates, this can grow relatively large if you have a large range of values, and a lot of values. You can tune the amount / range of data you can best represent by tuning the number of buckets, however UddSketch will almost always have some error, as it is always returning the middle of the bucket so that it can provide consistent error bounding. 
+2) Tdigest can often provide better absolute estimates than UddSketch, but in edge cases it can provide very large errors, if you happen to have a data distribution that it doesn't get along with, UddSketch can also have large error for certain data distributions, but it will tell you that it does. Tdigest is also prone to error if you have multiple re-aggregation steps, especially if some of the digests have highly disparate numbers of values and it is not a perfectly "stackable" aggregate, in that multiple re-aggregation steps can lead to different results than if you performed the algorithm directly on the underlying data (data order input can even sometimes have an affect though this is usually smaller). UddSketch does not have this problem, it will provide the same result no matter the reaggregation steps or order of input. 

@@ -247,10 +247,10 @@ CREATE AGGREGATE percentile_agg(
 // Approximate the value at the given approx_percentile (0.0-1.0)
 #[pg_extern(name="approx_percentile")]
 pub fn uddsketch_approx_percentile(
-    approx_percentile: f64,
+    percentile: f64,
     sketch: UddSketch,
 ) -> f64 {
-    sketch.to_uddsketch().estimate_quantile(approx_percentile)
+    sketch.to_uddsketch().estimate_quantile(percentile)
 }
 
 // Approximate the approx_percentile at the given value

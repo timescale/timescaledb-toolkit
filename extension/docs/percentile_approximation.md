@@ -281,18 +281,18 @@ ORDER BY api_id;
 ```output
  api_id |        avg         |   approx_median    
 --------+--------------------+--------------------
-      1 |  71.55322907526075 |  54.57028044425955
-      2 |  116.1446200551691 |  80.11711874054421
+      1 |  71.55322907526073 |  54.57028044425955
+      2 | 116.14462005516907 |  80.11711874054421
       3 |  151.6943183529463 |  97.07555689493275
-      4 | 151.80546818776745 |  91.05735575711857
-      5 | 240.73218897526579 | 110.33152038490607
+      4 | 151.80546818776742 |  91.05735575711857
+      5 |  240.7321889752658 | 110.33152038490607
       6 | 242.39094418199042 | 117.62359773545333
       7 | 204.31667016105945 | 110.33152038490607
       8 |  791.7213027346409 | 117.62359773545333
       9 |  730.1077688899509 | 133.68545889817688
      10 |   237.621813523762 | 117.62359773545333
-     11 | 1006.1587809419943 | 125.39762613589876
-     12 |  308.5952922205141 | 133.68545889817688
+     11 | 1006.1587809419942 | 125.39762613589876
+     12 |   308.595292220514 | 133.68545889817688
 ```
 
 We have several other accessor functions, including `error` which returns the maximum relative error for the percentile estimate, `num_vals` which returns the number of elements in the estimator, and perhaps the most interesting one, `approx_percentile_at_value`, which gives the hypothetical percentile for a given value. Let's say we really don't want our apis to go over 1s in response time (1000 ms), we can use that to figure out what fraction of users waited over a second for each api:
@@ -300,10 +300,26 @@ We have several other accessor functions, including `error` which returns the ma
 ```SQL
 SELECT
     api_id,
-    ((1 - approx_percentile_at_value(250, percentile_agg(percentile_agg))) * 100)::numeric(6,2) as percent_over_1s
+    ((1 - approx_percentile_at_value(1000, percentile_agg(percentile_agg))) * 100)::numeric(6,2) as percent_over_1s
 FROM response_times_hourly
 GROUP BY api_id
 ORDER BY api_id;
+```
+```output
+ api_id | percent_over_1s 
+--------+-----------------
+      1 |            0.00
+      2 |            0.00
+      3 |            0.00
+      4 |            0.42
+      5 |            1.61
+      6 |            2.59
+      7 |            2.90
+      8 |            3.20
+      9 |            4.47
+     10 |            4.42
+     11 |            5.84
+     12 |            4.97
 ```
 
 

@@ -20,6 +20,36 @@ We also provide nightly builds as a docker images in `timescaledev/timescale-ana
 All versions of the extension contain experimental features in the `timecale_analytics_experimental`, schema see [our docs section on experimental features](/extension/docs/README.md#tag-notes) for
 more details.
 
+## 💿 Installing From Source ##
+
+### 🔧 Tools Setup ###
+
+Building the extension requires valid rust and clang installs, along with the postgres headers for whichever version of postgres you are running, and pgx.
+We recommend installing rust using the [official instructions](https://www.rust-lang.org/tools/install):
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+and clang and the postgres header in the preferred manner for your system. For Ubuntu this could be
+```bash
+sudo apt-get clang postgresql-server-dev-13
+```
+and finally, [fork](https://github.com/JLockerman/pgx/tree/timescale)
+of [pgx](https://github.com/zombodb/pgx) can be installed with
+```bash
+cargo install --git https://github.com/JLockerman/pgx.git --branch timescale cargo-pgx && cargo pgx init
+```
+
+### 💾 Building and Installing the extension ###
+
+Download or clone this repository, and switch to the `extension` subdirectory, e.g. 
+```bash
+git clone https://github.com/timescale/timescale-analytics && cd timescale-analytics/extension
+```
+Then run 
+```
+cargo pgx install --release
+```
+
 ## ✏️ Get Involved ##
 
 The Timescale Analytics project is still in the initial planning stage as we
@@ -56,6 +86,7 @@ to install the extension to a postgres install locatable using `pg_config` use
 ```bash
 cargo pgx install --release
 ```
+
 
 ## 🐯 About TimescaleDB
 

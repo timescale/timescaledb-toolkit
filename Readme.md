@@ -104,12 +104,4 @@ time, roles and permissions, and security.
 
 TimescaleDB has a **large and active user community** (tens of millions
 of downloads, hundreds of thousands of active deployments, Slack channel
-with thousands of members). Users include Comcast, Fujitsu,
-Schneider Electric, Siemens, Walmart, Warner Music, and thousands of
-others.
-
-Developers and organizations around the world trust TimescaleDB with their
-time-series data. AppDynamics (now part of Cisco Systems and one of the
-largest application performance monitoring providers) relies on TimescaleDB
-as its main metrics database. TimescaleDB is also the preferred (recommended)
-backend datasource for Zabbix users and is natively supported in Grafana.
+with thousands of members).  

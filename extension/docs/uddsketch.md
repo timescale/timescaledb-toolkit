@@ -127,7 +127,7 @@ CREATE MATERIALIZED VIEW weekly_sketch
 WITH (timescaledb.continuous)
 AS SELECT
     time_bucket('7 day'::interval, time) as week,
-    uddsketch(100, 0.005, value)
+    uddsketch(100, 0.005, value) as sketch
 FROM test
 GROUP BY time_bucket('7 day'::interval, time);
 ```
@@ -136,7 +136,7 @@ Next we'll use one of our utility functions, `generate_periodic_normal_series`, 
 ```SQL ,non-transactional
 INSERT INTO test
     SELECT time, value
-    FROM timescale_analytics_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, NULL, NULL, NULL, NULL, NULL, NULL, rng_seed => 12345678); 
+    FROM timescale_analytics_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, rng_seed => 12345678); 
 ```
 ```
 INSERT 0 4032
@@ -146,10 +146,10 @@ Finally, we can query the aggregate to see various approximate percentiles from 
 ```SQL
 SELECT 
     week,
-    error(uddsketch), 
-    approx_percentile(0.01, uddsketch) AS low, 
-    approx_percentile(0.5, uddsketch) AS mid, 
-    approx_percentile(0.99, uddsketch) AS high 
+    error(sketch), 
+    approx_percentile(0.01, sketch) AS low, 
+    approx_percentile(0.5, sketch) AS mid, 
+    approx_percentile(0.99, sketch) AS high 
 FROM weekly_sketch
 ORDER BY week;
 ```
@@ -163,19 +163,33 @@ ORDER BY week;
  2020-01-27 00:00:00+00 | 0.005 | 688.8626877028054 |  911.4568854686239 | 1135.7472981488002
 ```
 
+We can also combine the weekly aggregates to run queries on the entire data:
+```SQL
+SELECT 
+    error(a.uddsketch), 
+    approx_percentile(0.01, a.uddsketch) AS low, 
+    approx_percentile(0.5, a.uddsketch) AS mid, 
+    approx_percentile(0.99, a.uddsketch) AS high 
+FROM (SELECT uddsketch(sketch) FROM weekly_sketch) AS a;
+```
+```output
+ error |       low        |        mid         |        high        
+-------+------------------+--------------------+--------------------
+ 0.005 | 753.736403199032 | 1027.6657963969128 | 1280.5527834239035
+```
+
+
 ## Command List (A-Z) <a id="uddsketch-api"></a>
 Aggregate Functions
 > - [uddsketch - point form](#uddsketch-point)
 > - [uddsketch - summary form](#uddsketch-summary)
 
 Accessor Functions
-
 > - [error](#error)
 > - [mean](#mean)
 > - [num_vals](#num-vals)
 > - [approx_percentile](#approx_percentile)
 > - [approx_percentile_at_value](#approx_percentile-at-value)
-
 
 ---
 ## **uddsketch (point form) ** <a id="uddsketch-point"></a>
@@ -242,7 +256,7 @@ This will combine multiple already constructed UddSketches, they must have the s
 | `uddsketch` | `UddSketch` | A UddSketch object which may be passed to other UddSketch APIs. |
 <br>
 
-### Sample Usages <a id="uddsketch-examples"></a>
+### Sample Usages <a id="uddsketch-summary-examples"></a>
 For this examples assume we have a table 'samples' with a column 'data' holding `DOUBLE PRECISION` values, and an 'id' column that holds the what series the data belongs to, we can create a view to get the UddSketches for each `id` using the [point form](#uddsketch-point) like so:
 
 ```SQL ,ignore

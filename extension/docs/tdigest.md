@@ -3,6 +3,7 @@
 > [Description](#tdigest-description)<br>
 > [Details](#tdigest-details)<br>
 > [Example](#tdigest-example)<br>
+> [Continuous Aggregate Example](#tdigest-cagg-example)<br>
 > [API](#tdigest-api)
 
 ## Description <a id="tdigest-description"></a>
@@ -89,6 +90,78 @@ FROM high_temp;
  MIAMI INTERNATIONAL AIRPORT, FL US    | 0.8093468908877591
 (4 rows)
 ```
+
+## Example Using TimeScale Continuous Aggregates (tdigest-cagg-example)
+Timescale [continuous aggregates](https://docs.timescale.com/latest/using-timescaledb/continuous-aggregates)
+provide an easy way to keep a tdigest up to date as more data is added to a table.  The following example
+shows how this might look in practice.  The first step is to create a Timescale hypertable to store our data.
+
+```SQL ,non-transactional,ignore-output
+SET TIME ZONE 'UTC';
+CREATE TABLE test(time TIMESTAMPTZ, value DOUBLE PRECISION);
+SELECT create_hypertable('test', 'time');
+```
+
+Next a materialized view with the timescaledb.continous property is added.  This will automatically keep it
+members, which in this case includes a tdigest, up to date as data is added to the table.
+```SQL ,non-transactional,ignore-output
+CREATE MATERIALIZED VIEW weekly_sketch
+WITH (timescaledb.continuous)
+AS SELECT
+    time_bucket('7 day'::interval, time) as week,
+    timescale_analytics_experimental.tdigest(100, value) as digest
+FROM test
+GROUP BY time_bucket('7 day'::interval, time);
+```
+
+Next a utility function, `generate_periodic_normal_series`, is called to generate some data.  When called in
+this manner the function will return 28 days worth of data points spaced 10 minutes apart.  These points are
+generate by adding a random point (with a normal distribution and standard deviation of 100) to a sine wave
+which oscilates between 900 and 1100 over the period of a day.
+```SQL ,non-transactional
+INSERT INTO test
+    SELECT time, value
+    FROM timescale_analytics_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, rng_seed => 543643); 
+```
+```
+INSERT 0 4032
+```
+
+Finally, a query is run over the aggregate to see various approximate percentiles from different weeks.
+```SQL
+SELECT 
+    week,
+    timescale_analytics_experimental.quantile(digest, 0.01) AS low, 
+    timescale_analytics_experimental.quantile(digest, 0.5) AS mid, 
+    timescale_analytics_experimental.quantile(digest, 0.99) AS high 
+FROM weekly_sketch
+ORDER BY week;
+```
+```output
+         week          |        low        |        mid         |        high        
+-----------------------+-------------------+--------------------+--------------------
+2019-12-30 00:00:00+00 | 783.2075197029583 | 1030.4505832620227 | 1276.7865808567146
+2020-01-06 00:00:00+00 | 865.2941219994462 | 1096.0356855737048 |  1331.649176312383
+2020-01-13 00:00:00+00 | 834.6747915021757 |  1060.024660266383 |    1286.1810386717
+2020-01-20 00:00:00+00 | 728.2421431793433 |  955.3913494459423 |  1203.730690023456
+2020-01-27 00:00:00+00 | 655.1143367116582 |  903.4836014674186 | 1167.7058289748031
+
+```
+
+It is also possible to combine the weekly aggregates to run queries on the entire data:
+```SQL
+SELECT 
+    timescale_analytics_experimental.quantile(combined.digest, 0.01) AS low, 
+    timescale_analytics_experimental.quantile(combined.digest, 0.5) AS mid, 
+    timescale_analytics_experimental.quantile(combined.digest, 0.99) AS high 
+FROM (SELECT timescale_analytics_experimental.tdigest(digest) AS digest FROM weekly_sketch) AS combined;
+```
+```output
+       low        |        mid         |        high        
+------------------+--------------------+--------------------
+746.7844638729881 | 1026.6100299252928 | 1294.5391132795592
+```
+
 
 ## Command List (A-Z) <a id="tdigest-api"></a>
 > - [tdigest](#tdigest)

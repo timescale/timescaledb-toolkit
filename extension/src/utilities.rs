@@ -1,6 +1,31 @@
 use pgx::*;
 use pg_sys::{TimestampTz};
 
+#[pg_extern(name="generate_periodic_normal_series", schema = "timescale_analytics_experimental")]
+pub fn default_generate_periodic_normal_series(
+    series_start: pg_sys::TimestampTz,
+    rng_seed: Option<i64>,
+) -> impl std::iter::Iterator<Item = (name!(time,TimestampTz),name!(value,f64))> + 'static {
+    generate_periodic_normal_series(series_start, None, None, None, None, None, None, rng_seed)
+}
+
+pub fn alternate_generate_periodic_normal_series(
+    series_start: pg_sys::TimestampTz,
+    periods_per_series: i64,
+    points_per_period: i64,
+    seconds_between_points: i64,
+    base_value: f64,
+    periodic_magnitude: f64,
+    standard_deviation: f64,
+    rng_seed: Option<i64>,
+) -> impl std::iter::Iterator<Item = (name!(time,TimestampTz),name!(value,f64))> + 'static {
+    generate_periodic_normal_series(series_start, 
+        Some(periods_per_series * points_per_period * seconds_between_points * 1000000),
+        Some(seconds_between_points * 1000000), Some(base_value), 
+        Some(points_per_period * seconds_between_points * 1000000),Some(periodic_magnitude),
+        Some(standard_deviation), rng_seed)
+}
+
 #[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn generate_periodic_normal_series(
     series_start: pg_sys::TimestampTz,
@@ -43,16 +68,17 @@ pub fn generate_periodic_normal_series(
         Some(v) => v,
         None => 100.0
     };
-    let rng_seed = match rng_seed {
-        Some(v) => v as u64,
-        None => 0  // TODO, random seed if not specified
-    };
 
     use rand_distr::Distribution;
     use rand::SeedableRng;
+    use rand_chacha::ChaCha12Rng;
+
+    let mut rng = match rng_seed {
+        Some(v) => ChaCha12Rng::seed_from_u64(v as u64),
+        None => ChaCha12Rng::from_entropy()
+    };
 
     let distribution = rand_distr::Normal::new(0.0, standard_deviation).unwrap();
-    let mut rng = rand::rngs::StdRng::seed_from_u64(rng_seed);
     
     (0..series_len).step_by(sample_interval as usize).map(move |accum| {
         let time = series_start + accum;

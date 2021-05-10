@@ -28,12 +28,12 @@ SELECT create_hypertable('response_times', 'ts');
 ```SQL , non-transactional, ignore-output
 SELECT setseed(0.43); -- do this to make sure we get the same random number for each run so the results are the same
 
-WITH apis as (SELECT generate_series(1, 12) as api_id), 
-users as (SELECT generate_series(1, 30) as user_id), 
-api_users as (SELECT * FROM apis JOIN users on api_id % 3 = user_id % 3),  -- users use ~ 1/3 of apis
-times as (SELECT generate_series('2020-01-01'::timestamptz, '2020-01-02'::timestamptz, '1 minute'::interval) as ts),
-raw_joined as (SELECT * from api_users CROSS JOIN times ORDER BY api_id, user_id, ts),
-generated_data as (
+WITH apis as MATERIALIZED (SELECT generate_series(1, 12) as api_id), 
+users as MATERIALIZED (SELECT generate_series(1, 30) as user_id), 
+api_users as MATERIALIZED (SELECT * FROM apis JOIN users on api_id % 3 = user_id % 3),  -- users use ~ 1/3 of apis
+times as MATERIALIZED (SELECT generate_series('2020-01-01'::timestamptz, '2020-01-02'::timestamptz, '1 minute'::interval) as ts),
+raw_joined as MATERIALIZED (SELECT * from api_users CROSS JOIN times ORDER BY api_id, user_id, ts),
+generated_data as MATERIALIZED (
 SELECT ts + '5 min'::interval * random() as ts,
     api_id, 
     user_id, 

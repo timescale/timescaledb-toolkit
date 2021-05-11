@@ -3,6 +3,7 @@ resolver = "2"
 
 members = [
     "extension",
+    "crates/encodings",
     "crates/t-digest",
     "crates/hyperloglog",
     "crates/udd-sketch",

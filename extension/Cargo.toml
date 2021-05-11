@@ -17,6 +17,7 @@ pg_test = ["approx"]
 [dependencies]
 pgx = {git="https://github.com/JLockerman/pgx.git", branch="timescale"}
 pgx-macros = {git="https://github.com/JLockerman/pgx.git", branch="timescale"}
+encodings = {path="../crates/encodings"}
 tdigest = {path="../crates/t-digest"}
 hyperloglog = {path="../crates/hyperloglog"}
 uddsketch = {path="../crates/udd-sketch"}

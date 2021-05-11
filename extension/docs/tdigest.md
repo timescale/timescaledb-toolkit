@@ -39,17 +39,17 @@ Now let's create some t-digests for our different stations and verify that they'
 
 ```SQL ,ignore
 CREATE VIEW high_temp AS
-    SELECT name, timescale_analytics_experimental.tdigest(100, tmax)
+    SELECT name, tdigest(100, tmax)
     FROM weather
     GROUP BY name;
 
 SELECT
     name,
-    timescale_analytics_experimental.get_count(tdigest)
+    num_vals(tdigest)
 FROM high_temp;
 ```
 ```
-                 name                  | get_count
+                 name                  | num_vals
 ---------------------------------------+-----------
  PORTLAND INTERNATIONAL AIRPORT, OR US |      7671
  LITCHFIELD PARK, AZ US                |      5881
@@ -62,7 +62,7 @@ We can then check to see the 99.5 percentile high temperature for each location.
 ```SQL ,ignore
 SELECT
     name,
-    timescale_analytics_experimental.quantile(tdigest, 0.995)
+    approx_percentile(0.995, tdigest)
 FROM high_temp;
 ```
 ```
@@ -78,11 +78,11 @@ Or even check to see what quantile 90F would fall at in each city.
 ```SQL ,ignore
 SELECT
     name,
-    timescale_analytics_experimental.quantile_at_value(tdigest, 90.0)
+    approx_percentile_at_value(90.0, tdigest)
 FROM high_temp;
 ```
 ```
-                 name                  |  quantile_at_value
+                 name                  |  approx_percentile_at_value
 ---------------------------------------+--------------------
  PORTLAND INTERNATIONAL AIRPORT, OR US | 0.9609990016734108
  LITCHFIELD PARK, AZ US                | 0.5531621580122781
@@ -109,7 +109,7 @@ CREATE MATERIALIZED VIEW weekly_sketch
 WITH (timescaledb.continuous)
 AS SELECT
     time_bucket('7 day'::interval, time) as week,
-    timescale_analytics_experimental.tdigest(100, value) as digest
+    tdigest(100, value) as digest
 FROM test
 GROUP BY time_bucket('7 day'::interval, time);
 ```
@@ -131,9 +131,9 @@ Finally, a query is run over the aggregate to see various approximate percentile
 ```SQL
 SELECT 
     week,
-    timescale_analytics_experimental.quantile(digest, 0.01) AS low, 
-    timescale_analytics_experimental.quantile(digest, 0.5) AS mid, 
-    timescale_analytics_experimental.quantile(digest, 0.99) AS high 
+    approx_percentile(0.01, digest) AS low, 
+    approx_percentile(0.5, digest) AS mid, 
+    approx_percentile(0.99, digest) AS high 
 FROM weekly_sketch
 ORDER BY week;
 ```
@@ -151,10 +151,10 @@ ORDER BY week;
 It is also possible to combine the weekly aggregates to run queries on the entire data:
 ```SQL
 SELECT 
-    timescale_analytics_experimental.quantile(combined.digest, 0.01) AS low, 
-    timescale_analytics_experimental.quantile(combined.digest, 0.5) AS mid, 
-    timescale_analytics_experimental.quantile(combined.digest, 0.99) AS high 
-FROM (SELECT timescale_analytics_experimental.tdigest(digest) AS digest FROM weekly_sketch) AS combined;
+    approx_percentile(0.01, combined.digest) AS low, 
+    approx_percentile(0.5, combined.digest) AS mid, 
+    approx_percentile(0.99, combined.digest) AS high 
+FROM (SELECT tdigest(digest) AS digest FROM weekly_sketch) AS combined;
 ```
 ```output
        low        |        mid         |        high        
@@ -164,20 +164,23 @@ FROM (SELECT timescale_analytics_experimental.tdigest(digest) AS digest FROM wee
 
 
 ## Command List (A-Z) <a id="tdigest-api"></a>
-> - [tdigest](#tdigest)
-> - [tdigest_count](#tdigest_count)
-> - [tdigest_max](#tdigest_max)
-> - [tdigest_mean](#tdigest_mean)
-> - [tdigest_min](#tdigest_min)
-> - [tdigest_quantile](#tdigest_quantile)
-> - [tdigest_quantile_at_value](#tdigest_quantile_at_value)
-> - [tdigest_sum](#tdigest_sum)
+Aggregate Functions
+> - [tdigest - point form](#tdigest)
+> - [tdigest - summary form](#tdigest-summary)
+
+Accessor Functions
+> - [num_vals](#tdigest_count)
+> - [mean](#tdigest_mean)
+> - [get_min](#tdigest_min)
+> - [get_max](#tdigest_max)
+> - [approx_percentile](#tdigest_quantile)
+> - [approx_percentile_at_value](#tdigest_quantile_at_value)
 
 
 ---
-## **tdigest** <a id="tdigest"></a>
+## **tdigest - point form** <a id="tdigest"></a>
 ```SQL ,ignore
-timescale_analytics_experimental.tdigest(
+tdigest(
     buckets INTEGER,
     value DOUBLE PRECISION
 ) RETURNS TDigest
@@ -203,23 +206,66 @@ This will construct and return a TDigest with the specified number of buckets ov
 For this examples assume we have a table 'samples' with a column 'weights' holding `DOUBLE PRECISION` values.  The following will simply return a digest over that column
 
 ```SQL ,ignore
-SELECT timescale_analytics_experimental.tdigest(100, data) FROM samples;
+SELECT tdigest(100, data) FROM samples;
 ```
 
 It may be more useful to build a view from the aggregate that we can later pass to other tdigest functions.
 
 ```SQL ,ignore
 CREATE VIEW digest AS
-    SELECT timescale_analytics_experimental.tdigest(100, data)
+    SELECT tdigest(100, data)
     FROM samples;
 ```
 
 ---
 
-## **tdigest_min** <a id="tdigest_min"></a>
+## **tdigest (summary form)** <a id="tdigest-summary"></a>
+```SQL ,ignore
+tdigest(
+    digest TDigest
+) RETURNS TDigest
+```
+
+This will combine multiple already constructed TDigests, if they were created with the same size. This is very useful for re-aggregating digests already constructed using the [point form](#tdigest).
+
+### Required Arguments <a id="tdigest-summary-required-arguments"></a>
+|Name| Type |Description|
+|---|---|---|
+| `digest` | `TDigest` | Previously constructed TDigest objects. |
+<br>
+
+### Returns
+
+|Column|Type|Description|
+|---|---|---|
+| `tdigest` | `TDigest` | A TDigest representing all of the underlying data from all the subaggregates. |
+<br>
+
+### Sample Usages <a id="tdigest-summary-examples"></a>
+For this examples assume we have a table 'samples' with a column 'data' holding `DOUBLE PRECISION` values, and an 'id' column that holds the what series the data belongs to, we can create a view to get the TDigests for each `id` using the [point form](#tdigest-point) like so:
 
 ```SQL ,ignore
-timescale_analytics_experimental.get_min(digest TDigest) RETURNS DOUBLE PRECISION
+CREATE VIEW digests AS
+    SELECT 
+        id, 
+        tdigest(100, data) as digest
+    FROM samples
+    GROUP BY id;
+```
+
+Then we can use that view to get the full aggregate like so: 
+
+```SQL ,ignore
+SELECT tdigest(digest)
+FROM digests;
+```
+
+---
+
+## **get_min** <a id="tdigest_min"></a>
+
+```SQL ,ignore
+get_min(digest TDigest) RETURNS DOUBLE PRECISION
 ```
 
 Get the minimum value from a t-digest.
@@ -234,25 +280,25 @@ Get the minimum value from a t-digest.
 
 |Column|Type|Description|
 |---|---|---|
-| `tdigest_min` | `DOUBLE PRECISION` | The minimum value entered into the t-digest. |
+| `get_min` | `DOUBLE PRECISION` | The minimum value entered into the t-digest. |
 <br>
 
 ### Sample Usages <a id="tdigest-min-examples"></a>
 
 ```SQL
-SELECT timescale_analytics_experimental.get_min(timescale_analytics_experimental.tdigest(100, data))
+SELECT get_min(tdigest(100, data))
 FROM generate_series(1, 100) data;
 ```
 ```output
- tdigest_min
--------------
-           1
+ get_min
+-----------
+         1
 ```
 ---
-## **tdigest_max** <a id="tdigest_max"></a>
+## **get_max** <a id="tdigest_max"></a>
 
 ```SQL ,ignore
-timescale_analytics_experimental.get_max(digest TDigest) RETURNS DOUBLE PRECISION
+get_max(digest TDigest) RETURNS DOUBLE PRECISION
 ```
 
 Get the maximum value from a t-digest.
@@ -266,13 +312,13 @@ Get the maximum value from a t-digest.
 ### Returns
 |Column|Type|Description|
 |---|---|---|
-| `max` | `DOUBLE PRECISION` | The maximum value entered into the t-digest. |
+| `get_max` | `DOUBLE PRECISION` | The maximum value entered into the t-digest. |
 <br>
 
 ### Sample Usage <a id="tdigest_max-examples"></a>
 
 ```SQL
-SELECT timescale_analytics_experimental.get_max(timescale_analytics_experimental.tdigest(100, data))
+SELECT get_max(tdigest(100, data))
 FROM generate_series(1, 100) data;
 ```
 ```output
@@ -281,10 +327,10 @@ FROM generate_series(1, 100) data;
      100
 ```
 ---
-## **tdigest_count** <a id="tdigest_count"></a>
+## **num_vals** <a id="tdigest_count"></a>
 
 ```SQL ,ignore
-timescale_analytics_experimental.get_count(digest TDigest) RETURNS DOUBLE PRECISION
+num_vals(digest TDigest) RETURNS DOUBLE PRECISION
 ```
 
 Get the number of values contained in a t-digest.
@@ -298,26 +344,26 @@ Get the number of values contained in a t-digest.
 ### Returns
 |Column|Type|Description|
 |---|---|---|
-| `count` | `DOUBLE PRECISION` | The number of values entered into the t-digest. |
+| `num_vals` | `DOUBLE PRECISION` | The number of values entered into the t-digest. |
 <br>
 
 ### Sample Usage <a id="tdigest_count-examples"></a>
 
 ```SQL
-SELECT timescale_analytics_experimental.get_count(timescale_analytics_experimental.tdigest(100, data))
+SELECT num_vals(tdigest(100, data))
 FROM generate_series(1, 100) data;
 ```
 ```output
- get_count
+ num_vals
 -----------
        100
 ```
 
 ---
-## **tdigest_mean** <a id="tdigest_mean"></a>
+## **mean** <a id="tdigest_mean"></a>
 
 ```SQL ,ignore
-timescale_analytics_experimental.mean(digest TDigest) RETURNS DOUBLE PRECISION
+mean(digest TDigest) RETURNS DOUBLE PRECISION
 ```
 
 Get the average of all the values contained in a t-digest.
@@ -337,7 +383,7 @@ Get the average of all the values contained in a t-digest.
 ### Sample Usage <a id="tdigest_mean-examples"></a>
 
 ```SQL
-SELECT timescale_analytics_experimental.mean(timescale_analytics_experimental.tdigest(100, data))
+SELECT mean(tdigest(100, data))
 FROM generate_series(1, 100) data;
 ```
 ```output
@@ -347,45 +393,12 @@ FROM generate_series(1, 100) data;
 ```
 
 ---
-## **tdigest_sum** <a id="tdigest_sum"></a>
+## **approx_percentile** <a id="tdigest_quantile"></a>
 
 ```SQL ,ignore
-timescale_analytics_experimental.sum(digest TDigest) RETURNS DOUBLE PRECISION
-```
-
-Get the sum of all the values in a t-digest
-
-### Required Arguments <a id="tdigest_sum-required-arguments"></a>
-|Name|Type|Description|
-|---|---|---|
-| `digest` | `TDigest` |  The digest to compute the sum on. |
-<br>
-
-### Returns
-|Column|Type|Description|
-|---|---|---|
-| `sum` | `DOUBLE PRECISION` | The sum of the values entered into the t-digest. |
-<br>
-
-### Sample Usage <a id="tdigest_sum-examples"></a>
-
-```SQL
-SELECT timescale_analytics_experimental.sum(timescale_analytics_experimental.tdigest(100, data))
-FROM generate_series(1, 100) data;
-```
-```output
-  sum
-------
- 5050
-```
-
----
-## **tdigest_quantile** <a id="tdigest_quantile"></a>
-
-```SQL ,ignore
-timescale_analytics_experimental.quantile(
-    digest TDigest,
-    quantile DOUBLE PRECISION
+approx_percentile(
+    quantile DOUBLE PRECISION,
+    digest TDigest
 ) RETURNS TDigest
 ```
 
@@ -394,35 +407,35 @@ Get the approximate value at a quantile from a t-digest
 ### Required Arguments <a id="tdigest_quantile-required-arguments"></a>
 |Name|Type|Description|
 |---|---|---|
-| `digest` | `TDigest` | The digest to compute the quantile on. |
 | `quantile` | `DOUBLE PRECISION` | The desired quantile (0.0-1.0) to approximate. |
+| `digest` | `TDigest` | The digest to compute the quantile on. |
 <br>
 
 ### Returns
 |Column|Type|Description|
 |---|---|---|
-| `quantile` | `DOUBLE PRECISION` | The estimated value at the requested quantile. |
+| `approx_percentile` | `DOUBLE PRECISION` | The estimated value at the requested quantile. |
 <br>
 
 ### Sample Usage <a id="tdigest_quantile-examples"></a>
 
 ```SQL
-SELECT timescale_analytics_experimental.quantile(timescale_analytics_experimental.tdigest(100, data), 0.90)
+SELECT approx_percentile(0.90, tdigest(100, data))
 FROM generate_series(1, 100) data;
 ```
 ```output
- quantile
+ approx_percentile
 ----------
      90.5
 ```
 
 ---
-## **tdigest_quantile_at_value** <a id="tdigest_quantile_at_value"></a>
+## **approx_percentile_at_value** <a id="tdigest_quantile_at_value"></a>
 
 ```SQL ,ignore
-timescale_analytics_experimental.quantile_at_value(
-    digest TDigest,
-    value DOUBLE PRECISION
+approx_percentile_at_value(
+    value DOUBLE PRECISION,
+    digest TDigest
 ) RETURNS TDigest
 ```
 
@@ -431,24 +444,24 @@ Estimate what quantile a given value would be located at in a t-digest.
 ### Required Arguments <a id="tdigest_quantile_at_value-required-arguments"></a>
 |Name|Type|Description|
 |---|---|---|
-| `digest` | `TDigest` | The digest to compute the quantile on. |
 | `value` | `DOUBLE PRECISION` |  The value to estimate the quantile of. |
+| `digest` | `TDigest` | The digest to compute the quantile on. |
 <br>
 
 ### Returns
 |Column|Type|Description|
 |---|---|---|
-| `quantile_at_value` | `DOUBLE PRECISION` | The estimated quantile associated with the provided value. |
+| `approx_percentile_at_value` | `DOUBLE PRECISION` | The estimated quantile associated with the provided value. |
 <br>
 
 ### Sample Usage <a id="tdigest_quantile_at_value-examples"></a>
 
 ```SQL
-SELECT timescale_analytics_experimental.quantile_at_value(timescale_analytics_experimental.tdigest(100, data), 90)
+SELECT approx_percentile_at_value(90, tdigest(100, data))
 FROM generate_series(1, 100) data;
 ```
 ```output
- quantile_at_value
+ approx_percentile_at_value
 -------------------
              0.895
 ```

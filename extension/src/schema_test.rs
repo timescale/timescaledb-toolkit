@@ -110,6 +110,27 @@ mod tests {
         "function uddsketch_out(uddsketch)",
         "function uddsketch_serialize(internal)",
         "function uddsketch_trans(internal,integer,double precision,double precision)",
-        "type uddsketch"
+        "type uddsketch",
+        "function approx_percentile(double precision,tdigest)",
+        "function approx_percentile_at_value(double precision,tdigest)",
+        "function get_max(tdigest)",
+        "function get_min(tdigest)",
+        "function mean(tdigest)",
+        "function num_vals(tdigest)",
+        "function tdigest(integer,double precision)",
+        "function tdigest(tdigest)",
+        "function tdigest_combine(internal,internal)",
+        "function tdigest_compound_combine(internal,internal)",
+        "function tdigest_compound_deserialize(bytea,internal)",
+        "function tdigest_compound_final(internal)",
+        "function tdigest_compound_serialize(internal)",
+        "function tdigest_compound_trans(internal,tdigest)",
+        "function tdigest_deserialize(bytea,internal)",
+        "function tdigest_final(internal)",
+        "function tdigest_in(cstring)",
+        "function tdigest_out(tdigest)",
+        "function tdigest_serialize(internal)",
+        "function tdigest_trans(internal,integer,double precision)",
+        "type tdigest"
     ];
 }

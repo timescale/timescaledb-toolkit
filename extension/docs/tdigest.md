@@ -14,6 +14,8 @@ Timescale analytics provides an implementation of the [t-digest data structure](
 
 Timescale's t-digest is implemented as an aggregate function in PostgreSQL.  They do not support moving-aggregate mode, and are not ordered-set aggregates.  Presently they are restricted to float values, but the goal is to make them polymorphic.  They are partializable and are good candidates for [continuous aggregation](https://docs.timescale.com/latest/using-timescaledb/continuous-aggregates).
 
+One additional thing to note about TDigests is that they are somewhat dependant on the order of inputs.  The percentile approximations should be nearly equal for the same underlying data, especially at the extremes of the quantile range where the TDigest is inherently more accurate, they are unlikely to be identical if built in a different order.  While this should have little effect on the accuracy of the estimates, it is worth noting that repeating the creation of the TDigest might have subtle differences if the call is being parallelized by Postgres.  Similarly, building a TDigest by combining several subdigests using the [summary aggregate](#tdigest-summary) is likely to produce a subtley different result than combining all of the underlying data using a single [point aggregate](#tdigest).
+
 ## Usage Example <a id="tdigest-example"></a>
 
 For this example we're going to start with a table containing some NOAA weather data for a few weather stations across the US over the past 20 years.
@@ -102,8 +104,8 @@ CREATE TABLE test(time TIMESTAMPTZ, value DOUBLE PRECISION);
 SELECT create_hypertable('test', 'time');
 ```
 
-Next a materialized view with the timescaledb.continous property is added.  This will automatically keep it
-members, which in this case includes a tdigest, up to date as data is added to the table.
+Next a materialized view with the timescaledb.continuous property is added.  This will automatically keep itself,
+including the tdigest in this case, up to date as data is added to the table.
 ```SQL ,non-transactional,ignore-output
 CREATE MATERIALIZED VIEW weekly_sketch
 WITH (timescaledb.continuous)
@@ -169,15 +171,15 @@ Aggregate Functions
 > - [tdigest - summary form](#tdigest-summary)
 
 Accessor Functions
-> - [num_vals](#tdigest_count)
-> - [mean](#tdigest_mean)
-> - [get_min](#tdigest_min)
-> - [get_max](#tdigest_max)
 > - [approx_percentile](#tdigest_quantile)
 > - [approx_percentile_at_value](#tdigest_quantile_at_value)
-
+> - [max_val](#tdigest_max)
+> - [mean](#tdigest_mean)
+> - [min_val](#tdigest_min)
+> - [num_vals](#tdigest_count)
 
 ---
+
 ## **tdigest - point form** <a id="tdigest"></a>
 ```SQL ,ignore
 tdigest(
@@ -203,13 +205,13 @@ This will construct and return a TDigest with the specified number of buckets ov
 <br>
 
 ### Sample Usages <a id="tdigest-examples"></a>
-For this examples assume we have a table 'samples' with a column 'weights' holding `DOUBLE PRECISION` values.  The following will simply return a digest over that column
+For this example, assume we have a table 'samples' with a column 'weights' holding `DOUBLE PRECISION` values.  The following will simply return a digest over that column
 
 ```SQL ,ignore
 SELECT tdigest(100, data) FROM samples;
 ```
 
-It may be more useful to build a view from the aggregate that we can later pass to other tdigest functions.
+It may be more useful to build a view from the aggregate that can later be passed to other tdigest functions.
 
 ```SQL ,ignore
 CREATE VIEW digest AS
@@ -226,7 +228,7 @@ tdigest(
 ) RETURNS TDigest
 ```
 
-This will combine multiple already constructed TDigests, if they were created with the same size. This is very useful for re-aggregating digests already constructed using the [point form](#tdigest).
+This will combine multiple already constructed TDigests, if they were created with the same size. This is very useful for re-aggregating digests already constructed using the [point form](#tdigest).  Note that the resulting digest may be subtley different from a digest constructed directly from the underlying points, as noted in the [details section](#tdigest-details) above.
 
 ### Required Arguments <a id="tdigest-summary-required-arguments"></a>
 |Name| Type |Description|
@@ -242,7 +244,7 @@ This will combine multiple already constructed TDigests, if they were created wi
 <br>
 
 ### Sample Usages <a id="tdigest-summary-examples"></a>
-For this examples assume we have a table 'samples' with a column 'data' holding `DOUBLE PRECISION` values, and an 'id' column that holds the what series the data belongs to, we can create a view to get the TDigests for each `id` using the [point form](#tdigest-point) like so:
+This example assumes a table 'samples' with a column 'data' holding `DOUBLE PRECISION` values and an 'id' column that holds the what series the data belongs to.  A view to get the TDigests for each `id` using the [point form](#tdigest-point) can be created like so:
 
 ```SQL ,ignore
 CREATE VIEW digests AS
@@ -253,7 +255,7 @@ CREATE VIEW digests AS
     GROUP BY id;
 ```
 
-Then we can use that view to get the full aggregate like so: 
+That view can then be used to get the full aggregate like so: 
 
 ```SQL ,ignore
 SELECT tdigest(digest)
@@ -262,137 +264,6 @@ FROM digests;
 
 ---
 
-## **get_min** <a id="tdigest_min"></a>
-
-```SQL ,ignore
-get_min(digest TDigest) RETURNS DOUBLE PRECISION
-```
-
-Get the minimum value from a t-digest.
-
-### Required Arguments <a id="tdigest_min-required-arguments"></a>
-|Name|Type|Description|
-|---|---|---|
-| `digest` | `TDigest` | The digest to extract the min value from. |
-<br>
-
-### Returns
-
-|Column|Type|Description|
-|---|---|---|
-| `get_min` | `DOUBLE PRECISION` | The minimum value entered into the t-digest. |
-<br>
-
-### Sample Usages <a id="tdigest-min-examples"></a>
-
-```SQL
-SELECT get_min(tdigest(100, data))
-FROM generate_series(1, 100) data;
-```
-```output
- get_min
------------
-         1
-```
----
-## **get_max** <a id="tdigest_max"></a>
-
-```SQL ,ignore
-get_max(digest TDigest) RETURNS DOUBLE PRECISION
-```
-
-Get the maximum value from a t-digest.
-
-### Required Arguments <a id="tdigest_max-required-arguments"></a>
-|Name|Type|Description|
-|---|---|---|
-| `digest` | `TDigest` | The digest to extract the max value from. |
-<br>
-
-### Returns
-|Column|Type|Description|
-|---|---|---|
-| `get_max` | `DOUBLE PRECISION` | The maximum value entered into the t-digest. |
-<br>
-
-### Sample Usage <a id="tdigest_max-examples"></a>
-
-```SQL
-SELECT get_max(tdigest(100, data))
-FROM generate_series(1, 100) data;
-```
-```output
- get_max
----------
-     100
-```
----
-## **num_vals** <a id="tdigest_count"></a>
-
-```SQL ,ignore
-num_vals(digest TDigest) RETURNS DOUBLE PRECISION
-```
-
-Get the number of values contained in a t-digest.
-
-### Required Arguments <a id="tdigest_count-required-arguments"></a>
-|Name|Type|Description|
-|---|---|---|
-| `digest` | `TDigest` | The digest to extract the number of values from. |
-<br>
-
-### Returns
-|Column|Type|Description|
-|---|---|---|
-| `num_vals` | `DOUBLE PRECISION` | The number of values entered into the t-digest. |
-<br>
-
-### Sample Usage <a id="tdigest_count-examples"></a>
-
-```SQL
-SELECT num_vals(tdigest(100, data))
-FROM generate_series(1, 100) data;
-```
-```output
- num_vals
------------
-       100
-```
-
----
-## **mean** <a id="tdigest_mean"></a>
-
-```SQL ,ignore
-mean(digest TDigest) RETURNS DOUBLE PRECISION
-```
-
-Get the average of all the values contained in a t-digest.
-
-### Required Arguments <a id="tdigest_mean-required-arguments"></a>
-|Name|Type|Description|
-|---|---|---|
-| `digest` | `TDigest` |  The digest to extract the mean value from. |
-<br>
-
-### Returns
-|Column|Type|Description|
-|---|---|---|
-| `mean` | `DOUBLE PRECISION` | The average of the values entered into the t-digest. |
-<br>
-
-### Sample Usage <a id="tdigest_mean-examples"></a>
-
-```SQL
-SELECT mean(tdigest(100, data))
-FROM generate_series(1, 100) data;
-```
-```output
- mean
-------
- 50.5
-```
-
----
 ## **approx_percentile** <a id="tdigest_quantile"></a>
 
 ```SQL ,ignore
@@ -430,6 +301,7 @@ FROM generate_series(1, 100) data;
 ```
 
 ---
+
 ## **approx_percentile_at_value** <a id="tdigest_quantile_at_value"></a>
 
 ```SQL ,ignore
@@ -465,3 +337,140 @@ FROM generate_series(1, 100) data;
 -------------------
              0.895
 ```
+
+## **max_val** <a id="tdigest_max"></a>
+
+```SQL ,ignore
+max_val(digest TDigest) RETURNS DOUBLE PRECISION
+```
+
+Get the maximum value from a t-digest.
+
+### Required Arguments <a id="tdigest_max-required-arguments"></a>
+|Name|Type|Description|
+|---|---|---|
+| `digest` | `TDigest` | The digest to extract the max value from. |
+<br>
+
+### Returns
+|Column|Type|Description|
+|---|---|---|
+| `max_val` | `DOUBLE PRECISION` | The maximum value entered into the t-digest. |
+<br>
+
+### Sample Usage <a id="tdigest_max-examples"></a>
+
+```SQL
+SELECT max_val(tdigest(100, data))
+FROM generate_series(1, 100) data;
+```
+```output
+ max_val
+---------
+     100
+```
+
+---
+
+## **mean** <a id="tdigest_mean"></a>
+
+```SQL ,ignore
+mean(digest TDigest) RETURNS DOUBLE PRECISION
+```
+
+Get the average of all the values contained in a t-digest.
+
+### Required Arguments <a id="tdigest_mean-required-arguments"></a>
+|Name|Type|Description|
+|---|---|---|
+| `digest` | `TDigest` |  The digest to extract the mean value from. |
+<br>
+
+### Returns
+|Column|Type|Description|
+|---|---|---|
+| `mean` | `DOUBLE PRECISION` | The average of the values entered into the t-digest. |
+<br>
+
+### Sample Usage <a id="tdigest_mean-examples"></a>
+
+```SQL
+SELECT mean(tdigest(100, data))
+FROM generate_series(1, 100) data;
+```
+```output
+ mean
+------
+ 50.5
+```
+
+---
+
+## **min_val** <a id="tdigest_min"></a>
+
+```SQL ,ignore
+min_val(digest TDigest) RETURNS DOUBLE PRECISION
+```
+
+Get the minimum value from a t-digest.
+
+### Required Arguments <a id="tdigest_min-required-arguments"></a>
+|Name|Type|Description|
+|---|---|---|
+| `digest` | `TDigest` | The digest to extract the min value from. |
+<br>
+
+### Returns
+
+|Column|Type|Description|
+|---|---|---|
+| `min_val` | `DOUBLE PRECISION` | The minimum value entered into the t-digest. |
+<br>
+
+### Sample Usages <a id="tdigest-min-examples"></a>
+
+```SQL
+SELECT min_val(tdigest(100, data))
+FROM generate_series(1, 100) data;
+```
+```output
+ min_val
+-----------
+         1
+```
+
+---
+
+## **num_vals** <a id="tdigest_count"></a>
+
+```SQL ,ignore
+num_vals(digest TDigest) RETURNS DOUBLE PRECISION
+```
+
+Get the number of values contained in a t-digest.
+
+### Required Arguments <a id="tdigest_count-required-arguments"></a>
+|Name|Type|Description|
+|---|---|---|
+| `digest` | `TDigest` | The digest to extract the number of values from. |
+<br>
+
+### Returns
+|Column|Type|Description|
+|---|---|---|
+| `num_vals` | `DOUBLE PRECISION` | The number of values entered into the t-digest. |
+<br>
+
+### Sample Usage <a id="tdigest_count-examples"></a>
+
+```SQL
+SELECT num_vals(tdigest(100, data))
+FROM generate_series(1, 100) data;
+```
+```output
+ num_vals
+-----------
+       100
+```
+
+---

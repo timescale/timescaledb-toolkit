@@ -336,7 +336,7 @@ pub fn tdigest_count(
 }
 
 // Minimum value entered in the digest.
-#[pg_extern(name="get_min")]
+#[pg_extern(name="min_val")]
 pub fn tdigest_min(
     digest: TDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -345,7 +345,7 @@ pub fn tdigest_min(
 }
 
 // Maximum value entered in the digest.
-#[pg_extern(name="get_max")]
+#[pg_extern(name="max_val")]
 pub fn tdigest_max(
     digest: TDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -401,8 +401,8 @@ mod tests {
 
             let (min, max, count) = client
                 .select("SELECT \
-                    get_min(tdigest), \
-                    get_max(tdigest), \
+                    min_val(tdigest), \
+                    max_val(tdigest), \
                     num_vals(tdigest) \
                     FROM digest",
                     None,

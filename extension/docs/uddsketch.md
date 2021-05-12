@@ -206,6 +206,8 @@ uddsketch(
 
 This will construct and return a new UddSketch with at most `size` buckets.  The maximum relative error of the UddSketch will be bounded by `max_error` unless it is impossible to do so while with the bucket bound.  If the sketch has had to combine buckets, the new error can be found with the [uddsketch_error](#error) command.
 
+Note that since the error will be increased automatically (roughly doubling at each step) as the number of buckets is exceeded, it is probably worth erring on the side of too small unless you have a good understanding of exactly what your error should be.
+
 ### Required Arguments <a id="uddsketch-required-arguments"></a>
 |Name| Type |Description|
 |---|---|---|

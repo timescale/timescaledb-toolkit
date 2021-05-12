@@ -266,7 +266,7 @@ CREATE AGGREGATE timescale_analytics_experimental.time_weight(tws timescale_anal
 "#
 );
 
-#[pg_extern(name = "average", schema = "timescale_analytics_experimental")]
+#[pg_extern(immutable, parallel_safe, name = "average", schema = "timescale_analytics_experimental")]
 pub fn time_weighted_average_average(
     tws: Option<timescale_analytics_experimental::TimeWeightSummary>,
     _fcinfo: pg_sys::FunctionCallInfo,

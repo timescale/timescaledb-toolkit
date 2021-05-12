@@ -21,6 +21,7 @@ For these examples we'll assume a table `foo` defined as follows, with a bit of 
 
 
 ```SQL ,non-transactional
+SET TIME ZONE 'UTC';
  CREATE TABLE foo (
     measure_id      BIGINT,
     ts              TIMESTAMPTZ ,

@@ -1,4 +1,4 @@
-# Time Weighted Average [<sup><mark>experimental</mark></sup>](/extension/docs/README.md#tag-notes)
+# Time Weighted Average
 
 > [Description](#time-weighted-average-description)<br>
 > [Example Usage](time-weighted-average-examples)<br>
@@ -52,8 +52,8 @@ Where the measure_id defines a series of related points. A simple use would be t
 
 ```SQL 
 SELECT measure_id,
-    timescale_analytics_experimental.average(
-        timescale_analytics_experimental.time_weight('LOCF', ts, val)
+    average(
+        time_weight('LOCF', ts, val)
     )
 FROM foo
 GROUP BY measure_id
@@ -72,8 +72,8 @@ We can also use the [`time_bucket` function](https://docs.timescale.com/latest/a
 ```SQL
 SELECT measure_id,
     time_bucket('5 min'::interval, ts) as bucket,
-    timescale_analytics_experimental.average(
-        timescale_analytics_experimental.time_weight('LOCF', ts, val)
+    average(
+        time_weight('LOCF', ts, val)
     )
 FROM foo
 GROUP BY measure_id, time_bucket('5 min'::interval, ts) 
@@ -105,7 +105,7 @@ CREATE MATERIALIZED VIEW foo_5
 WITH (timescaledb.continuous)
 AS SELECT measure_id,
     time_bucket('5 min'::interval, ts) as bucket,
-    timescale_analytics_experimental.time_weight('LOCF', ts, val)
+    time_weight('LOCF', ts, val)
 FROM foo
 GROUP BY measure_id, time_bucket('5 min'::interval, ts);
 ```
@@ -116,7 +116,7 @@ Note that here, we just use the `time_weight` function. It's often better to do 
 SELECT
     measure_id,
     bucket,
-    timescale_analytics_experimental.average(time_weight)
+    average(time_weight)
 FROM foo_5
 ORDER BY measure_id, bucket;
 ```
@@ -136,8 +136,8 @@ And we get the same results as before. It also allows us to re-aggregate from th
 SELECT
     measure_id,
     time_bucket('1 day'::interval, bucket),
-    timescale_analytics_experimental.average(
-            timescale_analytics_experimental.time_weight(time_weight)
+    average(
+            time_weight(time_weight)
     )
 FROM foo_5
 GROUP BY measure_id, time_bucket('1 day'::interval, bucket)
@@ -155,8 +155,8 @@ We can also use this to speed up our initial calculation where we're only groupi
 ```SQL 
 SELECT
     measure_id,
-    timescale_analytics_experimental.average(
-        timescale_analytics_experimental.time_weight(time_weight)
+    average(
+        time_weight(time_weight)
     )
 FROM foo_5
 GROUP BY measure_id
@@ -178,7 +178,7 @@ ORDER BY measure_id;
 ---
 ## **time_weight() (point form)** <a id="time_weight_point"></a>
 ```SQL ,ignore
-timescale_analytics_experimental.time_weight(
+time_weight(
     method TEXT¹,
     ts TIMESTAMPTZ,
     value DOUBLE PRECISION
@@ -210,20 +210,20 @@ An aggregate that produces a `TimeWeightSummary` from timestamps and associated 
 WITH t as (
     SELECT
         time_bucket('1 day'::interval, ts) as dt,
-        timescale_analytics_experimental.time_weight('Linear', ts, val) AS tw -- get a time weight summary
+        time_weight('Linear', ts, val) AS tw -- get a time weight summary
     FROM foo
     WHERE measure_id = 10
     GROUP BY time_bucket('1 day'::interval, ts)
 )
 SELECT
     dt,
-    timescale_analytics_experimental.average(tw) -- extract the average from the time weight summary
+    average(tw) -- extract the average from the time weight summary
 FROM t;
 ```
 
 ## **time_weight() (summary form)** <a id="time-weight-summary"></a>
 ```SQL ,ignore
-timescale_analytics_experimental.time_weight(
+time_weight(
     tws TimeWeightSummary
 ) RETURNS TimeWeightSummary
 ```
@@ -247,24 +247,24 @@ An aggregate to compute a combined `TimeWeightSummary` from a series of non-over
 WITH t as (
     SELECT
         date_trunc('day', ts) as dt,
-        timescale_analytics_experimental.time_weight('Linear', ts, val) AS tw -- get a time weight summary
+        time_weight('Linear', ts, val) AS tw -- get a time weight summary
     FROM foo
     WHERE measure_id = 10
     GROUP BY date_trunc('day', ts)
 ), q as (
-    SELECT timescale_analytics_experimental.time_weight(tw) AS full_tw -- do a second level of aggregation to get the full time weighted average
+    SELECT time_weight(tw) AS full_tw -- do a second level of aggregation to get the full time weighted average
     FROM t
 )
 SELECT
     dt,
-    timescale_analytics_experimental.average(tw),  -- extract the average from the time weight summary
-    timescale_analytics_experimental.average(tw) / (SELECT timescale_analytics_experimental.average(full_tw) FROM q LIMIT 1)  as normalized -- get the normalized average
+    average(tw),  -- extract the average from the time weight summary
+    average(tw) / (SELECT average(full_tw) FROM q LIMIT 1)  as normalized -- get the normalized average
 FROM t;
 ```
 
 ## **average()** <a id="time-weight-average"></a>
 ```SQL ,ignore
-timescale_analytics_experimental.average(
+average(
     tws TimeWeightSummary
 ) RETURNS DOUBLE PRECISION
 ```
@@ -288,11 +288,11 @@ A function to compute a time weighted average from a `TimeWeightSummary`.
 ```SQL ,ignore
 SELECT
     id,
-    timescale_analytics_experimental.average(tws)
+    average(tws)
 FROM (
     SELECT
         id,
-        timescale_analytics_experimental.time_weight('LOCF', ts, val) AS tws
+        time_weight('LOCF', ts, val) AS tws
     FROM foo
     GROUP BY id
 ) t
@@ -306,8 +306,8 @@ We throw an error if there is an attempt to combine overlapping `TimeWeightSumma
 
 ```SQL ,ignore-output
 WITH t as (SELECT measure_id,
-        timescale_analytics_experimental.average(
-            timescale_analytics_experimental.time_weight('LOCF', ts, val)
+        average(
+            time_weight('LOCF', ts, val)
         ) as time_weighted_average
     FROM foo
     GROUP BY measure_id)
@@ -322,13 +322,13 @@ Because they require ordered sets, the aggregates build up a buffer of input dat
 ```SQL ,ignore-output
 WITH t as (SELECT measure_id,
     time_bucket('1 day'::interval, ts),
-    timescale_analytics_experimental.time_weight('LOCF', ts, val)
+    time_weight('LOCF', ts, val)
     FROM foo
     GROUP BY measure_id, time_bucket('1 day'::interval, ts)
     )
 SELECT measure_id,
-    timescale_analytics_experimental.average(
-        timescale_analytics_experimental.time_weight(time_weight)
+    average(
+        time_weight(time_weight)
     )
 FROM t
 GROUP BY measure_id;

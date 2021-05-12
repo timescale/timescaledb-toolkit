@@ -18,6 +18,8 @@ As an example, assume both sketches were trying to capture an large set of value
 
 Timescale's UddSketch implementation is provided as an aggregate function in PostgreSQL.  It does not support moving-aggregate mode, and is not a ordered-set aggregate.  It currently only works with `DOUBLE PRECISION` types, but we're intending to relax this constraint as needed.  UddSketches are partializable and are good candidates for [continuous aggregation](https://docs.timescale.com/latest/using-timescaledb/continuous-aggregates).
 
+It's also worth noting that attempting to set the relative error too small or large can result in breaking behavior.  For this reason, the error is required to fall into the range [1.0e-12, 1.0).
+
 ## Usage Example <a id="uddsketch-example"></a>
 
 For this example we're going to start with a table containing some NOAA weather data for a few weather stations across the US over the past 20 years.
@@ -127,7 +129,7 @@ CREATE MATERIALIZED VIEW weekly_sketch
 WITH (timescaledb.continuous)
 AS SELECT
     time_bucket('7 day'::interval, time) as week,
-    uddsketch(100, 0.005, value)
+    uddsketch(100, 0.005, value) as sketch
 FROM test
 GROUP BY time_bucket('7 day'::interval, time);
 ```
@@ -136,7 +138,7 @@ Next we'll use one of our utility functions, `generate_periodic_normal_series`, 
 ```SQL ,non-transactional
 INSERT INTO test
     SELECT time, value
-    FROM timescale_analytics_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, NULL, NULL, NULL, NULL, NULL, NULL, rng_seed => 12345678); 
+    FROM timescale_analytics_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, rng_seed => 12345678); 
 ```
 ```
 INSERT 0 4032
@@ -146,10 +148,10 @@ Finally, we can query the aggregate to see various approximate percentiles from 
 ```SQL
 SELECT 
     week,
-    error(uddsketch), 
-    approx_percentile(0.01, uddsketch) AS low, 
-    approx_percentile(0.5, uddsketch) AS mid, 
-    approx_percentile(0.99, uddsketch) AS high 
+    error(sketch), 
+    approx_percentile(0.01, sketch) AS low, 
+    approx_percentile(0.5, sketch) AS mid, 
+    approx_percentile(0.99, sketch) AS high 
 FROM weekly_sketch
 ORDER BY week;
 ```
@@ -163,21 +165,36 @@ ORDER BY week;
  2020-01-27 00:00:00+00 | 0.005 | 688.8626877028054 |  911.4568854686239 | 1135.7472981488002
 ```
 
+We can also combine the weekly aggregates to run queries on the entire data:
+```SQL
+SELECT 
+    error(a.uddsketch), 
+    approx_percentile(0.01, a.uddsketch) AS low, 
+    approx_percentile(0.5, a.uddsketch) AS mid, 
+    approx_percentile(0.99, a.uddsketch) AS high 
+FROM (SELECT uddsketch(sketch) FROM weekly_sketch) AS a;
+```
+```output
+ error |       low        |        mid         |        high        
+-------+------------------+--------------------+--------------------
+ 0.005 | 753.736403199032 | 1027.6657963969128 | 1280.5527834239035
+```
+
+
 ## Command List (A-Z) <a id="uddsketch-api"></a>
 Aggregate Functions
 > - [uddsketch - point form](#uddsketch-point)
 > - [uddsketch - summary form](#uddsketch-summary)
 
 Accessor Functions
-
+> - [approx_percentile](#approx_percentile)
+> - [approx_percentile_at_value](#approx_percentile-at-value)
 > - [error](#error)
 > - [mean](#mean)
 > - [num_vals](#num-vals)
-> - [approx_percentile](#approx_percentile)
-> - [approx_percentile_at_value](#approx_percentile-at-value)
-
 
 ---
+
 ## **uddsketch (point form) ** <a id="uddsketch-point"></a>
 ```SQL ,ignore
 uddsketch(
@@ -205,7 +222,7 @@ This will construct and return a new UddSketch with at most `size` buckets.  The
 <br>
 
 ### Sample Usages <a id="uddsketch-examples"></a>
-For this examples assume we have a table 'samples' with a column 'data' holding `DOUBLE PRECISION` values.  The following will simply return a sketch over that column
+For this example assume we have a table 'samples' with a column 'data' holding `DOUBLE PRECISION` values.  The following will simply return a sketch over that column
 
 ```SQL ,ignore
 SELECT uddsketch(100, 0.01, data) FROM samples;
@@ -218,6 +235,7 @@ CREATE VIEW sketch AS
     SELECT uddsketch(100, 0.01, data)
     FROM samples;
 ```
+
 ---
 
 ## **uddsketch (summary form)** <a id="uddsketch-summary"></a>
@@ -242,8 +260,8 @@ This will combine multiple already constructed UddSketches, they must have the s
 | `uddsketch` | `UddSketch` | A UddSketch object which may be passed to other UddSketch APIs. |
 <br>
 
-### Sample Usages <a id="uddsketch-examples"></a>
-For this examples assume we have a table 'samples' with a column 'data' holding `DOUBLE PRECISION` values, and an 'id' column that holds the what series the data belongs to, we can create a view to get the UddSketches for each `id` using the [point form](#uddsketch-point) like so:
+### Sample Usages <a id="uddsketch-summary-examples"></a>
+For this example assume we have a table 'samples' with a column 'data' holding `DOUBLE PRECISION` values, and an 'id' column that holds the what series the data belongs to, we can create a view to get the UddSketches for each `id` using the [point form](#uddsketch-point) like so:
 
 ```SQL ,ignore
 CREATE VIEW sketch AS
@@ -263,109 +281,6 @@ FROM sketch;
 
 ---
 
-
-## **error** <a id="error"></a>
-
-```SQL ,ignore
-error(sketch UddSketch) RETURNS DOUBLE PRECISION
-```
-
-This returns the maximum relative error that a percentile estimate will have (relative to the correct value).  This will initially be the same as the `max_error` used to construct the UddSketch, but if the sketch has needed to combine buckets this function will return the new maximum error.
-
-### Required Arguments <a id="error-required-arguments"></a>
-|Name|Type|Description|
-|---|---|---|
-| `sketch` | `UddSketch` | The sketch to determine the error of. |
-<br>
-
-### Returns
-
-|Column|Type|Description|
-|---|---|---|
-| `error` | `DOUBLE PRECISION` | The maximum relative error of any percentile estimate. |
-<br>
-
-### Sample Usages <a id="error-examples"></a>
-
-```SQL
-SELECT error(
-    uddsketch(100, 0.01, data)
-) FROM generate_series(1, 100) data;
-```
-```output
- error
--------
-  0.01
-```
-
----
-## **mean** <a id="mean"></a>
-
-```SQL ,ignore
-mean(sketch UddSketch) RETURNS DOUBLE PRECISION
-```
-
-Get the average of all the values contained in a UddSketch.
-
-### Required Arguments <a id="mean-required-arguments"></a>
-|Name|Type|Description|
-|---|---|---|
-| `sketch` | `UddSketch` |  The sketch to extract the mean value from. |
-<br>
-
-### Returns
-|Column|Type|Description|
-|---|---|---|
-| `mean` | `DOUBLE PRECISION` | The average of the values entered into the UddSketch. |
-<br>
-
-### Sample Usage <a id="mean-examples"></a>
-
-```SQL
-SELECT mean(
-    uddsketch(100, 0.01, data)
-) FROM generate_series(1, 100) data;
-```
-```output
- mean
-------
- 50.5
-```
-## **num_vals** <a id="num-vals"></a>
-
-```SQL ,ignore
-num_vals(sketch UddSketch) RETURNS DOUBLE PRECISION
-```
-
-Get the number of values contained in a UddSketch.
-
-### Required Arguments <a id="num-vals-required-arguments"></a>
-|Name|Type|Description|
-|---|---|---|
-| `sketch` | `UddSketch` | The sketch to extract the number of values from. |
-<br>
-
-### Returns
-|Column|Type|Description|
-|---|---|---|
-| `uddsketch_count` | `DOUBLE PRECISION` | The number of values entered into the UddSketch. |
-<br>
-
-### Sample Usage <a id="num-vals-examples"></a>
-
-```SQL
-SELECT num_vals(
-    uddsketch(100, 0.01, data)
-) FROM generate_series(1, 100) data;
-```
-```output
- num_vals
------------
-       100
-```
-
----
----
 ## **approx_percentile** <a id="approx_percentile"></a>
 
 ```SQL ,ignore
@@ -405,6 +320,7 @@ SELECT approx_percentile(
 ```
 
 ---
+
 ## **approx_percentile_at_value** <a id="approx_percentile_at_value"></a>
 
 ```SQL ,ignore
@@ -442,3 +358,111 @@ SELECT approx_percentile_at_value(
 -------------------
              0.89
 ```
+
+---
+
+## **error** <a id="error"></a>
+
+```SQL ,ignore
+error(sketch UddSketch) RETURNS DOUBLE PRECISION
+```
+
+This returns the maximum relative error that a percentile estimate will have (relative to the correct value).  This will initially be the same as the `max_error` used to construct the UddSketch, but if the sketch has needed to combine buckets this function will return the new maximum error.
+
+### Required Arguments <a id="error-required-arguments"></a>
+|Name|Type|Description|
+|---|---|---|
+| `sketch` | `UddSketch` | The sketch to determine the error of. |
+<br>
+
+### Returns
+
+|Column|Type|Description|
+|---|---|---|
+| `error` | `DOUBLE PRECISION` | The maximum relative error of any percentile estimate. |
+<br>
+
+### Sample Usages <a id="error-examples"></a>
+
+```SQL
+SELECT error(
+    uddsketch(100, 0.01, data)
+) FROM generate_series(1, 100) data;
+```
+```output
+ error
+-------
+  0.01
+```
+
+---
+
+## **mean** <a id="mean"></a>
+
+```SQL ,ignore
+mean(sketch UddSketch) RETURNS DOUBLE PRECISION
+```
+
+Get the average of all the values contained in a UddSketch.
+
+### Required Arguments <a id="mean-required-arguments"></a>
+|Name|Type|Description|
+|---|---|---|
+| `sketch` | `UddSketch` |  The sketch to extract the mean value from. |
+<br>
+
+### Returns
+|Column|Type|Description|
+|---|---|---|
+| `mean` | `DOUBLE PRECISION` | The average of the values entered into the UddSketch. |
+<br>
+
+### Sample Usage <a id="mean-examples"></a>
+
+```SQL
+SELECT mean(
+    uddsketch(100, 0.01, data)
+) FROM generate_series(1, 100) data;
+```
+```output
+ mean
+------
+ 50.5
+```
+
+---
+
+## **num_vals** <a id="num-vals"></a>
+
+```SQL ,ignore
+num_vals(sketch UddSketch) RETURNS DOUBLE PRECISION
+```
+
+Get the number of values contained in a UddSketch.
+
+### Required Arguments <a id="num-vals-required-arguments"></a>
+|Name|Type|Description|
+|---|---|---|
+| `sketch` | `UddSketch` | The sketch to extract the number of values from. |
+<br>
+
+### Returns
+|Column|Type|Description|
+|---|---|---|
+| `uddsketch_count` | `DOUBLE PRECISION` | The number of values entered into the UddSketch. |
+<br>
+
+### Sample Usage <a id="num-vals-examples"></a>
+
+```SQL
+SELECT num_vals(
+    uddsketch(100, 0.01, data)
+) FROM generate_series(1, 100) data;
+```
+```output
+ num_vals
+-----------
+       100
+```
+
+---

@@ -317,7 +317,7 @@ pub fn tdigest_quantile(
 }
 
 // Approximate the quantile at the given value
-#[pg_extern(name="approx_percentile_at_value")]
+#[pg_extern(name="approx_percentile_rank")]
 pub fn tdigest_quantile_at_value(
     value: f64,
     digest: TDigest,
@@ -435,7 +435,7 @@ mod tests {
                     .select(
                         &format!("SELECT
                             approx_percentile({}, tdigest), \
-                            approx_percentile_at_value({}, tdigest) \
+                            approx_percentile_rank({}, tdigest) \
                             FROM digest",
                             quantile,
                             value),

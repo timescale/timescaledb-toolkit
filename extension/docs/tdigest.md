@@ -80,11 +80,11 @@ Or even check to see what quantile 90F would fall at in each city.
 ```SQL ,ignore
 SELECT
     name,
-    approx_percentile_at_value(90.0, tdigest)
+    approx_percentile_rank(90.0, tdigest)
 FROM high_temp;
 ```
 ```
-                 name                  |  approx_percentile_at_value
+                 name                  |  approx_percentile_rank
 ---------------------------------------+--------------------
  PORTLAND INTERNATIONAL AIRPORT, OR US | 0.9609990016734108
  LITCHFIELD PARK, AZ US                | 0.5531621580122781
@@ -172,7 +172,7 @@ Aggregate Functions
 
 Accessor Functions
 > - [approx_percentile](#tdigest_quantile)
-> - [approx_percentile_at_value](#tdigest_quantile_at_value)
+> - [approx_percentile_rank](#tdigest_quantile_at_value)
 > - [max_val](#tdigest_max)
 > - [mean](#tdigest_mean)
 > - [min_val](#tdigest_min)
@@ -302,10 +302,10 @@ FROM generate_series(1, 100) data;
 
 ---
 
-## **approx_percentile_at_value** <a id="tdigest_quantile_at_value"></a>
+## **approx_percentile_rank** <a id="tdigest_quantile_at_value"></a>
 
 ```SQL ,ignore
-approx_percentile_at_value(
+approx_percentile_rank(
     value DOUBLE PRECISION,
     digest TDigest
 ) RETURNS TDigest
@@ -323,17 +323,17 @@ Estimate what quantile a given value would be located at in a t-digest.
 ### Returns
 |Column|Type|Description|
 |---|---|---|
-| `approx_percentile_at_value` | `DOUBLE PRECISION` | The estimated quantile associated with the provided value. |
+| `approx_percentile_rank` | `DOUBLE PRECISION` | The estimated quantile associated with the provided value. |
 <br>
 
 ### Sample Usage <a id="tdigest_quantile_at_value-examples"></a>
 
 ```SQL
-SELECT approx_percentile_at_value(90, tdigest(100, data))
+SELECT approx_percentile_rank(90, tdigest(100, data))
 FROM generate_series(1, 100) data;
 ```
 ```output
- approx_percentile_at_value
+ approx_percentile_rank
 -------------------
              0.895
 ```

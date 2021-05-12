@@ -188,7 +188,7 @@ Aggregate Functions
 
 Accessor Functions
 > - [approx_percentile](#approx_percentile)
-> - [approx_percentile_at_value](#approx_percentile-at-value)
+> - [approx_percentile_rank](#approx_percentile_rank)
 > - [error](#error)
 > - [mean](#mean)
 > - [num_vals](#num-vals)
@@ -321,10 +321,10 @@ SELECT approx_percentile(
 
 ---
 
-## **approx_percentile_at_value** <a id="approx_percentile_at_value"></a>
+## **approx_percentile_rank** <a id="approx_percentile_rank"></a>
 
 ```SQL ,ignore
-approx_percentile_at_value(
+approx_percentile_rank(
     value DOUBLE PRECISION,
     sketch UddSketch
 ) RETURNS UddSketch
@@ -332,7 +332,7 @@ approx_percentile_at_value(
 
 Estimate what percentile a given value would be located at in a UddSketch.
 
-### Required Arguments <a id="approx_percentile_at_value-required-arguments"></a>
+### Required Arguments <a id="approx_percentile_rank-required-arguments"></a>
 |Name|Type|Description|
 |---|---|---|
 | `value` | `DOUBLE PRECISION` |  The value to estimate the percentile of. |
@@ -342,19 +342,19 @@ Estimate what percentile a given value would be located at in a UddSketch.
 ### Returns
 |Column|Type|Description|
 |---|---|---|
-| `approx_percentile_at_value` | `DOUBLE PRECISION` | The estimated percentile associated with the provided value. |
+| `approx_percentile_rank` | `DOUBLE PRECISION` | The estimated percentile associated with the provided value. |
 <br>
 
-### Sample Usage <a id="approx_percentile_at_value-examples"></a>
+### Sample Usage <a id="approx_percentile_rank-examples"></a>
 
 ```SQL
-SELECT approx_percentile_at_value(
+SELECT approx_percentile_rank(
     90,
     uddsketch(100, 0.01, data)
 ) FROM generate_series(1, 100) data;
 ```
 ```output
- approx_percentile_at_value
+ approx_percentile_rank
 -------------------
              0.89
 ```

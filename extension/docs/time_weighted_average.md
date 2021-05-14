@@ -334,7 +334,18 @@ FROM t
 GROUP BY measure_id;
 ```
 
-Moving aggregate mode is not supported by `time_weight` and its use as a window function may be quite inefficient.
+
+Moving aggregate mode is not supported by `time_weight` and its use as a window function may be quite inefficient, but it is possible to do so as in:
+
+```SQL ,ignore-output
+
+SELECT measure_id,
+    average(
+        time_weight('LOCF', ts, val) OVER (PARTITION BY measure_id  ORDER BY ts RANGE '15 minutes'::interval PRECEDING)
+    )
+FROM foo;
+```
+Which will give you the 15 minute rolling time weighted average for each point.
 
 ---
 ## Interpolation Methods Details <a id="time-weight-methods"></a>

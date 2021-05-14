@@ -243,8 +243,7 @@ CREATE AGGREGATE time_weight(method text, ts timestamptz, value DOUBLE PRECISION
     combinefunc = time_weight_combine,
     serialfunc = time_weight_trans_serialize,
     deserialfunc = time_weight_trans_deserialize,
-    parallel = restricted,
-    finalfunc_modify = shareable
+    parallel = restricted
 );
 
 CREATE AGGREGATE time_weight(tws TimeWeightSummary)

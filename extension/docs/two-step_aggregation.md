@@ -74,7 +74,7 @@ SELECT
     approx_percentile(0.5, percentile_agg(val)) as p50, 
     approx_percentile(0.9, percentile_agg(val)) as p90, 
     error(percentile_agg(val)), 
-    approx_percentile_at_value(10000, percentile_agg(val)) as percentile_at_threshold
+    approx_percentile_rank(10000, percentile_agg(val)) as percentile_at_threshold
 FROM foo;
 ```
 The optimizer can easily optimize away the redundant `percentile_agg(val)` calls, but would have much more trouble in the one-step approach.
@@ -150,4 +150,3 @@ GROUP BY id, time_bucket('1 day'::interval, bucket)
 
 ### Retrospective analysis over downsampled data <a id="philosophy-retro"></a>
 [Continuous aggregates](https://docs.timescale.com/latest/using-timescaledb/continuous-aggregates) (or separate aggregation tables powered by a cron job or [user-defined action]( __LINK__ ) ) aren't just used for speeding up queries, they're also used for [data retention]( __LINK__ ). But this can mean that they are very difficult to modify as your data ages. Unfortunately this is also when you are learning more things about the analysis you want to do on your data. By keeping them in their raw aggregate form, the user has the flexibility to apply different accessors to do retrospective analysis. With a one-step aggregate the user needs to determine, say, which percentiles are important when we create the continous aggregate, with a two-step aggregate the user can simply determine they're going to want an approximate percentile, and then determine when doing the analysis whether they want the median, the 90th, 95th or 1st percentile. No need to modify the aggregate or try to re-calculate from data that may no longer exist in the system. 
-

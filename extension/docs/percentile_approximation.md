@@ -295,12 +295,12 @@ ORDER BY api_id;
      12 |   308.595292220514 | 133.68545889817688
 ```
 
-We have several other accessor functions, including `error` which returns the maximum relative error for the percentile estimate, `num_vals` which returns the number of elements in the estimator, and perhaps the most interesting one, `approx_percentile_at_value`, which gives the hypothetical percentile for a given value. Let's say we really don't want our apis to go over 1s in response time (1000 ms), we can use that to figure out what fraction of users waited over a second for each api:
+We have several other accessor functions, including `error` which returns the maximum relative error for the percentile estimate, `num_vals` which returns the number of elements in the estimator, and perhaps the most interesting one, `approx_percentile_rank`, which gives the hypothetical percentile for a given value. Let's say we really don't want our apis to go over 1s in response time (1000 ms), we can use that to figure out what fraction of users waited over a second for each api:
 
 ```SQL
 SELECT
     api_id,
-    ((1 - approx_percentile_at_value(1000, percentile_agg(percentile_agg))) * 100)::numeric(6,2) as percent_over_1s
+    ((1 - approx_percentile_rank(1000, percentile_agg(percentile_agg))) * 100)::numeric(6,2) as percent_over_1s
 FROM response_times_hourly
 GROUP BY api_id
 ORDER BY api_id;
@@ -334,7 +334,7 @@ Accessor Functions <a id="accesor-functions">
 > - [mean](#mean)
 > - [num_vals](#num-vals)
 > - [approx_percentile](#approx_percentile)
-> - [approx_percentile_at_value](#approx_percentile-at-value)
+> - [approx_percentile_rank](#approx_percentile-at-value)
 
 
 ---
@@ -568,10 +568,10 @@ approx_percentile
 ```
 
 ---
-## **approx_percentile_at_value** <a id="approx_percentile_at_value"></a>
+## **approx_percentile_rank** <a id="approx_percentile_rank"></a>
 
 ```SQL ,ignore
-approx_percentile_at_value(
+approx_percentile_rank(
     value DOUBLE PRECISION,
     sketch UddSketch
 ) RETURNS UddSketch
@@ -579,7 +579,7 @@ approx_percentile_at_value(
 
 Estimate what percentile a given value would be located at in a UddSketch.
 
-### Required Arguments <a id="approx_percentile_at_value-required-arguments"></a>
+### Required Arguments <a id="approx_percentile_rank-required-arguments"></a>
 |Name|Type|Description|
 |---|---|---|
 | `value` | `DOUBLE PRECISION` |  The value to estimate the percentile of. |
@@ -589,18 +589,18 @@ Estimate what percentile a given value would be located at in a UddSketch.
 ### Returns
 |Column|Type|Description|
 |---|---|---|
-| `approx_percentile_at_value` | `DOUBLE PRECISION` | The estimated percentile associated with the provided value. |
+| `approx_percentile_rank` | `DOUBLE PRECISION` | The estimated percentile associated with the provided value. |
 <br>
 
-### Sample Usage <a id="approx_percentile_at_value-examples"></a>
+### Sample Usage <a id="approx_percentile_rank-examples"></a>
 
 ```SQL
 SELECT
-    approx_percentile_at_value(99, percentile_agg(data))
+    approx_percentile_rank(99, percentile_agg(data))
 FROM generate_series(0, 100) data;
 ```
 ```output
- approx_percentile_at_value
+ approx_percentile_rank
 ----------------------------
          0.9851485148514851
 ```

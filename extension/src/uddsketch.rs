@@ -401,8 +401,8 @@ pub fn uddsketch_approx_percentile(
 }
 
 // Approximate the approx_percentile at the given value
-#[pg_extern(name="approx_percentile_at_value")]
-pub fn uddsketch_approx_percentile_at_value(
+#[pg_extern(name="approx_percentile_rank")]
+pub fn uddsketch_approx_percentile_rank(
     value: f64,
     sketch: UddSketch,
 ) -> f64 {
@@ -507,7 +507,7 @@ mod tests {
                     .select(
                         &format!("SELECT \
                                 approx_percentile({}, uddsketch), \
-                                approx_percentile_at_value( {}, uddsketch) \
+                                approx_percentile_rank( {}, uddsketch) \
                             FROM sketch", approx_percentile, value), None, None)
                     .first()
                     .get_two::<f64, f64>();

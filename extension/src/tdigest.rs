@@ -307,7 +307,7 @@ CREATE AGGREGATE tdigest(
 //---- Available PG operations on the digest
 
 // Approximate the value at the given quantile (0.0-1.0)
-#[pg_extern(name="approx_percentile")]
+#[pg_extern(immutable, parallel_safe, name="approx_percentile")]
 pub fn tdigest_quantile(
     quantile: f64,
     digest: TDigest,
@@ -317,7 +317,7 @@ pub fn tdigest_quantile(
 }
 
 // Approximate the quantile at the given value
-#[pg_extern(name="approx_percentile_rank")]
+#[pg_extern(immutable, parallel_safe, name="approx_percentile_rank")]
 pub fn tdigest_quantile_at_value(
     value: f64,
     digest: TDigest,
@@ -327,7 +327,7 @@ pub fn tdigest_quantile_at_value(
 }
 
 // Number of elements from which the digest was built.
-#[pg_extern(name="num_vals")]
+#[pg_extern(immutable, parallel_safe, name="num_vals")]
 pub fn tdigest_count(
     digest: TDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -336,7 +336,7 @@ pub fn tdigest_count(
 }
 
 // Minimum value entered in the digest.
-#[pg_extern(name="min_val")]
+#[pg_extern(immutable, parallel_safe, name="min_val")]
 pub fn tdigest_min(
     digest: TDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -345,7 +345,7 @@ pub fn tdigest_min(
 }
 
 // Maximum value entered in the digest.
-#[pg_extern(name="max_val")]
+#[pg_extern(immutable, parallel_safe, name="max_val")]
 pub fn tdigest_max(
     digest: TDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -355,7 +355,7 @@ pub fn tdigest_max(
 
 // Average of all the values entered in the digest.
 // Note that this is not an approximation, though there may be loss of precision.
-#[pg_extern(name="mean")]
+#[pg_extern(immutable, parallel_safe, name="mean")]
 pub fn tdigest_mean(
     digest: TDigest,
     _fcinfo: pg_sys::FunctionCallInfo,

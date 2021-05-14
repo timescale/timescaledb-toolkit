@@ -131,6 +131,18 @@ mod tests {
         "function tdigest_out(tdigest)",
         "function tdigest_serialize(internal)",
         "function tdigest_trans(internal,integer,double precision)",
-        "type tdigest"
+        "type tdigest",
+        "function average(timeweightsummary)",
+        "function time_weight(text,timestamp with time zone,double precision)",
+        "function time_weight(timeweightsummary)",
+        "function time_weight_combine(internal,internal)",
+        "function time_weight_final(internal)",
+        "function time_weight_summary_trans(internal,timeweightsummary)",
+        "function time_weight_trans(internal,text,timestamp with time zone,double precision)",
+        "function time_weight_trans_deserialize(bytea,internal)",
+        "function time_weight_trans_serialize(internal)",
+        "function timeweightsummary_in(cstring)",
+        "function timeweightsummary_out(timeweightsummary)",
+        "type timeweightsummary",
     ];
 }

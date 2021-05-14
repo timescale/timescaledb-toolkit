@@ -19,5 +19,5 @@ The following links lead to pages for the different features in the Timescale An
 - [LTTB](lttb.md) [<sup><mark>experimental</mark></sup>](/extension/docs/README.md#tag-notes) – A downsample method that preserves visual similarity. ([Methods](lttb.md#api))
 
 - [Percentile Approximation](percentile_approximation.md) - A simple percentile approximation interface [([Methods](percentile_approximation.md#api))], wraps and simplifies the lower level algorithms:
-    - [T-Digest](tdigest.md) [<sup><mark>experimental</mark></sup>](/extension/docs/README.md#tag-notes) – A quantile estimate sketch optimized to provide more accurate estimates near the tails (i.e. 0.001 or 0.995) than conventional approaches. ([Methods](tdigest#tdigest_api))
+    - [T-Digest](tdigest.md) – A quantile estimate sketch optimized to provide more accurate estimates near the tails (i.e. 0.001 or 0.995) than conventional approaches. ([Methods](tdigest#tdigest_api))
     - [UddSketch](uddsketch.md) – A quantile estimate sketch which provides a guaranteed maximum relative error. ([Methods](uddsketch.md#uddsketch_api))

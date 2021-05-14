@@ -386,7 +386,7 @@ CREATE AGGREGATE percentile_agg(
 //---- Available PG operations on the sketch
 
 // Approximate the value at the given approx_percentile (0.0-1.0)
-#[pg_extern(name="approx_percentile")]
+#[pg_extern(immutable, parallel_safe, name="approx_percentile")]
 pub fn uddsketch_approx_percentile(
     percentile: f64,
     sketch: UddSketch,
@@ -401,7 +401,7 @@ pub fn uddsketch_approx_percentile(
 }
 
 // Approximate the approx_percentile at the given value
-#[pg_extern(name="approx_percentile_rank")]
+#[pg_extern(immutable, parallel_safe, name="approx_percentile_rank")]
 pub fn uddsketch_approx_percentile_rank(
     value: f64,
     sketch: UddSketch,
@@ -415,7 +415,7 @@ pub fn uddsketch_approx_percentile_rank(
 }
 
 // Number of elements from which the sketch was built.
-#[pg_extern(name="num_vals")]
+#[pg_extern(immutable, parallel_safe, name="num_vals")]
 pub fn uddsketch_num_vals(
     sketch: UddSketch,
 ) -> f64 {
@@ -424,7 +424,7 @@ pub fn uddsketch_num_vals(
 
 // Average of all the values entered in the sketch.
 // Note that this is not an approximation, though there may be loss of precision.
-#[pg_extern(name="mean")]
+#[pg_extern(immutable, parallel_safe, name="mean")]
 pub fn uddsketch_mean(
     sketch: UddSketch,
 ) -> f64 {
@@ -436,7 +436,7 @@ pub fn uddsketch_mean(
 }
 
 // The maximum error (relative to the true value) for any approx_percentile estimate.
-#[pg_extern(name="error")]
+#[pg_extern(immutable, parallel_safe, name="error")]
 pub fn uddsketch_error(
     sketch: UddSketch
 ) -> f64 {

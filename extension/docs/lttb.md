@@ -19,6 +19,7 @@ In this example we're going to examine downsampling a 101 point cosine wave
 generated like so
 
 ```SQL ,non-transactional
+SET TIME ZONE 'UTC';
 CREATE TABLE sample_data(time TIMESTAMPTZ, val DOUBLE PRECISION);
 INSERT INTO sample_data
     SELECT

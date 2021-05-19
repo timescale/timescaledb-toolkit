@@ -6,7 +6,7 @@ use crate::{
     aggregate_utils::in_aggregate_context, flatten, json_inout_funcs, palloc::Internal, pg_type,
 };
 
-use time_weighted_average::tspoint::TSPoint;
+use time_series::TSPoint;
 
 use flat_serialize::*;
 

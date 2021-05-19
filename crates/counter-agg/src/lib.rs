@@ -1,4 +1,4 @@
-use time_weighted_average::tspoint::TSPoint;
+use time_series::TSPoint;
 use serde::{Deserialize, Serialize};
 use regression::{XYPair, RegressionSummary};
 
@@ -263,4 +263,3 @@ impl CounterSummary {
         Ok(Some(delta / to_seconds(duration as f64))) // don't have to deal with 0 case because that is checked in delta as well (singleton)
     }
 }
-

@@ -10,7 +10,7 @@ use crate::{
 
 use flat_serialize::*;
 
-use time_weighted_average::tspoint::TSPoint;
+use time_series::TSPoint;
 
 // This is included for debug purposes and probably should not leave experimental
 #[pg_extern(schema = "timescale_analytics_experimental")]

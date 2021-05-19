@@ -18,8 +18,8 @@ use crate::{
     range::*,
 };
 
-use time_weighted_average::{
-    tspoint::TSPoint,
+use time_series::{
+    TSPoint,
 };
 
 use counter_agg::{

@@ -6,3 +6,4 @@
 *.iml
 sql/*.generated.sql
 /target-analyzer
+.editorconfig

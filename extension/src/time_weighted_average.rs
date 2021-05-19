@@ -9,8 +9,10 @@ use crate::{
 use flat_serialize::*;
 use pgx::*;
 
+use time_series::TSPoint;
+
 use time_weighted_average::{
-    tspoint::TSPoint, TimeWeightError, TimeWeightMethod,
+    TimeWeightError, TimeWeightMethod,
     TimeWeightSummary as TimeWeightSummaryInternal,
 };
 

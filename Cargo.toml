@@ -11,6 +11,7 @@ members = [
     "tools/sql-doctester",
     "crates/asap",
     "crates/counter-agg",
+    "crates/time-series",
 ]
 
 [profile.dev]

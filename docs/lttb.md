@@ -1,4 +1,4 @@
-# Largest Triangle Three Buckets [<sup><mark>experimental</mark></sup>](/extension/docs/README.md#tag-notes)
+# Largest Triangle Three Buckets [<sup><mark>experimental</mark></sup>](/docs/README.md#tag-notes)
 
 > [Description](#description)<br>
 > [Example](#example)<br>

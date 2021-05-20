@@ -8,7 +8,7 @@ and [the problems we're trying to solve](https://github.com/timescale/timescale-
 and our [Discussions forum](https://github.com/timescale/timescale-analytics/discussions) contains ongoing conversation.
 
 Documentation for this version of the Timescale Analytics extension can be found
-in this repository at [`extension/docs`](https://github.com/timescale/timescale-analytics/tree/main/extension/docs).
+in this repository at [`docs`](https://github.com/timescale/timescale-analytics/tree/main/docs).
 
 
 ## 🖥 Try It Out ##
@@ -17,7 +17,7 @@ The extension comes pre-installed on all [Timescale Forge](https://console.forge
 
 We also provide nightly builds as a docker images in `timescaledev/timescale-analytics:nightly`.
 
-All versions of the extension contain experimental features in the `timecale_analytics_experimental`, schema see [our docs section on experimental features](/extension/docs/README.md#tag-notes) for
+All versions of the extension contain experimental features in the `timecale_analytics_experimental`, schema see [our docs section on experimental features](/docs/README.md#tag-notes) for
 more details.
 
 ## 💿 Installing From Source ##

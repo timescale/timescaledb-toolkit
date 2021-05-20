@@ -1,8 +1,9 @@
-use time_series::TSPoint;
-use serde::{Deserialize, Serialize};
-use regression::{XYPair, RegressionSummary};
 
-pub mod regression;
+use time_series::TSPoint;
+use stats_agg::{XYPair, StatsSummary2D};
+use serde::{Deserialize, Serialize};
+
+
 pub mod range;
 mod tests;
 
@@ -21,14 +22,14 @@ pub struct CounterSummary {
     pub reset_sum: f64,
     pub num_resets: u64,
     pub num_changes: u64,
-    pub regress: RegressionSummary,
+    pub stats: StatsSummary2D,
     pub bounds: Option<range::I64Range>,
 }
 
 // Note that this can lose fidelity with the timestamp, but it would only lose it in the microseconds, 
-// this is likely okay in most applications. However, if you need better regression analysis at the subsecond level, 
-// you can always subtract a common near value from all your times, then add it back in, the regression analysis will be unchanged.
-// Note that convert the timestamp into seconds rather than microseconds here so that the slope and any other regression analysis, is done on a per-second basis.
+// this is likely okay in most applications. However, if you need better statsion analysis at the subsecond level, 
+// you can always subtract a common near value from all your times, then add it back in, the statsion analysis will be unchanged.
+// Note that convert the timestamp into seconds rather than microseconds here so that the slope and any other statsion analysis, is done on a per-second basis.
 // For instance, the slope will be the per-second slope, not the per-microsecond slope. The x intercept value will need to be converted back to microseconds so you get a timestamp out.
 fn ts_to_xy(pt: TSPoint) -> XYPair{
     XYPair{
@@ -54,10 +55,10 @@ impl CounterSummary {
             reset_sum: 0.0,
             num_resets: 0,
             num_changes: 0,
-            regress: RegressionSummary::new(),
+            stats: StatsSummary2D::new(),
             bounds,
         };
-        n.regress.accum(ts_to_xy(*pt)).unwrap();
+        n.stats.accum(ts_to_xy(*pt)).unwrap();
         n
     }
 
@@ -88,7 +89,7 @@ impl CounterSummary {
         self.last = *incoming;
         let mut incoming_xy = ts_to_xy(*incoming);
         incoming_xy.y += self.reset_sum;
-        self.regress.accum(incoming_xy).unwrap();
+        self.stats.accum(incoming_xy).unwrap();
         Ok(())
     }
 
@@ -119,15 +120,15 @@ impl CounterSummary {
         if self.single_value() {
             self.second = incoming.first;
         }
-        let mut regress = incoming.regress.clone();
+        let mut stats = incoming.stats.clone();
         // have to offset based on our reset_sum, including the amount we added based on any resets that happened at the boundary (but before we add in the incoming reset_sum)
-        regress.offset(XYPair{x:0.0, y: self.reset_sum}).unwrap();
+        stats.offset(XYPair{x:0.0, y: self.reset_sum}).unwrap();
         self.last = incoming.last;
         self.reset_sum += incoming.reset_sum;
         self.num_resets += incoming.num_resets;
         self.num_changes += incoming.num_changes;
         
-        self.regress = self.regress.combine(regress).unwrap();
+        self.stats = self.stats.combine(stats).unwrap();
         self.bounds_extend(incoming.bounds);
         Ok(())
     }
@@ -217,7 +218,7 @@ impl CounterSummary {
         let mut duration_to_start = to_seconds((self.first.ts - self.bounds.unwrap().left.unwrap()) as f64);
         let duration_to_end = to_seconds((self.bounds.unwrap().right.unwrap() - self.last.ts) as f64);
         let sampled_interval = self.time_delta();
-        let avg_duration_between_samples = sampled_interval / (self.regress.n64() - 1.0); // don't have to worry about divide by zero because we know we have at least 2 values from the above.
+        let avg_duration_between_samples = sampled_interval / (self.stats.n64() - 1.0); // don't have to worry about divide by zero because we know we have at least 2 values from the above.
         
         // we don't want to extrapolate to negative counter values, so we calculate the duration to the zero point of the counter (based on what we know here) and set that as duration_to_start if it's smaller than duration_to_start
         if result_val > 0.0 && self.first.val >= 0.0 {

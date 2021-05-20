@@ -15,12 +15,12 @@ pub mod tests {
         assert_eq!(p1.last, p2.last, "last");
         assert_eq!(p1.num_changes, p2.num_changes, "num_changes");
         assert_eq!(p1.num_resets, p2.num_resets, "num_resets");
-        assert_eq!(p1.regress.n, p2.regress.n, "n");
-        assert_relative_eq!(p1.regress.sx, p2.regress.sx);
-        assert_relative_eq!(p1.regress.sxx, p2.regress.sxx);
-        assert_relative_eq!(p1.regress.sy, p2.regress.sy);
-        assert_relative_eq!(p1.regress.syy, p2.regress.syy);
-        assert_relative_eq!(p1.regress.sxy, p2.regress.sxy);
+        assert_eq!(p1.stats.n, p2.stats.n, "n");
+        assert_relative_eq!(p1.stats.sx, p2.stats.sx);
+        assert_relative_eq!(p1.stats.sxx, p2.stats.sxx);
+        assert_relative_eq!(p1.stats.sy, p2.stats.sy);
+        assert_relative_eq!(p1.stats.syy, p2.stats.syy);
+        assert_relative_eq!(p1.stats.sxy, p2.stats.sxy);
     }
     #[test]
     fn create() {
@@ -68,10 +68,10 @@ pub mod tests {
         assert_relative_eq!(summary.reset_sum, 50.0);
         assert_eq!(summary.num_resets, 1);
         assert_eq!(summary.num_changes, 4);
-        assert_eq!(summary.regress.count(), 6);
-        assert_relative_eq!(summary.regress.sum().unwrap().x, to_seconds(75.0));
+        assert_eq!(summary.stats.count(), 6);
+        assert_relative_eq!(summary.stats.sum().unwrap().x, to_seconds(75.0));
         // non obvious one here, sumy should be the sum of all values including the resets at the time.
-        assert_relative_eq!(summary.regress.sum().unwrap().y, 0.0 + 10.0 + 20.0 + 20.0 + 50.0 + 60.0);
+        assert_relative_eq!(summary.stats.sum().unwrap().y, 0.0 + 10.0 + 20.0 + 20.0 + 50.0 + 60.0);
     }
     
 
@@ -170,10 +170,10 @@ pub mod tests {
         assert_relative_eq!(summary.reset_sum, 60.0);
         assert_eq!(summary.num_resets, 2);
         assert_eq!(summary.num_changes, 6);
-        assert_eq!(summary.regress.count(), 7);
-        assert_relative_eq!(summary.regress.sum().unwrap().x, to_seconds(105.0));
+        assert_eq!(summary.stats.count(), 7);
+        assert_relative_eq!(summary.stats.sum().unwrap().x, to_seconds(105.0));
         // non obvious one here, sy should be the sum of all values including the resets at the time they were added. 
-        assert_relative_eq!(summary.regress.sum().unwrap().y, 0.0 + 10.0 + 20.0 + 30.0 + 60.0 + 80.0 + 100.0);
+        assert_relative_eq!(summary.stats.sum().unwrap().y, 0.0 + 10.0 + 20.0 + 30.0 + 60.0 + 80.0 + 100.0);
 
         let mut part1 = CounterSummary::new(&TSPoint{ts: 0, val:0.0}, None);
         part1.add_point(&TSPoint{ts: 5, val:10.0}).unwrap();

@@ -14,6 +14,7 @@ members = [
     "crates/asap",
     "crates/counter-agg",
     "crates/time-series",
+    "crates/stats-agg",
 ]
 
 [profile.dev]

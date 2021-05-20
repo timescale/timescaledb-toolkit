@@ -1,4 +1,4 @@
-# ASAP Smoothing [<sup><mark>experimental</mark></sup>](/extension/docs/README.md#tag-notes)
+# ASAP Smoothing [<sup><mark>experimental</mark></sup>](/docs/README.md#tag-notes)
 
 > [Description](#asap-description)<br>
 > [Details](#asap-details)<br>

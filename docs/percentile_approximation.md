@@ -345,7 +345,7 @@ percentile_agg(
 ) RETURNS UddSketch
 ```
 
-This is the default percentile aggregation function. Under the hood, it uses the [UddSketch algorithm](/extension/docs/uddsketch.md) with 200 buckets and an initial max error of 0.001. This should be good for most common use cases of percentile approximation. For more advanced usage of the uddsketch algorithm or use cases for other percentile approximation algorithms see [advanced usage](#advanced-usage). This is the aggregation step of the [two-step aggregate](/extension/docs/two-step_aggregation.md), it is usually used with the [approx_percentile()](#approx_percentile) accessor function in order to extract an approximate percentile, however it is in a form that can be re-aggregated using the [summary form](#summary-form) of the function and any of the other [accessor functions](#accessor-functions).
+This is the default percentile aggregation function. Under the hood, it uses the [UddSketch algorithm](/docs/uddsketch.md) with 200 buckets and an initial max error of 0.001. This should be good for most common use cases of percentile approximation. For more advanced usage of the uddsketch algorithm or use cases for other percentile approximation algorithms see [advanced usage](#advanced-usage). This is the aggregation step of the [two-step aggregate](/docs/two-step_aggregation.md), it is usually used with the [approx_percentile()](#approx_percentile) accessor function in order to extract an approximate percentile, however it is in a form that can be re-aggregated using the [summary form](#summary-form) of the function and any of the other [accessor functions](#accessor-functions).
 
 
 ### Required Arguments <a id="point-form-required-arguments"></a>
@@ -360,7 +360,7 @@ This is the default percentile aggregation function. Under the hood, it uses the
 |---|---|---|
 | `percentile_agg` | `UddSketch` | A UddSketch object which may be passed to other percentile approximation APIs|
 
-Because the `percentile_agg` function uses the [UddSketch algorithm](/extension/docs/uddsketch.md), it returns the UddSketch data structure for use in further calls.
+Because the `percentile_agg` function uses the [UddSketch algorithm](/docs/uddsketch.md), it returns the UddSketch data structure for use in further calls.
 <br>
 
 ### Sample Usages <a id="point-form-examples"></a>
@@ -377,7 +377,7 @@ approx_percentile
              0.999
 ```
 
-They are often used to create [continuous aggregates]() after which we can use multiple [accessors](#accessor-functions) for [retrospective analysis](/extension/docs/two-step_aggregation.md#retrospective-analysis).
+They are often used to create [continuous aggregates]() after which we can use multiple [accessors](#accessor-functions) for [retrospective analysis](/docs/two-step_aggregation.md#retrospective-analysis).
 
 ```SQL ,ignore
 CREATE MATERIALIZED VIEW foo_hourly
@@ -411,7 +411,7 @@ This will combine multiple outputs from the [point form](#point-form) of the `pe
 |---|---|---|
 | `uddsketch` | `UddSketch` | A UddSketch object which may be passed to other UddSketch APIs. |
 
-Because the `percentile_agg` function uses the [UddSketch algorithm](/extension/docs/uddsketch.md), it returns the UddSketch data structure for use in further calls.
+Because the `percentile_agg` function uses the [UddSketch algorithm](/docs/uddsketch.md), it returns the UddSketch data structure for use in further calls.
 <br>
 
 ### Sample Usages <a id="summary-form-examples"></a>
@@ -610,8 +610,8 @@ FROM generate_series(0, 100) data;
 ## Advanced Usage: Percentile Approximation Algorithms and How to Choose <a id="advanced-usage"></a>
 While the simple `percentile_agg` interface will be sufficient for many users, we do provide more specific APIs for advanced users who want more control of how their percentile approximation is computed and how much space the intermediate representation uses.  We currently provide implementations of the following percentile approximation algorithms:
 
-- [T-Digest](/extension/docs/tdigest.md) – This algorithm buckets data more aggressively toward the center of the quantile range, giving it greater accuracy near the tails (i.e. 0.001 or 0.995).
-- [UddSketch](/extension/docs/uddsketch.md) – This algorithm uses exponentially sized buckets to guarantee the approximation falls within a known error range, relative to the true discrete percentile.
+- [T-Digest](/docs/tdigest.md) – This algorithm buckets data more aggressively toward the center of the quantile range, giving it greater accuracy near the tails (i.e. 0.001 or 0.995).
+- [UddSketch](/docs/uddsketch.md) – This algorithm uses exponentially sized buckets to guarantee the approximation falls within a known error range, relative to the true discrete percentile.
 
 There are different tradeoffs that each algorithm makes, and different use cases where each will shine.  The doc pages above each link to the research papers fully detailing the algorithms if you want all the details.  However, at a higher level, here are some of the differences to consider when choosing an algorithm:
 1) First off, it's interesting to note that the formal definition for a percentile is actually impercise, and there are different methods for determining what the true percentile actually is.  In Postgres, given a target percentile 'p', `percentile_disc` will return the smallest element of a set such that 'p' percent of the set is less than that element, while `percentile_cont` will return an interpolated value between the two nearest matches for 'p'.  The difference here isn't usually that interesting in practice, but if it matters to your use case, then keep in mind that TDigest will approximate the continous percentile while UddSketch provides an estimate of the discrete value.

@@ -1,19 +1,14 @@
-//stats is a small statistical regression lib that implements the Youngs-Cramer algorithm and is based on the Postgres implementation
-//here:
-//https://github.com/postgres/postgres/blob/472e518a44eacd9caac7d618f1b6451672ca4481/src/backend/utils/adt/float.c#L3260
+// stats is a small statistical regression lib that implements the Youngs-Cramer algorithm and is based on the Postgres implementation
+// here for 1D regression analysis:
+// https://github.com/postgres/postgres/blob/8bdd6f563aa2456de602e78991e6a9f61b8ec86d/src/backend/utils/adt/float.c#L2813
+// And here for 2D regression analysis:
+// https://github.com/postgres/postgres/blob/472e518a44eacd9caac7d618f1b6451672ca4481/src/backend/utils/adt/float.c#L3260
 //
 
 use serde::{Deserialize, Serialize};
 #[derive(Debug, PartialEq)]
 pub enum StatsError {
     DoubleOverflow,
-}
-#[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
-#[repr(C)]
-pub struct StatsSummary1D {
-    pub n: u64,
-    pub sx: f64,
-    pub sxx: f64,
 }
 
 #[derive(Debug, PartialEq)]
@@ -31,9 +26,6 @@ pub struct StatsSummary2D {
     pub syy: f64, // sum((y-sy/n)^2) (sum of squares)
     pub sxy: f64, // sum((x-sx/n)*(y-sy/n)) (sum of products)
 }
-
-
-
 
 
 impl StatsSummary2D {
@@ -438,6 +430,97 @@ impl StatsSummary2D {
         Some(self.sxy / self.n64())
     }
 }
+
+
+#[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
+#[repr(C)]
+pub struct StatsSummary1D {
+    pub n: u64,
+    pub sx: f64,
+    pub sxx: f64,
+}
+
+impl StatsSummary1D{
+    pub fn n64(&self) -> f64 {
+        self.n as f64
+    }
+
+    pub fn new() -> Self {
+        StatsSummary1D {
+            n: 0,
+            sx: 0.0,
+            sxx: 0.0,
+        }
+    }
+    pub fn accum(&mut self, p: f64) -> Result<(), StatsError> {
+        let old = StatsSummary1D {
+            n: self.n,
+            sx: self.sx,
+            sxx: self.sxx,
+        };
+        self.n += 1;
+        self.sx += p;
+        if old.n > 0 {
+            let tmpx = p * self.n64() - self.sx;
+            let scale = 1.0 / (self.n64() * old.n64());
+            self.sxx += tmpx * tmpx * scale;
+            if self.has_infinite() {
+                if self.check_overflow(&old, p) {
+                    return Err(StatsError::DoubleOverflow);
+                }
+                // sxx should be set to NaN if any of its inputs are
+                // infinite, so if they ended up as infinite and there wasn't an overflow,
+                // we need to set them to NaN instead as this implies that there was an
+                // infinite input (because they necessarily involve multiplications of
+                // infinites, which are NaNs)
+                if self.sxx.is_infinite() {
+                    self.sxx = f64::NAN;
+                }
+            }
+        } else {
+            // first input, leave sxx/syy/sxy alone unless we have infinite inputs
+            if !p.is_finite() {
+                self.sxx = f64::NAN;
+            }
+
+        }
+        Result::Ok(())
+    }
+    fn has_infinite(&self) -> bool {
+        self.sx.is_infinite()
+            || self.sxx.is_infinite()
+    }
+    fn check_overflow(&self, old: &StatsSummary1D, p: f64) -> bool {
+        //Only report overflow if we have finite inputs that lead to infinite results.
+        (self.sx.is_infinite() || self.sxx.is_infinite()) && old.sx.is_finite() && p.is_finite()
+    }
+    pub fn combine(&self, other: StatsSummary1D) -> Result<Self, StatsError> {
+        // TODO: think about whether we want to just modify &self in place here for perf
+        // reasons. This is also a set of weird questions around the Rust compiler, so
+        // easier to just add the copy trait here, may need to adjust or may make things
+        // harder if we do generics.
+        if self.n == 0 && other.n == 0 {
+            return Ok(StatsSummary1D::new());
+        } else if self.n == 0 {
+            // handle the trivial n = 0 cases here, and don't worry about divide by zero errors later.
+            return Ok(other);
+        } else if other.n == 0 {
+            return Ok(*self);
+        }
+        let tmpx = self.sx / self.n64() - other.sx / other.n64();
+        let n = self.n + other.n;
+        let r = StatsSummary1D {
+            n: n,
+            sx: self.sx + other.sx,
+            sxx: self.sxx + other.sxx + self.n64() * other.n64() * tmpx * tmpx / n as f64,
+        };
+        if r.has_infinite() && !self.has_infinite() && !other.has_infinite() {
+            return Err(StatsError::DoubleOverflow);
+        }
+        Ok(r)
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

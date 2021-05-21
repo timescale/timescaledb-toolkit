@@ -6,7 +6,7 @@ use crate::{
     aggregate_utils::in_aggregate_context, flatten, json_inout_funcs, palloc::Internal, pg_type,
 };
 
-use time_series::TSPoint;
+use time_series::{TSPoint, TimeSeries};
 
 use flat_serialize::*;
 
@@ -36,8 +36,7 @@ pub fn unnest_sorted_series(
 }
 
 pub struct LttbTrans {
-    points: Vec<TSPoint>,
-    sorted: bool,
+    series: TimeSeries,
     resolution: usize,
 }
 
@@ -62,18 +61,13 @@ pub fn lttb_trans(
                         error!("resolution must be greater than 2")
                     }
                     LttbTrans {
-                        points: vec![],
-                        sorted: true,
+                        series: TimeSeries::new_explicit_series(),
                         resolution: resolution as usize,
                     }.into()
                 },
             };
 
-            let unsorted = state.points.last().map_or(false, |d| d.ts > time);
-            if state.sorted && unsorted {
-                state.sorted = false
-            }
-            state.points.push(TSPoint {
+            state.series.add_point(TSPoint {
                 ts: time,
                 val: val,
             });
@@ -93,11 +87,9 @@ pub fn lttb_final(
                 None => return None,
                 Some(state) => state,
             };
-            if !state.sorted {
-                state.points.sort_by_key(|a| a.ts);
-                state.sorted = true;
-            }
-            let downsampled = lttb(&state.points, state.resolution);
+            state.series.sort();
+            let series = Cow::from(&state.series);
+            let downsampled = lttb(&*series, state.resolution);
             flatten!(
                 SortedTimeseries {
                     num_points: &(downsampled.len() as u64),

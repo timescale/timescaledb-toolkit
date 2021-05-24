@@ -8,10 +8,8 @@ macro_rules! pg_type {
         }
     ) => {
         ::paste::paste! {
-            use pgx::PostgresType;
-
             $(#[$attrs])?
-            #[derive(PostgresType, Copy, Clone)]
+            #[derive(pgx::PostgresType, Copy, Clone)]
             #[inoutfuncs]
             pub struct $name<'input>([<$name Data>]<'input>, Option<&'input [u8]>);
 

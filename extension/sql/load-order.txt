@@ -4,6 +4,7 @@ hyperloglog.generated.sql
 uddsketch.generated.sql
 triggers.generated.sql
 time_weighted_average.generated.sql
+time_series.generated.sql
 lttb.generated.sql
 asap.generated.sql
 counter_agg.generated.sql

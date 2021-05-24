@@ -10,6 +10,7 @@ pub mod lttb;
 pub mod counter_agg;
 pub mod range;
 pub mod utilities;
+pub mod time_series;
 
 mod palloc;
 mod aggregate_utils;

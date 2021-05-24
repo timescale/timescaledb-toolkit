@@ -1,16 +1,15 @@
 
 use pgx::*;
 use asap::*;
-use pg_sys::TimestampTz;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    aggregate_utils::in_aggregate_context, flatten, json_inout_funcs, palloc::Internal, pg_type,
+    aggregate_utils::in_aggregate_context, palloc::Internal,
 };
 
-use flat_serialize::*;
-
 use time_series::{TSPoint, TimeSeries, ExplicitTimeSeries, NormalTimeSeries, GapfillMethod, TimeSeriesError};
+
+pub use crate::time_series::NormalizedTimeSeries;
 
 // This is included for debug purposes and probably should not leave experimental
 #[pg_extern(schema = "timescale_analytics_experimental")]
@@ -21,62 +20,11 @@ pub fn asap_smooth_raw(
     asap_smooth(&data, resolution as u32)
 }
 
-// TODO: Can we have a single time-series object which can store either an
-// explicit or normal timeseries (without being stupidly inefficient)
-pg_type! {
-    #[derive(Debug)]
-    struct NormalizedTimeSeries {
-        start_ts: i64,
-        step_interval: i64,
-        num_vals: u64,  // required to be aligned
-        values: [f64; self.num_vals],
-    }
-}
-
-
-json_inout_funcs!(NormalizedTimeSeries);
-
 // hack to allow us to qualify names with "timescale_analytics_experimental"
 // so that pgx generates the correct SQL
 mod timescale_analytics_experimental {
     pub(crate) use super::*;
-
-    varlena_type!(NormalizedTimeSeries);
-}
-
-impl<'input> NormalizedTimeSeries<'input> {
-    #[allow(dead_code)]
-    fn to_normal_time_series(&self) -> NormalTimeSeries {
-        NormalTimeSeries {
-            start_ts: *self.start_ts,
-            step_interval: *self.step_interval,
-            values: self.values.to_vec(),
-        }
-    }
-
-    fn from_normal_time_series(series: &NormalTimeSeries) -> NormalizedTimeSeries<'input> {
-        unsafe {
-            flatten!(
-                NormalizedTimeSeries {
-                    start_ts: &series.start_ts,
-                    step_interval: &series.step_interval,
-                    num_vals: &(series.values.len() as u64),
-                    values: &series.values,
-                }
-            )
-        }
-    }
-}
-
-#[pg_extern(name = "unnest_series", schema = "timescale_analytics_experimental")]
-pub fn unnest_normalized_series(
-    series: timescale_analytics_experimental::NormalizedTimeSeries,
-) -> impl std::iter::Iterator<Item = (name!(time,TimestampTz),name!(value,f64))> + '_ {
-    (0..*series.num_vals).map(move |i| {
-        let num_steps = i as i64;
-        let step_interval = *series.step_interval;
-        (*series.start_ts + num_steps * step_interval, series.values[i as usize])
-    })
+    pub(crate) use NormalizedTimeSeries;
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

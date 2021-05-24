@@ -3,36 +3,16 @@ use pgx::*;
 use std::borrow::Cow;
 
 use crate::{
-    aggregate_utils::in_aggregate_context, flatten, json_inout_funcs, palloc::Internal, pg_type,
+    aggregate_utils::in_aggregate_context, flatten, palloc::Internal,
 };
 
 use time_series::{TSPoint, TimeSeries};
 
-use flat_serialize::*;
-
-pg_type! {
-    #[derive(Debug)]
-    struct SortedTimeseries {
-        num_points: u64,  // required to be aligned
-        points: [TSPoint; self.num_points],
-    }
-}
-
-json_inout_funcs!(SortedTimeseries);
+use crate::time_series::SortedTimeseriesData;
 
 // hack to allow us to qualify names with "timescale_analytics_experimental"
 // so that pgx generates the correct SQL
 mod timescale_analytics_experimental {
-    pub(crate) use super::*;
-
-    varlena_type!(SortedTimeseries);
-}
-
-#[pg_extern(name = "unnest_series", schema = "timescale_analytics_experimental")]
-pub fn unnest_sorted_series(
-    series: timescale_analytics_experimental::SortedTimeseries,
-) -> impl std::iter::Iterator<Item = (name!(time,pg_sys::TimestampTz),name!(value,f64))> + '_ {
-    series.points.iter().map(|p| (p.ts, p.val))
 }
 
 pub struct LttbTrans {
@@ -80,7 +60,7 @@ pub fn lttb_trans(
 pub fn lttb_final(
     state: Option<Internal<LttbTrans>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<timescale_analytics_experimental::SortedTimeseries<'static>> {
+) -> Option<crate::time_series::timescale_analytics_experimental::SortedTimeseries<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let mut state = match state {

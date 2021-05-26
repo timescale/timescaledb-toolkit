@@ -6,9 +6,9 @@ use crate::{
     aggregate_utils::in_aggregate_context, flatten, palloc::Internal,
 };
 
-use time_series::{TSPoint, TimeSeries};
+use time_series::{TSPoint, TimeSeries as InternalTimeSeries};
 
-use crate::time_series::SortedTimeseriesData;
+use crate::time_series::{TimeSeriesData, SeriesType};
 
 // hack to allow us to qualify names with "timescale_analytics_experimental"
 // so that pgx generates the correct SQL
@@ -16,7 +16,7 @@ mod timescale_analytics_experimental {
 }
 
 pub struct LttbTrans {
-    series: TimeSeries,
+    series: InternalTimeSeries,
     resolution: usize,
 }
 
@@ -41,7 +41,7 @@ pub fn lttb_trans(
                         error!("resolution must be greater than 2")
                     }
                     LttbTrans {
-                        series: TimeSeries::new_explicit_series(),
+                        series: InternalTimeSeries::new_explicit_series(),
                         resolution: resolution as usize,
                     }.into()
                 },
@@ -60,7 +60,7 @@ pub fn lttb_trans(
 pub fn lttb_final(
     state: Option<Internal<LttbTrans>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_series::timescale_analytics_experimental::SortedTimeseries<'static>> {
+) -> Option<crate::time_series::timescale_analytics_experimental::TimeSeries<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let mut state = match state {
@@ -71,9 +71,11 @@ pub fn lttb_final(
             let series = Cow::from(&state.series);
             let downsampled = lttb(&*series, state.resolution);
             flatten!(
-                SortedTimeseries {
-                    num_points: &(downsampled.len() as u64),
-                    points: &*downsampled,
+                TimeSeries {
+                    series: SeriesType::SortedSeries {
+                        num_points: &(downsampled.len() as u64),
+                        points: &*downsampled,
+                    }
                 }
             ).into()
         })

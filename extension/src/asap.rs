@@ -7,9 +7,9 @@ use crate::{
     aggregate_utils::in_aggregate_context, palloc::Internal,
 };
 
-use time_series::{TSPoint, TimeSeries, ExplicitTimeSeries, NormalTimeSeries, GapfillMethod, TimeSeriesError};
+use time_series::{TSPoint, TimeSeries as InternalTimeSeries, ExplicitTimeSeries, NormalTimeSeries, GapfillMethod, TimeSeriesError};
 
-pub use crate::time_series::NormalizedTimeSeries;
+use crate::time_series::TimeSeries;
 
 // This is included for debug purposes and probably should not leave experimental
 #[pg_extern(schema = "timescale_analytics_experimental")]
@@ -23,13 +23,11 @@ pub fn asap_smooth_raw(
 // hack to allow us to qualify names with "timescale_analytics_experimental"
 // so that pgx generates the correct SQL
 mod timescale_analytics_experimental {
-    pub(crate) use super::*;
-    pub(crate) use NormalizedTimeSeries;
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ASAPTransState {
-    ts: TimeSeries,
+    ts: InternalTimeSeries,
     resolution: i32,
 }
 
@@ -52,7 +50,7 @@ pub fn asap_trans(
             match state {
                 None => {
                     Some(ASAPTransState {
-                            ts: TimeSeries::Explicit(
+                            ts: InternalTimeSeries::Explicit(
                                 ExplicitTimeSeries {
                                     ordered: true,
                                     points: vec![p],
@@ -94,7 +92,7 @@ fn find_downsample_interval(series: &ExplicitTimeSeries, resolution: i64) -> i64
 fn asap_final(
     state: Option<Internal<ASAPTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<timescale_analytics_experimental::NormalizedTimeSeries<'static>> {
+) -> Option<crate::time_series::timescale_analytics_experimental::TimeSeries<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let state = match state {
@@ -102,7 +100,7 @@ fn asap_final(
                 Some(state) => state.clone(),
             };
 
-            if let TimeSeries::Explicit(mut series) = state.ts {
+            if let InternalTimeSeries::Explicit(mut series) = state.ts {
                 series.sort();
 
                 // In following the ASAP reference implementation, we only downsample if the number
@@ -127,10 +125,11 @@ fn asap_final(
                     step_interval: 0,
                     values: asap_smooth(&normal.values, state.resolution as u32)
                 };
+
                 // Set the step interval for the asap result so that it covers the same interval
                 // as the passed in data
                 result.step_interval = normal.step_interval * normal.values.len() as i64 / result.values.len() as i64;
-                Some(NormalizedTimeSeries::from_normal_time_series(&result))
+                TimeSeries::from_internal_time_series(InternalTimeSeries::Normal(result)).into()
             } else {
                 panic!("Unexpected timeseries format encountered");
             }

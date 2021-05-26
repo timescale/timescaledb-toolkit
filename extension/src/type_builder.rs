@@ -3,7 +3,7 @@ macro_rules! pg_type {
     (
         $(#[$attrs: meta])?
         struct $name: ident {
-            $($(#[$fattrs: meta])* $field:ident : $typ: tt),*
+            $($(#[$fattrs: meta])* $field:ident : $typ: tt$(<$life:lifetime>)?),*
             $(,)?
         }
     ) => {
@@ -26,7 +26,7 @@ macro_rules! pg_type {
                     version: u8,
                     #[serde(skip, default="crate::serialization::serde_reference_adaptor::default_padding")]
                     padding: [u8; 3],
-                    $($(#[$fattrs])* $field: $typ),*
+                    $($(#[$fattrs])* $field: $typ $(<$life>)?),*
                 }
             }
 

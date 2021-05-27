@@ -1,7 +1,5 @@
-pub mod tspoint;
-
 use serde::{Deserialize, Serialize};
-pub use tspoint::TSPoint;
+use time_series::TSPoint;
 #[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
 #[repr(u8)]
 pub enum TimeWeightMethod {

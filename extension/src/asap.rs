@@ -1,16 +1,15 @@
 
 use pgx::*;
 use asap::*;
-use pg_sys::TimestampTz;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    aggregate_utils::in_aggregate_context, flatten, json_inout_funcs, palloc::Internal, pg_type,
+    aggregate_utils::in_aggregate_context, palloc::Internal,
 };
 
-use flat_serialize::*;
+use time_series::{TSPoint, TimeSeries as InternalTimeSeries, ExplicitTimeSeries, NormalTimeSeries, GapfillMethod, TimeSeriesError};
 
-use time_weighted_average::tspoint::TSPoint;
+use crate::time_series::TimeSeries;
 
 // This is included for debug purposes and probably should not leave experimental
 #[pg_extern(schema = "timescale_analytics_experimental")]
@@ -21,192 +20,14 @@ pub fn asap_smooth_raw(
     asap_smooth(&data, resolution as u32)
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ExplicitTimeSeries {
-    ordered: bool,
-    points: Vec<TSPoint>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct NormalTimeSeries {
-    start_ts: i64,
-    step_interval: i64,    // ts delta between values
-    values: Vec<f64>
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum TimeSeries {
-    Explicit(ExplicitTimeSeries),
-    Normal(NormalTimeSeries)
-}
-
-pub enum TimeSeriesError {
-    OrderedDataExpected,
-    InsufficientDataToExtrapolate,
-}
-
-pub enum GapfillMethod {
-    LOCF,
-    Linear,
-}
-
-impl GapfillMethod {
-    // Adds the given number of points to the end of a non-empty NormalTimeSeries
-    fn fill_normalized_series_gap(&self, series: &mut NormalTimeSeries, points: i32, post_gap_val: f64) {
-        assert!(!series.values.is_empty());
-        let last_val = *series.values.last().unwrap();
-        for i in 1..=points {
-            match self {
-                GapfillMethod::LOCF => series.values.push(last_val),
-                GapfillMethod::Linear => series.values.push(last_val + (post_gap_val - last_val) * i as f64 / (points + 1) as f64)
-            }
-        }
-    }
-}
-
-impl ExplicitTimeSeries {
-    pub fn sort(&mut self) {
-        if !self.ordered {
-            self.points.sort_unstable_by_key(|p| p.ts);
-            self.ordered = true;
-        }
-    }
-
-    // This function will normalize a time range by averaging the values in `downsample_interval`
-    // sized buckets.  Any gaps will be filled via the given method and will use the downsampled
-    // values as the relevant points for LOCF or interpolation.
-    pub fn downsample_and_gapfill_to_normal_form(&self, downsample_interval: i64, gapfill_method: GapfillMethod) -> Result<NormalTimeSeries, TimeSeriesError> {
-        if !self.ordered {
-            return Err(TimeSeriesError::OrderedDataExpected);
-        }
-        if self.points.len() < 2 || self.points.last().unwrap().ts - self.points.first().unwrap().ts < downsample_interval {
-            return Err(TimeSeriesError::InsufficientDataToExtrapolate);
-        }
-
-        let mut result = NormalTimeSeries {
-            start_ts: self.points.first().unwrap().ts,
-            step_interval: downsample_interval,
-            values: Vec::<f64>::new(),
-        };
-
-        let mut bound = self.points.first().unwrap().ts + downsample_interval;
-        let mut sum = 0.0;
-        let mut count = 0;
-        let mut gap_count = 0;
-        for pt in self.points.iter() {
-            if pt.ts < bound {
-                sum += pt.val;
-                count += 1;
-            } else {
-                assert!(count != 0);
-                let new_val = sum / count as f64;
-                // If we missed any intervals prior to the current one, fill in the gap here
-                if gap_count != 0 {
-                    gapfill_method.fill_normalized_series_gap(&mut result, gap_count, new_val);
-                    gap_count = 0;
-                }
-                result.values.push(new_val);
-                sum = pt.val;
-                count = 1;
-                bound += downsample_interval;
-                // If the current point doesn't go in the bucket immediately following the one
-                // we just created, update the bound until we find the correct bucket and track
-                // the number of empty buckets we skip over
-                while bound < pt.ts {
-                    bound += downsample_interval;
-                    gap_count += 1;
-                }
-            }
-        }
-        // This will handle the last interval, since we always exit the above loop in the middle
-        // of accumulating an interval
-        assert!(count > 0);
-        let new_val = sum / count as f64;
-        if gap_count != 0 {
-            gapfill_method.fill_normalized_series_gap(&mut result, gap_count, new_val);
-        }
-        result.values.push(sum / count as f64);
-        Ok(result)
-    }
-}
-
-impl TimeSeries {
-    pub fn add_point(&mut self, point: TSPoint) {
-        match self {
-            TimeSeries::Explicit(series) => {
-                series.ordered = series.points.is_empty() || series.ordered && point.ts >= series.points.last().unwrap().ts;
-                series.points.push(point);
-            },
-            TimeSeries::Normal(normal) => {
-                // TODO: return error rather than assert
-                assert_eq!(normal.start_ts + normal.values.len() as i64 * normal.step_interval, point.ts);
-                normal.values.push(point.val);
-            }
-        }
-    }
-}
-
-// TODO: Can we have a single time-series object which can store either an
-// explicit or normal timeseries (without being stupidly inefficient)
-pg_type! {
-    #[derive(Debug)]
-    struct NormalizedTimeSeries {
-        start_ts: i64,
-        step_interval: i64,
-        num_vals: u64,  // required to be aligned
-        values: [f64; self.num_vals],
-    }
-}
-
-
-json_inout_funcs!(NormalizedTimeSeries);
-
 // hack to allow us to qualify names with "timescale_analytics_experimental"
 // so that pgx generates the correct SQL
 mod timescale_analytics_experimental {
-    pub(crate) use super::*;
-
-    varlena_type!(NormalizedTimeSeries);
-}
-
-impl<'input> NormalizedTimeSeries<'input> {
-    #[allow(dead_code)]
-    fn to_normal_time_series(&self) -> NormalTimeSeries {
-        NormalTimeSeries {
-            start_ts: *self.start_ts,
-            step_interval: *self.step_interval,
-            values: self.values.to_vec(),
-        }
-    }
-
-    fn from_normal_time_series(series: &NormalTimeSeries) -> NormalizedTimeSeries<'input> {
-        unsafe {
-            flatten!(
-                NormalizedTimeSeries {
-                    start_ts: &series.start_ts,
-                    step_interval: &series.step_interval,
-                    num_vals: &(series.values.len() as u64),
-                    values: &series.values,
-                }
-            )
-        }
-    }
-}
-
-#[pg_extern(name = "unnest_series", schema = "timescale_analytics_experimental")]
-pub fn unnest_normalized_series(
-    series: timescale_analytics_experimental::NormalizedTimeSeries,
-) -> impl std::iter::Iterator<Item = (name!(time,TimestampTz),name!(value,f64))> + '_ {
-    (0..*series.num_vals).map(move |i| {
-        let num_steps = i as i64;
-        let step_interval = *series.step_interval;
-        (*series.start_ts + num_steps * step_interval, series.values[i as usize])
-    })
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ASAPTransState {
-    ts: TimeSeries,
+    ts: InternalTimeSeries,
     resolution: i32,
 }
 
@@ -229,7 +50,7 @@ pub fn asap_trans(
             match state {
                 None => {
                     Some(ASAPTransState {
-                            ts: TimeSeries::Explicit(
+                            ts: InternalTimeSeries::Explicit(
                                 ExplicitTimeSeries {
                                     ordered: true,
                                     points: vec![p],
@@ -271,7 +92,7 @@ fn find_downsample_interval(series: &ExplicitTimeSeries, resolution: i64) -> i64
 fn asap_final(
     state: Option<Internal<ASAPTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<timescale_analytics_experimental::NormalizedTimeSeries<'static>> {
+) -> Option<crate::time_series::timescale_analytics_experimental::TimeSeries<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let state = match state {
@@ -279,7 +100,7 @@ fn asap_final(
                 Some(state) => state.clone(),
             };
 
-            if let TimeSeries::Explicit(mut series) = state.ts {
+            if let InternalTimeSeries::Explicit(mut series) = state.ts {
                 series.sort();
 
                 // In following the ASAP reference implementation, we only downsample if the number
@@ -304,10 +125,11 @@ fn asap_final(
                     step_interval: 0,
                     values: asap_smooth(&normal.values, state.resolution as u32)
                 };
+
                 // Set the step interval for the asap result so that it covers the same interval
                 // as the passed in data
                 result.step_interval = normal.step_interval * normal.values.len() as i64 / result.values.len() as i64;
-                Some(NormalizedTimeSeries::from_normal_time_series(&result))
+                TimeSeries::from_internal_time_series(InternalTimeSeries::Normal(result)).into()
             } else {
                 panic!("Unexpected timeseries format encountered");
             }

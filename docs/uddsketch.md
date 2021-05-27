@@ -138,7 +138,7 @@ Next we'll use one of our utility functions, `generate_periodic_normal_series`, 
 ```SQL ,non-transactional
 INSERT INTO test
     SELECT time, value
-    FROM timescale_analytics_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, rng_seed => 12345678); 
+    FROM timescale_analytics_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, rng_seed => 12345678);
 ```
 ```
 INSERT 0 4032
@@ -146,17 +146,17 @@ INSERT 0 4032
 
 Finally, we can query the aggregate to see various approximate percentiles from different weeks.
 ```SQL
-SELECT 
+SELECT
     week,
-    error(sketch), 
-    approx_percentile(0.01, sketch) AS low, 
-    approx_percentile(0.5, sketch) AS mid, 
-    approx_percentile(0.99, sketch) AS high 
+    error(sketch),
+    approx_percentile(0.01, sketch) AS low,
+    approx_percentile(0.5, sketch) AS mid,
+    approx_percentile(0.99, sketch) AS high
 FROM weekly_sketch
 ORDER BY week;
 ```
 ```output
-          week          | error |        low        |        mid         |        high        
+          week          | error |        low        |        mid         |        high
 ------------------------+-------+-------------------+--------------------+--------------------
  2019-12-30 00:00:00+00 | 0.005 | 808.3889305072331 |  1037.994095858188 | 1280.5527834239035
  2020-01-06 00:00:00+00 | 0.005 | 858.3773394302965 |  1091.213645863754 | 1306.4218833642865
@@ -167,15 +167,15 @@ ORDER BY week;
 
 We can also combine the weekly aggregates to run queries on the entire data:
 ```SQL
-SELECT 
-    error(a.uddsketch), 
-    approx_percentile(0.01, a.uddsketch) AS low, 
-    approx_percentile(0.5, a.uddsketch) AS mid, 
-    approx_percentile(0.99, a.uddsketch) AS high 
-FROM (SELECT uddsketch(sketch) FROM weekly_sketch) AS a;
+SELECT
+    error(a.uddsketch),
+    approx_percentile(0.01, a.uddsketch) AS low,
+    approx_percentile(0.5, a.uddsketch) AS mid,
+    approx_percentile(0.99, a.uddsketch) AS high
+FROM (SELECT rollup(sketch) as uddsketch FROM weekly_sketch) AS a;
 ```
 ```output
- error |       low        |        mid         |        high        
+ error |       low        |        mid         |        high
 -------+------------------+--------------------+--------------------
  0.005 | 753.736403199032 | 1027.6657963969128 | 1280.5527834239035
 ```
@@ -240,9 +240,9 @@ CREATE VIEW sketch AS
 
 ---
 
-## **uddsketch (summary form)** <a id="uddsketch-summary"></a>
+## **rollup (summary form)** <a id="uddsketch-summary"></a>
 ```SQL ,ignore
-uddsketch(
+rollup(
     sketch uddsketch
 ) RETURNS UddSketch
 ```
@@ -267,17 +267,17 @@ For this example assume we have a table 'samples' with a column 'data' holding `
 
 ```SQL ,ignore
 CREATE VIEW sketch AS
-    SELECT 
-        id, 
+    SELECT
+        id,
         uddsketch(100, 0.01, data) as sketched
     FROM samples
     GROUP BY id;
 ```
 
-Then we can use that view to get the full aggregate like so: 
+Then we can use that view to get the full aggregate like so:
 
 ```SQL ,ignore
-SELECT uddsketch(sketched)
+SELECT rollup(sketched)
 FROM sketch;
 ```
 
@@ -287,7 +287,7 @@ FROM sketch;
 
 ```SQL ,ignore
 approx_percentile(
-    percentile DOUBLE PRECISION, 
+    percentile DOUBLE PRECISION,
     sketch  uddsketch
 ) RETURNS DOUBLE PRECISION
 ```

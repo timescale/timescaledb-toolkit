@@ -294,7 +294,7 @@ version = "0.1.0"
 dependencies = [
  "approx",
  "serde",
- "time_weighted_average",
+ "time_series",
 ]
 
 [[package]]
@@ -1838,10 +1838,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "time_series"
+version = "0.1.0"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "time_weighted_average"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "time_series",
 ]
 
 [[package]]
@@ -1866,6 +1874,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tdigest",
+ "time_series",
  "time_weighted_average",
  "uddsketch",
 ]

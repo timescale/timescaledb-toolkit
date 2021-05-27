@@ -357,20 +357,7 @@ pub fn uddsketch_compound_trans(
 }
 
 extension_sql!(r#"
-CREATE AGGREGATE uddsketch(
-    sketch uddsketch
-) (
-    sfunc = uddsketch_compound_trans,
-    stype = internal,
-    finalfunc = uddsketch_final,
-    combinefunc = uddsketch_combine,
-    serialfunc = uddsketch_serialize,
-    deserialfunc = uddsketch_deserialize,
-    parallel = safe
-);
-"#);
-extension_sql!(r#"
-CREATE AGGREGATE percentile_agg(
+CREATE AGGREGATE rollup(
     sketch uddsketch
 ) (
     sfunc = uddsketch_compound_trans,
@@ -542,7 +529,7 @@ mod tests {
                 GROUP BY device", None, None);
 
             client.select("CREATE VIEW composite AS \
-                SELECT uddsketch(uddsketch) \
+                SELECT rollup(uddsketch) as uddsketch \
                 FROM sketches", None, None);
 
             client.select("CREATE VIEW base AS \

@@ -28,29 +28,29 @@ SET TIME ZONE 'UTC';
     val             DOUBLE PRECISION,
     PRIMARY KEY (measure_id, ts)
 );
-INSERT INTO foo VALUES 
-( 1, '2020-01-01 00:00:00+00', 10.0), 
-( 1, '2020-01-01 00:01:00+00', 20.0), 
-( 1, '2020-01-01 00:02:00+00',10.0), 
-( 1, '2020-01-01 00:03:00+00', 20.0), 
-( 1, '2020-01-01 00:04:00+00', 15.0), 
-( 2, '2020-01-01 00:00:00+00', 10.0), 
-( 2, '2020-01-01 00:01:00+00', 20.0), 
-( 2, '2020-01-01 00:02:00+00',10.0), 
-( 2, '2020-01-01 00:03:00+00', 20.0), 
-( 2, '2020-01-01 00:04:00+00', 10.0), 
-( 2, '2020-01-01 00:08:00+00', 10.0), 
-( 2, '2020-01-01 00:10:00+00', 30.0), 
-( 2, '2020-01-01 00:10:30+00',10.0), 
-( 2, '2020-01-01 00:16:30+00', 35.0), 
-( 2, '2020-01-01 00:30:00+00', 60.0); 
+INSERT INTO foo VALUES
+( 1, '2020-01-01 00:00:00+00', 10.0),
+( 1, '2020-01-01 00:01:00+00', 20.0),
+( 1, '2020-01-01 00:02:00+00',10.0),
+( 1, '2020-01-01 00:03:00+00', 20.0),
+( 1, '2020-01-01 00:04:00+00', 15.0),
+( 2, '2020-01-01 00:00:00+00', 10.0),
+( 2, '2020-01-01 00:01:00+00', 20.0),
+( 2, '2020-01-01 00:02:00+00',10.0),
+( 2, '2020-01-01 00:03:00+00', 20.0),
+( 2, '2020-01-01 00:04:00+00', 10.0),
+( 2, '2020-01-01 00:08:00+00', 10.0),
+( 2, '2020-01-01 00:10:00+00', 30.0),
+( 2, '2020-01-01 00:10:30+00',10.0),
+( 2, '2020-01-01 00:16:30+00', 35.0),
+( 2, '2020-01-01 00:30:00+00', 60.0);
 ```
 ```output
 INSERT 0 15
 ```
 Where the measure_id defines a series of related points. A simple use would be to calculate the time weighted average over the whole set of points for each `measure_id`. We'll use the LOCF method for weighting:
 
-```SQL 
+```SQL
 SELECT measure_id,
     average(
         time_weight('LOCF', ts, val)
@@ -60,7 +60,7 @@ GROUP BY measure_id
 ORDER BY measure_id;
 ```
 ```output
- measure_id | average 
+ measure_id | average
 ------------+---------
           1 |      15
           2 |   22.25
@@ -76,20 +76,20 @@ SELECT measure_id,
         time_weight('LOCF', ts, val)
     )
 FROM foo
-GROUP BY measure_id, time_bucket('5 min'::interval, ts) 
+GROUP BY measure_id, time_bucket('5 min'::interval, ts)
 ORDER BY measure_id, time_bucket('5 min'::interval, ts);
 ```
 ```output
- measure_id |         bucket         | average 
+ measure_id |         bucket         | average
 ------------+------------------------+---------
           1 | 2020-01-01 00:00:00+00 |      15
           2 | 2020-01-01 00:00:00+00 |      15
-          2 | 2020-01-01 00:05:00+00 |        
+          2 | 2020-01-01 00:05:00+00 |
           2 | 2020-01-01 00:10:00+00 |      30
-          2 | 2020-01-01 00:15:00+00 |        
-          2 | 2020-01-01 00:30:00+00 |        
+          2 | 2020-01-01 00:15:00+00 |
+          2 | 2020-01-01 00:30:00+00 |
 ```
-Note that in this case, there are several `time_buckets` that have only a single value, these return `NULL` as the average as we cannot take a time weighted average with only a single point in a bucket and no information about points outside the bucket. In many cases we'll have significantly more data here, but for the example we wanted to keep our data set small. 
+Note that in this case, there are several `time_buckets` that have only a single value, these return `NULL` as the average as we cannot take a time weighted average with only a single point in a bucket and no information about points outside the bucket. In many cases we'll have significantly more data here, but for the example we wanted to keep our data set small.
 
 
 Of course this might be more useful if we make a continuous aggregate out of it. We'll first have to make it a hypertable partitioned on the ts column, with a relatively large chunk_time_interval because the data isn't too high rate:
@@ -112,7 +112,7 @@ GROUP BY measure_id, time_bucket('5 min'::interval, ts);
 
 
 Note that here, we just use the `time_weight` function. It's often better to do that and simply run the `average` function when selecting from the view like so:
-```SQL 
+```SQL
 SELECT
     measure_id,
     bucket,
@@ -121,30 +121,30 @@ FROM foo_5
 ORDER BY measure_id, bucket;
 ```
 ```output
- measure_id |         bucket         | average 
+ measure_id |         bucket         | average
 ------------+------------------------+---------
           1 | 2020-01-01 00:00:00+00 |      15
           2 | 2020-01-01 00:00:00+00 |      15
-          2 | 2020-01-01 00:05:00+00 |        
+          2 | 2020-01-01 00:05:00+00 |
           2 | 2020-01-01 00:10:00+00 |      30
-          2 | 2020-01-01 00:15:00+00 |        
-          2 | 2020-01-01 00:30:00+00 |        
+          2 | 2020-01-01 00:15:00+00 |
+          2 | 2020-01-01 00:30:00+00 |
 ```
 And we get the same results as before. It also allows us to re-aggregate from the continuous aggregate into a larger bucket size quite simply:
 
-```SQL 
+```SQL
 SELECT
     measure_id,
     time_bucket('1 day'::interval, bucket),
     average(
-            time_weight(time_weight)
+            rollup(time_weight)
     )
 FROM foo_5
 GROUP BY measure_id, time_bucket('1 day'::interval, bucket)
 ORDER BY measure_id, time_bucket('1 day'::interval, bucket);
 ```
 ```output
- measure_id |      time_bucket       | average 
+ measure_id |      time_bucket       | average
 ------------+------------------------+---------
           1 | 2020-01-01 00:00:00+00 |      15
           2 | 2020-01-01 00:00:00+00 |   22.25
@@ -152,18 +152,18 @@ ORDER BY measure_id, time_bucket('1 day'::interval, bucket);
 
 We can also use this to speed up our initial calculation where we're only grouping by measure_id and producing a full average (assuming we have a fair number of points per 5 minute period, here it's not going to do much because of our limited example data, but you get the gist):
 
-```SQL 
+```SQL
 SELECT
     measure_id,
     average(
-        time_weight(time_weight)
+        rollup(time_weight)
     )
 FROM foo_5
 GROUP BY measure_id
 ORDER BY measure_id;
 ```
 ```output
- measure_id | average 
+ measure_id | average
 ------------+---------
           1 |      15
           2 |   22.25
@@ -172,7 +172,7 @@ ORDER BY measure_id;
 
 ## Command List (A-Z) <a id="time-weighted-average-api"></a>
 > - [time_weight() (point form)](#time_weight_point)
-> - [time_weight() (summary form)](#time-weight-summary)
+> - [rollup() (summary form)](#time-weight-summary)
 > - [average()](#time-weight-average)
 
 ---
@@ -221,9 +221,9 @@ SELECT
 FROM t;
 ```
 
-## **time_weight() (summary form)** <a id="time-weight-summary"></a>
+## **rollup() (summary form)** <a id="time-weight-summary"></a>
 ```SQL ,ignore
-time_weight(
+rollup(
     tws TimeWeightSummary
 ) RETURNS TimeWeightSummary
 ```
@@ -252,7 +252,7 @@ WITH t as (
     WHERE measure_id = 10
     GROUP BY date_trunc('day', ts)
 ), q as (
-    SELECT time_weight(tw) AS full_tw -- do a second level of aggregation to get the full time weighted average
+    SELECT rollup(tw) AS full_tw -- do a second level of aggregation to get the full time weighted average
     FROM t
 )
 SELECT
@@ -328,7 +328,7 @@ WITH t as (SELECT measure_id,
     )
 SELECT measure_id,
     average(
-        time_weight(time_weight)
+        rollup(time_weight)
     )
 FROM t
 GROUP BY measure_id;

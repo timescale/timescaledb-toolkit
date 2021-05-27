@@ -315,7 +315,7 @@ CREATE AGGREGATE timescale_analytics_experimental.counter_agg( ts timestamptz, v
 "#);
 
 extension_sql!(r#"
-CREATE AGGREGATE timescale_analytics_experimental.counter_agg(cs timescale_analytics_experimental.CounterSummary)
+CREATE AGGREGATE timescale_analytics_experimental.rollup(cs timescale_analytics_experimental.CounterSummary)
 (
     sfunc = timescale_analytics_experimental.counter_agg_summary_trans,
     stype = internal,
@@ -584,7 +584,7 @@ mod tests {
             //combine function works as expected
             let stmt = "SELECT counter_agg(ts, val) FROM test";
             let a = select_one!(client,stmt, timescale_analytics_experimental::CounterSummary);
-            let stmt = "WITH t as (SELECT date_trunc('minute', ts), counter_agg(ts, val) as agg FROM test group by 1 ) SELECT counter_agg(agg) FROM t";
+            let stmt = "WITH t as (SELECT date_trunc('minute', ts), counter_agg(ts, val) as agg FROM test group by 1 ) SELECT rollup(agg) FROM t";
             let b = select_one!(client,stmt, timescale_analytics_experimental::CounterSummary);
             assert_close_enough(&a.to_internal_counter_summary(), &b.to_internal_counter_summary());
         });

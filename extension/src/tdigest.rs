@@ -291,7 +291,7 @@ pub fn tdigest_compound_deserialize(
 }
 
 extension_sql!(r#"
-CREATE AGGREGATE tdigest(
+CREATE AGGREGATE rollup(
     tdigest
 ) (
     sfunc = tdigest_compound_trans,

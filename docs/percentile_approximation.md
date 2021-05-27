@@ -246,7 +246,7 @@ So, that's nifty, and much faster, especially for large data sets. But what's ev
 ```SQL
 SELECT
     api_id,
-    approx_percentile(0.5, percentile_agg(percentile_agg)) as approx_median
+    approx_percentile(0.5, rollup(percentile_agg)) as approx_median
 FROM response_times_hourly
 GROUP BY api_id
 ORDER BY api_id;
@@ -272,8 +272,8 @@ You'll notice that I didn't include the average response time here, that's becau
 ```SQL
 SELECT
     api_id,
-    mean(percentile_agg(percentile_agg)) as avg,
-    approx_percentile(0.5, percentile_agg(percentile_agg)) as approx_median
+    mean(rollup(percentile_agg)) as avg,
+    approx_percentile(0.5, rollup(percentile_agg)) as approx_median
 FROM response_times_hourly
 GROUP BY api_id
 ORDER BY api_id;
@@ -300,7 +300,7 @@ We have several other accessor functions, including `error` which returns the ma
 ```SQL
 SELECT
     api_id,
-    ((1 - approx_percentile_rank(1000, percentile_agg(percentile_agg))) * 100)::numeric(6,2) as percent_over_1s
+    ((1 - approx_percentile_rank(1000, rollup(percentile_agg))) * 100)::numeric(6,2) as percent_over_1s
 FROM response_times_hourly
 GROUP BY api_id
 ORDER BY api_id;
@@ -325,8 +325,8 @@ ORDER BY api_id;
 
 ## API <a id="percentile-approx-api"></a>
 Aggregate Functions <a id="aggregate-functions">
-> - [percentile_agg - point form](#point-form)
-> - [percentile_agg - summary form](#summary-form)
+> - [percentile_agg (point form)](#point-form)
+> - [rollup (summary form)](#summary-form)
 
 Accessor Functions <a id="accesor-functions">
 
@@ -338,7 +338,7 @@ Accessor Functions <a id="accesor-functions">
 
 
 ---
-## **percentile_agg (point form) ** <a id="point-form"></a>
+## **percentile_agg (point form)** <a id="point-form"></a>
 ```SQL ,ignore
 percentile_agg(
     value DOUBLE PRECISION
@@ -390,9 +390,9 @@ GROUP BY 1;
 ```
 ---
 
-## **percentile_agg (summary form)** <a id="summary-form"></a>
+## **rollup (summary form)** <a id="summary-form"></a>
 ```SQL ,ignore
-percentile_agg(
+rollup(
     sketch uddsketch
 ) RETURNS UddSketch
 ```
@@ -402,7 +402,7 @@ This will combine multiple outputs from the [point form](#point-form) of the `pe
 ### Required Arguments <a id="summary-form-required-arguments"></a>
 |Name| Type |Description|
 |---|---|---|
-| `sketch` | `UddSketch` | The already constructed uddsketch from a previous [percentile_agg() (point form)](#point-form) call. |
+| `sketch` | `UddSketch` | The already constructed uddsketch from a previous [percentile_agg()](#point-form) call. |
 <br>
 
 ### Returns
@@ -411,19 +411,19 @@ This will combine multiple outputs from the [point form](#point-form) of the `pe
 |---|---|---|
 | `uddsketch` | `UddSketch` | A UddSketch object which may be passed to other UddSketch APIs. |
 
-Because the `percentile_agg` function uses the [UddSketch algorithm](/docs/uddsketch.md), it returns the UddSketch data structure for use in further calls.
+Because the `percentile_agg` function uses the [UddSketch algorithm](/docs/uddsketch.md), `rollup` returns the UddSketch data structure for use in further calls.
 <br>
 
 ### Sample Usages <a id="summary-form-examples"></a>
 Let's presume we created the [continuous aggregate]() in the [point form example](#point-form-examples):
 
-We can then use the summary form of the percentile_agg function to re-aggregate the results from the `foo_hourly` view and the [`approx_percentile`](#approx_percentile) accessor function to get the 95th and 99th percentiles over each day:
+We can then rollup function to re-aggregate the results from the `foo_hourly` view and the [`approx_percentile`](#approx_percentile) accessor function to get the 95th and 99th percentiles over each day:
 
 ```SQL , ignore
 SELECT
     time_bucket('1 day'::interval, bucket) as bucket,
-    approx_percentile(0.95, percentile_agg(pct_agg)) as p95,
-    approx_percentile(0.99, percentile_agg(pct_agg)) as p99
+    approx_percentile(0.95, rollup(pct_agg)) as p95,
+    approx_percentile(0.99, rollup(pct_agg)) as p99
 FROM foo_hourly
 GROUP BY 1;
 ```

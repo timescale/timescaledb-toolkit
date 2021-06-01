@@ -129,7 +129,7 @@ fn asap_final(
                 // Set the step interval for the asap result so that it covers the same interval
                 // as the passed in data
                 result.step_interval = normal.step_interval * normal.values.len() as i64 / result.values.len() as i64;
-                TimeSeries::from_internal_time_series(InternalTimeSeries::Normal(result)).into()
+                TimeSeries::from_internal_time_series(&InternalTimeSeries::Normal(result)).into()
             } else {
                 panic!("Unexpected timeseries format encountered");
             }

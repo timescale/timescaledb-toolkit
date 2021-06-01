@@ -1,20 +1,98 @@
 #[macro_export]
 macro_rules! pg_type {
+    // base case, all fields are collected into $vals
     (
-        $(#[$attrs: meta])?
+        $(#[$attrs: meta])*
         struct $name: ident {
-            $($(#[$fattrs: meta])* $field:ident : $typ: tt$(<$life:lifetime>)?),*
+            $(,)?
+        }
+
+        $(%($($vals:tt)*))?
+    ) => {
+        $crate::pg_type_impl!{
+            $(#[$attrs])*
+            struct $name {
+                $($($vals)*)?
+            }
+        }
+    };
+    // eat a struct field and add it to $vals
+    (
+        $(#[$attrs: meta])*
+        struct $name: ident {
+            $(#[$fattrs: meta])* $field:ident : $typ: tt $(<$life:lifetime>)?,
+            $($tail: tt)*
+        }
+
+        $(%($($vals:tt)*))?
+    ) => {
+        $crate::pg_type!{
+            $(#[$attrs])*
+            struct $name {
+                $($tail)*
+            }
+
+            %( $($($vals)*)?
+                $(#[$fattrs])* $field : $typ $(<$life>)? ,
+            )
+        }
+    };
+    // eat an enum field, define the enum, and add the equivalent struct field to $vals
+    (
+        $(#[$attrs: meta])*
+        struct $name: ident {
+            $(#[$fattrs: meta])* $estructfield: ident : $(#[$enumattrs: meta])* enum $ename:ident {
+                $($enum_def:tt)*
+            },
+            $($tail: tt)*
+        }
+
+        $(%($($vals:tt)*))?
+    ) => {
+        flat_serialize_macro::flat_serialize! {
+            $(#[$attrs])*
+            $(#[$enumattrs])*
+            #[derive(serde::Serialize, serde::Deserialize)]
+            #[flat_serialize::field_attr(
+                fixed = r##"#[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]"##,
+                variable = r##"#[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize_slice")]"##,
+            )]
+            enum $ename {
+                $($enum_def)*
+            }
+        }
+        $crate::pg_type!{
+            $(#[$attrs])*
+            struct $name {
+                $($tail)*
+            }
+
+            %( $($($vals)*)?
+                $(#[$fattrs])*
+                #[flat_serialize::flatten]
+                $estructfield : $ename<'a>,
+            )
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! pg_type_impl {
+    (
+        $(#[$attrs: meta])*
+        struct $name: ident {
+            $($(#[$fattrs: meta])* $field:ident : $typ: tt $(<$life:lifetime>)?),*
             $(,)?
         }
     ) => {
         ::paste::paste! {
-            $(#[$attrs])?
+            $(#[$attrs])*
             #[derive(pgx::PostgresType, Copy, Clone)]
             #[inoutfuncs]
             pub struct $name<'input>([<$name Data>]<'input>, Option<&'input [u8]>);
 
             flat_serialize_macro::flat_serialize! {
-                $(#[$attrs])?
+                $(#[$attrs])*
                 #[derive(serde::Serialize, serde::Deserialize)]
                 #[flat_serialize::field_attr(
                     fixed = r##"#[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]"##,

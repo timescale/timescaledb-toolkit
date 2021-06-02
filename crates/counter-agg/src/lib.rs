@@ -1,6 +1,6 @@
 
 use time_series::TSPoint;
-use stats_agg::{XYPair, StatsSummary2D};
+use stats_agg::{XYPair, stats2d::StatsSummary2D};
 use serde::{Deserialize, Serialize};
 
 

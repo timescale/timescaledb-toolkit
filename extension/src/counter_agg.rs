@@ -26,7 +26,7 @@ use counter_agg::{
     CounterSummary as InternalCounterSummary,
     range::I64Range,
 };
-use stats_agg::StatsSummary2D;
+use stats_agg::stats2d::StatsSummary2D;
 
 #[allow(non_camel_case_types)]
 type tstzrange = Datum;

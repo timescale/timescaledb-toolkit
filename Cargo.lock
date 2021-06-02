@@ -1661,6 +1661,7 @@ dependencies = [
 name = "stats_agg"
 version = "0.1.0"
 dependencies = [
+ "approx",
  "serde",
 ]
 

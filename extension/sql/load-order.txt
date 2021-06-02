@@ -8,7 +8,5 @@ time_series.generated.sql
 lttb.generated.sql
 asap.generated.sql
 counter_agg.generated.sql
-schema_test.generated.sql
-serialization_collations.generated.sql
-serialization_types.generated.sql
 utilities.generated.sql
+stats_agg.generated.sql

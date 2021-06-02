@@ -123,7 +123,7 @@ pub fn time_weight_trans(
                     let mut s = TimeWeightTransState {
                         point_buffer: vec![],
                         // TODO technically not portable to ASCII-compatible charsets
-                        method: match method.to_lowercase().as_str() {
+                        method: match method.trim().to_lowercase().as_str() {
                             "linear" => TimeWeightMethod::Linear,
                             "locf" => TimeWeightMethod::LOCF,
                             _ => panic!("unknown method"),

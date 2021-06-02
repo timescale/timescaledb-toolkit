@@ -248,7 +248,7 @@ CREATE AGGREGATE time_weight(method text, ts timestamptz, value DOUBLE PRECISION
     parallel = restricted
 );
 
-CREATE AGGREGATE time_weight(tws TimeWeightSummary)
+CREATE AGGREGATE rollup(tws TimeWeightSummary)
 (
     sfunc = time_weight_summary_trans,
     stype = internal,
@@ -337,9 +337,9 @@ mod tests {
             assert_eq!(select_one!(client, stmt, f64), 17.75);
 
             // make sure we get the same result if we do multi-level aggregation
-            let stmt = "WITH t AS (SELECT date_trunc('minute', ts), time_weight('Linear', ts, val) AS tws FROM test GROUP BY 1) SELECT average(time_weight(tws)) FROM t";
+            let stmt = "WITH t AS (SELECT date_trunc('minute', ts), time_weight('Linear', ts, val) AS tws FROM test GROUP BY 1) SELECT average(rollup(tws)) FROM t";
             assert_eq!(select_one!(client, stmt, f64), 21.25);
-            let stmt = "WITH t AS (SELECT date_trunc('minute', ts), time_weight('LOCF', ts, val) AS tws FROM test GROUP BY 1) SELECT average(time_weight(tws)) FROM t";
+            let stmt = "WITH t AS (SELECT date_trunc('minute', ts), time_weight('LOCF', ts, val) AS tws FROM test GROUP BY 1) SELECT average(rollup(tws)) FROM t";
             assert_eq!(select_one!(client, stmt, f64), 17.75);
         });
     }

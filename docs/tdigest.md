@@ -123,7 +123,7 @@ which oscilates between 900 and 1100 over the period of a day.
 ```SQL ,non-transactional
 INSERT INTO test
     SELECT time, value
-    FROM timescale_analytics_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, rng_seed => 543643); 
+    FROM timescale_analytics_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, rng_seed => 543643);
 ```
 ```
 INSERT 0 4032
@@ -131,16 +131,16 @@ INSERT 0 4032
 
 Finally, a query is run over the aggregate to see various approximate percentiles from different weeks.
 ```SQL
-SELECT 
+SELECT
     week,
-    approx_percentile(0.01, digest) AS low, 
-    approx_percentile(0.5, digest) AS mid, 
-    approx_percentile(0.99, digest) AS high 
+    approx_percentile(0.01, digest) AS low,
+    approx_percentile(0.5, digest) AS mid,
+    approx_percentile(0.99, digest) AS high
 FROM weekly_sketch
 ORDER BY week;
 ```
 ```output
-         week          |        low        |        mid         |        high        
+         week          |        low        |        mid         |        high
 -----------------------+-------------------+--------------------+--------------------
 2019-12-30 00:00:00+00 | 783.2075197029583 | 1030.4505832620227 | 1276.7865808567146
 2020-01-06 00:00:00+00 | 865.2941219994462 | 1096.0356855737048 |  1331.649176312383
@@ -152,14 +152,14 @@ ORDER BY week;
 
 It is also possible to combine the weekly aggregates to run queries on the entire data:
 ```SQL
-SELECT 
-    approx_percentile(0.01, combined.digest) AS low, 
-    approx_percentile(0.5, combined.digest) AS mid, 
-    approx_percentile(0.99, combined.digest) AS high 
-FROM (SELECT tdigest(digest) AS digest FROM weekly_sketch) AS combined;
+SELECT
+    approx_percentile(0.01, combined.digest) AS low,
+    approx_percentile(0.5, combined.digest) AS mid,
+    approx_percentile(0.99, combined.digest) AS high
+FROM (SELECT rollup(digest) AS digest FROM weekly_sketch) AS combined;
 ```
 ```output
-       low        |        mid         |        high        
+       low        |        mid         |        high
 ------------------+--------------------+--------------------
 746.7844638729881 | 1026.6100299252928 | 1294.5391132795592
 ```
@@ -167,8 +167,8 @@ FROM (SELECT tdigest(digest) AS digest FROM weekly_sketch) AS combined;
 
 ## Command List (A-Z) <a id="tdigest-api"></a>
 Aggregate Functions
-> - [tdigest - point form](#tdigest)
-> - [tdigest - summary form](#tdigest-summary)
+> - [tdigest (point form)](#tdigest)
+> - [rollup (summary form)](#tdigest-summary)
 
 Accessor Functions
 > - [approx_percentile](#tdigest_quantile)
@@ -180,7 +180,7 @@ Accessor Functions
 
 ---
 
-## **tdigest - point form** <a id="tdigest"></a>
+## **tdigest (point form)** <a id="tdigest"></a>
 ```SQL ,ignore
 tdigest(
     buckets INTEGER,
@@ -221,14 +221,14 @@ CREATE VIEW digest AS
 
 ---
 
-## **tdigest (summary form)** <a id="tdigest-summary"></a>
+## **rollup (summary form)** <a id="tdigest-summary"></a>
 ```SQL ,ignore
-tdigest(
+rollup(
     digest TDigest
 ) RETURNS TDigest
 ```
 
-This will combine multiple already constructed TDigests, if they were created with the same size. This is very useful for re-aggregating digests already constructed using the [point form](#tdigest).  Note that the resulting digest may be subtley different from a digest constructed directly from the underlying points, as noted in the [details section](#tdigest-details) above.
+This will combine multiple already constructed TDigests, if they were created with the same size. This is very useful for re-aggregating digests already constructed using the [point form](#tdigest).  Note that the resulting digest may be subtly different from a digest constructed directly from the underlying points, as noted in the [details section](#tdigest-details) above.
 
 ### Required Arguments <a id="tdigest-summary-required-arguments"></a>
 |Name| Type |Description|
@@ -248,17 +248,17 @@ This example assumes a table 'samples' with a column 'data' holding `DOUBLE PREC
 
 ```SQL ,ignore
 CREATE VIEW digests AS
-    SELECT 
-        id, 
-        tdigest(100, data) as digest
+    SELECT
+        id,
+        rollup(100, data) as digest
     FROM samples
     GROUP BY id;
 ```
 
-That view can then be used to get the full aggregate like so: 
+That view can then be used to get the full aggregate like so:
 
 ```SQL ,ignore
-SELECT tdigest(digest)
+SELECT rollup(digest)
 FROM digests;
 ```
 

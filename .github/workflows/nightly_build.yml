@@ -37,7 +37,7 @@ jobs:
         id: tester_build
         uses: docker/build-push-action@v2
         with:
-          target: build-analytics
+          target: analytics-tools
           push: false
           load: true
           context: .
@@ -54,6 +54,8 @@ jobs:
               && cargo test --release --workspace --exclude timescale_analytics'
             docker stop ts_analytics_test
           # TODO we also want to run our extension tests, but we don't want to restart the DB, need a pgx patch
+
+          #TODO run doctests
 
       - name: Push
         id: image_build

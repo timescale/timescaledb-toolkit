@@ -1,6 +1,7 @@
 name: nightly
 
 on:
+  workflow_dispatch:
   schedule:
     # we build at 8am UTC, 3am Eastern, midnight Pacific
     - cron:  '0 8 * * 1-4'

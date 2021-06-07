@@ -33,29 +33,29 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Build
-        id: tester_build
-        uses: docker/build-push-action@v2
-        with:
-          target: analytics-tools
-          push: false
-          load: true
-          context: .
-          file: ./docker/nightly/Dockerfile
-          tags: timescaledev/timescale-analytics:tester
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache
+      # - name: Build
+      #   id: tester_build
+      #   uses: docker/build-push-action@v2
+      #   with:
+      #     target: analytics-tools
+      #     push: false
+      #     load: true
+      #     context: .
+      #     file: ./docker/nightly/Dockerfile
+      #     tags: timescaledev/timescale-analytics:tester
+      #     cache-from: type=local,src=/tmp/.buildx-cache
+      #     cache-to: type=local,dest=/tmp/.buildx-cache
 
-      - name: Run Tests
-        run: |
-            docker run -d --name ts_analytics_test -e POSTGRES_HOST_AUTH_METHOD=trust timescaledev/timescale-analytics:tester
-            docker exec ts_analytics_test /bin/bash -c 'PATH=\"${PATH}:/root/.cargo/bin\" \
-              && cd /rust/timescale-analytics/crates \
-              && cargo test --release --workspace --exclude timescale_analytics'
-            docker stop ts_analytics_test
-          # TODO we also want to run our extension tests, but we don't want to restart the DB, need a pgx patch
+      # - name: Run Tests
+      #   run: |
+      #       docker run -d --name ts_analytics_test -e POSTGRES_HOST_AUTH_METHOD=trust timescaledev/timescale-analytics:tester
+      #       docker exec ts_analytics_test /bin/bash -c 'PATH=\"${PATH}:/root/.cargo/bin\" \
+      #         && cd /rust/timescale-analytics/crates \
+      #         && cargo test --release --workspace --exclude timescale_analytics'
+      #       docker stop ts_analytics_test
+      # TODO we also want to run our extension tests, but we don't want to restart the DB, need a pgx patch
 
-          #TODO run doctests
+      #TODO run doctests
 
       - name: Push
         id: image_build

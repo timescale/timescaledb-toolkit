@@ -1,6 +1,9 @@
 name: nightly
 
 on:
+  pull_request:
+    paths:
+      - 'docker/nightly/**'
   workflow_dispatch:
   schedule:
     # we build at 8am UTC, 3am Eastern, midnight Pacific
@@ -61,7 +64,7 @@ jobs:
         id: image_build
         uses: docker/build-push-action@v2
         with:
-          push: true
+          push: ${{ startsWith(github.event_name, 'cron') }}
           context: .
           file: ./docker/nightly/Dockerfile
           tags: timescaledev/timescale-analytics:nightly

@@ -8,6 +8,7 @@ members = [
     "crates/hyperloglog",
     "crates/udd-sketch",
     "crates/time-weighted-average",
+    "tools/post-install",
     "tools/sql-doctester",
     "crates/asap",
     "crates/counter-agg",

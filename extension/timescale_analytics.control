@@ -1,5 +1,8 @@
 comment = 'timescale_analytics'
-default_version = '0.2'
-module_pathname = '$libdir/timescale_analytics'
+default_version = '0.3'
 relocatable = false
 superuser = false
+module_pathname = '$libdir/timescale_analytics' # only for testing, will be removed for real installs
+# comma-separated list of previous versions this version can be upgraded from
+# directly. This is used to generate upgrade scripts.
+# upgradeable_from = '0.1, 0.2'

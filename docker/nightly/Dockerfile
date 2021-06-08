@@ -36,7 +36,8 @@ RUN set -ex \
     && chown postgres:postgres -R /usr/lib/postgresql \
     && cd /rust/timescale-analytics \
         && cd extension \
-        && cargo pgx install --release
+        && cargo pgx install --release \
+        && cargo run --manifest-path ../tools/post-install/Cargo.toml -- pg_config
 
 # COPY over the new files to the image. Done as a seperate stage so we don't
 # ship the build tools.

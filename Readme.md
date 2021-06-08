@@ -41,13 +41,14 @@ cargo install --git https://github.com/JLockerman/pgx.git --branch timescale car
 
 ### 💾 Building and Installing the extension ###
 
-Download or clone this repository, and switch to the `extension` subdirectory, e.g. 
+Download or clone this repository, and switch to the `extension` subdirectory, e.g.
 ```bash
-git clone https://github.com/timescale/timescale-analytics && cd timescale-analytics/extension
+git clone https://github.com/timescale/timescale-analytics &&
 ```
-Then run 
+Then run
 ```
-cargo pgx install --release
+cargo pgx install --release && \
+cargo run --manifest-path ./tools/post-install/Cargo.toml --  /path/to/your/pg_config
 ```
 
 ## ✏️ Get Involved ##
@@ -104,4 +105,4 @@ time, roles and permissions, and security.
 
 TimescaleDB has a **large and active user community** (tens of millions
 of downloads, hundreds of thousands of active deployments, Slack channel
-with thousands of members).  
+with thousands of members).

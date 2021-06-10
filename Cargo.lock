@@ -1125,6 +1125,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
+name = "post-install"
+version = "0.1.0"
+dependencies = [
+ "xshell",
+]
+
+[[package]]
 name = "postgres"
 version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1761,6 +1768,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "testrunner"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "colored",
+ "postgres",
+ "rayon",
+]
+
+[[package]]
 name = "textwrap"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1854,7 +1871,7 @@ dependencies = [
 
 [[package]]
 name = "timescale_analytics"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "approx",
  "asap",
@@ -2193,3 +2210,18 @@ name = "xml-rs"
 version = "0.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b07db065a5cf61a7e4ba64f29e67db906fb1787316516c4e6e5ff0fea1efcd8a"
+
+[[package]]
+name = "xshell"
+version = "0.1.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c640362f1b150e186b76e88606e4b01a7b2f1d56cc50fcc184ddb683fb567c23"
+dependencies = [
+ "xshell-macros",
+]
+
+[[package]]
+name = "xshell-macros"
+version = "0.1.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0607c095c96c1d8420ce4a018a0954fb15d73d5eb59b521a05a0f04cffc05059"

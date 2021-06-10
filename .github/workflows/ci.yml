@@ -38,19 +38,31 @@ jobs:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
-        key: ${{ runner.os }}-cargo-pg12
+        key: ${{ runner.os }}-cargo-pg12-2
+        restore-keys: |
+          ${{ runner.os }}-cargo-pg12
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-cargo-build-target-pg12
+        key: ${{ runner.os }}-cargo-build-target-pg12-2
+        restore-keys: |
+          ${{ runner.os }}-cargo-build-target-pg12
 
     - name: Run PG 12 Tests
       run: sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo test --workspace --features 'pg12 pg_test'"
 
+    - name: Run post-install tests
+      run: |
+        sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg12 && /usr/local/cargo/bin/cargo pgx start pg12"
+        RUST_BACKTRACE=short cargo run --manifest-path ./tools/post-install/Cargo.toml /home/postgres/.pgx/12.6/pgx-install/bin/pg_config
+        cargo run --manifest-path ./tools/testrunner/Cargo.toml -- -h localhost -p 28812
+
     - name: Run Doc Tests
-      run: sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg12 && /usr/local/cargo/bin/cargo pgx start pg12 && cd extension && /usr/local/cargo/bin/cargo pgx run pg12" && sql-doctester -h localhost -s "CREATE EXTENSION timescaledb; CREATE EXTENSION timescale_analytics; SET SESSION TIMEZONE TO 'UTC'" -p 28812 docs
+      run: |
+        sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg12 && /usr/local/cargo/bin/cargo pgx start pg12"
+        sql-doctester -h localhost -s "CREATE EXTENSION timescaledb; CREATE EXTENSION timescale_analytics; SET SESSION TIMEZONE TO 'UTC'" -p 28812 docs
 
 
   test13:
@@ -80,16 +92,28 @@ jobs:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
-        key: ${{ runner.os }}-cargo-pg13
+        key: ${{ runner.os }}-cargo-build-target-pg13-2
+        restore-keys: |
+          ${{ runner.os }}-cargo-pg13
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-cargo-build-target-pg13
+        key: ${{ runner.os }}-cargo-build-target-pg13-2
+        restore-keys: |
+          ${{ runner.os }}-cargo-build-target-pg13
 
     - name: Run PG 13 Tests
       run: sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo test --workspace --features 'pg13 pg_test'"
 
+    - name: Run post-install tests
+      run: |
+        sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg13 && /usr/local/cargo/bin/cargo pgx start pg13"
+        RUST_BACKTRACE=short cargo run --manifest-path ./tools/post-install/Cargo.toml /home/postgres/.pgx/13.2/pgx-install/bin/pg_config
+        cargo run --manifest-path ./tools/testrunner/Cargo.toml -- -h localhost -p 28813
+
     - name: Run Doc Tests
-      run: sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg13 && /usr/local/cargo/bin/cargo pgx start pg13 && cd extension && /usr/local/cargo/bin/cargo pgx run pg13" && sql-doctester -h localhost -s "CREATE EXTENSION timescaledb; CREATE EXTENSION timescale_analytics; SET SESSION TIMEZONE TO 'UTC'" -p 28813 docs
+      run: |
+        sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg13 && /usr/local/cargo/bin/cargo pgx start pg13"
+        sql-doctester -h localhost -s "CREATE EXTENSION timescaledb; CREATE EXTENSION timescale_analytics; SET SESSION TIMEZONE TO 'UTC'" -p 28813 docs

@@ -9,7 +9,7 @@ mod tests {
     fn expected_failure() -> i32 { 1 }
 
     #[pg_test(error = "features in timescale_analytics_experimental are unstable, and objects depending on them will be deleted on extension update (there will be a DROP SCHEMA timescale_analytics_experimental CASCADE), which on Forge can happen at any time.")]
-    fn test_blocks_view() {
+    fn should_fail_blocks_view() {
         Spi::execute(|client| {
             let _ = client.select(
                 "CREATE VIEW failed AS SELECT timescale_analytics_experimental.expected_failure();",
@@ -17,7 +17,6 @@ mod tests {
                 None);
         })
     }
-
 
     // Test that any new features are added to the the experimental schema
     #[pg_test]

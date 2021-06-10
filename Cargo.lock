@@ -1768,6 +1768,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "testrunner"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "colored",
+ "postgres",
+ "rayon",
+]
+
+[[package]]
 name = "textwrap"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1861,7 +1871,7 @@ dependencies = [
 
 [[package]]
 name = "timescale_analytics"
-version = "0.2.0"
+version = "0.3.0"
 dependencies = [
  "approx",
  "asap",

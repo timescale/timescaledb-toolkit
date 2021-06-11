@@ -37,11 +37,11 @@ rand_chacha = "0.3.0"
 
 [dependencies.flat_serialize]
 git = "https://github.com/JLockerman/flat_serialize"
-rev = "41c100c"
+rev = "15e8b4d"
 
 [dependencies.flat_serialize_macro]
 git = "https://github.com/JLockerman/flat_serialize"
-rev = "41c100c"
+rev = "15e8b4d"
 
 [dev-dependencies]
 pgx-tests = {git="https://github.com/JLockerman/pgx.git", branch="timescale"}

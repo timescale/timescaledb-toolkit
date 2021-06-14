@@ -4,6 +4,8 @@ use serde::{Serialize, Deserialize};
 use pgx::{extension_sql, pg_sys};
 use counter_agg::range::I64Range;
 
+use flat_serialize_macro::flat_serialize;
+
 #[allow(non_camel_case_types)]
 pub type tstzrange = *mut pg_sys::varlena;
 
@@ -98,60 +100,46 @@ fn rbound_inclusive(flags: u8) -> bool {
 //     value: [T; self.is_some as u8],
 // }
 // ```
-#[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
-#[repr(C, u64)]
-pub enum DiskOption<T> {
-    None,
-    Some(T),
-}
-
-impl<T> From<Option<T>> for DiskOption<T> {
-    fn from(t: Option<T>) -> Self {
-        match t {
-            Some(t) => Self::Some(t),
-            None => Self::None,
-        }
+flat_serialize! {
+    #[derive(Debug, PartialEq, Serialize, Deserialize)]
+    struct I64RangeWrapper {
+        is_present: u8,
+        has_left: u8,
+        has_right: u8,
+        padding: [u8; 5],
+        left: i64 if self.is_present == 1 && self.has_left == 1,
+        right: i64 if self.is_present == 1 && self.has_right == 1,
     }
-}
-
-impl<T> Into<Option<T>> for DiskOption<T> {
-    fn into(self) -> Option<T> {
-        match self {
-            Self::Some(t) => Some(t),
-            Self::None => None,
-        }
-    }
-}
-
-#[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
-#[repr(C)]
-pub struct DiskI64Range {
-    left: DiskOption<i64>,
-    right: DiskOption<i64>,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-#[repr(transparent)]
-pub struct I64RangeWrapper {
-    bounds : DiskOption<DiskI64Range>,
 }
 impl I64RangeWrapper {
     pub fn to_i64range(&self) -> Option<I64Range> {
-        match self.bounds {
-            DiskOption::None => None,
-            DiskOption::Some(b) => Some(I64Range{
-                left: b.left.into(),
-                right: b.right.into(),
-            })
+        if self.is_present == 0 {
+            return None
         }
+        Some(I64Range{
+            left: self.left,
+            right: self.right,
+        })
     }
 
     pub fn from_i64range(b: Option<I64Range>) -> Self {
-        I64RangeWrapper {
-            bounds: b.map(|b| DiskI64Range {
-                left: b.left.into(),
-                right: b.right.into(),
-            }).into(),
+        match b {
+            Some(range) => Self {
+                is_present: 1,
+                has_left: range.left.is_some().into(),
+                has_right:  range.right.is_some().into(),
+                padding: [0; 5],
+                left: range.left,
+                right: range.right,
+            },
+            None => Self {
+                is_present: 0,
+                has_left: 0,
+                has_right: 0,
+                padding: [0; 5],
+                left: None,
+                right: None,
+            },
         }
     }
 }

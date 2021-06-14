@@ -36,6 +36,8 @@ use std::cmp::Ordering;
 #[cfg(test)]
 use std::collections::HashSet;
 
+use flat_serialize_macro::FlatSerializable;
+
 use serde::{Deserialize, Serialize};
 
 #[cfg(test)]
@@ -45,7 +47,7 @@ extern crate quickcheck;
 extern crate quickcheck_macros;
 
 /// Centroid implementation to the cluster mentioned in the paper.
-#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize, FlatSerializable)]
 #[repr(C)]
 pub struct Centroid {
     mean: OrderedFloat<f64>,

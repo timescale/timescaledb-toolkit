@@ -28,19 +28,17 @@ pg_type! {
         method: TimeWeightMethod,
     }
 }
-
 json_inout_funcs!(TimeWeightSummary);
 
 varlena_type!(TimeWeightSummary);
 
 impl<'input> TimeWeightSummary<'input> {
-    #[allow(non_snake_case)]
     fn to_internal(&self) -> TimeWeightSummaryInternal {
         TimeWeightSummaryInternal {
-            method: *self.method,
-            first: *self.first,
-            last: *self.last,
-            w_sum: *self.weighted_sum,
+            method: self.method,
+            first: self.first,
+            last: self.last,
+            w_sum: self.weighted_sum,
         }
     }
 }
@@ -143,9 +141,9 @@ pub fn time_weight_trans(
 }
 
 #[pg_extern()]
-pub fn time_weight_summary_trans(
+pub fn time_weight_summary_trans<'b>(
     state: Option<Internal<TimeWeightTransState>>,
-    next: Option<TimeWeightSummary>,
+    next: Option<TimeWeightSummary<'b>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal<TimeWeightTransState>> {
     unsafe {
@@ -155,7 +153,7 @@ pub fn time_weight_summary_trans(
                 TimeWeightTransState {
                     summary_buffer: vec![next.to_internal()],
                     point_buffer: vec![],
-                    method: *next.method,
+                    method: next.method.clone(),
                 }
                 .into(),
             ),
@@ -164,7 +162,7 @@ pub fn time_weight_summary_trans(
                 let next = TimeWeightTransState {
                     summary_buffer: vec![next.to_internal()],
                     point_buffer: vec![],
-                    method: *next.method,
+                    method: next.method,
                 };
                 state.push_summary(&next);
                 Some(state.into())
@@ -223,10 +221,10 @@ fn time_weight_final(
                 None => None,
                 Some(st) => Some(
                     flatten!(TimeWeightSummary {
-                        method: &st.method,
-                        first: &st.first,
-                        last: &st.last,
-                        weighted_sum: &st.w_sum,
+                        method: st.method,
+                        first: st.first,
+                        last: st.last,
+                        weighted_sum: st.w_sum,
                     })
                     .into(),
                 ),

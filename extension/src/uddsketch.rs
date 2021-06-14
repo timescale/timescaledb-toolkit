@@ -147,7 +147,7 @@ impl SerializedUddSketch {
 // PG object for the sketch.
 pg_type! {
     #[derive(Debug)]
-    struct UddSketch {
+    struct UddSketch<'input> {
         alpha: f64,
         max_buckets: u32,
         num_buckets: u32,
@@ -181,20 +181,20 @@ struct ReadableUddSketch {
 impl From<&UddSketch<'_>> for ReadableUddSketch {
     fn from(sketch: &UddSketch<'_>) -> Self {
         ReadableUddSketch {
-            version: *sketch.version,
-            alpha: *sketch.alpha,
-            max_buckets: *sketch.max_buckets,
-            num_buckets: *sketch.num_buckets,
-            compactions: *sketch.compactions,
-            count: *sketch.count,
-            sum: *sketch.sum,
+            version: sketch.version,
+            alpha: sketch.alpha,
+            max_buckets: sketch.max_buckets,
+            num_buckets: sketch.num_buckets,
+            compactions: sketch.compactions,
+            count: sketch.count,
+            sum: sketch.sum,
             buckets: sketch.keys().zip(sketch.counts()).collect(),
         }
     }
 }
 
-impl From<&ReadableUddSketch> for UddSketch<'static> {
-    fn from(sketch: &'_ ReadableUddSketch) -> Self {
+impl<'a, 'b> From<&'a ReadableUddSketch> for UddSketch<'b> {
+    fn from(sketch: &'a ReadableUddSketch) -> Self {
         assert_eq!(sketch.version, 1);
 
         let CompressedBuckets {
@@ -208,21 +208,21 @@ impl From<&ReadableUddSketch> for UddSketch<'static> {
         unsafe {
             flatten! {
                 UddSketch {
-                    alpha: &sketch.alpha,
-                    max_buckets: &sketch.max_buckets,
-                    num_buckets: &sketch.num_buckets,
-                    compactions: &sketch.compactions,
-                    count: &sketch.count,
-                    sum: &sketch.sum,
-                    zero_bucket_count: &zero_bucket_count,
-                    neg_indexes_bytes: &(negative_indexes.len() as u32),
-                    neg_buckets_bytes: &(negative_counts.len() as u32),
-                    pos_indexes_bytes: &(positive_indexes.len() as u32),
-                    pos_buckets_bytes: &(positive_counts.len() as u32),
-                    negative_indexes: &negative_indexes,
-                    negative_counts: &negative_counts,
-                    positive_indexes: &positive_indexes,
-                    positive_counts: &positive_counts,
+                    alpha: sketch.alpha,
+                    max_buckets: sketch.max_buckets,
+                    num_buckets: sketch.num_buckets,
+                    compactions: sketch.compactions,
+                    count: sketch.count,
+                    sum: sketch.sum,
+                    zero_bucket_count: zero_bucket_count,
+                    neg_indexes_bytes: (negative_indexes.len() as u32),
+                    neg_buckets_bytes: (negative_counts.len() as u32),
+                    pos_indexes_bytes: (positive_indexes.len() as u32),
+                    pos_buckets_bytes: (positive_counts.len() as u32),
+                    negative_indexes: &*negative_indexes,
+                    negative_counts: &*negative_counts,
+                    positive_indexes: &*positive_indexes,
+                    positive_counts: &*positive_counts,
                 }
             }
         }
@@ -256,15 +256,15 @@ impl<'input> InOutFuncs for UddSketch<'input> {
 
 impl<'input> UddSketch<'input> {
     fn keys(&self) -> impl Iterator<Item=SketchHashKey> + '_ {
-        decompress_keys(self.negative_indexes, *self.zero_bucket_count != 0, self.positive_indexes)
+        decompress_keys(self.negative_indexes, self.zero_bucket_count != 0, self.positive_indexes)
     }
 
     fn counts(&self) -> impl Iterator<Item=u64> + '_ {
-        decompress_counts(self.negative_counts, *self.zero_bucket_count, self.positive_counts)
+        decompress_counts(self.negative_counts, self.zero_bucket_count, self.positive_counts)
     }
 
     fn to_uddsketch(&self) -> UddSketchInternal {
-        UddSketchInternal::new_from_data(*self.max_buckets as u64, *self.alpha, *self.compactions, *self.count, *self.sum, self.keys(), self.counts())
+        UddSketchInternal::new_from_data(self.max_buckets as u64, self.alpha, self.compactions, self.count, self.sum, self.keys(), self.counts())
     }
 }
 
@@ -294,17 +294,17 @@ fn uddsketch_final(
             // both the size, the data, and the varlen header
             flatten!(
                 UddSketch {
-                    alpha: &state.max_error(),
-                    max_buckets: &(state.max_allowed_buckets() as u32),
-                    num_buckets: &(state.current_buckets_count() as u32),
-                    compactions: &(state.times_compacted() as u64),
-                    count: &state.count(),
-                    sum: &state.sum(),
-                    zero_bucket_count: &zero_bucket_count,
-                    neg_indexes_bytes: &(negative_indexes.len() as u32),
-                    neg_buckets_bytes: &(negative_counts.len() as u32),
-                    pos_indexes_bytes: &(positive_indexes.len() as u32),
-                    pos_buckets_bytes: &(positive_counts.len() as u32),
+                    alpha: state.max_error(),
+                    max_buckets: state.max_allowed_buckets() as u32,
+                    num_buckets: state.current_buckets_count() as u32,
+                    compactions: state.times_compacted() as u64,
+                    count: state.count(),
+                    sum: state.sum(),
+                    zero_bucket_count: zero_bucket_count,
+                    neg_indexes_bytes: negative_indexes.len() as u32,
+                    neg_buckets_bytes: negative_counts.len() as u32,
+                    pos_indexes_bytes: positive_indexes.len() as u32,
+                    pos_buckets_bytes: positive_counts.len() as u32,
                     negative_indexes: &negative_indexes,
                     negative_counts: &negative_counts,
                     positive_indexes: &positive_indexes,
@@ -464,9 +464,9 @@ pub fn uddsketch_approx_percentile(
 ) -> f64 {
     uddsketch::estimate_quantile(
         percentile,
-        *sketch.alpha,
-        uddsketch::gamma(*sketch.alpha),
-        *sketch.count,
+        sketch.alpha,
+        uddsketch::gamma(sketch.alpha),
+        sketch.count,
         sketch.keys().zip(sketch.counts()),
     )
 }
@@ -479,8 +479,8 @@ pub fn uddsketch_approx_percentile_rank(
 ) -> f64 {
     uddsketch::estimate_quantile_at_value(
         value,
-        uddsketch::gamma(*sketch.alpha),
-        *sketch.count,
+        uddsketch::gamma(sketch.alpha),
+        sketch.count,
         sketch.keys().zip(sketch.counts()),
     )
 }
@@ -490,7 +490,7 @@ pub fn uddsketch_approx_percentile_rank(
 pub fn uddsketch_num_vals(
     sketch: UddSketch,
 ) -> f64 {
-    *sketch.count as f64
+    sketch.count as f64
 }
 
 // Average of all the values entered in the sketch.
@@ -499,8 +499,8 @@ pub fn uddsketch_num_vals(
 pub fn uddsketch_mean(
     sketch: UddSketch,
 ) -> f64 {
-    if *sketch.count > 0 {
-        *sketch.sum / *sketch.count as f64
+    if sketch.count > 0 {
+        sketch.sum / sketch.count as f64
     } else {
         0.0
     }
@@ -511,7 +511,7 @@ pub fn uddsketch_mean(
 pub fn uddsketch_error(
     sketch: UddSketch
 ) -> f64 {
-    *sketch.alpha
+    sketch.alpha
 }
 
 #[cfg(any(test, feature = "pg_test"))]

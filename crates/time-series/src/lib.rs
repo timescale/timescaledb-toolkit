@@ -1,9 +1,11 @@
 
 use serde::{Deserialize, Serialize, ser::SerializeStruct};
 
+use flat_serialize_macro::FlatSerializable;
+
 use std::{borrow::Cow, ffi::CStr};
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug, FlatSerializable)]
 #[repr(C)]
 pub struct TSPoint {
     pub ts: i64,

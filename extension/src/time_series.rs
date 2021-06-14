@@ -16,8 +16,8 @@ type bytea = pg_sys::Datum;
 
 pg_type! {
     #[derive(Debug)]
-    struct TimeSeries {
-        series: enum SeriesType {
+    struct TimeSeries<'input> {
+        series: enum SeriesType<'input> {
             type_id: u64,
             SortedSeries: 1 {
                 num_points: u64,  // required to be aligned
@@ -68,8 +68,8 @@ impl<'input> TimeSeries<'input> {
             SeriesType::NormalSeries{start_ts, step_interval, values, ..} =>
                 InternalTimeSeries::Normal(
                     NormalTimeSeries {
-                        start_ts: *start_ts,
-                        step_interval: *step_interval,
+                        start_ts: start_ts,
+                        step_interval: step_interval,
                         values: values.to_vec(),
                     }
                 ),
@@ -87,7 +87,7 @@ impl<'input> TimeSeries<'input> {
         }
     }
 
-    pub fn from_internal_time_series(series: &InternalTimeSeries) -> TimeSeries<'input> {
+    pub fn from_internal_time_series(series: &InternalTimeSeries) -> TimeSeries<'static> {
         unsafe {
             match series {
                 InternalTimeSeries::Explicit(series) => {
@@ -95,7 +95,7 @@ impl<'input> TimeSeries<'input> {
                         flatten!(
                             TimeSeries {
                                 series: SeriesType::ExplicitSeries {
-                                    num_points: &(series.points.len() as u64),
+                                    num_points: series.points.len() as u64,
                                     points: &series.points,
                                 }
                             }
@@ -104,7 +104,7 @@ impl<'input> TimeSeries<'input> {
                         flatten!(
                             TimeSeries {
                                 series: SeriesType::SortedSeries {
-                                    num_points: &(series.points.len() as u64),
+                                    num_points: series.points.len() as u64,
                                     points: &series.points,
                                 }
                             }
@@ -115,9 +115,9 @@ impl<'input> TimeSeries<'input> {
                     flatten!(
                         TimeSeries {
                             series : SeriesType::NormalSeries {
-                                start_ts: &series.start_ts,
-                                step_interval: &series.step_interval,
-                                num_vals: &(series.values.len() as u64),
+                                start_ts: series.start_ts,
+                                step_interval: series.step_interval,
+                                num_vals: series.values.len() as u64,
                                 values: &series.values,
                             }
                         }
@@ -168,10 +168,10 @@ pub fn unnest_series(
             Box::new(points.iter().map(|points| (points.ts, points.val))),
 
         SeriesType::NormalSeries{start_ts, step_interval, num_vals, values} =>
-            Box::new((0..*num_vals).map(move |i| {
+            Box::new((0..num_vals).map(move |i| {
                 let num_steps = i as i64;
-                let step_interval = *step_interval;
-                (*start_ts + num_steps * step_interval, values[i as usize])
+                let step_interval = step_interval;
+                (start_ts + num_steps * step_interval, values[i as usize])
             })),
     };
     iter

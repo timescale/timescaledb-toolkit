@@ -136,7 +136,7 @@ pub fn tdigest_deserialize(
 // PG object for the digest.
 pg_type! {
     #[derive(Debug)]
-    struct TDigest {
+    struct TDigest<'input> {
         buckets: u32,
         max_buckets: u32,
         count: u64,
@@ -154,15 +154,15 @@ impl<'input> TDigest<'input> {
     fn to_internal_tdigest(&self) -> InternalTDigest {
         InternalTDigest::new(
             Vec::from(self.centroids),
-            *self.sum,
-            *self.count,
-            *self.max,
-            *self.0.min,
-            *self.max_buckets as usize
+            self.sum,
+            self.count,
+            self.max,
+            self.0.min,
+            self.max_buckets as usize
         )
     }
 
-    fn from_internal_tdigest(digest: &InternalTDigest) -> TDigest<'input> {
+    fn from_internal_tdigest(digest: &InternalTDigest) -> TDigest<'static> {
         let max_buckets: u32 = digest.max_size().try_into().unwrap();
 
         let centroids = digest.raw_centroids();
@@ -172,12 +172,12 @@ impl<'input> TDigest<'input> {
         unsafe {
             flatten!(
                 TDigest {
-                    max_buckets: &max_buckets,
-                    buckets: &(centroids.len() as u32),
-                    count: &digest.count(),
-                    sum: &digest.sum(),
-                    min: &digest.min(),
-                    max: &digest.max(),
+                    max_buckets: max_buckets,
+                    buckets: centroids.len() as u32,
+                    count: digest.count(),
+                    sum: digest.sum(),
+                    min: digest.min(),
+                    max: digest.max(),
                     centroids: &centroids,
                 }
             )
@@ -230,7 +230,7 @@ pub fn tdigest_compound_trans(
                 (a, None) => a,
                 (None, Some(a)) => Some(a.to_internal_tdigest().into()),
                 (Some(a), Some(b)) => {
-                    assert_eq!(a.max_size(), *b.max_buckets as usize);
+                    assert_eq!(a.max_size(), b.max_buckets as usize);
                     Some(InternalTDigest::merge_digests(
                             vec![a.deref().clone(), b.to_internal_tdigest()]  // TODO: TDigest merge with self
                         ).into())
@@ -332,7 +332,7 @@ pub fn tdigest_count(
     digest: TDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
-    *digest.count as f64
+    digest.count as f64
 }
 
 // Minimum value entered in the digest.
@@ -341,7 +341,7 @@ pub fn tdigest_min(
     digest: TDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
-    *digest.min
+    digest.min
 }
 
 // Maximum value entered in the digest.
@@ -350,7 +350,7 @@ pub fn tdigest_max(
     digest: TDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
-    *digest.max
+    digest.max
 }
 
 // Average of all the values entered in the digest.
@@ -360,8 +360,8 @@ pub fn tdigest_mean(
     digest: TDigest,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
-    if *digest.count > 0 {
-        *digest.sum / *digest.count as f64
+    if digest.count > 0 {
+        digest.sum / digest.count as f64
     } else {
         0.0
     }

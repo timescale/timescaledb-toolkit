@@ -61,18 +61,17 @@ mod timescale_analytics_experimental {
 impl<'input> StatsSummary1D<'input> {
     fn to_internal(&self) -> InternalStatsSummary1D {
         InternalStatsSummary1D{
-            n: *self.n,
-            sx: *self.sx,
-            sxx: *self.sxx,
+            n: self.n,
+            sx: self.sx,
+            sxx: self.sxx,
         }
     }
     fn from_internal(st: InternalStatsSummary1D) -> Self {
         unsafe{
-            flatten!(
-            StatsSummary1D {
-                n: &st.n,
-                sx: &st.sx,
-                sxx: &st.sxx,
+            flatten!(StatsSummary1D {
+                n: st.n,
+                sx: st.sx,
+                sxx: st.sxx,
             })
         }
     }
@@ -81,24 +80,24 @@ impl<'input> StatsSummary1D<'input> {
 impl<'input> StatsSummary2D<'input> {
     fn to_internal(&self) -> InternalStatsSummary2D {
         InternalStatsSummary2D{
-            n: *self.n,
-            sx: *self.sx,
-            sxx: *self.sxx,
-            sy: *self.sy,
-            syy: *self.syy,
-            sxy: *self.sxy,
+            n: self.n,
+            sx: self.sx,
+            sxx: self.sxx,
+            sy: self.sy,
+            syy: self.syy,
+            sxy: self.sxy,
         }
     }
     fn from_internal(st: InternalStatsSummary2D) -> Self {
         unsafe{
             flatten!(
             StatsSummary2D {
-                n: &st.n,
-                sx: &st.sx,
-                sxx: &st.sxx,
-                sy: &st.sy,
-                syy: &st.syy,
-                sxy: &st.sxy,
+                n: st.n,
+                sx: st.sx,
+                sxx: st.sxx,
+                sy: st.sy,
+                syy: st.syy,
+                sxy: st.sxy,
             })
         }
     }
@@ -157,7 +156,7 @@ pub fn stats1d_trans<'s>(
                     Some(StatsSummary1D::from_internal(s).into())
                 },
                 (Some(mut state), Some(val)) => {
-                    let mut s: InternalStatsSummary1D = state.to_internal(); 
+                    let mut s: InternalStatsSummary1D = state.to_internal();
                     s.accum(val).unwrap();
                     *state = StatsSummary1D::from_internal(s);
                     Some(state)
@@ -191,7 +190,7 @@ pub fn stats2d_trans<'s>(
                     Some(StatsSummary2D::from_internal(s).into())
                 },
                 (Some(mut state), Some(val)) => {
-                    let mut s: InternalStatsSummary2D = state.to_internal(); 
+                    let mut s: InternalStatsSummary2D = state.to_internal();
                     s.accum(val).unwrap();
                     *state = StatsSummary2D::from_internal(s);
                     Some(state)
@@ -214,7 +213,7 @@ pub fn stats1d_inv_trans<'s>(
                 (None, _) => panic!("Inverse function should never be called with NULL state"),
                 (Some(state), None) => Some(state),
                 (Some(state), Some(val)) => {
-                    let s: InternalStatsSummary1D = state.to_internal(); 
+                    let s: InternalStatsSummary1D = state.to_internal();
                     let s = s.remove(val);
                     match s {
                         None => None,
@@ -244,7 +243,7 @@ pub fn stats2d_inv_trans<'s>(
                 (None, _) => panic!("Inverse function should never be called with NULL state"),
                 (Some(state), None) => Some(state),
                 (Some(state), Some(val)) => {
-                    let s: InternalStatsSummary2D = state.to_internal(); 
+                    let s: InternalStatsSummary2D = state.to_internal();
                     let s = s.remove(val);
                     match s {
                         None => None,
@@ -374,7 +373,7 @@ pub fn stats1d_combine<'s, 'v>(
                     Some(s.into())
                 },
                 (Some(state1), Some(state2)) => {
-                    let s1 = state1.to_internal(); 
+                    let s1 = state1.to_internal();
                     let s2 = state2.to_internal();
                     let s1 = s1.combine(s2).unwrap();
                     Some(StatsSummary1D::from_internal(s1).into())
@@ -403,7 +402,7 @@ pub fn stats2d_combine<'s, 'v>(
                     Some(s.into())
                 },
                 (Some(state1), Some(state2)) => {
-                    let s1 = state1.to_internal(); 
+                    let s1 = state1.to_internal();
                     let s2 = state2.to_internal();
                     let s1 = s1.combine(s2).unwrap();
                     Some(StatsSummary2D::from_internal(s1).into())
@@ -808,7 +807,7 @@ fn stats2d_covar(
 //         assert_relative_eq!(p1.syy, p2.syy);
 //         assert_relative_eq!(p1.sxy, p2.sxy);
 //     }
-    
+
 
 
 //     // #[pg_test]

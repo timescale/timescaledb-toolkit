@@ -45,6 +45,7 @@ pg_type! {
         reset_sum: f64,
         num_resets: u64,
         num_changes: u64,
+        #[flat_serialize::flatten]
         bounds: I64RangeWrapper,
     }
 }
@@ -62,14 +63,14 @@ mod timescale_analytics_experimental {
 impl<'input> CounterSummary<'input> {
     fn to_internal_counter_summary(&self) -> InternalCounterSummary {
         InternalCounterSummary{
-            first: *self.first,
-            second: *self.second,
-            penultimate: *self.penultimate,
-            last: *self.last,
-            reset_sum: *self.reset_sum,
-            num_resets: *self.num_resets,
-            num_changes: *self.num_changes,
-            stats: *self.stats,
+            first: self.first,
+            second: self.second,
+            penultimate: self.penultimate,
+            last: self.last,
+            reset_sum: self.reset_sum,
+            num_resets: self.num_resets,
+            num_changes: self.num_changes,
+            stats: self.stats,
             bounds: self.bounds.to_i64range(),
         }
     }
@@ -77,15 +78,15 @@ impl<'input> CounterSummary<'input> {
         unsafe{
             flatten!(
             CounterSummary {
-                stats: &st.stats,
-                first: &st.first,
-                second: &st.second,
-                penultimate: &st.penultimate,
-                last: &st.last,
-                reset_sum: &st.reset_sum,
-                num_resets: &st.num_resets,
-                num_changes: &st.num_changes,
-                bounds: &I64RangeWrapper::from_i64range(st.bounds)
+                stats: st.stats,
+                first: st.first,
+                second: st.second,
+                penultimate: st.penultimate,
+                last: st.last,
+                reset_sum: st.reset_sum,
+                num_resets: st.num_resets,
+                num_changes: st.num_changes,
+                bounds: I64RangeWrapper::from_i64range(st.bounds)
             })
         }
     }

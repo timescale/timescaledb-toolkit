@@ -1,7 +1,11 @@
 use std::{
     ffi::{CStr, CString},
     os::raw::{c_char, c_int},
+    slice,
+    mem::{size_of, align_of, MaybeUninit},
 };
+
+use flat_serialize::{impl_flat_serializable, FlatSerializable, WrapErr};
 
 use serde::{Deserialize, Serialize};
 
@@ -12,9 +16,11 @@ use pgx::*;
 
 /// `PgCollationId` provides provides the ability to serialize and deserialize
 /// collation Oids as `(namespace, name)` pairs.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[repr(transparent)]
 pub struct PgCollationId(pub Oid);
+
+impl_flat_serializable!(PgCollationId);
 
 impl PgCollationId {
     pub fn is_invalid(&self) -> bool {

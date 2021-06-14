@@ -108,7 +108,7 @@ pub fn hyperloglog_deserialize(
 
 pg_type! {
     #[derive(Debug)]
-    struct HyperLogLog {
+    struct HyperLogLog<'input> {
         // Oids are stored in postgres arrays, so it should be safe to store them
         // in our types as long as we do send/recv and in/out correctly
         // see https://github.com/postgres/postgres/blob/b8d0cda53377515ac61357ec4a60e85ca873f486/src/include/utils/array.h#L90
@@ -167,7 +167,7 @@ pub fn hyperloglog_count<'input>(
     // count does not depend on the type parameters
     HLL::<()> {
         registers: hyperloglog.registers,
-        b: *hyperloglog.b as _,
+        b: hyperloglog.b as _,
         buildhasher: Default::default(),
         phantom: Default::default(),
     }
@@ -178,10 +178,10 @@ pub fn hyperloglog_count<'input>(
 pub fn hyperloglog_union<'input>(
     a: timescale_analytics_experimental::HyperLogLog<'input>,
     b: timescale_analytics_experimental::HyperLogLog<'input>,
-) -> timescale_analytics_experimental::HyperLogLog<'input> {
+) -> timescale_analytics_experimental::HyperLogLog<'static> {
     let a = HLL::<'_, Datum, DatumHashBuilder> {
         registers: a.registers,
-        b: *a.b as _,
+        b: a.b as _,
         buildhasher: unsafe {
             Cow::Owned(DatumHashBuilder::from_type_id(
                 a.element_type.0,
@@ -192,7 +192,7 @@ pub fn hyperloglog_union<'input>(
     };
     let b = HLL::<'_, Datum, DatumHashBuilder> {
         registers: b.registers,
-        b: *b.b as _,
+        b: b.b as _,
         buildhasher: unsafe {
             Cow::Owned(DatumHashBuilder::from_type_id(
                 b.element_type.0,
@@ -221,9 +221,9 @@ fn flatten_log(hyperloglog: HLL<Datum, DatumHashBuilder>)
     // both the size, the data, and the varlen header
     unsafe {
         flatten!(HyperLogLog {
-            element_type: &element_type,
-            collation: &collation,
-            b: &(hyperloglog.b as u32),
+            element_type: element_type,
+            collation: collation,
+            b: hyperloglog.b as u32,
             registers: hyperloglog.registers,
         })
         .into()

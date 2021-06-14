@@ -4,6 +4,8 @@ resolver = "2"
 members = [
     "extension",
     "crates/encodings",
+    "crates/flat_serialize/flat_serialize_macro",
+    "crates/flat_serialize/flat_serialize",
     "crates/t-digest",
     "crates/hyperloglog",
     "crates/udd-sketch",

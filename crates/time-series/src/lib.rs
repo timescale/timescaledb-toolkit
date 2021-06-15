@@ -183,6 +183,66 @@ impl TimeSeries {
             }
         }
     }
+
+    pub fn num_vals(&self) -> usize {
+        match &self {
+            TimeSeries::Explicit(explicit) => explicit.points.len(),
+            TimeSeries::Normal(normal) => normal.values.len()
+        }
+    }
+
+    // Combines two TimeSeries and returns the result.
+    pub fn combine(first: &TimeSeries, second: &TimeSeries) -> TimeSeries {
+        if first.num_vals() == 0 {
+            return second.clone();
+        }
+        if second.num_vals() == 0 {
+            return first.clone();
+        }
+
+        // If two explicit series are sorted and disjoint, return a sorted explicit series
+        if let (TimeSeries::Explicit(first), TimeSeries::Explicit(second)) = (&first, &second) {
+            if first.ordered && second.ordered {
+                if first.points.last().unwrap().ts < second.points[0].ts {
+                    let mut new = first.clone();
+                    new.points.extend(second.points.iter());
+                    return TimeSeries::Explicit(new);
+                }
+
+                if second.points.last().unwrap().ts < first.points[0].ts {
+                    let mut new = second.clone();
+                    new.points.extend(first.points.iter());
+                    return TimeSeries::Explicit(new);
+                }
+            }
+        };
+
+        // If the series are adjacent normal series, combine them into a larger normal series
+        let ordered = if let (TimeSeries::Normal(first), TimeSeries::Normal(second)) = (&first, &second) {
+            if first.step_interval == second.step_interval {
+                if second.start_ts == first.start_ts + first.values.len() as i64 * first.step_interval {
+                    let mut new = first.clone();
+                    new.values.extend(second.values.iter());
+                    return TimeSeries::Normal(new);
+                }
+                if first.start_ts == second.start_ts + second.values.len() as i64 * second.step_interval {
+                    let mut new = second.clone();
+                    new.values.extend(first.values.iter());
+                    return TimeSeries::Normal(new);
+                }
+            }
+
+            first.start_ts + (first.values.len() - 1) as i64 * first.step_interval < second.start_ts
+        } else {
+            false
+        };
+
+        // In all other cases, just return a new explicit series containing all the points from both series
+        let mut new = ExplicitTimeSeries{ordered, points: vec![]};
+        new.points.extend(first.iter());
+        new.points.extend(second.iter());
+        TimeSeries::Explicit(new)
+    }
 }
 
 impl<'a> From<&'a TimeSeries> for Cow<'a, [TSPoint]> {
@@ -207,5 +267,123 @@ mod tests {
         assert_eq!(p1.interpolate_linear(&p2, 4).unwrap(), 4.0);
         assert_eq!(p1.interpolate_linear(&p2, 0).unwrap(), 0.0);
         assert_eq!(p1.interpolate_linear(&p1, 2).unwrap_err(), TSPointError::TimesEqualInterpolate);
+    }
+
+    #[test]
+    fn test_series_combine() {
+        let a1 = TSPoint{ts: 1, val: 1.0};
+        let a2 = TSPoint{ts: 3, val: 3.0};
+        let a3 = TSPoint{ts: 4, val: 4.0};
+        let a4 = TSPoint{ts: 7, val: 7.0};
+
+        let b1 = TSPoint{ts: 2, val: 2.0};
+        let b2 = TSPoint{ts: 5, val: 5.0};
+        let b3 = TSPoint{ts: 8, val: 8.0};
+        let b4 = TSPoint{ts: 6, val: 6.0};
+
+        let mut a = TimeSeries::new_explicit_series();
+        a.add_point(a1);
+        a.add_point(a2);
+        a.add_point(a3);
+        a.add_point(a4);
+
+        let mut b = TimeSeries::new_explicit_series();
+        b.add_point(b1);
+        b.add_point(b2);
+        b.add_point(b3);
+        b.add_point(b4);
+
+        let c = TimeSeries::combine(&a, &b);
+        assert_eq!(8, c.num_vals());
+
+        let mut dup_check = 0;
+        for point in c.iter() {
+            assert!(point.ts > 0 && point.ts < 9);
+            assert_eq!(point.ts as f64, point.val);
+            assert!(1 << point.ts & dup_check == 0);
+            dup_check |= 1 << point.ts;
+        }
+    }
+
+    #[test]
+    fn test_sorted_series_combine() {
+        let mut a = TimeSeries::new_explicit_series();
+        a.add_point(TSPoint{ts: 2, val: 2.0});
+        a.add_point(TSPoint{ts: 5, val: 2.0});
+        a.add_point(TSPoint{ts: 10, val: 2.0});
+        a.add_point(TSPoint{ts: 15, val: 2.0});
+
+        let mut b = TimeSeries::new_explicit_series();
+        b.add_point(TSPoint{ts: 20, val: 2.0});
+        b.add_point(TSPoint{ts: 25, val: 2.0});
+        b.add_point(TSPoint{ts: 30, val: 2.0});
+        b.add_point(TSPoint{ts: 35, val: 2.0});
+
+        let mut c = TimeSeries::new_explicit_series();
+        c.add_point(TSPoint{ts: 31, val: 2.0});
+        c.add_point(TSPoint{ts: 36, val: 2.0});
+        c.add_point(TSPoint{ts: 40, val: 2.0});
+        c.add_point(TSPoint{ts: 45, val: 2.0});
+
+        let ab = TimeSeries::combine(&a, &b);
+        assert_eq!(8, ab.num_vals());
+        assert!(if let TimeSeries::Explicit(inner) = ab {inner.ordered} else {false});
+
+        let ca = TimeSeries::combine(&c, &a);
+        assert_eq!(8, ca.num_vals());
+        assert!(if let TimeSeries::Explicit(inner) = ca {inner.ordered} else {false});
+
+        let bc = TimeSeries::combine(&b, &c);
+        assert_eq!(8, bc.num_vals());
+        assert!(!(if let TimeSeries::Explicit(inner) = bc {inner.ordered} else {false}));
+    }
+
+    #[test]
+    fn test_normal_series_combine() {
+        let a = TimeSeries::Normal(
+            NormalTimeSeries {
+                start_ts: 5,
+                step_interval: 5,
+                values: vec![1.0, 2.0, 3.0, 4.0]
+            }
+        );
+        let b = TimeSeries::Normal(
+            NormalTimeSeries {
+                start_ts: 25,
+                step_interval: 5,
+                values: vec![5.0, 6.0, 7.0, 8.0]
+            }
+        );
+        let c = TimeSeries::Normal(
+            NormalTimeSeries {
+                start_ts: 30,
+                step_interval: 5,
+                values: vec![6.0, 7.0, 8.0, 9.0]
+            }
+        );
+        let d = TimeSeries::Normal(
+            NormalTimeSeries {
+                start_ts: 25,
+                step_interval: 6,
+                values: vec![5.0, 6.0, 7.0, 8.0]
+            }
+        );
+
+        let ab = TimeSeries::combine(&a, &b);
+        assert_eq!(8, ab.num_vals());
+        assert!(matches!(ab, TimeSeries::Normal(_)));
+
+        let ba = TimeSeries::combine(&b, &a);
+        assert_eq!(8, ba.num_vals());
+        assert!(matches!(ba, TimeSeries::Normal(_)));
+
+        let ca = TimeSeries::combine(&c, &a);
+        assert_eq!(8, ca.num_vals());
+        assert!(!matches!(ca, TimeSeries::Normal(_)));
+
+        let ad = TimeSeries::combine(&a, &d);
+        assert_eq!(8, ad.num_vals());
+        assert!(!matches!(ad, TimeSeries::Normal(_)));
+        assert!(if let TimeSeries::Explicit(inner) = ad {inner.ordered} else {false});
     }
 }

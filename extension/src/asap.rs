@@ -137,6 +137,44 @@ fn asap_final(
     }
 }
 
+#[pg_extern(name="asap_smooth", schema = "timescale_analytics_experimental")]
+pub fn asap_on_timeseries(
+    series: crate::time_series::timescale_analytics_experimental::TimeSeries<'static>,
+    resolution: i32
+) -> Option<crate::time_series::timescale_analytics_experimental::TimeSeries<'static>> {
+    // TODO: implement this using zero copy (requires sort, find_downsample_interval, and downsample_and_gapfill on TimeSeries)
+    let series = series.to_internal_time_series();
+    let mut normal = match series {
+        InternalTimeSeries::Explicit(mut explicit) => {
+            explicit.sort();
+            let normal = if explicit.points.len() >= 2 * resolution as usize {
+                let downsample_interval = find_downsample_interval(&explicit, resolution as i64);
+                explicit.downsample_and_gapfill_to_normal_form(downsample_interval, GapfillMethod::Linear)
+            } else {
+                explicit.downsample_and_gapfill_to_normal_form((explicit.points.last().unwrap().ts - explicit.points.first().unwrap().ts) / explicit.points.len() as i64, GapfillMethod::Linear)
+            };
+            match normal {
+                Ok(series) => series,
+                Err(TimeSeriesError::InsufficientDataToExtrapolate) => panic!("Not enough data to generate a smoothed representation"),
+                Err(_) => unreachable!()
+            }
+        },
+        InternalTimeSeries::Normal(normal) => normal
+    };
+
+    // Drop the last value to match the reference implementation
+    normal.values.pop();
+
+    let mut result = NormalTimeSeries {start_ts: normal.start_ts,
+        step_interval: 0,
+        values: asap_smooth(&normal.values, resolution as u32)
+    };
+
+    // Set the step interval for the asap result so that it covers the same interval
+    // as the passed in data
+    result.step_interval = normal.step_interval * normal.values.len() as i64 / result.values.len() as i64;
+    TimeSeries::from_internal_time_series(&InternalTimeSeries::Normal(result)).into()
+}
 
 // Aggregate on only values (assumes aggregation over ordered normalized timestamp)
 extension_sql!(r#"
@@ -220,6 +258,26 @@ mod tests {
             .first()
             .get_one::<f64>().unwrap();
             assert!((10.0 - test_val).abs() > (8.0 - test_val).abs());
+
+            // Now compare the asap aggregate to asap run on a timeseries aggregate
+            client.select(
+                "create table asap_vals2 as 
+                SELECT * 
+                FROM timescale_analytics_experimental.unnest_series(
+                    (SELECT timescale_analytics_experimental.asap_smooth(
+                        (SELECT timescale_analytics_experimental.timeseries(date, value) FROM asap_test),
+                        100)
+                    )
+                )", None, None);
+
+            let delta = client
+                .select(
+                    "SELECT count(*) 
+                    FROM asap_vals r1 FULL OUTER JOIN asap_vals2 r2 ON r1 = r2
+                    WHERE r1 IS NULL OR r2 IS NULL;" , None, None)
+                .first()
+                .get_one::<i32>();
+            assert_eq!(delta.unwrap(), 0);
         });
     }
 }

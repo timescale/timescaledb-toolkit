@@ -1,6 +1,7 @@
 
 use serde::{Deserialize, Serialize};
-use crate::{StatsError};
+use crate::{StatsError, INV_FLOATING_ERROR_THRESHOLD};
+
 #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
 #[repr(C)]
 pub struct StatsSummary1D {
@@ -9,9 +10,8 @@ pub struct StatsSummary1D {
     pub sxx: f64,
 }
 
-const INV_FLOATING_ERROR_THRESHOLD : f64 = 0.999;
 impl StatsSummary1D{
-    pub fn n64(&self) -> f64 {
+    fn n64(&self) -> f64 {
         self.n as f64
     }
 
@@ -69,7 +69,7 @@ impl StatsSummary1D{
 
     fn check_overflow(&self, old: &StatsSummary1D, p: f64) -> bool {
         //Only report overflow if we have finite inputs that lead to infinite results.
-        (self.sx.is_infinite() || self.sxx.is_infinite()) && old.sx.is_finite() && p.is_finite()
+       self.has_infinite() && old.sx.is_finite() && p.is_finite()
     }
 
     // inverse transition function (inverse of accum) for windowed aggregates, return None if we want to re-calculate from scratch
@@ -120,7 +120,7 @@ impl StatsSummary1D{
         Some(new) 
     }
 
-    // convenience function for testing.
+    // convenience function for creating an aggregate from a vector, currently used mostly for testing.
     pub fn new_from_vec(v: Vec<f64>) -> Result<Self, StatsError> {
         let mut r = StatsSummary1D::new();
         for p in v {
@@ -157,20 +157,22 @@ impl StatsSummary1D{
     
     // This is the inverse combine function for use in the window function context when we want to reverse the operation of the normal combine function 
     // for re-aggregation over a window, this is what will get called in tumbling window averages for instance.
-    // As with any window function, returning None will cause a re-calculation, so we do that in several cases where either we're dealing with infinites or we have some potential problems with outlie sums
+    // As with any window function, returning None will cause a re-calculation, so we do that in several cases where either we're dealing with infinites or we have some potential problems with outlying sums
     // so here, self is the previously combined StatsSummary, and we're removing the input and returning the part that would have been there before.
     pub fn remove_combined(&self, remove: StatsSummary1D) -> Option<Self>{
         let combined = &self; // just to lessen confusion with naming
-        // handle the trivial n = 0 cases here, and don't worry about divide by zero errors later.
-        if combined.n == 0 && remove.n == 0 {
+        // handle the trivial n = 0 and equal n cases here, and don't worry about divide by zero errors later.
+        if combined.n == remove.n { 
             return Some(StatsSummary1D::new());
         }  else if remove.n == 0 {
             return Some(*self);
         } else if combined.n == 0 {
             // if we've gotten here remove.n != 0, this should never occur, we can't subtract from nothing
             panic!(); 
+        } else if  combined.n < remove.n {
+            panic!(); // given that we're always removing things that we've previously added, we shouldn't be able to get a case where we're removing an n that's larger. 
         }
-        // if the sum we're removing is very large compared to the overall value, see note on the remove function
+        // if the sum we're removing is very large compared to the overall value we need to recalculate, see note on the remove function
         if remove.sx / combined.sx > INV_FLOATING_ERROR_THRESHOLD{
             return None;
         }

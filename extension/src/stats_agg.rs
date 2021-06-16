@@ -14,12 +14,9 @@ use crate::{
     pg_type,
 };
 
-use time_weighted_average::{
-    tspoint::TSPoint,
-};
-
+use stats_agg::XYPair;
 use stats_agg::stats1d::StatsSummary1D as InternalStatsSummary1D;
-use stats_agg::stats2d::StatsSummary2D as IntneralStatsSummary2D;
+use stats_agg::stats2d::StatsSummary2D as InternalStatsSummary2D;
 
 
 
@@ -81,6 +78,32 @@ impl<'input> StatsSummary1D<'input> {
     }
 }
 
+impl<'input> StatsSummary2D<'input> {
+    fn to_internal(&self) -> InternalStatsSummary2D {
+        InternalStatsSummary2D{
+            n: *self.n,
+            sx: *self.sx,
+            sxx: *self.sxx,
+            sy: *self.sy,
+            syy: *self.syy,
+            sxy: *self.sxy,
+        }
+    }
+    fn from_internal(st: InternalStatsSummary2D) -> Self {
+        unsafe{
+            flatten!(
+            StatsSummary2D {
+                n: &st.n,
+                sx: &st.sx,
+                sxx: &st.sxx,
+                sy: &st.sy,
+                syy: &st.syy,
+                sxy: &st.sxy,
+            })
+        }
+    }
+}
+
 
 
 #[pg_extern(schema = "timescale_analytics_experimental", strict)]
@@ -100,6 +123,23 @@ pub fn stats1d_trans_deserialize(
     de.into()
 }
 
+#[pg_extern(schema = "timescale_analytics_experimental", strict)]
+pub fn stats2d_trans_serialize<'s>(
+    state: Internal<StatsSummary2D<'s>>,
+) -> bytea {
+    let ser: &StatsSummary2DData = &*state;
+    crate::do_serialize!(ser)
+}
+
+#[pg_extern(schema = "timescale_analytics_experimental", strict)]
+pub fn stats2d_trans_deserialize(
+    bytes: bytea,
+    _internal: Option<Internal<()>>,
+) -> Internal<StatsSummary2D<'static>> {
+    let de: StatsSummary2D = crate::do_deserialize!(bytes, StatsSummary2DData);
+    de.into()
+}
+
 #[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn stats1d_trans<'s>(
     state: Option<Internal<StatsSummary1D<'s>>>,
@@ -109,7 +149,8 @@ pub fn stats1d_trans<'s>(
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state, val) {
-                (a, None) => a,
+                (None, None) => Some(StatsSummary1D::from_internal(InternalStatsSummary1D::new()).into()), // return an empty one from the trans function because otherwise it breaks in the window context
+                (Some(state), None) => Some(state),
                 (None, Some(val)) => {
                     let mut s = InternalStatsSummary1D::new();
                     s.accum(val).unwrap();
@@ -119,6 +160,40 @@ pub fn stats1d_trans<'s>(
                     let mut s: InternalStatsSummary1D = state.to_internal(); 
                     s.accum(val).unwrap();
                     *state = StatsSummary1D::from_internal(s);
+                    Some(state)
+                },
+            }
+        })
+    }
+}
+// Note that in general, for all stats2d cases, if either the y or x value is missing, we disregard the entire point as the n is shared between them
+// if the user wants us to treat nulls as a particular value (ie zero), they can use COALESCE to do so
+#[pg_extern(schema = "timescale_analytics_experimental")]
+pub fn stats2d_trans<'s>(
+    state: Option<Internal<StatsSummary2D<'s>>>,
+    y: Option<f64>,
+    x: Option<f64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal<StatsSummary2D<'s>>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            let val: Option<XYPair> = match (y, x) {
+                (None, _) => None,
+                (_, None) => None,
+                (Some(y), Some(x)) => Some(XYPair{y, x})
+            };
+            match (state, val) {
+                (None, None) => Some(StatsSummary2D::from_internal(InternalStatsSummary2D::new()).into()), // return an empty one from the trans function because otherwise it breaks in the window context
+                (Some(state), None) => Some(state),
+                (None, Some(val)) => {
+                    let mut s = InternalStatsSummary2D::new();
+                    s.accum(val).unwrap();
+                    Some(StatsSummary2D::from_internal(s).into())
+                },
+                (Some(mut state), Some(val)) => {
+                    let mut s: InternalStatsSummary2D = state.to_internal(); 
+                    s.accum(val).unwrap();
+                    *state = StatsSummary2D::from_internal(s);
                     Some(state)
                 },
             }
@@ -151,6 +226,36 @@ pub fn stats1d_inv_trans<'s>(
     }
 }
 
+#[pg_extern(schema = "timescale_analytics_experimental")]
+pub fn stats2d_inv_trans<'s>(
+    state: Option<Internal<StatsSummary2D<'s>>>,
+    y: Option<f64>,
+    x: Option<f64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal<StatsSummary2D<'s>>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            let val: Option<XYPair> = match (y, x) {
+                (None, _) => None,
+                (_, None) => None,
+                (Some(y), Some(x)) => Some(XYPair{y, x})
+            };
+            match (state, val) {
+                (None, _) => panic!("Inverse function should never be called with NULL state"),
+                (Some(state), None) => Some(state),
+                (Some(state), Some(val)) => {
+                    let s: InternalStatsSummary2D = state.to_internal(); 
+                    let s = s.remove(val);
+                    match s {
+                        None => None,
+                        Some(s) => Some(StatsSummary2D::from_internal(s).into())
+                    }
+                },
+            }
+        })
+    }
+}
+
 
 #[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn stats1d_summary_trans<'s, 'v>(
@@ -163,11 +268,36 @@ pub fn stats1d_summary_trans<'s, 'v>(
             match (state, value) {
                 (state, None) => state,
                 (None, Some(value)) =>  Some(value.in_current_context().into()),
-                (Some(mut state), Some(value)) => {
+                (Some(state), Some(value)) => {
                     let s = state.to_internal();
                     let v = value.to_internal();
                     let s = s.combine(v).unwrap();
                     let s = StatsSummary1D::from_internal(s);
+                    Some(s.into())
+                }
+            }
+        })
+    }
+}
+
+
+
+#[pg_extern(schema = "timescale_analytics_experimental")]
+pub fn stats2d_summary_trans<'s, 'v>(
+    state: Option<Internal<StatsSummary2D<'s>>>,
+    value: Option<timescale_analytics_experimental::StatsSummary2D<'v>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal<StatsSummary2D<'s>>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            match (state, value) {
+                (state, None) => state,
+                (None, Some(value)) =>  Some(value.in_current_context().into()),
+                (Some(state), Some(value)) => {
+                    let s = state.to_internal();
+                    let v = value.to_internal();
+                    let s = s.combine(v).unwrap();
+                    let s = StatsSummary2D::from_internal(s);
                     Some(s.into())
                 }
             }
@@ -193,6 +323,31 @@ pub fn stats1d_summary_inv_trans<'s, 'v>(
                     match s {
                         None => None,
                         Some(s) => Some(StatsSummary1D::from_internal(s).into()),
+                    }
+                }
+            }
+        })
+    }
+}
+
+#[pg_extern(schema = "timescale_analytics_experimental")]
+pub fn stats2d_summary_inv_trans<'s, 'v>(
+    state: Option<Internal<StatsSummary2D<'s>>>,
+    value: Option<timescale_analytics_experimental::StatsSummary2D<'v>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal<StatsSummary2D<'s>>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            match (state, &value) {
+                (None, _) => panic!("Inverse function should never be called with NULL state"),
+                (Some(state), None) => Some(state),
+                (Some(state), Some(value)) => {
+                    let s = state.to_internal();
+                    let v = value.to_internal();
+                    let s = s.remove_combined(v);
+                    match s {
+                        None => None,
+                        Some(s) => Some(StatsSummary2D::from_internal(s).into()),
                     }
                 }
             }
@@ -230,6 +385,35 @@ pub fn stats1d_combine<'s, 'v>(
 }
 
 #[pg_extern(schema = "timescale_analytics_experimental")]
+pub fn stats2d_combine<'s, 'v>(
+    state1: Option<Internal<StatsSummary2D<'s>>>,
+    state2: Option<Internal<StatsSummary2D<'v>>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+)  -> Option<Internal<StatsSummary2D<'s>>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            match (state1, state2) {
+                (None, None) => None,
+                (None, Some(state2)) => {
+                    let s = state2.in_current_context();
+                    Some(s.into())
+                },
+                (Some(state1), None) => {
+                    let s = state1.in_current_context();
+                    Some(s.into())
+                },
+                (Some(state1), Some(state2)) => {
+                    let s1 = state1.to_internal(); 
+                    let s2 = state2.to_internal();
+                    let s1 = s1.combine(s2).unwrap();
+                    Some(StatsSummary2D::from_internal(s1).into())
+                }
+            }
+        })
+    }
+}
+
+#[pg_extern(schema = "timescale_analytics_experimental")]
 fn stats1d_final<'s>(
     state: Option<Internal<StatsSummary1D<'s>>>,
     fcinfo: pg_sys::FunctionCallInfo,
@@ -243,6 +427,22 @@ fn stats1d_final<'s>(
         })
     }
 }
+
+#[pg_extern(schema = "timescale_analytics_experimental")]
+fn stats2d_final<'s>(
+    state: Option<Internal<StatsSummary2D<'s>>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<timescale_analytics_experimental::StatsSummary2D<'s>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            match state {
+                None => None,
+                Some(state) => Some(state.in_current_context()),
+            }
+        })
+    }
+}
+
 
 
 extension_sql!(r#"
@@ -262,6 +462,54 @@ CREATE AGGREGATE timescale_analytics_experimental.stats_agg( value DOUBLE PRECIS
 );
 "#);
 
+// mostly for testing/debugging, in case we want one without the inverse functions defined.
+extension_sql!(r#"
+CREATE AGGREGATE timescale_analytics_experimental.stats_agg_no_inv( value DOUBLE PRECISION )
+(
+    sfunc = timescale_analytics_experimental.stats1d_trans,
+    stype = internal,
+    finalfunc = timescale_analytics_experimental.stats1d_final,
+    combinefunc = timescale_analytics_experimental.stats1d_combine,
+    serialfunc = timescale_analytics_experimental.stats1d_trans_serialize,
+    deserialfunc = timescale_analytics_experimental.stats1d_trans_deserialize,
+    parallel = safe
+);
+"#);
+
+// same things for the 2d case
+extension_sql!(r#"
+CREATE AGGREGATE timescale_analytics_experimental.stats_agg( y DOUBLE PRECISION, x DOUBLE PRECISION )
+(
+    sfunc = timescale_analytics_experimental.stats2d_trans,
+    stype = internal,
+    finalfunc = timescale_analytics_experimental.stats2d_final,
+    combinefunc = timescale_analytics_experimental.stats2d_combine,
+    serialfunc = timescale_analytics_experimental.stats2d_trans_serialize,
+    deserialfunc = timescale_analytics_experimental.stats2d_trans_deserialize,
+    msfunc = timescale_analytics_experimental.stats2d_trans,
+    minvfunc = timescale_analytics_experimental.stats2d_inv_trans,
+    mstype = internal,
+    mfinalfunc = timescale_analytics_experimental.stats2d_final,
+    parallel = safe
+);
+"#);
+
+// mostly for testing/debugging, in case we want one without the inverse functions defined.
+extension_sql!(r#"
+CREATE AGGREGATE timescale_analytics_experimental.stats_agg_no_inv( y DOUBLE PRECISION, x DOUBLE PRECISION )
+(
+    sfunc = timescale_analytics_experimental.stats2d_trans,
+    stype = internal,
+    finalfunc = timescale_analytics_experimental.stats2d_final,
+    combinefunc = timescale_analytics_experimental.stats2d_combine,
+    serialfunc = timescale_analytics_experimental.stats2d_trans_serialize,
+    deserialfunc = timescale_analytics_experimental.stats2d_trans_deserialize,
+    parallel = safe
+);
+"#);
+
+//  Currently, rollup does not have the inverse function so if you want the behavior where we don't use the inverse,
+// you can use it in your window functions (useful for our own perf testing as well)
 
 extension_sql!(r#"
 CREATE AGGREGATE timescale_analytics_experimental.rollup(ss timescale_analytics_experimental.statssummary1d)
@@ -272,15 +520,11 @@ CREATE AGGREGATE timescale_analytics_experimental.rollup(ss timescale_analytics_
     combinefunc = timescale_analytics_experimental.stats1d_combine,
     serialfunc = timescale_analytics_experimental.stats1d_trans_serialize,
     deserialfunc = timescale_analytics_experimental.stats1d_trans_deserialize,
-    msfunc = timescale_analytics_experimental.stats1d_summary_trans,
-    minvfunc = timescale_analytics_experimental.stats1d_summary_inv_trans,
-    mstype = internal,
-    mfinalfunc = timescale_analytics_experimental.stats1d_final,
     parallel = safe
 );
 "#);
 
-// these are the same, but for UI, we decided to have slightly differently named functions for the windowed context and not, so that it reads better.
+//  For UI, we decided to have slightly differently named functions for the windowed context and not, so that it reads better, as well as using the inverse function only in the window context
 extension_sql!(r#"
 CREATE AGGREGATE timescale_analytics_experimental.rolling(ss timescale_analytics_experimental.statssummary1d)
 (
@@ -299,6 +543,39 @@ CREATE AGGREGATE timescale_analytics_experimental.rolling(ss timescale_analytics
 "#);
 
 
+// Same as for the 1D case, but for the 2D
+
+extension_sql!(r#"
+CREATE AGGREGATE timescale_analytics_experimental.rollup(ss timescale_analytics_experimental.statssummary2d)
+(
+    sfunc = timescale_analytics_experimental.stats2d_summary_trans,
+    stype = internal,
+    finalfunc = timescale_analytics_experimental.stats2d_final,
+    combinefunc = timescale_analytics_experimental.stats2d_combine,
+    serialfunc = timescale_analytics_experimental.stats2d_trans_serialize,
+    deserialfunc = timescale_analytics_experimental.stats2d_trans_deserialize,
+    parallel = safe
+);
+"#);
+
+//  For UI, we decided to have slightly differently named functions for the windowed context and not, so that it reads better, as well as using the inverse function only in the window context
+extension_sql!(r#"
+CREATE AGGREGATE timescale_analytics_experimental.rolling(ss timescale_analytics_experimental.statssummary2d)
+(
+    sfunc = timescale_analytics_experimental.stats2d_summary_trans,
+    stype = internal,
+    finalfunc = timescale_analytics_experimental.stats2d_final,
+    combinefunc = timescale_analytics_experimental.stats2d_combine,
+    serialfunc = timescale_analytics_experimental.stats2d_trans_serialize,
+    deserialfunc = timescale_analytics_experimental.stats2d_trans_deserialize,
+    msfunc = timescale_analytics_experimental.stats2d_summary_trans,
+    minvfunc = timescale_analytics_experimental.stats2d_summary_inv_trans,
+    mstype = internal,
+    mfinalfunc = timescale_analytics_experimental.stats2d_final,
+    parallel = safe
+);
+"#);
+
 
 
 #[pg_extern(name="average", schema = "timescale_analytics_experimental", strict, immutable)]
@@ -309,8 +586,8 @@ fn stats1d_average(
     summary.to_internal().avg()
 }
 
-#[pg_extern(name="sum_vals", schema = "timescale_analytics_experimental", strict, immutable)]
-fn stats1d_sum_vals(
+#[pg_extern(name="sum", schema = "timescale_analytics_experimental", strict, immutable)]
+fn stats1d_sum(
     summary: timescale_analytics_experimental::StatsSummary1D,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
@@ -319,26 +596,26 @@ fn stats1d_sum_vals(
 
 #[pg_extern(name="stddev", schema = "timescale_analytics_experimental", immutable)]
 fn stats1d_stddev(
-    summary: timescale_analytics_experimental::StatsSummary1D,
+    summary: Option<timescale_analytics_experimental::StatsSummary1D>,
     method: default!(String, "population"),
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     match method.trim().to_lowercase().as_str() {
-        "population" | "pop" => summary.to_internal().stddev_pop(),
-        "sample" | "samp" => summary.to_internal().stddev_samp(),
+        "population" | "pop" => summary?.to_internal().stddev_pop(),
+        "sample" | "samp" => summary?.to_internal().stddev_samp(),
         _ => panic!("unknown analysis method"),
     }
 }
 
 #[pg_extern(name="variance", schema = "timescale_analytics_experimental", immutable)]
 fn stats1d_variance(
-    summary: timescale_analytics_experimental::StatsSummary1D,
+    summary: Option<timescale_analytics_experimental::StatsSummary1D>,
     method: default!(String, "population"),
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     match method.trim().to_lowercase().as_str() {
-        "population" | "pop" => summary.to_internal().var_pop(),
-        "sample" | "samp" => summary.to_internal().var_samp(),
+        "population" | "pop" => summary?.to_internal().var_pop(),
+        "sample" | "samp" => summary?.to_internal().var_samp(),
         _ => panic!("unknown analysis method"),
     }
 }
@@ -351,117 +628,193 @@ fn stats1d_num_vals(
     summary.to_internal().count()
 }
 
-
-#[cfg(any(test, feature = "pg_test"))]
-mod tests {
-
-    use approx::assert_relative_eq;
-    use pgx::*;
-    use super::*;
-
-    macro_rules! select_one {
-        ($client:expr, $stmt:expr, $type:ty) => {
-            $client
-                .select($stmt, None, None)
-                .first()
-                .get_one::<$type>()
-                .unwrap()
-        };
-    }
-
-    //do proper numerical comparisons on the values where that matters, use exact where it should be exact.
-    // copied from counter_agg crate
-    #[track_caller]
-    fn assert_close_enough(p1:&InternalCounterSummary, p2:&InternalCounterSummary) {
-        assert_eq!(p1.first, p2.first, "first");
-        assert_eq!(p1.second, p2.second, "second");
-        assert_eq!(p1.penultimate, p2.penultimate, "penultimate");
-        assert_eq!(p1.last, p2.last, "last");
-        assert_eq!(p1.num_changes, p2.num_changes, "num_changes");
-        assert_eq!(p1.num_resets, p2.num_resets, "num_resets");
-        assert_eq!(p1.stats.n, p2.stats.n, "n");
-        assert_relative_eq!(p1.stats.sx, p2.stats.sx);
-        assert_relative_eq!(p1.stats.sxx, p2.stats.sxx);
-        assert_relative_eq!(p1.stats.sy, p2.stats.sy);
-        assert_relative_eq!(p1.stats.syy, p2.stats.syy);
-        assert_relative_eq!(p1.stats.sxy, p2.stats.sxy);
-    }
-
-    #[pg_test]
-    fn test_counter_aggregate() {
-        Spi::execute(|client| {
-            client.select("CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)", None, None);
-            // set search_path after defining our table so we don't pollute the wrong schema
-            let stmt = "SELECT format('timescale_analytics_experimental, %s',current_setting('search_path'))";
-            let search_path = select_one!(client, stmt, String);
-            client.select(&format!("SET LOCAL search_path TO {}", search_path), None, None);
-            let stmt = "INSERT INTO test VALUES('2020-01-01 00:00:00+00', 10.0), ('2020-01-01 00:01:00+00', 20.0)";
-            client.select(stmt, None, None);
-
-            // NULL bounds are equivalent to none provided
-            let stmt = "SELECT counter_agg(ts, val) FROM test";
-            let a = select_one!(client,stmt, timescale_analytics_experimental::CounterSummary);
-            let stmt = "SELECT counter_agg(ts, val, NULL::tstzrange) FROM test";
-            let b = select_one!(client,stmt, timescale_analytics_experimental::CounterSummary);
-            assert_close_enough(&a.to_internal(), &b.to_internal());
-
-            let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
-            assert_relative_eq!(select_one!(client, stmt, f64), 10.0);
-
-            let stmt = "SELECT time_delta(counter_agg(ts, val)) FROM test";
-            assert_relative_eq!(select_one!(client, stmt, f64), 60.0);
-
-            let stmt = "SELECT extrapolated_delta(counter_agg(ts, val, '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00+00)'), 'prometheus') FROM test";
-            assert_relative_eq!(select_one!(client, stmt, f64), 20.0);
-            // doesn't matter if we set the bounds before or after
-            let stmt = "SELECT extrapolated_delta(with_bounds(counter_agg(ts, val), '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00+00)'), 'prometheus') FROM test";
-            assert_relative_eq!(select_one!(client, stmt, f64), 20.0);
-
-            let stmt = "SELECT extrapolated_rate(counter_agg(ts, val, '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00+00)'), 'prometheus') FROM test";
-            assert_relative_eq!(select_one!(client, stmt, f64), 20.0 / 120.0);
-
-            let stmt = "INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)";
-            client.select(stmt, None, None);
-
-            let stmt = "SELECT slope(counter_agg(ts, val)) FROM test";
-            assert_relative_eq!(select_one!(client, stmt, f64), 10.0 / 60.0);
-
-            let stmt = "SELECT intercept(counter_agg(ts, val)) FROM test";
-            assert_relative_eq!(select_one!(client, stmt, f64), -105191990.0);
-
-            let stmt = "SELECT corr(counter_agg(ts, val)) FROM test";
-            assert_relative_eq!(select_one!(client, stmt, f64), 1.0);
-
-            let stmt = "SELECT counter_zero_time(counter_agg(ts, val)) FROM test";
-            let zp = select_one!(client, stmt, i64);
-            let real_zp = select_one!(client, "SELECT '2019-12-31 23:59:00+00'::timestamptz", i64);
-            assert_eq!(zp, real_zp);
-
-            let stmt = "INSERT INTO test VALUES('2020-01-01 00:08:00+00', 30.0), ('2020-01-01 00:10:00+00', 30.0), ('2020-01-01 00:10:30+00', 10.0), ('2020-01-01 00:20:00+00', 40.0)";
-            client.select(stmt, None, None);
-
-            let stmt = "SELECT num_elements(counter_agg(ts, val)) FROM test";
-            assert_eq!(select_one!(client, stmt, i64), 9);
-
-            let stmt = "SELECT num_resets(counter_agg(ts, val)) FROM test";
-            assert_eq!(select_one!(client, stmt, i64), 3);
-
-            let stmt = "SELECT num_changes(counter_agg(ts, val)) FROM test";
-            assert_eq!(select_one!(client, stmt, i64), 7);
-
-            //combine function works as expected
-            let stmt = "SELECT counter_agg(ts, val) FROM test";
-            let a = select_one!(client,stmt, timescale_analytics_experimental::CounterSummary);
-            let stmt = "WITH t as (SELECT date_trunc('minute', ts), counter_agg(ts, val) as agg FROM test group by 1 ) SELECT counter_agg(agg) FROM t";
-            let b = select_one!(client,stmt, timescale_analytics_experimental::CounterSummary);
-            assert_close_enough(&a.to_internal(), &b.to_internal());
-        });
-    }
-
-    // #[pg_test]
-    // fn test_combine_aggregate(){
-    //     Spi::execute(|client| {
-
-    //     });
-    // }
+#[pg_extern(name="average_x", schema = "timescale_analytics_experimental", strict, immutable)]
+fn stats2d_average_x(
+    summary: timescale_analytics_experimental::StatsSummary2D,
+    _fcinfo: pg_sys::FunctionCallInfo,
+)-> Option<f64> {
+    Some(summary.to_internal().avg()?.x)
 }
+
+#[pg_extern(name="average_y", schema = "timescale_analytics_experimental", strict, immutable)]
+fn stats2d_average_y(
+    summary: timescale_analytics_experimental::StatsSummary2D,
+    _fcinfo: pg_sys::FunctionCallInfo,
+)-> Option<f64> {
+    Some(summary.to_internal().avg()?.y)
+}
+
+#[pg_extern(name="sum_x", schema = "timescale_analytics_experimental", strict, immutable)]
+fn stats2d_sum_x(
+    summary: timescale_analytics_experimental::StatsSummary2D,
+    _fcinfo: pg_sys::FunctionCallInfo,
+)-> Option<f64> {
+    Some(summary.to_internal().sum()?.x)
+}
+
+#[pg_extern(name="sum_y", schema = "timescale_analytics_experimental", strict, immutable)]
+fn stats2d_sum_y(
+    summary: timescale_analytics_experimental::StatsSummary2D,
+    _fcinfo: pg_sys::FunctionCallInfo,
+)-> Option<f64> {
+    Some(summary.to_internal().sum()?.y)
+}
+
+#[pg_extern(name="stddev_x", schema = "timescale_analytics_experimental", immutable)]
+fn stats2d_stddev_x(
+    summary: Option<timescale_analytics_experimental::StatsSummary2D>,
+    method: default!(String, "population"),
+    _fcinfo: pg_sys::FunctionCallInfo,
+)-> Option<f64> {
+    match method.trim().to_lowercase().as_str() {
+        "population" | "pop" => Some(summary?.to_internal().stddev_pop()?.x),
+        "sample" | "samp" => Some(summary?.to_internal().stddev_samp()?.x),
+        _ => panic!("unknown analysis method"),
+    }
+}
+
+#[pg_extern(name="stddev_y", schema = "timescale_analytics_experimental", immutable)]
+fn stats2d_stddev_y(
+    summary: Option<timescale_analytics_experimental::StatsSummary2D>,
+    method: default!(String, "population"),
+    _fcinfo: pg_sys::FunctionCallInfo,
+)-> Option<f64> {
+    match method.trim().to_lowercase().as_str() {
+        "population" | "pop" => Some(summary?.to_internal().stddev_pop()?.y),
+        "sample" | "samp" => Some(summary?.to_internal().stddev_samp()?.y),
+        _ => panic!("unknown analysis method"),
+    }
+}
+
+#[pg_extern(name="variance_x", schema = "timescale_analytics_experimental", immutable)]
+fn stats2d_variance_x(
+    summary: Option<timescale_analytics_experimental::StatsSummary2D>,
+    method: default!(String, "population"),
+    _fcinfo: pg_sys::FunctionCallInfo,
+)-> Option<f64> {
+    match method.trim().to_lowercase().as_str() {
+        "population" | "pop" => Some(summary?.to_internal().var_pop()?.x),
+        "sample" | "samp" => Some(summary?.to_internal().var_samp()?.x),
+        _ => panic!("unknown analysis method"),
+    }
+}
+
+#[pg_extern(name="variance_y", schema = "timescale_analytics_experimental", immutable)]
+fn stats2d_variance_y(
+    summary: Option<timescale_analytics_experimental::StatsSummary2D>,
+    method: default!(String, "population"),
+    _fcinfo: pg_sys::FunctionCallInfo,
+)-> Option<f64> {
+    match method.trim().to_lowercase().as_str() {
+        "population" | "pop" => Some(summary?.to_internal().var_pop()?.x),
+        "sample" | "samp" => Some(summary?.to_internal().var_samp()?.x),
+        _ => panic!("unknown analysis method"),
+    }
+}
+
+#[pg_extern(name="num_vals", schema = "timescale_analytics_experimental", strict, immutable)]
+fn stats2d_num_vals(
+    summary: timescale_analytics_experimental::StatsSummary2D,
+    _fcinfo: pg_sys::FunctionCallInfo,
+)-> i64 {
+    summary.to_internal().count()
+}
+
+#[pg_extern(name="slope", schema = "timescale_analytics_experimental", strict, immutable)]
+fn stats2d_slope(
+    summary: timescale_analytics_experimental::StatsSummary2D,
+    _fcinfo: pg_sys::FunctionCallInfo,
+)-> Option<f64> {
+    summary.to_internal().slope()
+}
+
+#[pg_extern(name="corr", schema = "timescale_analytics_experimental", strict, immutable)]
+fn stats2d_corr(
+    summary: timescale_analytics_experimental::StatsSummary2D,
+    _fcinfo: pg_sys::FunctionCallInfo,
+)-> Option<f64> {
+    summary.to_internal().corr()
+}
+
+#[pg_extern(name="intercept", schema = "timescale_analytics_experimental", strict, immutable)]
+fn stats2d_intercept(
+    summary: timescale_analytics_experimental::StatsSummary2D,
+    _fcinfo: pg_sys::FunctionCallInfo,
+)-> Option<f64> {
+    summary.to_internal().intercept()
+}
+
+#[pg_extern(name="x_intercept", schema = "timescale_analytics_experimental", strict, immutable)]
+fn stats2d_x_intercept(
+    summary: timescale_analytics_experimental::StatsSummary2D,
+    _fcinfo: pg_sys::FunctionCallInfo,
+)-> Option<f64> {
+    summary.to_internal().x_intercept()
+}
+
+#[pg_extern(name="determination_coeff", schema = "timescale_analytics_experimental", strict, immutable)]
+fn stats2d_determination_coeff(
+    summary: timescale_analytics_experimental::StatsSummary2D,
+    _fcinfo: pg_sys::FunctionCallInfo,
+)-> Option<f64> {
+    summary.to_internal().determination_coeff()
+}
+
+#[pg_extern(name="covariance", schema = "timescale_analytics_experimental", immutable)]
+fn stats2d_covar(
+    summary: Option<timescale_analytics_experimental::StatsSummary2D>,
+    method: default!(String, "population"),
+    _fcinfo: pg_sys::FunctionCallInfo,
+)-> Option<f64> {
+    match method.trim().to_lowercase().as_str() {
+        "population" | "pop" => summary?.to_internal().covar_pop(),
+        "sample" | "samp" => summary?.to_internal().covar_samp(),
+        _ => panic!("unknown analysis method"),
+    }
+}
+
+
+// TODO: Add testing - probably want to do some fuzz testing against the Postgres implementations of the same. Possibly translate the Postgres tests as well?
+// #[cfg(any(test, feature = "pg_test"))]
+// mod tests {
+
+//     use approx::assert_relative_eq;
+//     use pgx::*;
+//     use super::*;
+
+//     macro_rules! select_one {
+//         ($client:expr, $stmt:expr, $type:ty) => {
+//             $client
+//                 .select($stmt, None, None)
+//                 .first()
+//                 .get_one::<$type>()
+//                 .unwrap()
+//         };
+//     }
+
+//     //do proper numerical comparisons on the values where that matters, use exact where it should be exact.
+//     #[track_caller]
+//     fn stats1d_assert_close_enough(p1:&StatsSummary1D, p2:&StatsSummary1D) {
+//         assert_eq!(p1.n, p2.n, "n");
+//         assert_relative_eq!(p1.sx, p2.sx);
+//         assert_relative_eq!(p1.sxx, p2.sxx);
+//     }
+//     #[track_caller]
+//     fn stats2d_assert_close_enough(p1:&StatsSummary2D, p2:&StatsSummary2D) {
+//         assert_eq!(p1.n, p2.n, "n");
+//         assert_relative_eq!(p1.sx, p2.sx);
+//         assert_relative_eq!(p1.sxx, p2.sxx);
+//         assert_relative_eq!(p1.sy, p2.sy);
+//         assert_relative_eq!(p1.syy, p2.syy);
+//         assert_relative_eq!(p1.sxy, p2.sxy);
+//     }
+    
+
+
+//     // #[pg_test]
+//     // fn test_combine_aggregate(){
+//     //     Spi::execute(|client| {
+
+//     //     });
+//     // }
+// }

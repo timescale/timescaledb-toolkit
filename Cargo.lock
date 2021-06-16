@@ -294,8 +294,8 @@ version = "0.1.0"
 dependencies = [
  "approx",
  "serde",
- "time_series",
  "stats_agg",
+ "time_series",
 ]
 
 [[package]]

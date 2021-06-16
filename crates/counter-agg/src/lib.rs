@@ -27,9 +27,9 @@ pub struct CounterSummary {
 }
 
 // Note that this can lose fidelity with the timestamp, but it would only lose it in the microseconds, 
-// this is likely okay in most applications. However, if you need better statsion analysis at the subsecond level, 
-// you can always subtract a common near value from all your times, then add it back in, the statsion analysis will be unchanged.
-// Note that convert the timestamp into seconds rather than microseconds here so that the slope and any other statsion analysis, is done on a per-second basis.
+// this is likely okay in most applications. However, if you need better regression analysis at the subsecond level, 
+// you can always subtract a common near value from all your times, then add it back in, the regression analysis will be unchanged.
+// Note that convert the timestamp into seconds rather than microseconds here so that the slope and any other regression analysis, is done on a per-second basis.
 // For instance, the slope will be the per-second slope, not the per-microsecond slope. The x intercept value will need to be converted back to microseconds so you get a timestamp out.
 fn ts_to_xy(pt: TSPoint) -> XYPair{
     XYPair{
@@ -218,7 +218,7 @@ impl CounterSummary {
         let mut duration_to_start = to_seconds((self.first.ts - self.bounds.unwrap().left.unwrap()) as f64);
         let duration_to_end = to_seconds((self.bounds.unwrap().right.unwrap() - self.last.ts) as f64);
         let sampled_interval = self.time_delta();
-        let avg_duration_between_samples = sampled_interval / (self.stats.n64() - 1.0); // don't have to worry about divide by zero because we know we have at least 2 values from the above.
+        let avg_duration_between_samples = sampled_interval / (self.stats.n - 1) as f64; // don't have to worry about divide by zero because we know we have at least 2 values from the above.
         
         // we don't want to extrapolate to negative counter values, so we calculate the duration to the zero point of the counter (based on what we know here) and set that as duration_to_start if it's smaller than duration_to_start
         if result_val > 0.0 && self.first.val >= 0.0 {

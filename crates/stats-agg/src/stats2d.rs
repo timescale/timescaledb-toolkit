@@ -1,22 +1,12 @@
-//regression is a small statistical regression lib that implements the Youngs-Cramer algorithm and is based on the Postgres implementation
-//here:
-//https://github.com/postgres/postgres/blob/472e518a44eacd9caac7d618f1b6451672ca4481/src/backend/utils/adt/float.c#L3260
-//
-
+// 2D stats are based on the Youngs-Cramer implementation in PG here: 
+// https://github.com/postgres/postgres/blob/472e518a44eacd9caac7d618f1b6451672ca4481/src/backend/utils/adt/float.c#L3260
 use serde::{Deserialize, Serialize};
-#[derive(Debug, PartialEq)]
-pub enum RegressionError {
-    DoubleOverflow,
-}
-#[derive(Debug, PartialEq)]
-pub struct XYPair {
-    pub x: f64,
-    pub y: f64,
-}
-//regression partials
+use crate::{StatsError, XYPair, INV_FLOATING_ERROR_THRESHOLD};
+
+
 #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
 #[repr(C)]
-pub struct RegressionSummary {
+pub struct StatsSummary2D {
     pub n: u64,   // count
     pub sx: f64,  // sum(x)
     pub sxx: f64, // sum((x-sx/n)^2) (sum of squares)
@@ -24,9 +14,11 @@ pub struct RegressionSummary {
     pub syy: f64, // sum((y-sy/n)^2) (sum of squares)
     pub sxy: f64, // sum((x-sx/n)*(y-sy/n)) (sum of products)
 }
-impl RegressionSummary {
+
+
+impl StatsSummary2D {
     pub fn new() -> Self {
-        RegressionSummary {
+        StatsSummary2D {
             n: 0,
             sx: 0.0,
             sxx: 0.0,
@@ -36,13 +28,14 @@ impl RegressionSummary {
         }
     }
 
-    pub fn n64(&self) -> f64 {
+    fn n64(&self) -> f64 {
         self.n as f64
     }
-    /// accumulate an XYPair into a RegressionSummary
+    /// accumulate an XYPair into a StatsSummary2D
     /// ```
-    /// use counter_agg::regression::*;
-    /// let mut p = RegressionSummary::new();
+    /// use stats_agg::*;
+    /// use stats_agg::stats2d::*;
+    /// let mut p = StatsSummary2D::new();
     /// p.accum(XYPair{x:1.0, y:1.0,}).unwrap();
     /// p.accum(XYPair{x:2.0, y:2.0,}).unwrap();
     /// //we can add in infinite values and it will handle it properly.
@@ -50,11 +43,11 @@ impl RegressionSummary {
     /// assert_eq!(p.sum().unwrap().x, f64::INFINITY);
     /// assert!(p.sum_squares().unwrap().x.is_nan()); // this is NaN because it involves multiplication of two infinite values
     ///
-    /// assert_eq!(p.accum(XYPair{y:f64::MAX, x:1.0,}), Err(RegressionError::DoubleOverflow)); // we do error if we actually overflow however
+    /// assert_eq!(p.accum(XYPair{y:f64::MAX, x:1.0,}), Err(StatsError::DoubleOverflow)); // we do error if we actually overflow however
     ///
     ///```
-    pub fn accum(&mut self, p: XYPair) -> Result<(), RegressionError> {
-        let old = RegressionSummary {
+    pub fn accum(&mut self, p: XYPair) -> Result<(), StatsError> {
+        let old = StatsSummary2D {
             n: self.n,
             sx: self.sx,
             sxx: self.sxx,
@@ -74,7 +67,7 @@ impl RegressionSummary {
             self.sxy += tmpx * tmpy * scale;
             if self.has_infinite() {
                 if self.check_overflow(&old, p) {
-                    return Err(RegressionError::DoubleOverflow);
+                    return Err(StatsError::DoubleOverflow);
                 }
                 // sxx, syy, and sxy should be set to NaN if any of their inputs are
                 // infinite, so if they ended up as infinite and there wasn't an overflow,
@@ -111,7 +104,7 @@ impl RegressionSummary {
             || self.syy.is_infinite()
             || self.sxy.is_infinite()
     }
-    fn check_overflow(&self, old: &RegressionSummary, p: XYPair) -> bool {
+    fn check_overflow(&self, old: &StatsSummary2D, p: XYPair) -> bool {
         //Only report overflow if we have finite inputs that lead to infinite results.
         ((self.sx.is_infinite() || self.sxx.is_infinite()) && old.sx.is_finite() && p.x.is_finite())
             || ((self.sy.is_infinite() || self.syy.is_infinite())
@@ -124,47 +117,103 @@ impl RegressionSummary {
                 && p.y.is_finite())
     }
 
-    ///create a RegressionSummary from a vector of XYPairs
+    // inverse transition function (inverse of accum) for windowed aggregates, return None if we want to re-calculate from scratch
+    // we won't modify in place here because of that return bit, it might be that we want to modify accum to also 
+    // copy just for symmetry. 
+    // Assumption: no need for Result/error possibility because we can't overflow, as we are doing an inverse operation of something that already happened, so if it worked forward, it should work in reverse?
+    // We're extending the Youngs Cramer algorithm here with the algebraic transformation to figure out the reverse calculations.
+    // This goes beyond what the PG code does, and is our extension for performance in windowed calculations.
+    
+    // There is a case where the numerical error can get very large that we will try to avoid: if we have an outlier value that is much larger than the surrounding values
+    // we can get something like: v1 + v2 + v3 + ... vn = outlier + v1 + v2 + v3 + ... + vn - outlier when the outlier is removed from the window. This will cause significant error in the 
+    // resulting calculation of v1 + ... + vn, more than we're comfortable with, so we'll return None in that case which will force recalculation from scratch of v1 + ... + vn. 
+
+    // Algebra for removal:
+    // n = n_old + 1 -> n_old = n - 1
+    // Sx = Sx_old + x -> Sx_old = Sx - x
+    // sum((x - Sx/n)^2) = Sxx = Sxx_old + 1/(n * n_old) * (nx - Sx)^2  -> Sxx_old = Sxx - 1/(n * n_old) * (nx - Sx)^2
+    // Sy / Syy analogous
+    // sum((x - Sx/n)(y - Sy/n)) = Sxy = Sxy_old + 1/(n * n_old) * (nx - Sx) * (ny - Sy)  -> Sxy_old = Sxy - 1/(n * n_old) * (nx - Sx) * (ny - Sy)
+    pub fn remove(&self, p: XYPair) -> Option<Self> {
+        // if we are trying to remove a nan/infinite input, it's time to recalculate.
+        if !p.x.is_finite() || !p.y.is_finite(){
+            return None;
+        }
+        // if we are removing a value that is very large compared to the sum of the values that we're removing it from,
+        // we should probably recalculate to avoid accumulating error. We might want a different test for this, if there
+        // is a  way to calculate the error directly, that might be best...
+        if p.x / self.sx > INV_FLOATING_ERROR_THRESHOLD || p.y / self.sy > INV_FLOATING_ERROR_THRESHOLD{
+            return None;
+        }
+        
+        // we can't have an initial value of n = 0 if we're removing something...
+        if self.n <= 0 {
+            panic!(); //perhaps we should do error handling here, but I think this is reasonable as we are assuming that the removal is of an already-added item in the rest of this
+        }
+
+        // if we're removing the last point we should just return a completely empty value to eliminate any errors, it can only be completely empty at that point. 
+        if self.n == 1 {
+            return Some(StatsSummary2D::new());
+        }
+        
+        let mut new = StatsSummary2D {
+            n: self.n - 1,
+            sx: self.sx - p.x,
+            sy: self.sy - p.y,
+            sxx: 0.0, // initialize these for now.
+            syy: 0.0,
+            sxy: 0.0,
+        }; 
+        let tmpx = p.x * self.n64() - self.sx;
+        let tmpy = p.y * self.n64() - self.sy;
+        let scale = 1.0 / (self.n64() * new.n64());
+        new.sxx = self.sxx - tmpx * tmpx * scale;
+        new.syy = self.syy - tmpy * tmpy * scale;
+        new.sxy = self.sxy - tmpx * tmpy * scale;
+        Some(new) 
+    }
+
+    ///create a StatsSummary2D from a vector of XYPairs
     /// ```
-    /// use counter_agg::regression::RegressionSummary;
-    /// use counter_agg::regression::XYPair;
-    /// let mut p = RegressionSummary::new();
+    /// use stats_agg::stats2d::StatsSummary2D;
+    /// use stats_agg::XYPair;
+    /// let mut p = StatsSummary2D::new();
     /// p.accum(XYPair{x:1.0, y:1.0,}).unwrap();
     /// p.accum(XYPair{x:2.0, y:2.0,}).unwrap();
     /// p.accum(XYPair{x:3.0, y:3.0,}).unwrap();
-    /// let q = RegressionSummary::new_from_vec(vec![XYPair{x:1.0, y:1.0,}, XYPair{x:2.0, y:2.0,}, XYPair{x:3.0, y:3.0,}]).unwrap();
+    /// let q = StatsSummary2D::new_from_vec(vec![XYPair{x:1.0, y:1.0,}, XYPair{x:2.0, y:2.0,}, XYPair{x:3.0, y:3.0,}]).unwrap();
     /// assert_eq!(p, q);
     ///```
-    pub fn new_from_vec(v: Vec<XYPair>) -> Result<Self, RegressionError> {
-        let mut r = RegressionSummary::new();
+    pub fn new_from_vec(v: Vec<XYPair>) -> Result<Self, StatsError> {
+        let mut r = StatsSummary2D::new();
         for p in v {
             r.accum(p)?;
         }
         Result::Ok(r)
     }
-    /// combine two RegressionSummarys
+    /// combine two StatsSummary2Ds
     /// ```
-    /// use counter_agg::regression::RegressionSummary;
-    /// use counter_agg::regression::XYPair;
-    /// let p = RegressionSummary::new_from_vec(vec![XYPair{x:1.0, y:1.0,}, XYPair{x:2.0, y:2.0,}, XYPair{x:3.0, y:3.0,}, XYPair{x:4.0, y:4.0,}]).unwrap();
-    /// let q = RegressionSummary::new_from_vec(vec![XYPair{x:1.0, y:1.0,}, XYPair{x:2.0, y:2.0,},]).unwrap();
-    /// let r = RegressionSummary::new_from_vec(vec![XYPair{x:3.0, y:3.0,}, XYPair{x:4.0, y:4.0,},]).unwrap();
+    /// use stats_agg::stats2d::StatsSummary2D;
+    /// use stats_agg::XYPair;
+    /// let p = StatsSummary2D::new_from_vec(vec![XYPair{x:1.0, y:1.0,}, XYPair{x:2.0, y:2.0,}, XYPair{x:3.0, y:3.0,}, XYPair{x:4.0, y:4.0,}]).unwrap();
+    /// let q = StatsSummary2D::new_from_vec(vec![XYPair{x:1.0, y:1.0,}, XYPair{x:2.0, y:2.0,},]).unwrap();
+    /// let r = StatsSummary2D::new_from_vec(vec![XYPair{x:3.0, y:3.0,}, XYPair{x:4.0, y:4.0,},]).unwrap();
     /// let r = r.combine(q).unwrap();
     /// assert_eq!(r, p);
     /// ```
-    // we combine two RegressionSummarys via a generalization of the Youngs-Cramer algorithm, we follow what Postgres does here
+    // we combine two StatsSummary2Ds via a generalization of the Youngs-Cramer algorithm, we follow what Postgres does here
     //      n = n1 + n2
     //      sx = sx1 + sx2
-    //      sxx = sxx1 + sxx2 + n1 * n2 * (sx1/n1 - sx2/n)^2 / n
+    //      sxx = sxx1 + sxx2 + n1 * n2 * (sx1/n1 - sx2/n2)^2 / n
     //      sy / syy analogous
     //      sxy = sxy1 + sxy2 + n1 * n2 * (sx1/n1 - sx2/n2) * (sy1/n1 - sy2/n2) / n
-    pub fn combine(&self, other: RegressionSummary) -> Result<Self, RegressionError> {
+    pub fn combine(&self, other: StatsSummary2D) -> Result<Self, StatsError> {
         // TODO: think about whether we want to just modify &self in place here for perf
         // reasons. This is also a set of weird questions around the Rust compiler, so
         // easier to just add the copy trait here, may need to adjust or may make things
         // harder if we do generics.
         if self.n == 0 && other.n == 0 {
-            return Ok(RegressionSummary::new());
+            return Ok(StatsSummary2D::new());
         } else if self.n == 0 {
             // handle the trivial n = 0 cases here, and don't worry about divide by zero errors later.
             return Ok(other);
@@ -174,7 +223,7 @@ impl RegressionSummary {
         let tmpx = self.sx / self.n64() - other.sx / other.n64();
         let tmpy = self.sy / self.n64() - other.sy / other.n64();
         let n = self.n + other.n;
-        let r = RegressionSummary {
+        let r = StatsSummary2D {
             n: n,
             sx: self.sx + other.sx,
             sxx: self.sxx + other.sxx + self.n64() * other.n64() * tmpx * tmpx / n as f64,
@@ -183,11 +232,50 @@ impl RegressionSummary {
             sxy: self.sxy + other.sxy + self.n64() * other.n64() * tmpx * tmpy / n as f64,
         };
         if r.has_infinite() && !self.has_infinite() && !other.has_infinite() {
-            return Err(RegressionError::DoubleOverflow);
+            return Err(StatsError::DoubleOverflow);
         }
         Ok(r)
     }
-    /// offsets all values accumulated in a RegressionSummary by a given amount in X & Y. This
+    
+    // This is the inverse combine function for use in the window function context when we want to reverse the operation of the normal combine function 
+    // for re-aggregation over a window, this is what will get called in tumbling window averages for instance.
+    // As with any window function, returning None will cause a re-calculation, so we do that in several cases where either we're dealing with infinites or we have some potential problems with outlying sums
+    // so here, self is the previously combined StatsSummary, and we're removing the input and returning the part that would have been there before.
+    pub fn remove_combined(&self, remove: StatsSummary2D) -> Option<Self>{
+        let combined = &self; // just to lessen confusion with naming
+        // handle the trivial n = 0 and equal n cases here, and don't worry about divide by zero errors later.
+        if combined.n == remove.n { 
+            return Some(StatsSummary2D::new());
+        }  else if remove.n == 0 {
+            return Some(*self);
+        } else if combined.n == 0 {
+            // if we've gotten here remove.n != 0, this should never occur, we can't subtract from nothing
+            panic!(); 
+        } else if  combined.n < remove.n {
+            panic!(); //  given that we're always removing things that we've previously added, we shouldn't be able to get a case where we're removing an n that's larger. 
+        }
+        // if the sum we're removing is very large compared to the overall value we need to recalculate, see note on the remove function
+        if remove.sx / combined.sx > INV_FLOATING_ERROR_THRESHOLD || remove.sy / combined.sy > INV_FLOATING_ERROR_THRESHOLD {
+            return None;
+        }
+        let mut part = StatsSummary2D{
+            n: combined.n - remove.n,
+            sx: combined.sx - remove.sx,
+            sy: combined.sy - remove.sy,
+            sxx: 0.0, //just initialize these, for now.
+            syy: 0.0,
+            sxy: 0.0,
+        };
+        let tmpx = part.sx / part.n64() - remove.sx / remove.n64(); //gets squared so order doesn't matter
+        let tmpy = part.sy / part.n64() - remove.sy / remove.n64();
+        part.sxx = combined.sxx - remove.sxx - part.n64() * remove.n64() * tmpx * tmpx / combined.n64(); 
+        part.syy = combined.syy - remove.syy - part.n64() * remove.n64() * tmpy * tmpy / combined.n64();
+        part.sxy = combined.sxy - remove.sxy - part.n64() * remove.n64() * tmpx * tmpy / combined.n64();
+        Some(part)
+    }
+   
+
+    /// offsets all values accumulated in a StatsSummary2D by a given amount in X & Y. This
     /// only works if all values are offset by that amount. This is used for allowing
     /// relative calculations in a local region and then allowing them to be combined with
     /// other regions where all points are offset by the same amount. The main use case
@@ -201,11 +289,11 @@ impl RegressionSummary {
         // Y + C - Sy/N - NC/N 
         // Y + C - Sy/N - C 
         // Y - Sy/N
-    pub fn offset(&mut self, offset: XYPair) -> Result<(), RegressionError> {
+    pub fn offset(&mut self, offset: XYPair) -> Result<(), StatsError> {
         self.sx = self.sx + self.n64() * offset.x;
         self.sy = self.sy + self.n64() * offset.y;
         if self.has_infinite() && offset.x.is_finite() && offset.y.is_finite(){
-            return Err(RegressionError::DoubleOverflow);  
+            return Err(StatsError::DoubleOverflow);  
         }
         Ok(())      
     }
@@ -216,16 +304,16 @@ impl RegressionSummary {
     ///returns the sum of squares of both the independent (x) and dependent (y) variables
     ///as an XYPair, where the sum of squares is defined as: sum(x^2) - sum(x)^2 / n)
     ///```
-    /// use counter_agg::regression::RegressionSummary;
-    /// use counter_agg::regression::XYPair;
-    /// let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
+    /// use stats_agg::stats2d::StatsSummary2D;
+    /// use stats_agg::XYPair;
+    /// let p = StatsSummary2D::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let ssx = (1.0_f64.powi(2) + 2.0_f64.powi(2) + 3.0_f64.powi(2)) - (1.0+2.0+3.0_f64).powi(2)/3.0;
     /// let ssy = (2.0_f64.powi(2) + 4.0_f64.powi(2) + 6.0_f64.powi(2)) - (2.0+4.0+6.0_f64).powi(2)/3.0;
     /// let ssp = p.sum_squares().unwrap();
     /// assert_eq!(ssp.x, ssx);
     /// assert_eq!(ssp.y, ssy);
-    /// //empty RegressionSummarys return None
-    /// assert!(RegressionSummary::new().sum_squares().is_none());
+    /// //empty StatsSummary2Ds return None
+    /// assert!(StatsSummary2D::new().sum_squares().is_none());
     /// ```
     pub fn sum_squares(&self) -> Option<XYPair> {
         if self.n == 0 {
@@ -238,13 +326,13 @@ impl RegressionSummary {
     }
     ///returns the "sum of products" of the dependent * independent variables sum(x * y) - sum(x) * sum(y) / n
     ///```
-    /// use counter_agg::regression::RegressionSummary;
-    /// use counter_agg::regression::XYPair;
-    /// let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
+    /// use stats_agg::stats2d::StatsSummary2D;
+    /// use stats_agg::XYPair;
+    /// let p = StatsSummary2D::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let s = (2.0 * 1.0 + 4.0 * 2.0 + 6.0 * 3.0) - (2.0 + 4.0 + 6.0)*(1.0 + 2.0 + 3.0)/3.0;
     /// assert_eq!(p.sumxy().unwrap(), s);
-    /// //empty RegressionSummarys return None
-    /// assert!(RegressionSummary::new().sumxy().is_none());
+    /// //empty StatsSummary2Ds return None
+    /// assert!(StatsSummary2D::new().sumxy().is_none());
     /// ```
     pub fn sumxy(&self) -> Option<f64> {
         if self.n == 0 {
@@ -254,16 +342,16 @@ impl RegressionSummary {
     }
     ///returns the averages of the x and y variables
     ///```
-    /// use counter_agg::regression::RegressionSummary;
-    /// use counter_agg::regression::XYPair;
-    /// let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
+    /// use stats_agg::stats2d::StatsSummary2D;
+    /// use stats_agg::XYPair;
+    /// let p = StatsSummary2D::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let avgx = (1.0 + 2.0 + 3.0)/3.0;
     /// let avgy = (2.0 + 4.0 + 6.0)/3.0;
     /// let avgp = p.avg().unwrap();
     /// assert_eq!(avgp.x, avgx);
     /// assert_eq!(avgp.y, avgy);
-    /// //empty RegressionSummarys return None
-    /// assert!(RegressionSummary::new().avg().is_none());
+    /// //empty StatsSummary2Ds return None
+    /// assert!(StatsSummary2D::new().avg().is_none());
     /// ```
     pub fn avg(&self) -> Option<XYPair> {
         if self.n == 0 {
@@ -276,30 +364,30 @@ impl RegressionSummary {
     }
     ///returns the count of inputs as an i64
     ///```
-    /// use counter_agg::regression::RegressionSummary;
-    /// use counter_agg::regression::XYPair;
+    /// use stats_agg::stats2d::StatsSummary2D;
+    /// use stats_agg::XYPair;
 
-    /// let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
+    /// let p = StatsSummary2D::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let s = 3;
     /// assert_eq!(p.count(), s);
-    /// //empty RegressionSummarys return 0 count
-    /// assert_eq!(RegressionSummary::new().count(), 0);
+    /// //empty StatsSummary2Ds return 0 count
+    /// assert_eq!(StatsSummary2D::new().count(), 0);
     /// ```
     pub fn count(&self) -> i64 {
         self.n as i64
     }
     ///returns the sums of x and y as an XYPair
     ///```
-    /// use counter_agg::regression::RegressionSummary;
-    /// use counter_agg::regression::XYPair;
-    /// let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
+    /// use stats_agg::stats2d::StatsSummary2D;
+    /// use stats_agg::XYPair;
+    /// let p = StatsSummary2D::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let sumx = (1.0 + 2.0 + 3.0);
     /// let sumy = (2.0 + 4.0 + 6.0);
     /// let sump = p.sum().unwrap();
     /// assert_eq!(sump.x, sumx);
     /// assert_eq!(sump.y, sumy);
-    /// //empty RegressionSummarys return None
-    /// assert!(RegressionSummary::new().sum().is_none());
+    /// //empty StatsSummary2Ds return None
+    /// assert!(StatsSummary2D::new().sum().is_none());
     /// ```
     pub fn sum(&self) -> Option<XYPair> {
         if self.n == 0 {
@@ -310,25 +398,42 @@ impl RegressionSummary {
             y: self.sy,
         })
     }
-    ///returns the population standard deviation of both the independent and dependent variables as an XYPair
-    pub fn stddev_pop(&self) -> Option<XYPair> {
+
+    pub fn var_pop(&self) -> Option<XYPair> {
         if self.n == 0 {
             return None;
         }
         Some(XYPair {
-            x: (self.sxx / self.n64()).sqrt(),
-            y: (self.syy / self.n64()).sqrt(),
+            x: self.sxx / self.n64(),
+            y: self.syy / self.n64(),
+        })
+    }
+
+    pub fn var_samp(&self) -> Option<XYPair> {
+        if self.n <= 1 {
+            return None;
+        }
+        Some(XYPair {
+            x: self.sxx / (self.n64() - 1.0),
+            y: self.syy / (self.n64() - 1.0),
+        })
+    }
+
+    ///returns the population standard deviation of both the independent and dependent variables as an XYPair
+    pub fn stddev_pop(&self) -> Option<XYPair> {
+        let var = self.var_pop()?;
+        Some(XYPair {
+            x: var.x.sqrt(),
+            y: var.y.sqrt(),
         })
     }
 
     ///returns the sample standard deviation of both the independent and dependent variables as an XYPair
     pub fn stddev_samp(&self) -> Option<XYPair> {
-        if self.n <= 1 {
-            return None;
-        }
+        let var = self.var_samp()?;
         Some(XYPair {
-            x: (self.sxx / self.n64() - 1.0).sqrt(),
-            y: (self.syy / self.n64() - 1.0).sqrt(),
+            x: var.x.sqrt(),
+            y: var.y.sqrt(),
         })
     }
 
@@ -337,7 +442,7 @@ impl RegressionSummary {
     /// population covariance and stddev, because we end up with a canceling n or n-1 term. This
     /// also allows us to reduce our calculation to the sumxy / sqrt(sum_squares(x)*sum_squares(y))
     pub fn corr(&self) -> Option<f64> {
-        // empty RegressionSummarys, horizontal or vertical lines should return None
+        // empty StatsSummary2Ds, horizontal or vertical lines should return None
         if self.n == 0 || self.sxx == 0.0 || self.syy == 0.0 {
             return None;
         }
@@ -392,14 +497,14 @@ impl RegressionSummary {
 
     ///returns the sample covariance: (sumxy()/n-1)
     ///```
-    /// use counter_agg::regression::RegressionSummary;
-    /// use counter_agg::regression::XYPair;
-    /// let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
+    /// use stats_agg::stats2d::StatsSummary2D;
+    /// use stats_agg::XYPair;
+    /// let p = StatsSummary2D::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let s = (2.0 * 1.0 + 4.0 * 2.0 + 6.0 * 3.0) - (2.0 + 4.0 + 6.0)*(1.0 + 2.0 + 3.0)/3.0;
     /// let s = s/2.0;
     /// assert_eq!(p.covar_samp().unwrap(), s);
-    /// //empty RegressionSummarys return None
-    /// assert!(RegressionSummary::new().covar_samp().is_none());
+    /// //empty StatsSummary2Ds return None
+    /// assert!(StatsSummary2D::new().covar_samp().is_none());
     /// ```
     pub fn covar_samp(&self) -> Option<f64> {
         if self.n <= 1 {
@@ -410,14 +515,14 @@ impl RegressionSummary {
 
     ///returns the population covariance: (sumxy()/n)
     ///```
-    /// use counter_agg::regression::RegressionSummary;
-    /// use counter_agg::regression::XYPair;
-    /// let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
+    /// use stats_agg::stats2d::StatsSummary2D;
+    /// use stats_agg::XYPair;
+    /// let p = StatsSummary2D::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let s = (2.0 * 1.0 + 4.0 * 2.0 + 6.0 * 3.0) - (2.0 + 4.0 + 6.0)*(1.0 + 2.0 + 3.0)/3.0;
     /// let s = s/3.0;
     /// assert_eq!(p.covar_pop().unwrap(), s);
-    /// //empty RegressionSummarys return None
-    /// assert!(RegressionSummary::new().covar_pop().is_none());
+    /// //empty StatsSummary2Ds return None
+    /// assert!(StatsSummary2D::new().covar_pop().is_none());
     /// ```
     pub fn covar_pop(&self) -> Option<f64> {
         if self.n == 0 {
@@ -427,38 +532,39 @@ impl RegressionSummary {
     }
 }
 
+
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
     fn test_linear(){
-        let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
+        let p = StatsSummary2D::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
         assert_eq!(p.slope().unwrap(), 2.0);
         assert_eq!(p.intercept().unwrap(), 0.0);
         assert_eq!(p.x_intercept().unwrap(), 0.0);
 
-        let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:2.0,}, XYPair{y:4.0, x:3.0,}, XYPair{y:6.0, x:4.0,}]).unwrap();
+        let p = StatsSummary2D::new_from_vec(vec![XYPair{y:2.0, x:2.0,}, XYPair{y:4.0, x:3.0,}, XYPair{y:6.0, x:4.0,}]).unwrap();
         assert_eq!(p.slope().unwrap(), 2.0);
         assert_eq!(p.intercept().unwrap(), -2.0);
         assert_eq!(p.x_intercept().unwrap(), 1.0);
 
         // empty
-        let p = RegressionSummary::new();
+        let p = StatsSummary2D::new();
         assert_eq!(p.slope(), None);
         assert_eq!(p.intercept(), None);
         assert_eq!(p.x_intercept(), None);
         // singleton
-        let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:2.0,}, ]).unwrap();
+        let p = StatsSummary2D::new_from_vec(vec![XYPair{y:2.0, x:2.0,}, ]).unwrap();
         assert_eq!(p.slope(), None);
         assert_eq!(p.intercept(), None);
         assert_eq!(p.x_intercept(), None);
         //vertical
-        let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:2.0,}, XYPair{y:4.0, x:2.0,},]).unwrap();
+        let p = StatsSummary2D::new_from_vec(vec![XYPair{y:2.0, x:2.0,}, XYPair{y:4.0, x:2.0,},]).unwrap();
         assert_eq!(p.slope(), None);
         assert_eq!(p.intercept(), None);
         assert_eq!(p.x_intercept().unwrap(), 2.0);
         //horizontal
-        let p = RegressionSummary::new_from_vec(vec![XYPair{y:2.0, x:2.0,}, XYPair{y:2.0, x:4.0,},]).unwrap();
+        let p = StatsSummary2D::new_from_vec(vec![XYPair{y:2.0, x:2.0,}, XYPair{y:2.0, x:4.0,},]).unwrap();
         assert_eq!(p.slope().unwrap(), 0.0);
         assert_eq!(p.intercept().unwrap(), 2.0);
         assert_eq!(p.x_intercept(), None);

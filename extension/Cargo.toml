@@ -22,6 +22,7 @@ tdigest = {path="../crates/t-digest"}
 hyperloglog = {path="../crates/hyperloglog"}
 uddsketch = {path="../crates/udd-sketch"}
 counter-agg = {path="../crates/counter-agg"}
+stats_agg = {path="../crates/stats-agg"}
 time_weighted_average = {path="../crates/time-weighted-average"}
 time_series = {path="../crates/time-series"}
 asap = {path="../crates/asap"}

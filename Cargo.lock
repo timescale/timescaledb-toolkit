@@ -294,6 +294,7 @@ version = "0.1.0"
 dependencies = [
  "approx",
  "serde",
+ "stats_agg",
  "time_series",
 ]
 
@@ -1657,6 +1658,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "stats_agg"
+version = "0.1.0"
+dependencies = [
+ "approx",
+ "serde",
+]
+
+[[package]]
 name = "stdweb"
 version = "0.4.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1890,6 +1899,7 @@ dependencies = [
  "rand_distr",
  "serde",
  "serde_json",
+ "stats_agg",
  "tdigest",
  "time_series",
  "time_weighted_average",

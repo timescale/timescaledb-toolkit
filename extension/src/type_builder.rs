@@ -108,6 +108,12 @@ macro_rules! pg_type_impl {
                 }
             }
 
+            impl<'input> $name<'input> {
+                pub fn in_current_context(&self) -> $name<'static> {
+                    unsafe { self.0.flatten() }
+                }
+            } 
+
             impl<'input> [<$name Data>]<'input> {
                 pub unsafe fn flatten(&self) -> $name<'static> {
                     let bytes = self.to_pg_bytes();

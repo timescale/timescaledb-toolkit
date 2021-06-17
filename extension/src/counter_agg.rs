@@ -24,9 +24,9 @@ use time_series::{
 
 use counter_agg::{
     CounterSummary as InternalCounterSummary,
-    regression::RegressionSummary,
     range::I64Range,
 };
+use stats_agg::stats2d::StatsSummary2D;
 
 #[allow(non_camel_case_types)]
 type tstzrange = Datum;
@@ -37,7 +37,7 @@ type bytea = pg_sys::Datum;
 pg_type! {
     #[derive(Debug, PartialEq)]
     struct CounterSummary {
-        regress: RegressionSummary,
+        stats: StatsSummary2D,
         first: TSPoint,
         second: TSPoint,
         penultimate:TSPoint,
@@ -69,7 +69,7 @@ impl<'input> CounterSummary<'input> {
             reset_sum: *self.reset_sum,
             num_resets: *self.num_resets,
             num_changes: *self.num_changes,
-            regress: *self.regress,
+            stats: *self.stats,
             bounds: self.bounds.to_i64range(),
         }
     }
@@ -77,7 +77,7 @@ impl<'input> CounterSummary<'input> {
         unsafe{
             flatten!(
             CounterSummary {
-                regress: &st.regress,
+                stats: &st.stats,
                 first: &st.first,
                 second: &st.second,
                 penultimate: &st.penultimate,
@@ -430,7 +430,7 @@ fn counter_agg_num_elements(
     summary: timescale_analytics_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> i64 {
-    summary.to_internal_counter_summary().regress.n as i64
+    summary.to_internal_counter_summary().stats.n as i64
 }
 
 #[pg_extern(name="num_changes", schema = "timescale_analytics_experimental", strict, immutable)]
@@ -454,7 +454,7 @@ fn counter_agg_slope(
     summary: timescale_analytics_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
-    summary.to_internal_counter_summary().regress.slope()
+    summary.to_internal_counter_summary().stats.slope()
 }
 
 #[pg_extern(name="intercept", schema = "timescale_analytics_experimental", strict, immutable)]
@@ -462,7 +462,7 @@ fn counter_agg_intercept(
     summary: timescale_analytics_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
-    summary.to_internal_counter_summary().regress.intercept()
+    summary.to_internal_counter_summary().stats.intercept()
 }
 
 #[pg_extern(name="corr", schema = "timescale_analytics_experimental", strict, immutable)]
@@ -470,7 +470,7 @@ fn counter_agg_corr(
     summary: timescale_analytics_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
-    summary.to_internal_counter_summary().regress.corr()
+    summary.to_internal_counter_summary().stats.corr()
 }
 
 #[pg_extern(name="counter_zero_time", schema = "timescale_analytics_experimental", strict, immutable)]
@@ -478,7 +478,7 @@ fn counter_agg_counter_zero_time(
     summary: timescale_analytics_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<pg_sys::TimestampTz> {
-    Some((summary.to_internal_counter_summary().regress.x_intercept()? * 1_000_000.0) as i64)
+    Some((summary.to_internal_counter_summary().stats.x_intercept()? * 1_000_000.0) as i64)
 }
 
 
@@ -511,12 +511,12 @@ mod tests {
         assert_eq!(p1.last, p2.last, "last");
         assert_eq!(p1.num_changes, p2.num_changes, "num_changes");
         assert_eq!(p1.num_resets, p2.num_resets, "num_resets");
-        assert_eq!(p1.regress.n, p2.regress.n, "n");
-        assert_relative_eq!(p1.regress.sx, p2.regress.sx);
-        assert_relative_eq!(p1.regress.sxx, p2.regress.sxx);
-        assert_relative_eq!(p1.regress.sy, p2.regress.sy);
-        assert_relative_eq!(p1.regress.syy, p2.regress.syy);
-        assert_relative_eq!(p1.regress.sxy, p2.regress.sxy);
+        assert_eq!(p1.stats.n, p2.stats.n, "n");
+        assert_relative_eq!(p1.stats.sx, p2.stats.sx);
+        assert_relative_eq!(p1.stats.sxx, p2.stats.sxx);
+        assert_relative_eq!(p1.stats.sy, p2.stats.sy);
+        assert_relative_eq!(p1.stats.syy, p2.stats.syy);
+        assert_relative_eq!(p1.stats.sxy, p2.stats.sxy);
     }
 
     #[pg_test]
@@ -535,7 +535,7 @@ mod tests {
             let a = select_one!(client,stmt, timescale_analytics_experimental::CounterSummary);
             let stmt = "SELECT counter_agg(ts, val, NULL::tstzrange) FROM test";
             let b = select_one!(client,stmt, timescale_analytics_experimental::CounterSummary);
-            assert_eq!(a, b);
+            assert_close_enough(&a.to_internal_counter_summary(), &b.to_internal_counter_summary());
 
             let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
             assert_relative_eq!(select_one!(client, stmt, f64), 10.0);

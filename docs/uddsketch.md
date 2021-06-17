@@ -6,6 +6,12 @@
 > [Example in a Continuous Aggregates](#uddsketch-cagg-example)<br>
 > [API](#uddsketch-api)
 
+Because we're still in the experimental schema we'll just run this for setup:
+```SQL , non-transactional
+    SET search_path to public,timescale_analytics_experimental;
+    SET timescale_analytics_acknowledge_auto_drop TO 'true';
+```
+
 ## Description <a id="uddsketch-description"></a>
 
 [UddSketch](https://arxiv.org/pdf/2004.08604.pdf) is a specialization of the [DDSketch](https://arxiv.org/pdf/1908.10693.pdf) data structure.  It follows the same approach of breaking the data range into a series of logarithmically sized buckets such that it can guarantee a maximum relative error for any percentile estimate as long as it knows which bucket that percentile falls in.
@@ -468,3 +474,11 @@ SELECT num_vals(
 ```
 
 ---
+
+
+Because we're still in the experimental schema we'll just run this for teardown:
+```SQL , non-transactional, ignore-output
+    RESET search_path;
+    RESET timescale_analytics_acknowledge_auto_drop;
+```
+

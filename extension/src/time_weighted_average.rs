@@ -30,8 +30,11 @@ pg_type! {
 }
 
 json_inout_funcs!(TimeWeightSummary);
+mod timescale_analytics_experimental {
+    pub(crate) use super::*;
 
-varlena_type!(TimeWeightSummary);
+    varlena_type!(TimeWeightSummary);
+}
 
 impl<'input> TimeWeightSummary<'input> {
     #[allow(non_snake_case)]
@@ -88,13 +91,13 @@ impl TimeWeightTransState {
     }
 }
 
-#[pg_extern()]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn time_weight_trans_serialize(mut state: Internal<TimeWeightTransState>) -> bytea {
     state.combine_summaries();
     crate::do_serialize!(state)
 }
 
-#[pg_extern(strict)]
+#[pg_extern(schema = "timescale_analytics_experimental",strict)]
 pub fn time_weight_trans_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
@@ -102,7 +105,7 @@ pub fn time_weight_trans_deserialize(
     crate::do_deserialize!(bytes, TimeWeightTransState)
 }
 
-#[pg_extern()]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn time_weight_trans(
     state: Option<Internal<TimeWeightTransState>>,
     method: String,
@@ -142,10 +145,10 @@ pub fn time_weight_trans(
     }
 }
 
-#[pg_extern()]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn time_weight_summary_trans(
     state: Option<Internal<TimeWeightTransState>>,
-    next: Option<TimeWeightSummary>,
+    next: Option<timescale_analytics_experimental::TimeWeightSummary>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal<TimeWeightTransState>> {
     unsafe {
@@ -173,7 +176,7 @@ pub fn time_weight_summary_trans(
     }
 }
 
-#[pg_extern()]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn time_weight_combine(
     state1: Option<Internal<TimeWeightTransState>>,
     state2: Option<Internal<TimeWeightTransState>>,
@@ -206,11 +209,11 @@ pub fn time_weight_combine(
     }
 }
 
-#[pg_extern()]
+#[pg_extern(schema = "timescale_analytics_experimental")]
 fn time_weight_final(
     state: Option<Internal<TimeWeightTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<TimeWeightSummary<'static>> {
+) -> Option<timescale_analytics_experimental::TimeWeightSummary<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let mut state = match state {
@@ -237,33 +240,33 @@ fn time_weight_final(
 
 extension_sql!(
     r#"
-CREATE AGGREGATE time_weight(method text, ts timestamptz, value DOUBLE PRECISION)
+CREATE AGGREGATE timescale_analytics_experimental.time_weight(method text, ts timestamptz, value DOUBLE PRECISION)
 (
-    sfunc = time_weight_trans,
+    sfunc = timescale_analytics_experimental.time_weight_trans,
     stype = internal,
-    finalfunc = time_weight_final,
-    combinefunc = time_weight_combine,
-    serialfunc = time_weight_trans_serialize,
-    deserialfunc = time_weight_trans_deserialize,
+    finalfunc = timescale_analytics_experimental.time_weight_final,
+    combinefunc = timescale_analytics_experimental.time_weight_combine,
+    serialfunc = timescale_analytics_experimental.time_weight_trans_serialize,
+    deserialfunc = timescale_analytics_experimental.time_weight_trans_deserialize,
     parallel = restricted
 );
 
-CREATE AGGREGATE rollup(tws TimeWeightSummary)
+CREATE AGGREGATE timescale_analytics_experimental.rollup(tws timescale_analytics_experimental.TimeWeightSummary)
 (
-    sfunc = time_weight_summary_trans,
+    sfunc = timescale_analytics_experimental.time_weight_summary_trans,
     stype = internal,
-    finalfunc = time_weight_final,
-    combinefunc = time_weight_combine,
-    serialfunc = time_weight_trans_serialize,
-    deserialfunc = time_weight_trans_deserialize,
+    finalfunc = timescale_analytics_experimental.time_weight_final,
+    combinefunc = timescale_analytics_experimental.time_weight_combine,
+    serialfunc = timescale_analytics_experimental.time_weight_trans_serialize,
+    deserialfunc = timescale_analytics_experimental.time_weight_trans_deserialize,
     parallel = restricted
 );
 "#
 );
 
-#[pg_extern(immutable, parallel_safe, name = "average")]
+#[pg_extern(schema = "timescale_analytics_experimental",immutable, parallel_safe, name = "average")]
 pub fn time_weighted_average_average(
-    tws: Option<TimeWeightSummary>,
+    tws: Option<timescale_analytics_experimental::TimeWeightSummary>,
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<f64> {
     match tws {
@@ -297,6 +300,12 @@ mod tests {
     #[pg_test]
     fn test_time_weight_aggregate() {
         Spi::execute(|client| {
+
+            // adding this for un-stabilization
+            let sp = client.select("SELECT format(' %s, timescale_analytics_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select("SET timescale_analytics_acknowledge_auto_drop TO 'true'", None, None);
+
             let stmt = "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)";
             client.select(stmt, None, None);
 
@@ -341,6 +350,9 @@ mod tests {
             assert_eq!(select_one!(client, stmt, f64), 21.25);
             let stmt = "WITH t AS (SELECT date_trunc('minute', ts), time_weight('LOCF', ts, val) AS tws FROM test GROUP BY 1) SELECT average(rollup(tws)) FROM t";
             assert_eq!(select_one!(client, stmt, f64), 17.75);
+
+            client.select("RESET search_path", None, None);
+            client.select("RESET timescale_analytics_acknowledge_auto_drop ", None, None);
         });
     }
 }

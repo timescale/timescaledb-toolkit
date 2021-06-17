@@ -6,6 +6,11 @@
 > [Notes on Parallelism and Ordering](#time-weight-ordering)<br>
 > [Interpolation Methods Details](#time-weight-methods)<br>
 
+Because we're still in the experimental schema we'll just run this for setup:
+```SQL , non-transactional
+    SET search_path to public,timescale_analytics_experimental;
+    SET timescale_analytics_acknowledge_auto_drop TO 'true';
+```
 
 ## Description <a id="time-weighted-average-description"></a>
 
@@ -384,3 +389,11 @@ The linear interpolation is similar, except here it is more of a sawtooth curve.
 ```
 
 Here this ends up being equal to the rectangle with width equal to the duration between two points and height the midpoint between the two magnitudes. Once we have this weighted sum, we can divide by the total duration to get the time weighted average.
+
+
+Because we're still in the experimental schema we'll just run this for teardown:
+```SQL , non-transactional, ignore-output
+    RESET search_path;
+    RESET timescale_analytics_acknowledge_auto_drop;
+```
+

@@ -5,18 +5,11 @@
 
 ###### A note on terminology: Technically, a percentile divides the group into 100 equally sized (by frequency) buckets, while a quantile would divide the group into an arbitrary number of buckets. We use percentile here with the recognition that while quantile is the technically more "correct" term for an arbitrary precision operation, percentile has become more commonly used to describe this type of function.
 
-Because we're still in the experimental schema we'll just run this for setup:
-```SQL , non-transactional
-    SET search_path to public,timescale_analytics_experimental;
-    SET timescale_analytics_acknowledge_auto_drop TO 'true';
-```
-
 ## Why to Use Approximate Percentiles <a id="why-use"></a>
 
 There are really two things to cover here:  1) [why use percentiles at all](#why-use-percent) and 2) [why use *approximate* percentiles rather than exact percentiles](#why-approximate).
 
 To better understand this, we'll use the common example of a server that's running APIs for a company and tracking the response times for the various APIs it's running. So, for our example, we have a table something like this:
-
 
 ```SQL , non-transactional, ignore-output
 SET SESSION TIME ZONE 'UTC'; -- so we get consistent output
@@ -627,10 +620,3 @@ There are different tradeoffs that each algorithm makes, and different use cases
 4) Trying to calculate percise error bars for TDigest can be difficult, especially when merging multiple subdigests into a larger one (this can come about either through summary aggregation or just parallelization of the normal point aggregate).  If being able to tightly characterize your error is important, UddSketch will likely be the desired algorithm.
 5) That being said, the fact that UddSketch uses exponential bucketing to provide a guaranteed relative error can cause some wildly varying absolute errors if the data set covers a large range.  For instance if the data is evenly distributed over the range [1,100], estimates at the high end of the percentile range would have about 100 times the absolute error of those at the low end of the range.  This gets much more extreme if the data range is [0,100].  If having a stable absolute error is important to your use case, consider TDigest.
 6) While both implementation will likely get smaller and/or faster with future optimizations, in general UddSketch will end up with a smaller memory footprint than TDigest, and a correspondingly smaller disk footprint for any continuous aggregates.  This is one of the main reasons that the default `percentile_agg` uses UddSketch, and is a pretty good reason to prefer that algorithm if your use case doesn't clearly benefit from TDigest.  Regardless of the algorithm, the best way to improve the accuracy of your percentile estimates is to increase the number of buckets, and UddSketch gives you more leeway to do so.
-
-
-Because we're still in the experimental schema we'll just run this for teardown:
-```SQL , non-transactional, ignore-output
-    RESET search_path;
-    RESET timescale_analytics_acknowledge_auto_drop;
-```

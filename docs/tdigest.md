@@ -6,12 +6,6 @@
 > [Continuous Aggregate Example](#tdigest-cagg-example)<br>
 > [API](#tdigest-api)
 
-Because we're still in the experimental schema we'll just run this for setup:
-```SQL , non-transactional
-    SET search_path to public,timescale_analytics_experimental;
-    SET timescale_analytics_acknowledge_auto_drop TO 'true';
-```
-
 ## Description <a id="tdigest-description"></a>
 
 Timescale analytics provides an implementation of the [t-digest data structure](https://github.com/tdunning/t-digest/blob/master/docs/t-digest-paper/histo.pdf) for quantile approximations.  A t-digest is a space efficient aggregation which provides increased resolution at the edges of the distribution.  This allows for more accurate estimates of extreme quantiles than traditional methods.
@@ -480,10 +474,3 @@ FROM generate_series(1, 100) data;
 ```
 
 ---
-
-
-Because we're still in the experimental schema we'll just run this for teardown:
-```SQL , non-transactional, ignore-output
-    RESET search_path;
-    RESET timescale_analytics_acknowledge_auto_drop;
-```

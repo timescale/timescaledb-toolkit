@@ -7,7 +7,7 @@ use crate::{
     aggregate_utils::in_aggregate_context, json_inout_funcs, pg_type, flatten, palloc::Internal,
 };
 
-use time_series::{TSPoint, TimeSeries as InternalTimeSeries, ExplicitTimeSeries, NormalTimeSeries};
+use time_series::{TSPoint, TimeSeries as InternalTimeSeries, ExplicitTimeSeries, NormalTimeSeries, GapfillMethod};
 
 use flat_serialize::*;
 
@@ -220,6 +220,25 @@ pub fn timeseries_trans(
 }
 
 #[pg_extern(schema = "timescale_analytics_experimental")]
+pub fn timeseries_compound_trans(
+    state: Option<Internal<InternalTimeSeries>>,
+    series: Option<crate::time_series::timescale_analytics_experimental::TimeSeries<'static>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal<InternalTimeSeries>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            match (state, series) {
+                (None, None) => None,
+                (None, Some(series)) => Some(series.to_internal_time_series().into()),
+                (Some(state), None) => Some(state.clone().into()),
+                (Some(state), Some(series)) =>
+                    Some(InternalTimeSeries::combine(&state, &series.to_internal_time_series()).into())
+            }
+        })
+    }
+}
+
+#[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn timeseries_combine (
     state1: Option<Internal<InternalTimeSeries>>,
     state2: Option<Internal<InternalTimeSeries>>,
@@ -264,3 +283,121 @@ CREATE AGGREGATE timescale_analytics_experimental.timeseries(ts TIMESTAMPTZ, val
     deserialfunc = timescale_analytics_experimental.timeseries_deserialize
 );
 "#);
+
+extension_sql!(r#"
+CREATE AGGREGATE timescale_analytics_experimental.rollup(
+    timescale_analytics_experimental.timeseries
+) (
+    sfunc = timescale_analytics_experimental.timeseries_compound_trans,
+    stype = internal,
+    finalfunc = timescale_analytics_experimental.timeseries_final,
+    combinefunc = timescale_analytics_experimental.timeseries_combine,
+    serialfunc = timescale_analytics_experimental.timeseries_serialize,
+    deserialfunc = timescale_analytics_experimental.timeseries_deserialize
+);
+"#);
+
+type Interval = pg_sys::Datum;
+
+#[pg_extern(schema = "timescale_analytics_experimental")]
+pub fn normalize (
+    series: crate::time_series::timescale_analytics_experimental::TimeSeries<'static>,
+    interval: Interval,
+    method: String,
+    truncate: Option<bool>,
+    range_start: Option<pg_sys::TimestampTz>,
+    range_end: Option<pg_sys::TimestampTz>,
+    _fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<crate::time_series::timescale_analytics_experimental::TimeSeries<'static>> {
+    unsafe {
+        let interval = interval as *const pg_sys::Interval;
+        if (*interval).day > 0 || (*interval).month > 0 {
+            panic!("Normalization intervals are currently restricted to stable units (hours or smaller)");
+        }
+        let interval = (*interval).time;
+        let method = match method.to_ascii_lowercase().as_str() {
+            "locf" => GapfillMethod::LOCF,
+            "nearest" => GapfillMethod::Nearest,
+            "interpolate" => GapfillMethod::Linear,
+            _ => panic!("Unknown normalization method: {} - valid methods are locf, nearest, or interpolate", method)
+        };
+        let truncate = match truncate {
+            Some(x) => x,
+            None => true,
+        };
+        if series.len() < 2 {
+            panic!("Need at least two points to normalize a timeseries")
+        }
+
+        // TODO: if series is sorted we should be able to do this without a copy
+        let mut series = series.to_internal_time_series();
+        series.sort();
+
+        let align = if truncate {interval} else {1};
+        let start = match range_start {
+            Some(t) => t,
+            None => series.first().unwrap().ts,
+        } / align * align;
+
+        let end = match range_end {
+            Some(t) => t,
+            None => series.last().unwrap().ts,
+        } / align * align;
+
+        let mut iter = series.iter().peekable();
+        let mut first = iter.next().unwrap();
+        let mut second = iter.next().unwrap();
+
+        while first.ts < start && iter.peek().is_some() {
+            first = second;
+            second = iter.next().unwrap();
+        }
+
+
+        // TODO: should be able to create new TimeSeries in place
+        let mut result = 
+            InternalTimeSeries::new_normal_series(
+                if start < first.ts {
+                    method.predict_left(start, first, Some(second))
+                } else if start == first.ts {
+                    first
+                } else if start < second.ts {
+                    method.gapfill(start, first, second)
+                } else {
+                    method.predict_right(start, second, Some(first))
+                }, interval);
+
+        let mut next = start + interval;
+
+        while next < first.ts {
+            result.add_point(method.predict_left(next, first, Some(second)));
+            next += interval;
+        }
+
+        let mut left = first;
+        let mut right = second;
+
+        while next <= end { 
+            if next == left.ts {
+                result.add_point(left);
+                next += interval;
+            }
+            while next < right.ts && next <= end {
+                result.add_point(method.gapfill(next, left, right));
+                next += interval;
+            }
+            if iter.peek().is_some() {
+                left = right;
+                right = iter.next().unwrap();
+            } else {
+                while next <= end {
+                    // This will still behave correctly if next == right.ts
+                    result.add_point(method.predict_right(next, right, Some(left)));
+                    next += interval;
+                }
+            }
+        }
+
+        Some(TimeSeries::from_internal_time_series(&result))
+    }
+}

@@ -54,6 +54,7 @@ pub enum TimeSeriesError {
 pub enum GapfillMethod {
     LOCF,
     Linear,
+    Nearest,  // Defaults to left on tie
 }
 
 impl GapfillMethod {
@@ -64,7 +65,64 @@ impl GapfillMethod {
         for i in 1..=points {
             match self {
                 GapfillMethod::LOCF => series.values.push(last_val),
-                GapfillMethod::Linear => series.values.push(last_val + (post_gap_val - last_val) * i as f64 / (points + 1) as f64)
+                GapfillMethod::Linear => series.values.push(last_val + (post_gap_val - last_val) * i as f64 / (points + 1) as f64),
+                GapfillMethod::Nearest => series.values.push(if i <= (points + 1) / 2 {last_val} else {post_gap_val}),
+            }
+        }
+    }
+}
+
+impl GapfillMethod {
+    // Determine a value to the left of a given point or two (for linear) using the given gapfill method
+    // TODO: this returns the first value for LOCF, which probabaly isn't correct, technically this function shouldn't be valid for LOCF,
+    pub fn predict_left(&self, target_time: i64, first: TSPoint, second: Option<TSPoint>) -> TSPoint {
+        TSPoint {
+            ts: target_time,
+            val: match self {
+                GapfillMethod::LOCF => first.val,
+                GapfillMethod::Nearest => first.val,
+                GapfillMethod::Linear => {
+                    let second = match second {
+                        Some(v) => v,
+                        None => panic!{"Unable to predict left point without two values to interpolate from"},
+                    };
+                    let slope = (first.val - second.val) / (first.ts - second.ts) as f64;
+                    first.val - slope * (first.ts - target_time) as f64
+                },
+            }
+        }
+    }
+
+    // Determine a value to the right of a given point or two (for linear) using the given gapfill method
+    pub fn predict_right(&self, target_time: i64, last: TSPoint, penultimate: Option<TSPoint>) -> TSPoint {
+        TSPoint {
+            ts: target_time,
+            val: match self {
+                GapfillMethod::LOCF => last.val,
+                GapfillMethod::Nearest => last.val,
+                GapfillMethod::Linear => {
+                    let penultimate = match penultimate {
+                        Some(v) => v,
+                        None => panic!{"Unable to predict right point without two values to interpolate from"},
+                    };
+                    let slope = (last.val - penultimate.val) / (last.ts - penultimate.ts) as f64;
+                    last.val + slope * (target_time - last.ts) as f64
+                },
+            }
+        }
+    }
+
+    // Given a target time and the immediate points to either side, provide the missing point
+    pub fn gapfill(&self, target_time: i64, left: TSPoint, right: TSPoint) -> TSPoint {
+        TSPoint {
+            ts: target_time,
+            val: match self {
+                GapfillMethod::LOCF => left.val,
+                GapfillMethod::Nearest => if target_time - left.ts <= right.ts - target_time {left.val} else {right.val},
+                GapfillMethod::Linear => {
+                    let slope = (right.val - left.val) / (right.ts - left.ts) as f64;
+                    left.val + slope * (target_time - left.ts) as f64
+                },
             }
         }
     }
@@ -142,6 +200,16 @@ impl TimeSeries {
             ExplicitTimeSeries {
                 ordered: true,
                 points: vec![],
+            }
+        )
+    }
+
+    pub fn new_normal_series(start: TSPoint, interval: i64) -> TimeSeries {
+        TimeSeries::Normal(
+            NormalTimeSeries {
+                start_ts: start.ts,
+                step_interval: interval,
+                values: vec![start.val]
             }
         )
     }
@@ -242,6 +310,28 @@ impl TimeSeries {
         new.points.extend(first.iter());
         new.points.extend(second.iter());
         TimeSeries::Explicit(new)
+    }
+
+    pub fn first(&self) -> Option<TSPoint> {
+        if self.num_vals() == 0 {
+            None
+        } else {
+            match self {
+                TimeSeries::Explicit(series) => Some(series.points[0]),
+                TimeSeries::Normal(NormalTimeSeries { start_ts, values, ..}) => Some(TSPoint{ts: *start_ts, val: values[0]}),
+            }
+        }
+    }
+
+    pub fn last(&self) -> Option<TSPoint> {
+        if self.num_vals() == 0 {
+            None
+        } else {
+            match self {
+                TimeSeries::Explicit(series) => Some(*series.points.last().unwrap()),
+                TimeSeries::Normal(NormalTimeSeries { start_ts, step_interval, values }) => Some(TSPoint{ts: *start_ts + step_interval * (values.len() as i64 - 1), val: *values.last().unwrap()}),
+            }
+        }
     }
 }
 

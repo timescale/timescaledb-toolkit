@@ -23,7 +23,7 @@ type int = u32;
 
 // PG function for adding values to a sketch.
 // Null values are ignored.
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern()]
 pub fn uddsketch_trans(
     state: Option<Internal<UddSketchInternal>>,
     size: int,
@@ -49,7 +49,7 @@ pub fn uddsketch_trans(
 
 // transition function for the simpler percentile_agg aggregate, which doesn't
 // take parameters for the size and error, but uses a default
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern()]
 pub fn percentile_agg_trans(
     state: Option<Internal<UddSketchInternal>>,
     value: Option<f64>,
@@ -61,7 +61,7 @@ pub fn percentile_agg_trans(
 }
 
 // PG function for merging sketches.
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern()]
 pub fn uddsketch_combine(
     state1: Option<Internal<UddSketchInternal>>,
     state2: Option<Internal<UddSketchInternal>>,
@@ -86,7 +86,7 @@ pub fn uddsketch_combine(
 #[allow(non_camel_case_types)]
 type bytea = pg_sys::Datum;
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern()]
 pub fn uddsketch_serialize(
     state: Internal<UddSketchInternal>,
 ) -> bytea {
@@ -94,7 +94,7 @@ pub fn uddsketch_serialize(
     crate::do_serialize!(serializable)
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental", strict)]
+#[pg_extern(strict)]
 pub fn uddsketch_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
@@ -167,13 +167,8 @@ pg_type! {
     }
 }
 
+varlena_type!(UddSketch);
 json_inout_funcs!(UddSketch);
-mod timescale_analytics_experimental {
-    pub(crate) use super::*;
-
-    varlena_type!(UddSketch);
-}
-
 
 impl<'input> UddSketch<'input> {
     fn keys(&self) -> impl Iterator<Item=SketchHashKey> + '_ {
@@ -190,11 +185,11 @@ impl<'input> UddSketch<'input> {
 }
 
 // PG function to generate a user-facing UddSketch object from a UddSketchInternal.
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern()]
 fn uddsketch_final(
     state: Option<Internal<UddSketchInternal>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<timescale_analytics_experimental::UddSketch<'static>> {
+) -> Option<UddSketch<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let state = match state {
@@ -313,36 +308,36 @@ fn decompress_counts<'b>(
 }
 
 extension_sql!(r#"
-CREATE AGGREGATE timescale_analytics_experimental.uddsketch(
+CREATE AGGREGATE uddsketch(
     size int, max_error DOUBLE PRECISION, value DOUBLE PRECISION
 ) (
-    sfunc = timescale_analytics_experimental.uddsketch_trans,
+    sfunc = uddsketch_trans,
     stype = internal,
-    finalfunc = timescale_analytics_experimental.uddsketch_final,
-    combinefunc = timescale_analytics_experimental.uddsketch_combine,
-    serialfunc = timescale_analytics_experimental.uddsketch_serialize,
-    deserialfunc = timescale_analytics_experimental.uddsketch_deserialize,
+    finalfunc = uddsketch_final,
+    combinefunc = uddsketch_combine,
+    serialfunc = uddsketch_serialize,
+    deserialfunc = uddsketch_deserialize,
     parallel = safe
 );
 "#);
 
 extension_sql!(r#"
-CREATE AGGREGATE timescale_analytics_experimental.percentile_agg(value DOUBLE PRECISION)
+CREATE AGGREGATE percentile_agg(value DOUBLE PRECISION)
 (
-    sfunc = timescale_analytics_experimental.percentile_agg_trans,
+    sfunc = percentile_agg_trans,
     stype = internal,
-    finalfunc = timescale_analytics_experimental.uddsketch_final,
-    combinefunc = timescale_analytics_experimental.uddsketch_combine,
-    serialfunc = timescale_analytics_experimental.uddsketch_serialize,
-    deserialfunc = timescale_analytics_experimental.uddsketch_deserialize,
+    finalfunc = uddsketch_final,
+    combinefunc = uddsketch_combine,
+    serialfunc = uddsketch_serialize,
+    deserialfunc = uddsketch_deserialize,
     parallel = safe
 );
 "#);
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern()]
 pub fn uddsketch_compound_trans(
     state: Option<Internal<UddSketchInternal>>,
-    value: Option<timescale_analytics_experimental::UddSketch>,
+    value: Option<UddSketch>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal<UddSketchInternal>> {
     unsafe {
@@ -362,15 +357,15 @@ pub fn uddsketch_compound_trans(
 }
 
 extension_sql!(r#"
-CREATE AGGREGATE timescale_analytics_experimental.rollup(
-    sketch timescale_analytics_experimental.uddsketch
+CREATE AGGREGATE rollup(
+    sketch uddsketch
 ) (
-    sfunc = timescale_analytics_experimental.uddsketch_compound_trans,
+    sfunc = uddsketch_compound_trans,
     stype = internal,
-    finalfunc = timescale_analytics_experimental.uddsketch_final,
-    combinefunc = timescale_analytics_experimental.uddsketch_combine,
-    serialfunc = timescale_analytics_experimental.uddsketch_serialize,
-    deserialfunc = timescale_analytics_experimental.uddsketch_deserialize,
+    finalfunc = uddsketch_final,
+    combinefunc = uddsketch_combine,
+    serialfunc = uddsketch_serialize,
+    deserialfunc = uddsketch_deserialize,
     parallel = safe
 );
 "#);
@@ -378,10 +373,10 @@ CREATE AGGREGATE timescale_analytics_experimental.rollup(
 //---- Available PG operations on the sketch
 
 // Approximate the value at the given approx_percentile (0.0-1.0)
-#[pg_extern(schema = "timescale_analytics_experimental", immutable, parallel_safe, name="approx_percentile")]
+#[pg_extern(immutable, parallel_safe, name="approx_percentile")]
 pub fn uddsketch_approx_percentile(
     percentile: f64,
-    sketch: timescale_analytics_experimental::UddSketch,
+    sketch: UddSketch,
 ) -> f64 {
     uddsketch::estimate_quantile(
         percentile,
@@ -393,10 +388,10 @@ pub fn uddsketch_approx_percentile(
 }
 
 // Approximate the approx_percentile at the given value
-#[pg_extern(schema = "timescale_analytics_experimental", immutable, parallel_safe, name="approx_percentile_rank")]
+#[pg_extern(immutable, parallel_safe, name="approx_percentile_rank")]
 pub fn uddsketch_approx_percentile_rank(
     value: f64,
-    sketch: timescale_analytics_experimental::UddSketch,
+    sketch: UddSketch,
 ) -> f64 {
     uddsketch::estimate_quantile_at_value(
         value,
@@ -407,18 +402,18 @@ pub fn uddsketch_approx_percentile_rank(
 }
 
 // Number of elements from which the sketch was built.
-#[pg_extern(schema = "timescale_analytics_experimental", immutable, parallel_safe, name="num_vals")]
+#[pg_extern(immutable, parallel_safe, name="num_vals")]
 pub fn uddsketch_num_vals(
-    sketch: timescale_analytics_experimental::UddSketch,
+    sketch: UddSketch,
 ) -> f64 {
     *sketch.count as f64
 }
 
 // Average of all the values entered in the sketch.
 // Note that this is not an approximation, though there may be loss of precision.
-#[pg_extern(schema = "timescale_analytics_experimental", immutable, parallel_safe, name="mean")]
+#[pg_extern(immutable, parallel_safe, name="mean")]
 pub fn uddsketch_mean(
-    sketch: timescale_analytics_experimental::UddSketch,
+    sketch: UddSketch,
 ) -> f64 {
     if *sketch.count > 0 {
         *sketch.sum / *sketch.count as f64
@@ -428,9 +423,9 @@ pub fn uddsketch_mean(
 }
 
 // The maximum error (relative to the true value) for any approx_percentile estimate.
-#[pg_extern(schema = "timescale_analytics_experimental", immutable, parallel_safe, name="error")]
+#[pg_extern(immutable, parallel_safe, name="error")]
 pub fn uddsketch_error(
-    sketch: timescale_analytics_experimental::UddSketch
+    sketch: UddSketch
 ) -> f64 {
     *sketch.alpha
 }
@@ -452,11 +447,6 @@ mod tests {
     #[pg_test]
     fn test_aggregate() {
         Spi::execute(|client| {
-            // adding this for un-stabilization
-            let sp = client.select("SELECT format(' %s, timescale_analytics_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select("SET timescale_analytics_acknowledge_auto_drop TO 'true'", None, None);
-
             client.select("CREATE TABLE test (data DOUBLE PRECISION)", None, None);
             client.select("INSERT INTO test SELECT generate_series(0.01, 100, 0.01)", None, None);
 
@@ -517,20 +507,12 @@ mod tests {
                     pct_eql(est_quant.unwrap(), approx_percentile, 1.0);
                 }
             }
-
-            client.select("RESET search_path", None, None);
-            client.select("RESET timescale_analytics_acknowledge_auto_drop ", None, None);
         });
     }
-    
+
     #[pg_test]
     fn test_compound_agg() {
         Spi::execute(|client| {
-            // adding this for un-stabilization
-            let sp = client.select("SELECT format(' %s, timescale_analytics_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select("SET timescale_analytics_acknowledge_auto_drop TO 'true'", None, None);
-
             client.select("CREATE TABLE new_test (device INTEGER, value DOUBLE PRECISION)", None, None);
             client.select("INSERT INTO new_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
 
@@ -573,20 +555,12 @@ mod tests {
             apx_eql(test_value.unwrap(), value.unwrap(), 0.0001);
             apx_eql(test_error.unwrap(), error.unwrap(), 0.000001);
             pct_eql(test_value.unwrap(), 9.0, test_error.unwrap());
-
-            client.select("RESET search_path", None, None);
-            client.select("RESET timescale_analytics_acknowledge_auto_drop ", None, None);
         });
     }
 
     #[pg_test]
     fn test_percentile_agg() {
         Spi::execute(|client| {
-            // adding this for un-stabilization
-            let sp = client.select("SELECT format(' %s, timescale_analytics_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select("SET timescale_analytics_acknowledge_auto_drop TO 'true'", None, None);
-
             client.select("CREATE TABLE pa_test (device INTEGER, value DOUBLE PRECISION)", None, None);
             client.select("INSERT INTO pa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
 
@@ -625,9 +599,6 @@ mod tests {
             apx_eql(test_value.unwrap(), value.unwrap(), 0.0001);
             apx_eql(test_error.unwrap(), error.unwrap(), 0.000001);
             pct_eql(test_value.unwrap(), 9.0, test_error.unwrap());
-
-            client.select("RESET search_path", None, None);
-            client.select("RESET timescale_analytics_acknowledge_auto_drop ", None, None);
         });
     }
 }

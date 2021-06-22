@@ -9,7 +9,7 @@ use postgres::{Client, NoTls, SimpleQueryMessage::Row};
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 fn main() {
-    let matches = clap_app!(("sql-doctester") =>
+    let matches = clap_app!(("testrunner") =>
         (@arg HOST: -h --host [hostname] conflicts_with[URL] "postgres host")
         (@arg PORT: -p --port [portnumber] conflicts_with[URL] "postgres port")
         (@arg USER: -u --user [username] conflicts_with[URL] "postgres user")

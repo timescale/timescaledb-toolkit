@@ -1,6 +1,4 @@
 
-pub mod triggers;
-
 pub mod tdigest;
 pub mod hyperloglog;
 pub mod uddsketch;
@@ -18,6 +16,10 @@ mod aggregate_utils;
 mod type_builder;
 mod serialization;
 mod schema_test;
+
+// This should be last so we don't run our warning trigger on when
+// installing this extension
+pub mod triggers;
 
 use pgx::*;
 

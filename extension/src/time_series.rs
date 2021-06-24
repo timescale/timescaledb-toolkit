@@ -299,6 +299,17 @@ CREATE AGGREGATE timescale_analytics_experimental.rollup(
 
 type Interval = pg_sys::Datum;
 
+#[pg_extern(schema = "timescale_analytics_experimental", name="normalize")]
+pub fn normalize_default_range (
+    series: crate::time_series::timescale_analytics_experimental::TimeSeries<'static>,
+    interval: Interval,
+    method: String,
+    truncate: Option<bool>,
+    _fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<crate::time_series::timescale_analytics_experimental::TimeSeries<'static>> {
+    normalize(series, interval, method, truncate, None, None, _fcinfo)
+}
+
 #[pg_extern(schema = "timescale_analytics_experimental")]
 pub fn normalize (
     series: crate::time_series::timescale_analytics_experimental::TimeSeries<'static>,
@@ -348,7 +359,7 @@ pub fn normalize (
         let mut first = iter.next().unwrap();
         let mut second = iter.next().unwrap();
 
-        while first.ts < start && iter.peek().is_some() {
+        while second.ts < start && iter.peek().is_some() {
             first = second;
             second = iter.next().unwrap();
         }
@@ -399,5 +410,74 @@ pub fn normalize (
         }
 
         Some(TimeSeries::from_internal_time_series(&result))
+    }
+}
+
+
+#[cfg(any(test, feature = "pg_test"))]
+mod tests {
+    use pgx::*;
+    
+    #[pg_test]
+    fn test_normalization_gapfill() {
+        Spi::execute(|client| {
+            client.select("CREATE TABLE test(time TIMESTAMPTZ, value DOUBLE PRECISION);", None, None);
+            client.select(
+                "INSERT INTO test
+                SELECT '2020-01-01 0:02 UTC'::timestamptz + '10 minutes'::interval * i, 10.0 * i
+                FROM generate_series(0,6) as i", None, None);
+
+            client.select("set timescale_analytics_acknowledge_auto_drop to 'true'", None, None);
+            client.select("CREATE VIEW series AS SELECT timescale_analytics_experimental.timeseries(time, value) FROM test;", None, None);
+
+            // LOCF
+            let results = client.select(
+                "SELECT value 
+                FROM timescale_analytics_experimental.unnest_series(
+                    (SELECT timescale_analytics_experimental.normalize(timeseries, '10 min', 'locf', true)
+                     FROM series)
+                );", None, None);
+
+            let expected = vec![0.0, 0.0, 10.0, 20.0, 30.0, 40.0, 50.0];
+
+            assert_eq!(results.len(), expected.len());
+
+            for (e, r) in expected.iter().zip(results) {
+                assert_eq!(r.by_ordinal(1).unwrap().value::<f64>().unwrap(), *e);
+            }
+
+            // Interpolate
+            let results = client.select(
+                "SELECT value 
+                FROM timescale_analytics_experimental.unnest_series(
+                    (SELECT timescale_analytics_experimental.normalize(timeseries, '10 min', 'interpolate', true)
+                     FROM series)
+                );", None, None);
+
+            let expected = vec![-2.0, 8.0, 18.0, 28.0, 38.0, 48.0, 58.0];
+
+            assert_eq!(results.len(), expected.len());
+
+            for (e, r) in expected.iter().zip(results) {
+                assert_eq!(r.by_ordinal(1).unwrap().value::<f64>().unwrap(), *e);
+            }
+
+            // Nearest
+            let results = client.select(
+                "SELECT value 
+                FROM timescale_analytics_experimental.unnest_series(
+                    (SELECT timescale_analytics_experimental.normalize(timeseries, '10 min', 'nearest', true)
+                     FROM series)
+                );", None, None);
+
+            let expected = vec![0.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0];
+
+            assert_eq!(results.len(), expected.len());
+
+            for (e, r) in expected.iter().zip(results) {
+                assert_eq!(r.by_ordinal(1).unwrap().value::<f64>().unwrap(), *e);
+            }
+    
+        })
     }
 }

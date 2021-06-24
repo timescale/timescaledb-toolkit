@@ -24,7 +24,7 @@ pg_type! {
     struct TimeWeightSummary {
         first: TSPoint,
         last: TSPoint,
-        w_sum: f64,
+        weighted_sum: f64,
         method: TimeWeightMethod,
     }
 }
@@ -40,7 +40,7 @@ impl<'input> TimeWeightSummary<'input> {
             method: *self.method,
             first: *self.first,
             last: *self.last,
-            w_sum: *self.w_sum,
+            w_sum: *self.weighted_sum,
         }
     }
 }
@@ -226,7 +226,7 @@ fn time_weight_final(
                         method: &st.method,
                         first: &st.first,
                         last: &st.last,
-                        w_sum: &st.w_sum,
+                        weighted_sum: &st.w_sum,
                     })
                     .into(),
                 ),
@@ -341,6 +341,87 @@ mod tests {
             assert_eq!(select_one!(client, stmt, f64), 21.25);
             let stmt = "WITH t AS (SELECT date_trunc('minute', ts), time_weight('LOCF', ts, val) AS tws FROM test GROUP BY 1) SELECT average(rollup(tws)) FROM t";
             assert_eq!(select_one!(client, stmt, f64), 17.75);
+        });
+    }
+
+    #[pg_test]
+    fn test_time_weight_aggregate_io() {
+        Spi::execute(|client| {
+            let stmt = "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)";
+            client.select(stmt, None, None);
+
+            let linear_time_weight = "SELECT time_weight('Linear', ts, val)::TEXT FROM test";
+            let locf_time_weight =  "SELECT time_weight('LOCF', ts, val)::TEXT FROM test";
+            let avg = |text: &str| format!("SELECT average('{}'::TimeWeightSummary)", text);
+
+            // add a couple points
+            let stmt = "INSERT INTO test VALUES('2020-01-01 00:00:00+00', 10.0), ('2020-01-01 00:01:00+00', 20.0)";
+            client.select(stmt, None, None);
+
+            // test basic with 2 points
+            let expected = "{\
+                \"version\":1,\
+                \"first\":{\"ts\":631152000000000,\"val\":10.0},\
+                \"last\":{\"ts\":631152060000000,\"val\":20.0},\
+                \"weighted_sum\":900000000.0,\
+                \"method\":\"Linear\"\
+            }";
+            assert_eq!(select_one!(client, linear_time_weight, String), expected);
+            assert_eq!(select_one!(client, &*avg(expected), f64), 15.0);
+
+            let expected = "{\
+                \"version\":1,\
+                \"first\":{\"ts\":631152000000000,\"val\":10.0},\
+                \"last\":{\"ts\":631152060000000,\"val\":20.0},\
+                \"weighted_sum\":600000000.0,\
+                \"method\":\"LOCF\"\
+            }";
+            assert_eq!(select_one!(client, locf_time_weight, String), expected);
+            assert_eq!(select_one!(client, &*avg(expected), f64), 10.0);
+
+            // more values evenly spaced
+            let stmt = "INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)";
+            client.select(stmt, None, None);
+
+            let expected = "{\
+                \"version\":1,\
+                \"first\":{\"ts\":631152000000000,\"val\":10.0},\
+                \"last\":{\"ts\":631152240000000,\"val\":10.0},\
+                \"weighted_sum\":3600000000.0,\
+                \"method\":\"Linear\"\
+            }";
+            assert_eq!(select_one!(client, linear_time_weight, String), expected);
+            assert_eq!(select_one!(client, &*avg(expected), f64), 15.0);
+            let expected = "{\
+                \"version\":1,\
+                \"first\":{\"ts\":631152000000000,\"val\":10.0},\
+                \"last\":{\"ts\":631152240000000,\"val\":10.0},\
+                \"weighted_sum\":3600000000.0,\
+                \"method\":\"LOCF\"\
+            }";
+            assert_eq!(select_one!(client, locf_time_weight, String), expected);
+            assert_eq!(select_one!(client, &*avg(expected), f64), 15.0);
+
+            //non-evenly spaced values
+            let stmt = "INSERT INTO test VALUES('2020-01-01 00:08:00+00', 30.0), ('2020-01-01 00:10:00+00', 10.0), ('2020-01-01 00:10:30+00', 20.0), ('2020-01-01 00:20:00+00', 30.0)";
+            client.select(stmt, None, None);
+
+            let expected = "{\
+                \"version\":1,\
+                \"first\":{\"ts\":631152000000000,\"val\":10.0},\
+                \"last\":{\"ts\":631153200000000,\"val\":30.0},\
+                \"weighted_sum\":25500000000.0,\"method\":\"Linear\"\
+            }";
+            assert_eq!(select_one!(client, linear_time_weight, String), expected);
+            assert_eq!(select_one!(client, &*avg(expected), f64), 21.25);
+            let expected = "{\
+                \"version\":1,\
+                \"first\":{\"ts\":631152000000000,\"val\":10.0},\
+                \"last\":{\"ts\":631153200000000,\"val\":30.0},\
+                \"weighted_sum\":21300000000.0,\"method\":\"LOCF\"\
+            }";
+            assert_eq!(select_one!(client, locf_time_weight, String), expected);
+            assert_eq!(select_one!(client, &*avg(expected), f64), 17.75);
         });
     }
 }

@@ -1,5 +1,6 @@
 
 pub mod delta {
+    use crate::zigzag;
 
     pub fn i64_decoder() -> impl FnMut(i64) -> i64{
         let mut prev = 0i64;
@@ -13,6 +14,7 @@ pub mod delta {
     pub fn u64_decoder() -> impl FnMut(u64) -> u64 {
         let mut prev = 0u64;
         move |delta| {
+            let delta = zigzag::decode(delta) as u64;
             let value = prev.wrapping_add(delta);
             prev = value;
             value
@@ -33,7 +35,7 @@ pub mod delta {
         move |value: u64| {
             let delta = value.wrapping_sub(prev);
             prev = value;
-            delta
+            zigzag::encode(delta as i64)
         }
     }
 

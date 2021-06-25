@@ -144,6 +144,13 @@ INSERT INTO test
 INSERT 0 4032
 ```
 
+<div hidden>
+Refresh to make sure we're exercising our serialization path.
+```SQL ,non-tranactional,ignore-output
+CALL refresh_continuous_aggregate('weekly_sketch', NULL, NULL);
+```
+</div>
+
 Finally, we can query the aggregate to see various approximate percentiles from different weeks.
 ```SQL
 SELECT

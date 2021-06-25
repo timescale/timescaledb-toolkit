@@ -67,11 +67,9 @@ pub fn run_tests<OnErr: FnMut(Test, TestError)>(
         let drop_name = db_name.to_string();
         let deferred = Deferred(move || {
             eprintln!("{} {}", "Finished".bold().green(), finish_name);
-            let mut dropper = Client::connect(root_connection_config, NoTls)
-                .expect("cannot connect to drop test DBs");
-            dropper
-                .simple_query(&format!(r#"DROP DATABASE IF EXISTS "{}""#, drop_name))
-                .expect("could not drop test DB");
+            Client::connect(root_connection_config, NoTls).and_then(|mut client| {
+                client.simple_query(&format!(r#"DROP DATABASE IF EXISTS "{}""#, drop_name))
+            }).map_err(|e| eprintln!("error dropping DB {}", e));
         });
         {
             eprintln!("{} {}", "Starting".bold().green(), tests_name);

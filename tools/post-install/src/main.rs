@@ -32,16 +32,16 @@ fn try_main() -> xshell::Result<()> {
 
     let extension_info = get_extension_info(&pg_config)?;
 
-    // remove `module_path = '$libdir/timescale_analytics'`
-    // from timescale_analytics.control.
+    // remove `module_path = '$libdir/timescaledb_toolkit'`
+    // from timescaledb_toolkit.control.
     // Not needed for correctness purposes, but it ensures that if `MODULE_PATH`
     // is left anywhere in the install script, it will fail to install.
     remove_module_path_from_control_file(&extension_info);
 
-    // rename timescale_analytics.so to timescale_analytics-<current version>.so
+    // rename timescaledb_toolkit.so to timescaledb_toolkit-<current version>.so
     add_version_to_binary(&extension_info);
 
-    // replace `MODULE_PATH` with `$libdir/timescale_analytics-<current version>`
+    // replace `MODULE_PATH` with `$libdir/timescaledb_toolkit-<current version>`
     add_version_to_install_script(&extension_info);
 
     generate_update_scripts(&extension_info);
@@ -63,7 +63,7 @@ fn get_extension_info(pg_config: &str) -> xshell::Result<ExtensionInfo> {
     let share_dir = cmd!("{pg_config} --sharedir").read()?;
     let extension_dir = path!(share_dir/"extension");
 
-    let control_file = path!(extension_dir/"timescale_analytics.control");
+    let control_file = path!(extension_dir/"timescaledb_toolkit.control");
 
     let control_contents = fs::read_to_string(&control_file).unwrap_or_else(|e| panic!(
         "cannot read control file {} due to {}",
@@ -119,8 +119,8 @@ fn remove_module_path_from_control_file(
 fn add_version_to_binary(
     ExtensionInfo { current_version, bin_dir, .. } : &ExtensionInfo
 ) {
-    let bin_file = path!(bin_dir/"timescale_analytics.so");
-    let versioned_file = path!(bin_dir/format!("timescale_analytics-{}.so", current_version));
+    let bin_file = path!(bin_dir/"timescaledb_toolkit.so");
+    let versioned_file = path!(bin_dir/format!("timescaledb_toolkit-{}.so", current_version));
     rename_file(bin_file, versioned_file);
 }
 
@@ -128,11 +128,11 @@ fn add_version_to_binary(
 fn add_version_to_install_script(
     ExtensionInfo { current_version, extension_dir, .. } : &ExtensionInfo
 ) {
-    let install_script = path!(extension_dir/format!("timescale_analytics--{}.sql", current_version));
+    let install_script = path!(extension_dir/format!("timescaledb_toolkit--{}.sql", current_version));
 
     let versioned_script = install_script.with_extension("sql.tmp");
 
-    let module_path = format!("$libdir/timescale_analytics-{}", current_version);
+    let module_path = format!("$libdir/timescaledb_toolkit-{}", current_version);
 
     transform_file_to(&install_script, &versioned_script, |line| {
         if line.contains("MODULE_PATHNAME") {
@@ -151,13 +151,13 @@ fn add_version_to_install_script(
 fn generate_update_scripts(
     ExtensionInfo { current_version, upgradeable_from, extension_dir, .. }: &ExtensionInfo
 ) {
-    let extension_path = path!(extension_dir/format!("timescale_analytics--{}.sql", current_version));
+    let extension_path = path!(extension_dir/format!("timescaledb_toolkit--{}.sql", current_version));
 
     for from_version in upgradeable_from {
         let mut extension_file = open_file(&extension_path);
 
         let upgrade_path = path!(extension_dir/format!(
-            "timescale_analytics--{from}--{to}.sql", from=from_version, to=current_version
+            "timescaledb_toolkit--{from}--{to}.sql", from=from_version, to=current_version
         ));
         let mut upgrade_file = create_file(&upgrade_path);
 

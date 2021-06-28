@@ -7,12 +7,12 @@ use counter_agg::range::I64Range;
 #[allow(non_camel_case_types)]
 pub type tstzrange = *mut pg_sys::varlena;
 
-// hack to allow us to qualify names with "timescale_analytics_experimental"
+// hack to allow us to qualify names with "toolkit_experimental"
 // so that pgx generates the correct SQL
-mod timescale_analytics_experimental {
+mod toolkit_experimental {
     pub(crate) use super::*;
     extension_sql!(r#"
-        CREATE SCHEMA IF NOT EXISTS timescale_analytics_experimental;
+        CREATE SCHEMA IF NOT EXISTS toolkit_experimental;
     "#);
 }
 
@@ -36,7 +36,7 @@ pub unsafe fn get_range(range: tstzrange) -> Option<I64Range> {
         if !lbound_inclusive(flags) {
             left += 1;
         }
-        range.left = Some(left);  
+        range.left = Some(left);
     }
     if range_has_rbound(flags){
         let bytes = range_bytes[..8].try_into().unwrap();
@@ -44,7 +44,7 @@ pub unsafe fn get_range(range: tstzrange) -> Option<I64Range> {
         if rbound_inclusive(flags) {
             right += 1;
         }
-        range.right = Some(right);  
+        range.right = Some(right);
     }
     Some(range)
 
@@ -64,8 +64,8 @@ const RANGE_LB_INC: u8 = 0x02;
 const RANGE_UB_INC: u8 = 0x04;
 const RANGE_LB_INF: u8 = 0x08;
 const RANGE_UB_INF: u8 = 0x10;
-const RANGE_LB_NULL: u8 = 0x20; // should never be used, but why not. 
-const RANGE_UB_NULL: u8 = 0x40; // should never be used, but why not. 
+const RANGE_LB_NULL: u8 = 0x20; // should never be used, but why not.
+const RANGE_UB_NULL: u8 = 0x40; // should never be used, but why not.
 
 fn range_has_lbound(flags: u8) -> bool {
     flags & (RANGE_EMPTY | RANGE_LB_NULL | RANGE_LB_INF) == 0
@@ -156,9 +156,9 @@ impl I64RangeWrapper {
     }
 }
 
-// this introduces a timescaledb dependency, but only kind of, 
+// this introduces a timescaledb dependency, but only kind of,
 extension_sql!(r#"
-CREATE OR REPLACE FUNCTION timescale_analytics_experimental.time_bucket_range( bucket_width interval, ts timestamptz) 
+CREATE OR REPLACE FUNCTION toolkit_experimental.time_bucket_range( bucket_width interval, ts timestamptz)
 RETURNS tstzrange as $$
 SELECT tstzrange(time_bucket(bucket_width, ts), time_bucket(bucket_width, ts + bucket_width), '[)');
 $$

@@ -8,7 +8,7 @@
 
 ## Description <a id="tdigest-description"></a>
 
-Timescale analytics provides an implementation of the [t-digest data structure](https://github.com/tdunning/t-digest/blob/master/docs/t-digest-paper/histo.pdf) for quantile approximations.  A t-digest is a space efficient aggregation which provides increased resolution at the edges of the distribution.  This allows for more accurate estimates of extreme quantiles than traditional methods.
+TimescaleDB Toolkit provides an implementation of the [t-digest data structure](https://github.com/tdunning/t-digest/blob/master/docs/t-digest-paper/histo.pdf) for quantile approximations.  A t-digest is a space efficient aggregation which provides increased resolution at the edges of the distribution.  This allows for more accurate estimates of extreme quantiles than traditional methods.
 
 ## Details <a id="tdigest-details"></a>
 
@@ -123,7 +123,7 @@ which oscilates between 900 and 1100 over the period of a day.
 ```SQL ,non-transactional
 INSERT INTO test
     SELECT time, value
-    FROM timescale_analytics_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, rng_seed => 543643);
+    FROM toolkit_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, rng_seed => 543643);
 ```
 ```
 INSERT 0 4032

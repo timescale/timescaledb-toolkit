@@ -20,7 +20,7 @@ CREATE TABLE test(time TIMESTAMPTZ, value DOUBLE PRECISION);
 ```SQL ,non-transactional
 INSERT INTO test
     SELECT time, value
-    FROM timescale_analytics_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, rng_seed => 11111);
+    FROM toolkit_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, rng_seed => 11111);
 ```
 ```output
 INSERT 0 4032
@@ -28,23 +28,23 @@ INSERT 0 4032
 
 While still expermental, we'll need to set this before creating our view:
 ```SQL , non-transactional,ignore-output
-    SET timescale_analytics_acknowledge_auto_drop TO 'true';
+    SET timescaledb_toolkit_acknowledge_auto_drop TO 'true';
 ```
 
 Now lets capture this data into a time series which we'll store in a view.
 
 ```SQL ,non-transactional,ignore-output
-CREATE VIEW series AS SELECT timescale_analytics_experimental.timeseries(time, value) FROM test;
+CREATE VIEW series AS SELECT toolkit_experimental.timeseries(time, value) FROM test;
 ```
 
 We can now use this timeseries to efficiently move the data around to other functions.
 
 ```SQL
-SELECT time, value::numeric(10,2) FROM 
-timescale_analytics_experimental.unnest_series((SELECT timescale_analytics_experimental.lttb(timeseries, 20) FROM series));
+SELECT time, value::numeric(10,2) FROM
+toolkit_experimental.unnest_series((SELECT toolkit_experimental.lttb(timeseries, 20) FROM series));
 ```
 ```output
-          time          |       value        
+          time          |       value
 ------------------------+--------------------
 2020-01-01 00:00:00+00 | 1038.44
 2020-01-02 04:20:00+00 | 1325.44
@@ -69,11 +69,11 @@ timescale_analytics_experimental.unnest_series((SELECT timescale_analytics_exper
 ```
 
 ```SQL
-SELECT time, value::numeric(10,2) FROM 
-timescale_analytics_experimental.unnest_series((SELECT timescale_analytics_experimental.normalize(timeseries, '20 sec', 'interpolate', true, '2020-01-20 16:00:00 UTC', '2020-01-20 16:05:00 UTC') FROM series));
+SELECT time, value::numeric(10,2) FROM
+toolkit_experimental.unnest_series((SELECT toolkit_experimental.normalize(timeseries, '20 sec', 'interpolate', true, '2020-01-20 16:00:00 UTC', '2020-01-20 16:05:00 UTC') FROM series));
 ```
 ```output
-          time          |       value        
+          time          |       value
 ------------------------+--------------------
 2020-01-20 16:00:00+00 |  944.75
 2020-01-20 16:00:20+00 |  953.37
@@ -133,7 +133,7 @@ This will construct and return timeseries object containing the passed in time, 
 For this example, assume we have a table 'samples' with two columns, 'time' and 'weight'.  The following will return that table as a timeseries.
 
 ```SQL ,ignore
-SELECT timescale_analytics_experimental.timeseries(time, weight) FROM samples;
+SELECT toolkit_experimental.timeseries(time, weight) FROM samples;
 ```
 
 ---
@@ -167,7 +167,7 @@ This example assumes a table 'samples' with columns 'time', 'data', and 'batch'.
 CREATE VIEW series AS
     SELECT
         batch,
-        timescale_analytics_experimental.timeseries(time, data) as batch_series
+        toolkit_experimental.timeseries(time, data) as batch_series
     FROM samples
     GROUP BY batch;
 ```
@@ -206,17 +206,17 @@ The unnest function is used to get the (time, value) pairs back out of a timeser
 ### Sample Usage <a id="timeseries_unnest-examples"></a>
 
 ```SQL
-SELECT timescale_analytics_experimental.unnest_series(
-    (SELECT timescale_analytics_experimental.timeseries(a.time, a.value)
-    FROM 
-        (SELECT time, value 
-        FROM timescale_analytics_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, 45654))
+SELECT toolkit_experimental.unnest_series(
+    (SELECT toolkit_experimental.timeseries(a.time, a.value)
+    FROM
+        (SELECT time, value
+        FROM toolkit_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, 45654))
         a)
     )
 LIMIT 10;
 ```
 ```output
-                 unnest_series                 
+                 unnest_series
 -----------------------------------------------
  ("2020-01-01 00:00:00+00",1009.8399687963981)
  ("2020-01-01 00:10:00+00",873.6326953620166)
@@ -273,19 +273,19 @@ This function will create a new timeseries of uniformly spaced (in time) time, v
 ### Sample Usage <a id="timeseries_normalize-examples"></a>
 
 ```SQL
-SELECT time, value 
-FROM timescale_analytics_experimental.unnest_series(
-    (SELECT timescale_analytics_experimental.normalize(series.timeseries, '10 min', 'nearest', true, '2020-01-20 2:00:00 UTC', '2020-01-20 3:00:00 UTC')
-    FROM 
-        (SELECT timescale_analytics_experimental.timeseries(a.time, a.value) 
+SELECT time, value
+FROM toolkit_experimental.unnest_series(
+    (SELECT toolkit_experimental.normalize(series.timeseries, '10 min', 'nearest', true, '2020-01-20 2:00:00 UTC', '2020-01-20 3:00:00 UTC')
+    FROM
+        (SELECT toolkit_experimental.timeseries(a.time, a.value)
         FROM
-            (SELECT '2020-01-20 UTC'::timestamptz + '3 min'::interval * i as time, i as value FROM generate_series(0, 100) as i) a 
+            (SELECT '2020-01-20 UTC'::timestamptz + '3 min'::interval * i as time, i as value FROM generate_series(0, 100) as i) a
         ) series
     )
 );
 ```
 ```output
-          time          | value 
+          time          | value
 ------------------------+-------
  2020-01-20 02:00:00+00 |    40
  2020-01-20 02:10:00+00 |    43

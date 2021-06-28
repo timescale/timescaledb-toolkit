@@ -40,22 +40,22 @@ jobs:
       #   id: tester_build
       #   uses: docker/build-push-action@v2
       #   with:
-      #     target: analytics-tools
+      #     target: toolkit-tools
       #     push: false
       #     load: true
       #     context: .
       #     file: ./docker/nightly/Dockerfile
-      #     tags: timescaledev/timescale-analytics:tester
+      #     tags: timescaledev/timescaledb-toolkit:tester
       #     cache-from: type=local,src=/tmp/.buildx-cache
       #     cache-to: type=local,dest=/tmp/.buildx-cache
 
       # - name: Run Tests
       #   run: |
-      #       docker run -d --name ts_analytics_test -e POSTGRES_HOST_AUTH_METHOD=trust timescaledev/timescale-analytics:tester
-      #       docker exec ts_analytics_test /bin/bash -c 'PATH=\"${PATH}:/root/.cargo/bin\" \
-      #         && cd /rust/timescale-analytics/crates \
-      #         && cargo test --release --workspace --exclude timescale_analytics'
-      #       docker stop ts_analytics_test
+      #       docker run -d --name toolkit_test -e POSTGRES_HOST_AUTH_METHOD=trust timescaledev/timescaledb-toolkit:tester
+      #       docker exec toolkit_test /bin/bash -c 'PATH=\"${PATH}:/root/.cargo/bin\" \
+      #         && cd /rust/timescaledb-analytics/crates \
+      #         && cargo test --release --workspace --exclude timescaledb_toolkit'
+      #       docker stop toolkit_test
       # TODO we also want to run our extension tests, but we don't want to restart the DB, need a pgx patch
 
       #TODO run doctests
@@ -67,7 +67,7 @@ jobs:
           push: ${{ startsWith(github.event_name, 'cron') }}
           context: .
           file: ./docker/nightly/Dockerfile
-          tags: timescaledev/timescale-analytics:nightly
+          tags: timescaledev/timescaledb-toolkit:nightly
 
       - name: Image digest
         run: echo ${{ steps.image_build.outputs.digest }}

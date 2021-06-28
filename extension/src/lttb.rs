@@ -10,9 +10,9 @@ use time_series::{TSPoint, TimeSeries as InternalTimeSeries};
 
 use crate::time_series::{TimeSeriesData, SeriesType};
 
-// hack to allow us to qualify names with "timescale_analytics_experimental"
+// hack to allow us to qualify names with "toolkit_experimental"
 // so that pgx generates the correct SQL
-mod timescale_analytics_experimental {
+mod toolkit_experimental {
 }
 
 pub struct LttbTrans {
@@ -20,7 +20,7 @@ pub struct LttbTrans {
     resolution: usize,
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn lttb_trans(
     state: Option<Internal<LttbTrans>>,
     time: pg_sys::TimestampTz,
@@ -56,11 +56,11 @@ pub fn lttb_trans(
     }
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn lttb_final(
     state: Option<Internal<LttbTrans>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_series::timescale_analytics_experimental::TimeSeries<'static>> {
+) -> Option<crate::time_series::toolkit_experimental::TimeSeries<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let mut state = match state {
@@ -83,10 +83,10 @@ pub fn lttb_final(
 }
 
 extension_sql!(r#"
-CREATE AGGREGATE timescale_analytics_experimental.lttb(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution INT) (
-    sfunc = timescale_analytics_experimental.lttb_trans,
+CREATE AGGREGATE toolkit_experimental.lttb(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution INT) (
+    sfunc = toolkit_experimental.lttb_trans,
     stype = internal,
-    finalfunc = timescale_analytics_experimental.lttb_final
+    finalfunc = toolkit_experimental.lttb_final
 );
 "#);
 
@@ -166,17 +166,17 @@ pub fn lttb(data: &[TSPoint], threshold: usize) -> Cow<'_, [TSPoint]> {
     Cow::Owned(sampled)
 }
 
-#[pg_extern(name="lttb", schema = "timescale_analytics_experimental")]
+#[pg_extern(name="lttb", schema = "toolkit_experimental")]
 pub fn lttb_on_timeseries(
-    series: crate::time_series::timescale_analytics_experimental::TimeSeries<'static>,
+    series: crate::time_series::toolkit_experimental::TimeSeries<'static>,
     threshold: i32,
-) -> Option<crate::time_series::timescale_analytics_experimental::TimeSeries<'static>> {
+) -> Option<crate::time_series::toolkit_experimental::TimeSeries<'static>> {
     lttb_ts(series, threshold as usize).into()
 }
 
 // based on https://github.com/jeromefroe/lttb-rs version 0.2.0
-pub fn lttb_ts (data: crate::time_series::timescale_analytics_experimental::TimeSeries<'static>, threshold: usize)
--> crate::time_series::timescale_analytics_experimental::TimeSeries<'static>
+pub fn lttb_ts (data: crate::time_series::toolkit_experimental::TimeSeries<'static>, threshold: usize)
+-> crate::time_series::toolkit_experimental::TimeSeries<'static>
 {
     if !data.is_sorted() {
         panic!("lttb requires sorted timeseries");
@@ -254,37 +254,37 @@ pub fn lttb_ts (data: crate::time_series::timescale_analytics_experimental::Time
     // Always add the last point.
     sampled.add_point(data.get(data.num_points() - 1).unwrap());
 
-    crate::time_series::timescale_analytics_experimental::TimeSeries::from_internal_time_series(&sampled)
+    crate::time_series::toolkit_experimental::TimeSeries::from_internal_time_series(&sampled)
 }
 
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {
     use pgx::*;
-    
+
     #[pg_test]
     fn test_lttb_equivalence() {
         Spi::execute(|client| {
             client.select("CREATE TABLE test(time TIMESTAMPTZ, value DOUBLE PRECISION);", None, None);
             client.select(
-                "INSERT INTO test 
-                SELECT time, value 
-                FROM timescale_analytics_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, NULL);", None, None);
+                "INSERT INTO test
+                SELECT time, value
+                FROM toolkit_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, NULL);", None, None);
 
             client.select("CREATE TABLE results1(time TIMESTAMPTZ, value DOUBLE PRECISION);", None, None);
             client.select(
-                "INSERT INTO results1 
-                SELECT time, value 
-                FROM timescale_analytics_experimental.unnest_series(
-                    (SELECT timescale_analytics_experimental.lttb(time, value, 100) FROM test)
+                "INSERT INTO results1
+                SELECT time, value
+                FROM toolkit_experimental.unnest_series(
+                    (SELECT toolkit_experimental.lttb(time, value, 100) FROM test)
                 );", None, None);
 
             client.select("CREATE TABLE results2(time TIMESTAMPTZ, value DOUBLE PRECISION);", None, None);
             client.select(
                 "INSERT INTO results2
-                SELECT time, value 
-                FROM timescale_analytics_experimental.unnest_series(
-                    (SELECT timescale_analytics_experimental.lttb(
-                        (SELECT timescale_analytics_experimental.timeseries(time, value) FROM test), 100)
+                SELECT time, value
+                FROM toolkit_experimental.unnest_series(
+                    (SELECT toolkit_experimental.lttb(
+                        (SELECT toolkit_experimental.timeseries(time, value) FROM test), 100)
                     )
                 );", None, None);
 

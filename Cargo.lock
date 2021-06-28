@@ -1879,7 +1879,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "timescale_analytics"
+name = "timescaledb_toolkit"
 version = "0.3.0"
 dependencies = [
  "approx",

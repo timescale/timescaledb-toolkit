@@ -58,7 +58,7 @@ fn main() {
         .expect("could not connect to test DB");
 
     println!("{}", "Creating Extension".bold().green());
-    client.simple_query("CREATE EXTENSION timescale_analytics;"
+    client.simple_query("CREATE EXTENSION timescaledb_toolkit;"
         ).expect("cannot retrieve test names");
 
     println!("{}", "Retrieving Tests".bold().green());

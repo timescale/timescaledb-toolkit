@@ -62,7 +62,7 @@ jobs:
     - name: Run Doc Tests
       run: |
         sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg12 && /usr/local/cargo/bin/cargo pgx start pg12"
-        sql-doctester -h localhost -s "CREATE EXTENSION timescaledb; CREATE EXTENSION timescale_analytics; SET SESSION TIMEZONE TO 'UTC'" -p 28812 docs
+        sql-doctester -h localhost -s "CREATE EXTENSION timescaledb; CREATE EXTENSION timescaledb_toolkit; SET SESSION TIMEZONE TO 'UTC'" -p 28812 docs
 
 
   test13:
@@ -116,4 +116,4 @@ jobs:
     - name: Run Doc Tests
       run: |
         sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg13 && /usr/local/cargo/bin/cargo pgx start pg13"
-        sql-doctester -h localhost -s "CREATE EXTENSION timescaledb; CREATE EXTENSION timescale_analytics; SET SESSION TIMEZONE TO 'UTC'" -p 28813 docs
+        sql-doctester -h localhost -s "CREATE EXTENSION timescaledb; CREATE EXTENSION timescaledb_toolkit; SET SESSION TIMEZONE TO 'UTC'" -p 28813 docs

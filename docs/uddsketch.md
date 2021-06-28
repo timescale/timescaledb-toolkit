@@ -138,7 +138,7 @@ Next we'll use one of our utility functions, `generate_periodic_normal_series`, 
 ```SQL ,non-transactional
 INSERT INTO test
     SELECT time, value
-    FROM timescale_analytics_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, rng_seed => 12345678);
+    FROM toolkit_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, rng_seed => 12345678);
 ```
 ```
 INSERT 0 4032

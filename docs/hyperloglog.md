@@ -6,7 +6,7 @@
 
 ## Description <a id="hyperloglog-description"></a>
 
-Timescale analytics provides an implementation of the [Hyperloglog estimator](https://en.wikipedia.org/wiki/HyperLogLog) for `COUNT DISTINCT` approximations of any type that has a hash function.
+TimescaleDB Toolkit provides an implementation of the [Hyperloglog estimator](https://en.wikipedia.org/wiki/HyperLogLog) for `COUNT DISTINCT` approximations of any type that has a hash function.
 
 ## Details <a id="hyperloglog-details"></a>
 
@@ -20,7 +20,7 @@ Timescale's HyperLogLog is implemented as an aggregate function in PostgreSQL.  
 ---
 ## **hyperloglog** <a id="hyperloglog"></a>
 ```SQL,ignore
-timescale_analytics_experimental.hyperloglog(
+toolkit_experimental.hyperloglog(
     size INTEGER,
     value AnyElement¹
 ) RETURNS TDigest
@@ -47,13 +47,13 @@ This will construct and return a Hyperloglog with at least the specified number 
 For this examples assume we have a table 'samples' with a column 'weights' holding `DOUBLE PRECISION` values.  The following will simply return a digest over that column
 
 ```SQL ,ignore
-SELECT timescale_analytics_experimental.hyperloglog(64, data) FROM samples;
+SELECT toolkit_experimental.hyperloglog(64, data) FROM samples;
 ```
 
 It may be more useful to build a view from the aggregate that we can later pass to other tdigest functions.
 
 ```SQL ,ignore
-CREATE VIEW digest AS SELECT timescale_analytics_experimental.hyperloglog(64, data) FROM samples;
+CREATE VIEW digest AS SELECT toolkit_experimental.hyperloglog(64, data) FROM samples;
 ```
 
 ---
@@ -61,7 +61,7 @@ CREATE VIEW digest AS SELECT timescale_analytics_experimental.hyperloglog(64, da
 ## **hyperloglog_count** <a id="hyperloglog_count"></a>
 
 ```SQL ,ignore
-timescale_analytics_experimental.hyperloglog_count(hyperloglog Hyperloglog) RETURNS BIGINT
+toolkit_experimental.hyperloglog_count(hyperloglog Hyperloglog) RETURNS BIGINT
 ```
 
 Get the number of distinct values from a hyperloglog.
@@ -82,7 +82,7 @@ Get the number of distinct values from a hyperloglog.
 ### Sample Usages <a id="hyperloglog_count-examples"></a>
 
 ```SQL
-SELECT timescale_analytics_experimental.hyperloglog_count(timescale_analytics_experimental.hyperloglog(64, data))
+SELECT toolkit_experimental.hyperloglog_count(toolkit_experimental.hyperloglog(64, data))
 FROM generate_series(1, 100) data
 ```
 ```output

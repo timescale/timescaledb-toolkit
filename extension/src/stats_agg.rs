@@ -48,9 +48,9 @@ json_inout_funcs!(StatsSummary1D);
 json_inout_funcs!(StatsSummary2D);
 
 
-// hack to allow us to qualify names with "timescale_analytics_experimental"
+// hack to allow us to qualify names with "toolkit_experimental"
 // so that pgx generates the correct SQL
-mod timescale_analytics_experimental {
+mod toolkit_experimental {
     pub(crate) use super::*;
 
     varlena_type!(StatsSummary1D);
@@ -106,7 +106,7 @@ impl<'input> StatsSummary2D<'input> {
 
 
 
-#[pg_extern(schema = "timescale_analytics_experimental", strict)]
+#[pg_extern(schema = "toolkit_experimental", strict)]
 pub fn stats1d_trans_serialize<'s>(
     state: Internal<StatsSummary1D<'s>>,
 ) -> bytea {
@@ -114,7 +114,7 @@ pub fn stats1d_trans_serialize<'s>(
     crate::do_serialize!(ser)
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental", strict)]
+#[pg_extern(schema = "toolkit_experimental", strict)]
 pub fn stats1d_trans_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
@@ -123,7 +123,7 @@ pub fn stats1d_trans_deserialize(
     de.into()
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental", strict)]
+#[pg_extern(schema = "toolkit_experimental", strict)]
 pub fn stats2d_trans_serialize<'s>(
     state: Internal<StatsSummary2D<'s>>,
 ) -> bytea {
@@ -131,7 +131,7 @@ pub fn stats2d_trans_serialize<'s>(
     crate::do_serialize!(ser)
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental", strict)]
+#[pg_extern(schema = "toolkit_experimental", strict)]
 pub fn stats2d_trans_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
@@ -140,7 +140,7 @@ pub fn stats2d_trans_deserialize(
     de.into()
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn stats1d_trans<'s>(
     state: Option<Internal<StatsSummary1D<'s>>>,
     val: Option<f64>,
@@ -157,7 +157,7 @@ pub fn stats1d_trans<'s>(
                     Some(StatsSummary1D::from_internal(s).into())
                 },
                 (Some(mut state), Some(val)) => {
-                    let mut s: InternalStatsSummary1D = state.to_internal(); 
+                    let mut s: InternalStatsSummary1D = state.to_internal();
                     s.accum(val).unwrap();
                     *state = StatsSummary1D::from_internal(s);
                     Some(state)
@@ -168,7 +168,7 @@ pub fn stats1d_trans<'s>(
 }
 // Note that in general, for all stats2d cases, if either the y or x value is missing, we disregard the entire point as the n is shared between them
 // if the user wants us to treat nulls as a particular value (ie zero), they can use COALESCE to do so
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn stats2d_trans<'s>(
     state: Option<Internal<StatsSummary2D<'s>>>,
     y: Option<f64>,
@@ -191,7 +191,7 @@ pub fn stats2d_trans<'s>(
                     Some(StatsSummary2D::from_internal(s).into())
                 },
                 (Some(mut state), Some(val)) => {
-                    let mut s: InternalStatsSummary2D = state.to_internal(); 
+                    let mut s: InternalStatsSummary2D = state.to_internal();
                     s.accum(val).unwrap();
                     *state = StatsSummary2D::from_internal(s);
                     Some(state)
@@ -202,7 +202,7 @@ pub fn stats2d_trans<'s>(
 }
 
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn stats1d_inv_trans<'s>(
     state: Option<Internal<StatsSummary1D<'s>>>,
     val: Option<f64>,
@@ -214,7 +214,7 @@ pub fn stats1d_inv_trans<'s>(
                 (None, _) => panic!("Inverse function should never be called with NULL state"),
                 (Some(state), None) => Some(state),
                 (Some(state), Some(val)) => {
-                    let s: InternalStatsSummary1D = state.to_internal(); 
+                    let s: InternalStatsSummary1D = state.to_internal();
                     let s = s.remove(val);
                     match s {
                         None => None,
@@ -226,7 +226,7 @@ pub fn stats1d_inv_trans<'s>(
     }
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn stats2d_inv_trans<'s>(
     state: Option<Internal<StatsSummary2D<'s>>>,
     y: Option<f64>,
@@ -244,7 +244,7 @@ pub fn stats2d_inv_trans<'s>(
                 (None, _) => panic!("Inverse function should never be called with NULL state"),
                 (Some(state), None) => Some(state),
                 (Some(state), Some(val)) => {
-                    let s: InternalStatsSummary2D = state.to_internal(); 
+                    let s: InternalStatsSummary2D = state.to_internal();
                     let s = s.remove(val);
                     match s {
                         None => None,
@@ -257,10 +257,10 @@ pub fn stats2d_inv_trans<'s>(
 }
 
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn stats1d_summary_trans<'s, 'v>(
     state: Option<Internal<StatsSummary1D<'s>>>,
-    value: Option<timescale_analytics_experimental::StatsSummary1D<'v>>,
+    value: Option<toolkit_experimental::StatsSummary1D<'v>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal<StatsSummary1D<'s>>> {
     unsafe {
@@ -282,10 +282,10 @@ pub fn stats1d_summary_trans<'s, 'v>(
 
 
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn stats2d_summary_trans<'s, 'v>(
     state: Option<Internal<StatsSummary2D<'s>>>,
-    value: Option<timescale_analytics_experimental::StatsSummary2D<'v>>,
+    value: Option<toolkit_experimental::StatsSummary2D<'v>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal<StatsSummary2D<'s>>> {
     unsafe {
@@ -305,10 +305,10 @@ pub fn stats2d_summary_trans<'s, 'v>(
     }
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn stats1d_summary_inv_trans<'s, 'v>(
     state: Option<Internal<StatsSummary1D<'s>>>,
-    value: Option<timescale_analytics_experimental::StatsSummary1D<'v>>,
+    value: Option<toolkit_experimental::StatsSummary1D<'v>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal<StatsSummary1D<'s>>> {
     unsafe {
@@ -330,10 +330,10 @@ pub fn stats1d_summary_inv_trans<'s, 'v>(
     }
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn stats2d_summary_inv_trans<'s, 'v>(
     state: Option<Internal<StatsSummary2D<'s>>>,
-    value: Option<timescale_analytics_experimental::StatsSummary2D<'v>>,
+    value: Option<toolkit_experimental::StatsSummary2D<'v>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal<StatsSummary2D<'s>>> {
     unsafe {
@@ -355,7 +355,7 @@ pub fn stats2d_summary_inv_trans<'s, 'v>(
     }
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn stats1d_combine<'s, 'v>(
     state1: Option<Internal<StatsSummary1D<'s>>>,
     state2: Option<Internal<StatsSummary1D<'v>>>,
@@ -374,7 +374,7 @@ pub fn stats1d_combine<'s, 'v>(
                     Some(s.into())
                 },
                 (Some(state1), Some(state2)) => {
-                    let s1 = state1.to_internal(); 
+                    let s1 = state1.to_internal();
                     let s2 = state2.to_internal();
                     let s1 = s1.combine(s2).unwrap();
                     Some(StatsSummary1D::from_internal(s1).into())
@@ -384,7 +384,7 @@ pub fn stats1d_combine<'s, 'v>(
     }
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn stats2d_combine<'s, 'v>(
     state1: Option<Internal<StatsSummary2D<'s>>>,
     state2: Option<Internal<StatsSummary2D<'v>>>,
@@ -403,7 +403,7 @@ pub fn stats2d_combine<'s, 'v>(
                     Some(s.into())
                 },
                 (Some(state1), Some(state2)) => {
-                    let s1 = state1.to_internal(); 
+                    let s1 = state1.to_internal();
                     let s2 = state2.to_internal();
                     let s1 = s1.combine(s2).unwrap();
                     Some(StatsSummary2D::from_internal(s1).into())
@@ -413,11 +413,11 @@ pub fn stats2d_combine<'s, 'v>(
     }
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 fn stats1d_final<'s>(
     state: Option<Internal<StatsSummary1D<'s>>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<timescale_analytics_experimental::StatsSummary1D<'s>> {
+) -> Option<toolkit_experimental::StatsSummary1D<'s>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match state {
@@ -428,11 +428,11 @@ fn stats1d_final<'s>(
     }
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 fn stats2d_final<'s>(
     state: Option<Internal<StatsSummary2D<'s>>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<timescale_analytics_experimental::StatsSummary2D<'s>> {
+) -> Option<toolkit_experimental::StatsSummary2D<'s>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match state {
@@ -446,64 +446,64 @@ fn stats2d_final<'s>(
 
 
 extension_sql!(r#"
-CREATE AGGREGATE timescale_analytics_experimental.stats_agg( value DOUBLE PRECISION )
+CREATE AGGREGATE toolkit_experimental.stats_agg( value DOUBLE PRECISION )
 (
-    sfunc = timescale_analytics_experimental.stats1d_trans,
+    sfunc = toolkit_experimental.stats1d_trans,
     stype = internal,
-    finalfunc = timescale_analytics_experimental.stats1d_final,
-    combinefunc = timescale_analytics_experimental.stats1d_combine,
-    serialfunc = timescale_analytics_experimental.stats1d_trans_serialize,
-    deserialfunc = timescale_analytics_experimental.stats1d_trans_deserialize,
-    msfunc = timescale_analytics_experimental.stats1d_trans,
-    minvfunc = timescale_analytics_experimental.stats1d_inv_trans,
+    finalfunc = toolkit_experimental.stats1d_final,
+    combinefunc = toolkit_experimental.stats1d_combine,
+    serialfunc = toolkit_experimental.stats1d_trans_serialize,
+    deserialfunc = toolkit_experimental.stats1d_trans_deserialize,
+    msfunc = toolkit_experimental.stats1d_trans,
+    minvfunc = toolkit_experimental.stats1d_inv_trans,
     mstype = internal,
-    mfinalfunc = timescale_analytics_experimental.stats1d_final,
+    mfinalfunc = toolkit_experimental.stats1d_final,
     parallel = safe
 );
 "#);
 
 // mostly for testing/debugging, in case we want one without the inverse functions defined.
 extension_sql!(r#"
-CREATE AGGREGATE timescale_analytics_experimental.stats_agg_no_inv( value DOUBLE PRECISION )
+CREATE AGGREGATE toolkit_experimental.stats_agg_no_inv( value DOUBLE PRECISION )
 (
-    sfunc = timescale_analytics_experimental.stats1d_trans,
+    sfunc = toolkit_experimental.stats1d_trans,
     stype = internal,
-    finalfunc = timescale_analytics_experimental.stats1d_final,
-    combinefunc = timescale_analytics_experimental.stats1d_combine,
-    serialfunc = timescale_analytics_experimental.stats1d_trans_serialize,
-    deserialfunc = timescale_analytics_experimental.stats1d_trans_deserialize,
+    finalfunc = toolkit_experimental.stats1d_final,
+    combinefunc = toolkit_experimental.stats1d_combine,
+    serialfunc = toolkit_experimental.stats1d_trans_serialize,
+    deserialfunc = toolkit_experimental.stats1d_trans_deserialize,
     parallel = safe
 );
 "#);
 
 // same things for the 2d case
 extension_sql!(r#"
-CREATE AGGREGATE timescale_analytics_experimental.stats_agg( y DOUBLE PRECISION, x DOUBLE PRECISION )
+CREATE AGGREGATE toolkit_experimental.stats_agg( y DOUBLE PRECISION, x DOUBLE PRECISION )
 (
-    sfunc = timescale_analytics_experimental.stats2d_trans,
+    sfunc = toolkit_experimental.stats2d_trans,
     stype = internal,
-    finalfunc = timescale_analytics_experimental.stats2d_final,
-    combinefunc = timescale_analytics_experimental.stats2d_combine,
-    serialfunc = timescale_analytics_experimental.stats2d_trans_serialize,
-    deserialfunc = timescale_analytics_experimental.stats2d_trans_deserialize,
-    msfunc = timescale_analytics_experimental.stats2d_trans,
-    minvfunc = timescale_analytics_experimental.stats2d_inv_trans,
+    finalfunc = toolkit_experimental.stats2d_final,
+    combinefunc = toolkit_experimental.stats2d_combine,
+    serialfunc = toolkit_experimental.stats2d_trans_serialize,
+    deserialfunc = toolkit_experimental.stats2d_trans_deserialize,
+    msfunc = toolkit_experimental.stats2d_trans,
+    minvfunc = toolkit_experimental.stats2d_inv_trans,
     mstype = internal,
-    mfinalfunc = timescale_analytics_experimental.stats2d_final,
+    mfinalfunc = toolkit_experimental.stats2d_final,
     parallel = safe
 );
 "#);
 
 // mostly for testing/debugging, in case we want one without the inverse functions defined.
 extension_sql!(r#"
-CREATE AGGREGATE timescale_analytics_experimental.stats_agg_no_inv( y DOUBLE PRECISION, x DOUBLE PRECISION )
+CREATE AGGREGATE toolkit_experimental.stats_agg_no_inv( y DOUBLE PRECISION, x DOUBLE PRECISION )
 (
-    sfunc = timescale_analytics_experimental.stats2d_trans,
+    sfunc = toolkit_experimental.stats2d_trans,
     stype = internal,
-    finalfunc = timescale_analytics_experimental.stats2d_final,
-    combinefunc = timescale_analytics_experimental.stats2d_combine,
-    serialfunc = timescale_analytics_experimental.stats2d_trans_serialize,
-    deserialfunc = timescale_analytics_experimental.stats2d_trans_deserialize,
+    finalfunc = toolkit_experimental.stats2d_final,
+    combinefunc = toolkit_experimental.stats2d_combine,
+    serialfunc = toolkit_experimental.stats2d_trans_serialize,
+    deserialfunc = toolkit_experimental.stats2d_trans_deserialize,
     parallel = safe
 );
 "#);
@@ -512,32 +512,32 @@ CREATE AGGREGATE timescale_analytics_experimental.stats_agg_no_inv( y DOUBLE PRE
 // you can use it in your window functions (useful for our own perf testing as well)
 
 extension_sql!(r#"
-CREATE AGGREGATE timescale_analytics_experimental.rollup(ss timescale_analytics_experimental.statssummary1d)
+CREATE AGGREGATE toolkit_experimental.rollup(ss toolkit_experimental.statssummary1d)
 (
-    sfunc = timescale_analytics_experimental.stats1d_summary_trans,
+    sfunc = toolkit_experimental.stats1d_summary_trans,
     stype = internal,
-    finalfunc = timescale_analytics_experimental.stats1d_final,
-    combinefunc = timescale_analytics_experimental.stats1d_combine,
-    serialfunc = timescale_analytics_experimental.stats1d_trans_serialize,
-    deserialfunc = timescale_analytics_experimental.stats1d_trans_deserialize,
+    finalfunc = toolkit_experimental.stats1d_final,
+    combinefunc = toolkit_experimental.stats1d_combine,
+    serialfunc = toolkit_experimental.stats1d_trans_serialize,
+    deserialfunc = toolkit_experimental.stats1d_trans_deserialize,
     parallel = safe
 );
 "#);
 
 //  For UI, we decided to have slightly differently named functions for the windowed context and not, so that it reads better, as well as using the inverse function only in the window context
 extension_sql!(r#"
-CREATE AGGREGATE timescale_analytics_experimental.rolling(ss timescale_analytics_experimental.statssummary1d)
+CREATE AGGREGATE toolkit_experimental.rolling(ss toolkit_experimental.statssummary1d)
 (
-    sfunc = timescale_analytics_experimental.stats1d_summary_trans,
+    sfunc = toolkit_experimental.stats1d_summary_trans,
     stype = internal,
-    finalfunc = timescale_analytics_experimental.stats1d_final,
-    combinefunc = timescale_analytics_experimental.stats1d_combine,
-    serialfunc = timescale_analytics_experimental.stats1d_trans_serialize,
-    deserialfunc = timescale_analytics_experimental.stats1d_trans_deserialize,
-    msfunc = timescale_analytics_experimental.stats1d_summary_trans,
-    minvfunc = timescale_analytics_experimental.stats1d_summary_inv_trans,
+    finalfunc = toolkit_experimental.stats1d_final,
+    combinefunc = toolkit_experimental.stats1d_combine,
+    serialfunc = toolkit_experimental.stats1d_trans_serialize,
+    deserialfunc = toolkit_experimental.stats1d_trans_deserialize,
+    msfunc = toolkit_experimental.stats1d_summary_trans,
+    minvfunc = toolkit_experimental.stats1d_summary_inv_trans,
     mstype = internal,
-    mfinalfunc = timescale_analytics_experimental.stats1d_final,
+    mfinalfunc = toolkit_experimental.stats1d_final,
     parallel = safe
 );
 "#);
@@ -546,57 +546,57 @@ CREATE AGGREGATE timescale_analytics_experimental.rolling(ss timescale_analytics
 // Same as for the 1D case, but for the 2D
 
 extension_sql!(r#"
-CREATE AGGREGATE timescale_analytics_experimental.rollup(ss timescale_analytics_experimental.statssummary2d)
+CREATE AGGREGATE toolkit_experimental.rollup(ss toolkit_experimental.statssummary2d)
 (
-    sfunc = timescale_analytics_experimental.stats2d_summary_trans,
+    sfunc = toolkit_experimental.stats2d_summary_trans,
     stype = internal,
-    finalfunc = timescale_analytics_experimental.stats2d_final,
-    combinefunc = timescale_analytics_experimental.stats2d_combine,
-    serialfunc = timescale_analytics_experimental.stats2d_trans_serialize,
-    deserialfunc = timescale_analytics_experimental.stats2d_trans_deserialize,
+    finalfunc = toolkit_experimental.stats2d_final,
+    combinefunc = toolkit_experimental.stats2d_combine,
+    serialfunc = toolkit_experimental.stats2d_trans_serialize,
+    deserialfunc = toolkit_experimental.stats2d_trans_deserialize,
     parallel = safe
 );
 "#);
 
 //  For UI, we decided to have slightly differently named functions for the windowed context and not, so that it reads better, as well as using the inverse function only in the window context
 extension_sql!(r#"
-CREATE AGGREGATE timescale_analytics_experimental.rolling(ss timescale_analytics_experimental.statssummary2d)
+CREATE AGGREGATE toolkit_experimental.rolling(ss toolkit_experimental.statssummary2d)
 (
-    sfunc = timescale_analytics_experimental.stats2d_summary_trans,
+    sfunc = toolkit_experimental.stats2d_summary_trans,
     stype = internal,
-    finalfunc = timescale_analytics_experimental.stats2d_final,
-    combinefunc = timescale_analytics_experimental.stats2d_combine,
-    serialfunc = timescale_analytics_experimental.stats2d_trans_serialize,
-    deserialfunc = timescale_analytics_experimental.stats2d_trans_deserialize,
-    msfunc = timescale_analytics_experimental.stats2d_summary_trans,
-    minvfunc = timescale_analytics_experimental.stats2d_summary_inv_trans,
+    finalfunc = toolkit_experimental.stats2d_final,
+    combinefunc = toolkit_experimental.stats2d_combine,
+    serialfunc = toolkit_experimental.stats2d_trans_serialize,
+    deserialfunc = toolkit_experimental.stats2d_trans_deserialize,
+    msfunc = toolkit_experimental.stats2d_summary_trans,
+    minvfunc = toolkit_experimental.stats2d_summary_inv_trans,
     mstype = internal,
-    mfinalfunc = timescale_analytics_experimental.stats2d_final,
+    mfinalfunc = toolkit_experimental.stats2d_final,
     parallel = safe
 );
 "#);
 
 
 
-#[pg_extern(name="average", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="average", schema = "toolkit_experimental", strict, immutable)]
 fn stats1d_average(
-    summary: timescale_analytics_experimental::StatsSummary1D,
+    summary: toolkit_experimental::StatsSummary1D,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal().avg()
 }
 
-#[pg_extern(name="sum", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="sum", schema = "toolkit_experimental", strict, immutable)]
 fn stats1d_sum(
-    summary: timescale_analytics_experimental::StatsSummary1D,
+    summary: toolkit_experimental::StatsSummary1D,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal().sum()
 }
 
-#[pg_extern(name="stddev", schema = "timescale_analytics_experimental", immutable)]
+#[pg_extern(name="stddev", schema = "toolkit_experimental", immutable)]
 fn stats1d_stddev(
-    summary: Option<timescale_analytics_experimental::StatsSummary1D>,
+    summary: Option<toolkit_experimental::StatsSummary1D>,
     method: default!(String, "population"),
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
@@ -607,9 +607,9 @@ fn stats1d_stddev(
     }
 }
 
-#[pg_extern(name="variance", schema = "timescale_analytics_experimental", immutable)]
+#[pg_extern(name="variance", schema = "toolkit_experimental", immutable)]
 fn stats1d_variance(
-    summary: Option<timescale_analytics_experimental::StatsSummary1D>,
+    summary: Option<toolkit_experimental::StatsSummary1D>,
     method: default!(String, "population"),
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
@@ -620,49 +620,49 @@ fn stats1d_variance(
     }
 }
 
-#[pg_extern(name="num_vals", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="num_vals", schema = "toolkit_experimental", strict, immutable)]
 fn stats1d_num_vals(
-    summary: timescale_analytics_experimental::StatsSummary1D,
+    summary: toolkit_experimental::StatsSummary1D,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> i64 {
     summary.to_internal().count()
 }
 
-#[pg_extern(name="average_x", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="average_x", schema = "toolkit_experimental", strict, immutable)]
 fn stats2d_average_x(
-    summary: timescale_analytics_experimental::StatsSummary2D,
+    summary: toolkit_experimental::StatsSummary2D,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     Some(summary.to_internal().avg()?.x)
 }
 
-#[pg_extern(name="average_y", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="average_y", schema = "toolkit_experimental", strict, immutable)]
 fn stats2d_average_y(
-    summary: timescale_analytics_experimental::StatsSummary2D,
+    summary: toolkit_experimental::StatsSummary2D,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     Some(summary.to_internal().avg()?.y)
 }
 
-#[pg_extern(name="sum_x", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="sum_x", schema = "toolkit_experimental", strict, immutable)]
 fn stats2d_sum_x(
-    summary: timescale_analytics_experimental::StatsSummary2D,
+    summary: toolkit_experimental::StatsSummary2D,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     Some(summary.to_internal().sum()?.x)
 }
 
-#[pg_extern(name="sum_y", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="sum_y", schema = "toolkit_experimental", strict, immutable)]
 fn stats2d_sum_y(
-    summary: timescale_analytics_experimental::StatsSummary2D,
+    summary: toolkit_experimental::StatsSummary2D,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     Some(summary.to_internal().sum()?.y)
 }
 
-#[pg_extern(name="stddev_x", schema = "timescale_analytics_experimental", immutable)]
+#[pg_extern(name="stddev_x", schema = "toolkit_experimental", immutable)]
 fn stats2d_stddev_x(
-    summary: Option<timescale_analytics_experimental::StatsSummary2D>,
+    summary: Option<toolkit_experimental::StatsSummary2D>,
     method: default!(String, "population"),
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
@@ -673,9 +673,9 @@ fn stats2d_stddev_x(
     }
 }
 
-#[pg_extern(name="stddev_y", schema = "timescale_analytics_experimental", immutable)]
+#[pg_extern(name="stddev_y", schema = "toolkit_experimental", immutable)]
 fn stats2d_stddev_y(
-    summary: Option<timescale_analytics_experimental::StatsSummary2D>,
+    summary: Option<toolkit_experimental::StatsSummary2D>,
     method: default!(String, "population"),
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
@@ -686,9 +686,9 @@ fn stats2d_stddev_y(
     }
 }
 
-#[pg_extern(name="variance_x", schema = "timescale_analytics_experimental", immutable)]
+#[pg_extern(name="variance_x", schema = "toolkit_experimental", immutable)]
 fn stats2d_variance_x(
-    summary: Option<timescale_analytics_experimental::StatsSummary2D>,
+    summary: Option<toolkit_experimental::StatsSummary2D>,
     method: default!(String, "population"),
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
@@ -699,9 +699,9 @@ fn stats2d_variance_x(
     }
 }
 
-#[pg_extern(name="variance_y", schema = "timescale_analytics_experimental", immutable)]
+#[pg_extern(name="variance_y", schema = "toolkit_experimental", immutable)]
 fn stats2d_variance_y(
-    summary: Option<timescale_analytics_experimental::StatsSummary2D>,
+    summary: Option<toolkit_experimental::StatsSummary2D>,
     method: default!(String, "population"),
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
@@ -712,57 +712,57 @@ fn stats2d_variance_y(
     }
 }
 
-#[pg_extern(name="num_vals", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="num_vals", schema = "toolkit_experimental", strict, immutable)]
 fn stats2d_num_vals(
-    summary: timescale_analytics_experimental::StatsSummary2D,
+    summary: toolkit_experimental::StatsSummary2D,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> i64 {
     summary.to_internal().count()
 }
 
-#[pg_extern(name="slope", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="slope", schema = "toolkit_experimental", strict, immutable)]
 fn stats2d_slope(
-    summary: timescale_analytics_experimental::StatsSummary2D,
+    summary: toolkit_experimental::StatsSummary2D,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal().slope()
 }
 
-#[pg_extern(name="corr", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="corr", schema = "toolkit_experimental", strict, immutable)]
 fn stats2d_corr(
-    summary: timescale_analytics_experimental::StatsSummary2D,
+    summary: toolkit_experimental::StatsSummary2D,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal().corr()
 }
 
-#[pg_extern(name="intercept", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="intercept", schema = "toolkit_experimental", strict, immutable)]
 fn stats2d_intercept(
-    summary: timescale_analytics_experimental::StatsSummary2D,
+    summary: toolkit_experimental::StatsSummary2D,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal().intercept()
 }
 
-#[pg_extern(name="x_intercept", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="x_intercept", schema = "toolkit_experimental", strict, immutable)]
 fn stats2d_x_intercept(
-    summary: timescale_analytics_experimental::StatsSummary2D,
+    summary: toolkit_experimental::StatsSummary2D,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal().x_intercept()
 }
 
-#[pg_extern(name="determination_coeff", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="determination_coeff", schema = "toolkit_experimental", strict, immutable)]
 fn stats2d_determination_coeff(
-    summary: timescale_analytics_experimental::StatsSummary2D,
+    summary: toolkit_experimental::StatsSummary2D,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal().determination_coeff()
 }
 
-#[pg_extern(name="covariance", schema = "timescale_analytics_experimental", immutable)]
+#[pg_extern(name="covariance", schema = "toolkit_experimental", immutable)]
 fn stats2d_covar(
-    summary: Option<timescale_analytics_experimental::StatsSummary2D>,
+    summary: Option<toolkit_experimental::StatsSummary2D>,
     method: default!(String, "population"),
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
@@ -808,7 +808,7 @@ fn stats2d_covar(
 //         assert_relative_eq!(p1.syy, p2.syy);
 //         assert_relative_eq!(p1.sxy, p2.sxy);
 //     }
-    
+
 
 
 //     // #[pg_test]

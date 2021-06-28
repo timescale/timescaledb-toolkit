@@ -39,9 +39,9 @@ pg_type! {
 }
 json_inout_funcs!(TimeSeries);
 
-// hack to allow us to qualify names with "timescale_analytics_experimental"
+// hack to allow us to qualify names with "toolkit_experimental"
 // so that pgx generates the correct SQL
-pub mod timescale_analytics_experimental {
+pub mod toolkit_experimental {
     pub(crate) use super::*;
     varlena_type!(TimeSeries);
 }
@@ -156,9 +156,9 @@ impl<'input> TimeSeries<'input> {
     }
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn unnest_series(
-    series: timescale_analytics_experimental::TimeSeries,
+    series: toolkit_experimental::TimeSeries,
 ) -> impl std::iter::Iterator<Item = (name!(time,pg_sys::TimestampTz),name!(value,f64))> + '_ {
     let iter: Box<dyn Iterator<Item=_>> = match series.series {
         SeriesType::SortedSeries{points, ..} =>
@@ -177,14 +177,14 @@ pub fn unnest_series(
     iter
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn timeseries_serialize(
     state: Internal<InternalTimeSeries>,
 ) -> bytea {
     crate::do_serialize!(state)
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental",strict)]
+#[pg_extern(schema = "toolkit_experimental",strict)]
 pub fn timeseries_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
@@ -192,7 +192,7 @@ pub fn timeseries_deserialize(
     crate::do_deserialize!(bytes, InternalTimeSeries)
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn timeseries_trans(
     state: Option<Internal<InternalTimeSeries>>,
     time: Option<pg_sys::TimestampTz>,
@@ -219,10 +219,10 @@ pub fn timeseries_trans(
     }
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn timeseries_compound_trans(
     state: Option<Internal<InternalTimeSeries>>,
-    series: Option<crate::time_series::timescale_analytics_experimental::TimeSeries<'static>>,
+    series: Option<crate::time_series::toolkit_experimental::TimeSeries<'static>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal<InternalTimeSeries>> {
     unsafe {
@@ -238,7 +238,7 @@ pub fn timeseries_compound_trans(
     }
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn timeseries_combine (
     state1: Option<Internal<InternalTimeSeries>>,
     state2: Option<Internal<InternalTimeSeries>>,
@@ -257,11 +257,11 @@ pub fn timeseries_combine (
     }
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn timeseries_final(
     state: Option<Internal<InternalTimeSeries>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_series::timescale_analytics_experimental::TimeSeries<'static>> {
+) -> Option<crate::time_series::toolkit_experimental::TimeSeries<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let state = match state {
@@ -274,52 +274,52 @@ pub fn timeseries_final(
 }
 
 extension_sql!(r#"
-CREATE AGGREGATE timescale_analytics_experimental.timeseries(ts TIMESTAMPTZ, value DOUBLE PRECISION) (
-    sfunc = timescale_analytics_experimental.timeseries_trans,
+CREATE AGGREGATE toolkit_experimental.timeseries(ts TIMESTAMPTZ, value DOUBLE PRECISION) (
+    sfunc = toolkit_experimental.timeseries_trans,
     stype = internal,
-    finalfunc = timescale_analytics_experimental.timeseries_final,
-    combinefunc = timescale_analytics_experimental.timeseries_combine,
-    serialfunc = timescale_analytics_experimental.timeseries_serialize,
-    deserialfunc = timescale_analytics_experimental.timeseries_deserialize
+    finalfunc = toolkit_experimental.timeseries_final,
+    combinefunc = toolkit_experimental.timeseries_combine,
+    serialfunc = toolkit_experimental.timeseries_serialize,
+    deserialfunc = toolkit_experimental.timeseries_deserialize
 );
 "#);
 
 extension_sql!(r#"
-CREATE AGGREGATE timescale_analytics_experimental.rollup(
-    timescale_analytics_experimental.timeseries
+CREATE AGGREGATE toolkit_experimental.rollup(
+    toolkit_experimental.timeseries
 ) (
-    sfunc = timescale_analytics_experimental.timeseries_compound_trans,
+    sfunc = toolkit_experimental.timeseries_compound_trans,
     stype = internal,
-    finalfunc = timescale_analytics_experimental.timeseries_final,
-    combinefunc = timescale_analytics_experimental.timeseries_combine,
-    serialfunc = timescale_analytics_experimental.timeseries_serialize,
-    deserialfunc = timescale_analytics_experimental.timeseries_deserialize
+    finalfunc = toolkit_experimental.timeseries_final,
+    combinefunc = toolkit_experimental.timeseries_combine,
+    serialfunc = toolkit_experimental.timeseries_serialize,
+    deserialfunc = toolkit_experimental.timeseries_deserialize
 );
 "#);
 
 type Interval = pg_sys::Datum;
 
-#[pg_extern(schema = "timescale_analytics_experimental", name="normalize")]
+#[pg_extern(schema = "toolkit_experimental", name="normalize")]
 pub fn normalize_default_range (
-    series: crate::time_series::timescale_analytics_experimental::TimeSeries<'static>,
+    series: crate::time_series::toolkit_experimental::TimeSeries<'static>,
     interval: Interval,
     method: String,
     truncate: Option<bool>,
     _fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_series::timescale_analytics_experimental::TimeSeries<'static>> {
+) -> Option<crate::time_series::toolkit_experimental::TimeSeries<'static>> {
     normalize(series, interval, method, truncate, None, None, _fcinfo)
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn normalize (
-    series: crate::time_series::timescale_analytics_experimental::TimeSeries<'static>,
+    series: crate::time_series::toolkit_experimental::TimeSeries<'static>,
     interval: Interval,
     method: String,
     truncate: Option<bool>,
     range_start: Option<pg_sys::TimestampTz>,
     range_end: Option<pg_sys::TimestampTz>,
     _fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_series::timescale_analytics_experimental::TimeSeries<'static>> {
+) -> Option<crate::time_series::toolkit_experimental::TimeSeries<'static>> {
     unsafe {
         let interval = interval as *const pg_sys::Interval;
         if (*interval).day > 0 || (*interval).month > 0 {
@@ -366,7 +366,7 @@ pub fn normalize (
 
 
         // TODO: should be able to create new TimeSeries in place
-        let mut result = 
+        let mut result =
             InternalTimeSeries::new_normal_series(
                 if start < first.ts {
                     method.predict_left(start, first, Some(second))
@@ -388,7 +388,7 @@ pub fn normalize (
         let mut left = first;
         let mut right = second;
 
-        while next <= end { 
+        while next <= end {
             if next == left.ts {
                 result.add_point(left);
                 next += interval;
@@ -417,7 +417,7 @@ pub fn normalize (
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {
     use pgx::*;
-    
+
     #[pg_test]
     fn test_normalization_gapfill() {
         Spi::execute(|client| {
@@ -427,14 +427,14 @@ mod tests {
                 SELECT '2020-01-01 0:02 UTC'::timestamptz + '10 minutes'::interval * i, 10.0 * i
                 FROM generate_series(0,6) as i", None, None);
 
-            client.select("set timescale_analytics_acknowledge_auto_drop to 'true'", None, None);
-            client.select("CREATE VIEW series AS SELECT timescale_analytics_experimental.timeseries(time, value) FROM test;", None, None);
+            client.select("set timescaledb_toolkit_acknowledge_auto_drop to 'true'", None, None);
+            client.select("CREATE VIEW series AS SELECT toolkit_experimental.timeseries(time, value) FROM test;", None, None);
 
             // LOCF
             let results = client.select(
-                "SELECT value 
-                FROM timescale_analytics_experimental.unnest_series(
-                    (SELECT timescale_analytics_experimental.normalize(timeseries, '10 min', 'locf', true)
+                "SELECT value
+                FROM toolkit_experimental.unnest_series(
+                    (SELECT toolkit_experimental.normalize(timeseries, '10 min', 'locf', true)
                      FROM series)
                 );", None, None);
 
@@ -448,9 +448,9 @@ mod tests {
 
             // Interpolate
             let results = client.select(
-                "SELECT value 
-                FROM timescale_analytics_experimental.unnest_series(
-                    (SELECT timescale_analytics_experimental.normalize(timeseries, '10 min', 'interpolate', true)
+                "SELECT value
+                FROM toolkit_experimental.unnest_series(
+                    (SELECT toolkit_experimental.normalize(timeseries, '10 min', 'interpolate', true)
                      FROM series)
                 );", None, None);
 
@@ -464,9 +464,9 @@ mod tests {
 
             // Nearest
             let results = client.select(
-                "SELECT value 
-                FROM timescale_analytics_experimental.unnest_series(
-                    (SELECT timescale_analytics_experimental.normalize(timeseries, '10 min', 'nearest', true)
+                "SELECT value
+                FROM toolkit_experimental.unnest_series(
+                    (SELECT toolkit_experimental.normalize(timeseries, '10 min', 'nearest', true)
                      FROM series)
                 );", None, None);
 
@@ -477,7 +477,7 @@ mod tests {
             for (e, r) in expected.iter().zip(results) {
                 assert_eq!(r.by_ordinal(1).unwrap().value::<f64>().unwrap(), *e);
             }
-    
+
         })
     }
 }

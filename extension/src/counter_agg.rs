@@ -51,9 +51,9 @@ pg_type! {
 
 json_inout_funcs!(CounterSummary);
 
-// hack to allow us to qualify names with "timescale_analytics_experimental"
+// hack to allow us to qualify names with "toolkit_experimental"
 // so that pgx generates the correct SQL
-mod timescale_analytics_experimental {
+mod toolkit_experimental {
     pub(crate) use super::*;
 
     varlena_type!(CounterSummary);
@@ -156,7 +156,7 @@ impl CounterSummaryTransState {
     }
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn counter_summary_trans_serialize(
     mut state: Internal<CounterSummaryTransState>,
 ) -> bytea {
@@ -164,7 +164,7 @@ pub fn counter_summary_trans_serialize(
     crate::do_serialize!(state)
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental", strict)]
+#[pg_extern(schema = "toolkit_experimental", strict)]
 pub fn counter_summary_trans_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
@@ -172,7 +172,7 @@ pub fn counter_summary_trans_deserialize(
     crate::do_deserialize!(bytes, CounterSummaryTransState)
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn counter_agg_trans(
     state: Option<Internal<CounterSummaryTransState>>,
     ts: Option<pg_sys::TimestampTz>,
@@ -202,7 +202,7 @@ pub fn counter_agg_trans(
     }
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn counter_agg_trans_no_bounds(
     state: Option<Internal<CounterSummaryTransState>>,
     ts: Option<pg_sys::TimestampTz>,
@@ -213,10 +213,10 @@ pub fn counter_agg_trans_no_bounds(
 }
 
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn counter_agg_summary_trans(
     state: Option<Internal<CounterSummaryTransState>>,
-    value: Option<timescale_analytics_experimental::CounterSummary>,
+    value: Option<toolkit_experimental::CounterSummary>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal<CounterSummaryTransState>> {
     unsafe {
@@ -234,7 +234,7 @@ pub fn counter_agg_summary_trans(
     }
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn counter_agg_combine(
     state1: Option<Internal<CounterSummaryTransState>>,
     state2: Option<Internal<CounterSummaryTransState>>,
@@ -259,11 +259,11 @@ pub fn counter_agg_combine(
     }
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 fn counter_agg_final(
     state: Option<Internal<CounterSummaryTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<timescale_analytics_experimental::CounterSummary<'static>> {
+) -> Option<toolkit_experimental::CounterSummary<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let mut state = match state {
@@ -288,107 +288,107 @@ fn counter_agg_final(
 
 
 extension_sql!(r#"
-CREATE AGGREGATE timescale_analytics_experimental.counter_agg( ts timestamptz, value DOUBLE PRECISION, bounds tstzrange )
+CREATE AGGREGATE toolkit_experimental.counter_agg( ts timestamptz, value DOUBLE PRECISION, bounds tstzrange )
 (
-    sfunc = timescale_analytics_experimental.counter_agg_trans,
+    sfunc = toolkit_experimental.counter_agg_trans,
     stype = internal,
-    finalfunc = timescale_analytics_experimental.counter_agg_final,
-    combinefunc = timescale_analytics_experimental.counter_agg_combine,
-    serialfunc = timescale_analytics_experimental.counter_summary_trans_serialize,
-    deserialfunc = timescale_analytics_experimental.counter_summary_trans_deserialize,
+    finalfunc = toolkit_experimental.counter_agg_final,
+    combinefunc = toolkit_experimental.counter_agg_combine,
+    serialfunc = toolkit_experimental.counter_summary_trans_serialize,
+    deserialfunc = toolkit_experimental.counter_summary_trans_deserialize,
     parallel = restricted
 );
 "#);
 
 // allow calling counter agg without bounds provided.
 extension_sql!(r#"
-CREATE AGGREGATE timescale_analytics_experimental.counter_agg( ts timestamptz, value DOUBLE PRECISION )
+CREATE AGGREGATE toolkit_experimental.counter_agg( ts timestamptz, value DOUBLE PRECISION )
 (
-    sfunc = timescale_analytics_experimental.counter_agg_trans_no_bounds,
+    sfunc = toolkit_experimental.counter_agg_trans_no_bounds,
     stype = internal,
-    finalfunc = timescale_analytics_experimental.counter_agg_final,
-    combinefunc = timescale_analytics_experimental.counter_agg_combine,
-    serialfunc = timescale_analytics_experimental.counter_summary_trans_serialize,
-    deserialfunc = timescale_analytics_experimental.counter_summary_trans_deserialize,
+    finalfunc = toolkit_experimental.counter_agg_final,
+    combinefunc = toolkit_experimental.counter_agg_combine,
+    serialfunc = toolkit_experimental.counter_summary_trans_serialize,
+    deserialfunc = toolkit_experimental.counter_summary_trans_deserialize,
     parallel = restricted
 );
 "#);
 
 extension_sql!(r#"
-CREATE AGGREGATE timescale_analytics_experimental.rollup(cs timescale_analytics_experimental.CounterSummary)
+CREATE AGGREGATE toolkit_experimental.rollup(cs toolkit_experimental.CounterSummary)
 (
-    sfunc = timescale_analytics_experimental.counter_agg_summary_trans,
+    sfunc = toolkit_experimental.counter_agg_summary_trans,
     stype = internal,
-    finalfunc = timescale_analytics_experimental.counter_agg_final,
-    combinefunc = timescale_analytics_experimental.counter_agg_combine,
-    serialfunc = timescale_analytics_experimental.counter_summary_trans_serialize,
-    deserialfunc = timescale_analytics_experimental.counter_summary_trans_deserialize,
+    finalfunc = toolkit_experimental.counter_agg_final,
+    combinefunc = toolkit_experimental.counter_agg_combine,
+    serialfunc = toolkit_experimental.counter_summary_trans_serialize,
+    deserialfunc = toolkit_experimental.counter_summary_trans_deserialize,
     parallel = restricted
 );
 "#);
 
-#[pg_extern(name="delta", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="delta", schema = "toolkit_experimental", strict, immutable)]
 fn counter_agg_delta(
-    summary: timescale_analytics_experimental::CounterSummary,
+    summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> f64 {
     summary.to_internal_counter_summary().delta()
 }
 
-#[pg_extern(name="rate", schema = "timescale_analytics_experimental", strict, immutable )]
+#[pg_extern(name="rate", schema = "toolkit_experimental", strict, immutable )]
 fn counter_agg_rate(
-    summary: timescale_analytics_experimental::CounterSummary,
+    summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal_counter_summary().rate()
 }
 
-#[pg_extern(name="time_delta", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="time_delta", schema = "toolkit_experimental", strict, immutable)]
 fn counter_agg_time_delta(
-    summary: timescale_analytics_experimental::CounterSummary,
+    summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> f64 {
     summary.to_internal_counter_summary().time_delta()
 }
 
-#[pg_extern(name="irate_left", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="irate_left", schema = "toolkit_experimental", strict, immutable)]
 fn counter_agg_irate_left(
-    summary: timescale_analytics_experimental::CounterSummary,
+    summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal_counter_summary().irate_left()
 }
 
-#[pg_extern(name="irate_right", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="irate_right", schema = "toolkit_experimental", strict, immutable)]
 fn counter_agg_irate_right(
-    summary: timescale_analytics_experimental::CounterSummary,
+    summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal_counter_summary().irate_right()
 }
 
-#[pg_extern(name="idelta_left", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="idelta_left", schema = "toolkit_experimental", strict, immutable)]
 fn counter_agg_idelta_left(
-    summary: timescale_analytics_experimental::CounterSummary,
+    summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> f64 {
     summary.to_internal_counter_summary().idelta_left()
 }
 
-#[pg_extern(name="idelta_right", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="idelta_right", schema = "toolkit_experimental", strict, immutable)]
 fn counter_agg_idelta_right(
-    summary: timescale_analytics_experimental::CounterSummary,
+    summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> f64 {
     summary.to_internal_counter_summary().idelta_right()
 }
 
-#[pg_extern(name="with_bounds", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="with_bounds", schema = "toolkit_experimental", strict, immutable)]
 fn counter_agg_with_bounds(
-    summary: timescale_analytics_experimental::CounterSummary,
+    summary: toolkit_experimental::CounterSummary,
     bounds: tstzrange,
     _fcinfo: pg_sys::FunctionCallInfo,
-) -> timescale_analytics_experimental::CounterSummary{
+) -> toolkit_experimental::CounterSummary{
     unsafe{
         let ptr = bounds as *mut pg_sys::varlena;
         let mut summary = summary.to_internal_counter_summary();
@@ -397,9 +397,9 @@ fn counter_agg_with_bounds(
     }
 }
 
-#[pg_extern(name="extrapolated_delta", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="extrapolated_delta", schema = "toolkit_experimental", strict, immutable)]
 fn counter_agg_extrapolated_delta(
-    summary: timescale_analytics_experimental::CounterSummary,
+    summary: toolkit_experimental::CounterSummary,
     method: String,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
@@ -411,9 +411,9 @@ fn counter_agg_extrapolated_delta(
     }
 }
 
-#[pg_extern(name="extrapolated_rate", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="extrapolated_rate", schema = "toolkit_experimental", strict, immutable)]
 fn counter_agg_extrapolated_rate(
-    summary: timescale_analytics_experimental::CounterSummary,
+    summary: toolkit_experimental::CounterSummary,
     method: String,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
@@ -425,57 +425,57 @@ fn counter_agg_extrapolated_rate(
     }
 }
 
-#[pg_extern(name="num_elements", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="num_elements", schema = "toolkit_experimental", strict, immutable)]
 fn counter_agg_num_elements(
-    summary: timescale_analytics_experimental::CounterSummary,
+    summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> i64 {
     summary.to_internal_counter_summary().stats.n as i64
 }
 
-#[pg_extern(name="num_changes", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="num_changes", schema = "toolkit_experimental", strict, immutable)]
 fn counter_agg_num_changes(
-    summary: timescale_analytics_experimental::CounterSummary,
+    summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> i64 {
     summary.to_internal_counter_summary().num_changes as i64
 }
 
-#[pg_extern(name="num_resets", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="num_resets", schema = "toolkit_experimental", strict, immutable)]
 fn counter_agg_num_resets(
-    summary: timescale_analytics_experimental::CounterSummary,
+    summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> i64 {
     summary.to_internal_counter_summary().num_resets as i64
 }
 
-#[pg_extern(name="slope", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="slope", schema = "toolkit_experimental", strict, immutable)]
 fn counter_agg_slope(
-    summary: timescale_analytics_experimental::CounterSummary,
+    summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal_counter_summary().stats.slope()
 }
 
-#[pg_extern(name="intercept", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="intercept", schema = "toolkit_experimental", strict, immutable)]
 fn counter_agg_intercept(
-    summary: timescale_analytics_experimental::CounterSummary,
+    summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal_counter_summary().stats.intercept()
 }
 
-#[pg_extern(name="corr", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="corr", schema = "toolkit_experimental", strict, immutable)]
 fn counter_agg_corr(
-    summary: timescale_analytics_experimental::CounterSummary,
+    summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal_counter_summary().stats.corr()
 }
 
-#[pg_extern(name="counter_zero_time", schema = "timescale_analytics_experimental", strict, immutable)]
+#[pg_extern(name="counter_zero_time", schema = "toolkit_experimental", strict, immutable)]
 fn counter_agg_counter_zero_time(
-    summary: timescale_analytics_experimental::CounterSummary,
+    summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<pg_sys::TimestampTz> {
     Some((summary.to_internal_counter_summary().stats.x_intercept()? * 1_000_000.0) as i64)
@@ -524,7 +524,7 @@ mod tests {
         Spi::execute(|client| {
             client.select("CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)", None, None);
             // set search_path after defining our table so we don't pollute the wrong schema
-            let stmt = "SELECT format('timescale_analytics_experimental, %s',current_setting('search_path'))";
+            let stmt = "SELECT format('toolkit_experimental, %s',current_setting('search_path'))";
             let search_path = select_one!(client, stmt, String);
             client.select(&format!("SET LOCAL search_path TO {}", search_path), None, None);
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:00:00+00', 10.0), ('2020-01-01 00:01:00+00', 20.0)";
@@ -532,9 +532,9 @@ mod tests {
 
             // NULL bounds are equivalent to none provided
             let stmt = "SELECT counter_agg(ts, val) FROM test";
-            let a = select_one!(client,stmt, timescale_analytics_experimental::CounterSummary);
+            let a = select_one!(client,stmt, toolkit_experimental::CounterSummary);
             let stmt = "SELECT counter_agg(ts, val, NULL::tstzrange) FROM test";
-            let b = select_one!(client,stmt, timescale_analytics_experimental::CounterSummary);
+            let b = select_one!(client,stmt, toolkit_experimental::CounterSummary);
             assert_close_enough(&a.to_internal_counter_summary(), &b.to_internal_counter_summary());
 
             let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
@@ -583,9 +583,9 @@ mod tests {
 
             //combine function works as expected
             let stmt = "SELECT counter_agg(ts, val) FROM test";
-            let a = select_one!(client,stmt, timescale_analytics_experimental::CounterSummary);
+            let a = select_one!(client,stmt, toolkit_experimental::CounterSummary);
             let stmt = "WITH t as (SELECT date_trunc('minute', ts), counter_agg(ts, val) as agg FROM test group by 1 ) SELECT rollup(agg) FROM t";
-            let b = select_one!(client,stmt, timescale_analytics_experimental::CounterSummary);
+            let b = select_one!(client,stmt, toolkit_experimental::CounterSummary);
             assert_close_enough(&a.to_internal_counter_summary(), &b.to_internal_counter_summary());
         });
     }

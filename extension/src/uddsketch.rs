@@ -12,7 +12,6 @@ use uddsketch::{SketchHashKey, UDDSketch as UddSketchInternal};
 
 use crate::{
     aggregate_utils::in_aggregate_context,
-    json_inout_funcs,
     flatten,
     palloc::Internal, pg_type
 };
@@ -116,7 +115,7 @@ struct SerializedUddSketch {
 
 impl From<&UddSketchInternal> for SerializedUddSketch {
     fn from(sketch: &UddSketchInternal) -> Self {
-        let buckets = compress_buckets(&*sketch);
+        let buckets = compress_buckets(sketch.bucket_iter());
         SerializedUddSketch {
             alpha: sketch.max_error(),
             max_buckets: sketch.max_allowed_buckets() as u32,
@@ -167,8 +166,93 @@ pg_type! {
     }
 }
 
+#[derive(serde::Serialize, serde::Deserialize)]
+struct ReadableUddSketch {
+    version: u8,
+    alpha: f64,
+    max_buckets: u32,
+    num_buckets: u32,
+    compactions: u64,
+    count: u64,
+    sum: f64,
+    buckets: Vec<(SketchHashKey, u64)>
+}
+
+impl From<&UddSketch<'_>> for ReadableUddSketch {
+    fn from(sketch: &UddSketch<'_>) -> Self {
+        ReadableUddSketch {
+            version: *sketch.version,
+            alpha: *sketch.alpha,
+            max_buckets: *sketch.max_buckets,
+            num_buckets: *sketch.num_buckets,
+            compactions: *sketch.compactions,
+            count: *sketch.count,
+            sum: *sketch.sum,
+            buckets: sketch.keys().zip(sketch.counts()).collect(),
+        }
+    }
+}
+
+impl From<&ReadableUddSketch> for UddSketch<'static> {
+    fn from(sketch: &'_ ReadableUddSketch) -> Self {
+        assert_eq!(sketch.version, 1);
+
+        let CompressedBuckets {
+            negative_indexes,
+            negative_counts,
+            zero_bucket_count,
+            positive_indexes,
+            positive_counts,
+        } = compress_buckets(sketch.buckets.iter().cloned());
+
+        unsafe {
+            flatten! {
+                UddSketch {
+                    alpha: &sketch.alpha,
+                    max_buckets: &sketch.max_buckets,
+                    num_buckets: &sketch.num_buckets,
+                    compactions: &sketch.compactions,
+                    count: &sketch.count,
+                    sum: &sketch.sum,
+                    zero_bucket_count: &zero_bucket_count,
+                    neg_indexes_bytes: &(negative_indexes.len() as u32),
+                    neg_buckets_bytes: &(negative_counts.len() as u32),
+                    pos_indexes_bytes: &(positive_indexes.len() as u32),
+                    pos_buckets_bytes: &(positive_counts.len() as u32),
+                    negative_indexes: &negative_indexes,
+                    negative_counts: &negative_counts,
+                    positive_indexes: &positive_indexes,
+                    positive_counts: &positive_counts,
+                }
+            }
+        }
+    }
+}
+
 varlena_type!(UddSketch);
-json_inout_funcs!(UddSketch);
+
+impl<'input> InOutFuncs for UddSketch<'input> {
+    fn output(&self, buffer: &mut StringInfo) {
+        use crate::serialization::{EncodedStr::*, str_to_db_encoding};
+
+        let stringified = serde_json::to_string(&ReadableUddSketch::from(self)).unwrap();
+        match str_to_db_encoding(&stringified) {
+            Utf8(s) => buffer.push_str(s),
+            Other(s) => buffer.push_bytes(s.to_bytes()),
+        }
+    }
+
+    fn input(input: &std::ffi::CStr) -> Self
+    where
+        Self: Sized,
+    {
+        use crate::serialization::str_from_db_encoding;
+
+        let utf8_str = str_from_db_encoding(input);
+        let val: ReadableUddSketch = serde_json::from_str(utf8_str).unwrap();
+        UddSketch::from(&val)
+    }
+}
 
 impl<'input> UddSketch<'input> {
     fn keys(&self) -> impl Iterator<Item=SketchHashKey> + '_ {
@@ -203,7 +287,7 @@ fn uddsketch_final(
                 zero_bucket_count,
                 positive_indexes,
                 positive_counts,
-            } = compress_buckets(&*state);
+            } = compress_buckets(state.bucket_iter());
 
 
             // we need to flatten the vector to a single buffer that contains
@@ -240,13 +324,13 @@ struct CompressedBuckets {
     positive_counts: Vec<u8>,
 }
 
-fn compress_buckets(sketch: &UddSketchInternal) -> CompressedBuckets {
+fn compress_buckets(buckets: impl Iterator<Item=(SketchHashKey, u64)>) -> CompressedBuckets {
     let mut negative_indexes = prefix_varint::I64Compressor::with(delta::i64_encoder());
     let mut negative_counts = prefix_varint::U64Compressor::with(delta::u64_encoder());
     let mut zero_bucket_count = 0;
     let mut positive_indexes = prefix_varint::I64Compressor::with(delta::i64_encoder());
     let mut positive_counts = prefix_varint::U64Compressor::with(delta::u64_encoder());
-    for (k, b) in sketch.bucket_iter() {
+    for (k, b) in buckets {
         match k {
             SketchHashKey::Negative(i) => {
                 negative_indexes.push(i);
@@ -599,6 +683,51 @@ mod tests {
             apx_eql(test_value.unwrap(), value.unwrap(), 0.0001);
             apx_eql(test_error.unwrap(), error.unwrap(), 0.000001);
             pct_eql(test_value.unwrap(), 9.0, test_error.unwrap());
+        });
+    }
+
+    #[pg_test]
+    fn uddsketch_io_test() {
+        Spi::execute(|client| {
+            client.select("CREATE TABLE io_test (value DOUBLE PRECISION)", None, None);
+            client.select("INSERT INTO io_test VALUES (-1000), (-100), (-10), (-1), (-0.1), (-0.01), (-0.001), (0), (0.001), (0.01), (0.1), (1), (10), (100), (1000)", None, None);
+
+            let sketch = client.select("SELECT uddsketch(10, 0.01, value)::text FROM io_test", None, None).first().get_one::<String>();
+
+            let expected = "{\
+                \"version\":1,\
+                \"alpha\":0.9881209712069546,\
+                \"max_buckets\":10,\
+                \"num_buckets\":9,\
+                \"compactions\":8,\
+                \"count\":15,\
+                \"sum\":0.0,\
+                \"buckets\":[\
+                    [{\"Negative\":2},1],\
+                    [{\"Negative\":1},2],\
+                    [{\"Negative\":0},3],\
+                    [{\"Negative\":-1},1],\
+                    [\"Zero\",1],\
+                    [{\"Positive\":-1},1],\
+                    [{\"Positive\":0},3],\
+                    [{\"Positive\":1},2],\
+                    [{\"Positive\":2},1]\
+                    ]\
+                }";
+
+            assert_eq!(sketch, Some(expected.into()));
+
+            client.select("CREATE VIEW sketch AS SELECT uddsketch(10, 0.01, value) FROM io_test", None, None).first().get_one::<String>();
+
+            for cmd in vec!["mean(" , "num_vals(", "error(", "approx_percentile(0.1,", "approx_percentile(0.25,", "approx_percentile(0.5,", "approx_percentile(0.6,", "approx_percentile(0.8,"] {
+                let sql1 = format!("SELECT {}uddsketch) FROM sketch", cmd);
+                let sql2 = format!("SELECT {}'{}'::uddsketch) FROM sketch", cmd, expected);
+
+                let expected = client.select(&sql1, None, None).first().get_one::<f64>().unwrap();
+                let test = client.select(&sql2, None, None).first().get_one::<f64>().unwrap();
+
+                assert_eq!(expected, test);
+            }
         });
     }
 }

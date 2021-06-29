@@ -5,14 +5,14 @@ mod tests {
 
     use pgx::*;
 
-    #[pg_extern(schema="timescale_analytics_experimental")]
+    #[pg_extern(schema="toolkit_experimental")]
     fn expected_failure() -> i32 { 1 }
 
-    #[pg_test(error = "features in timescale_analytics_experimental are unstable, and objects depending on them will be deleted on extension update (there will be a DROP SCHEMA timescale_analytics_experimental CASCADE), which on Forge can happen at any time.")]
+    #[pg_test(error = "features in toolkit_experimental are unstable, and objects depending on them will be deleted on extension update (there will be a DROP SCHEMA toolkit_experimental CASCADE), which on Forge can happen at any time.")]
     fn should_fail_blocks_view() {
         Spi::execute(|client| {
             let _ = client.select(
-                "CREATE VIEW failed AS SELECT timescale_analytics_experimental.expected_failure();",
+                "CREATE VIEW failed AS SELECT toolkit_experimental.expected_failure();",
                None,
                 None);
         })
@@ -27,7 +27,7 @@ mod tests {
                 .select(
                     "SELECT pg_catalog.pg_describe_object(classid, objid, 0) \
                     FROM pg_catalog.pg_extension e, pg_catalog.pg_depend d \
-                    WHERE e.extname='timescale_analytics' \
+                    WHERE e.extname='timescaledb_toolkit' \
                     AND refclassid = 'pg_catalog.pg_extension'::pg_catalog.regclass \
                     AND d.refobjid = e.oid \
                     AND deptype = 'e'
@@ -42,7 +42,7 @@ mod tests {
                     }
 
                     if val.starts_with("schema")
-                        && val.strip_prefix("schema ") == Some("timescale_analytics_experimental") {
+                        && val.strip_prefix("schema ") == Some("toolkit_experimental") {
                         return None
                     }
 
@@ -51,13 +51,13 @@ mod tests {
                         return None
                     }
 
-                    let type_prefix = "type timescale_analytics_experimental.";
+                    let type_prefix = "type toolkit_experimental.";
                     if val.starts_with(type_prefix)
                         && val.strip_prefix(type_prefix).is_some() {
                             return None
                     }
 
-                    let function_prefix = "function timescale_analytics_experimental.";
+                    let function_prefix = "function toolkit_experimental.";
                     if val.starts_with(function_prefix)
                         && val.strip_prefix(function_prefix).is_some() {
                             return None
@@ -90,7 +90,7 @@ mod tests {
         "event trigger disallow_experimental_dependencies_on_views",
         "function disallow_experimental_dependencies()",
         "function disallow_experimental_view_dependencies()",
-        "function timescale_analytics_probe()",
+        "function timescaledb_toolkit_probe()",
         "function approx_percentile(double precision,uddsketch)",
         "function approx_percentile_rank(double precision,uddsketch)",
         "function error(uddsketch)",

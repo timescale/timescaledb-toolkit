@@ -12,7 +12,7 @@ use time_series::{TSPoint, TimeSeries as InternalTimeSeries, ExplicitTimeSeries,
 use crate::time_series::TimeSeries;
 
 // This is included for debug purposes and probably should not leave experimental
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn asap_smooth_raw(
     data: Vec<f64>,
     resolution: i32,
@@ -20,9 +20,9 @@ pub fn asap_smooth_raw(
     asap_smooth(&data, resolution as u32)
 }
 
-// hack to allow us to qualify names with "timescale_analytics_experimental"
+// hack to allow us to qualify names with "toolkit_experimental"
 // so that pgx generates the correct SQL
-mod timescale_analytics_experimental {
+mod toolkit_experimental {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -31,7 +31,7 @@ pub struct ASAPTransState {
     resolution: i32,
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn asap_trans(
     state: Option<Internal<ASAPTransState>>,
     ts: Option<pg_sys::TimestampTz>,
@@ -88,11 +88,11 @@ fn find_downsample_interval(series: &ExplicitTimeSeries, resolution: i64) -> i64
     candidate / median * median  // Truncate candidate to a multiple of median
 }
 
-#[pg_extern(schema = "timescale_analytics_experimental")]
+#[pg_extern(schema = "toolkit_experimental")]
 fn asap_final(
     state: Option<Internal<ASAPTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_series::timescale_analytics_experimental::TimeSeries<'static>> {
+) -> Option<crate::time_series::toolkit_experimental::TimeSeries<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let state = match state {
@@ -137,11 +137,11 @@ fn asap_final(
     }
 }
 
-#[pg_extern(name="asap_smooth", schema = "timescale_analytics_experimental")]
+#[pg_extern(name="asap_smooth", schema = "toolkit_experimental")]
 pub fn asap_on_timeseries(
-    series: crate::time_series::timescale_analytics_experimental::TimeSeries<'static>,
+    series: crate::time_series::toolkit_experimental::TimeSeries<'static>,
     resolution: i32
-) -> Option<crate::time_series::timescale_analytics_experimental::TimeSeries<'static>> {
+) -> Option<crate::time_series::toolkit_experimental::TimeSeries<'static>> {
     // TODO: implement this using zero copy (requires sort, find_downsample_interval, and downsample_and_gapfill on TimeSeries)
     let series = series.to_internal_time_series();
     let mut normal = match series {
@@ -178,10 +178,10 @@ pub fn asap_on_timeseries(
 
 // Aggregate on only values (assumes aggregation over ordered normalized timestamp)
 extension_sql!(r#"
-CREATE AGGREGATE timescale_analytics_experimental.asap_smooth(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution INT) (
-    sfunc = timescale_analytics_experimental.asap_trans,
+CREATE AGGREGATE toolkit_experimental.asap_smooth(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution INT) (
+    sfunc = toolkit_experimental.asap_trans,
     stype = internal,
-    finalfunc = timescale_analytics_experimental.asap_final
+    finalfunc = toolkit_experimental.asap_final
 );
 "#);
 
@@ -207,7 +207,7 @@ mod tests {
             // and our decreased values should be around 64-72.  However, since the output is
             // rolling averages, expect these values to impact the results around these ranges as well.
 
-            client.select("create table asap_vals as SELECT * FROM timescale_analytics_experimental.unnest_series((SELECT timescale_analytics_experimental.asap_smooth(date, value, 100) FROM asap_test ))", None, None);
+            client.select("create table asap_vals as SELECT * FROM toolkit_experimental.unnest_series((SELECT toolkit_experimental.asap_smooth(date, value, 100) FROM asap_test ))", None, None);
 
             let sanity = client.select("SELECT COUNT(*) FROM asap_vals", None, None).first()
                 .get_one::<i32>().unwrap();
@@ -261,18 +261,18 @@ mod tests {
 
             // Now compare the asap aggregate to asap run on a timeseries aggregate
             client.select(
-                "create table asap_vals2 as 
-                SELECT * 
-                FROM timescale_analytics_experimental.unnest_series(
-                    (SELECT timescale_analytics_experimental.asap_smooth(
-                        (SELECT timescale_analytics_experimental.timeseries(date, value) FROM asap_test),
+                "create table asap_vals2 as
+                SELECT *
+                FROM toolkit_experimental.unnest_series(
+                    (SELECT toolkit_experimental.asap_smooth(
+                        (SELECT toolkit_experimental.timeseries(date, value) FROM asap_test),
                         100)
                     )
                 )", None, None);
 
             let delta = client
                 .select(
-                    "SELECT count(*) 
+                    "SELECT count(*)
                     FROM asap_vals r1 FULL OUTER JOIN asap_vals2 r2 ON r1 = r2
                     WHERE r1 IS NULL OR r2 IS NULL;" , None, None)
                 .first()

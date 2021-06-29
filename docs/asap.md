@@ -7,7 +7,7 @@
 
 ## Description <a id="asap-description"></a>
 
-The [ASAP smoothing alogrithm](https://arxiv.org/pdf/1703.00983.pdf) is designed create human readable graphs which preserve the rough shape and larger trends of the input data while minimizing the local variance between points.  Timescale analytics provides an implementation of this which will take `(timestamp, value)` pairs, normalize them to the target interval, and return the ASAP smoothed values.
+The [ASAP smoothing alogrithm](https://arxiv.org/pdf/1703.00983.pdf) is designed create human readable graphs which preserve the rough shape and larger trends of the input data while minimizing the local variance between points.  TimescaleDB Toolkit provides an implementation of this which will take `(timestamp, value)` pairs, normalize them to the target interval, and return the ASAP smoothed values.
 
 ## Details <a id="asap-details"></a>
 
@@ -17,7 +17,7 @@ The output of the postgres aggregate is a timescale timeseries object describing
 
 ## Usage Example <a id="asap-example"></a>
 
-In this example we're going to examine about 250 years of monthly temperature readings from England (raw data can be found [here](http://futuredata.stanford.edu/asap/Temp.csv), though timestamps need to have a day added to be readable by PostgresQL).  
+In this example we're going to examine about 250 years of monthly temperature readings from England (raw data can be found [here](http://futuredata.stanford.edu/asap/Temp.csv), though timestamps need to have a day added to be readable by PostgresQL).
 
 
 ```SQL ,ignore
@@ -26,7 +26,7 @@ COPY temperatures from 'temperature.csv' CSV HEADER;
 SELECT * FROM temperatures ORDER BY month LIMIT 10;
 ```
 ```
-            month             | value 
+            month             | value
 ------------------------------+-------
  1723-01-01 00:00:00-07:52:58 |   1.1
  1723-02-01 00:00:00-07:52:58 |   4.4
@@ -48,10 +48,10 @@ It is hard to look at this data and make much sense of how the temperature has c
 We can use ASAP smoothing here to get a much clearer picture of the behavior over this interval.
 
 ```SQL ,ignore
-SELECT * FROM timescale_analytics_experimental.unnest_series((SELECT timescale_analytics_experimental.asap_smooth(month, value, 800) FROM temperatures));
+SELECT * FROM toolkit_experimental.unnest_series((SELECT toolkit_experimental.asap_smooth(month, value, 800) FROM temperatures));
 ```
 ```
-                time                 |       value       
+                time                 |       value
 -------------------------------------+-------------------
  1723-01-01 00:00:00-07:52:58        |  9.51550387596899
  1723-04-12 21:38:55.135135-07:52:58 |   9.4890503875969
@@ -81,7 +81,7 @@ Note the use of the `unnest_series` here to unpack the results of the `asap_smoo
 ---
 ## **asap_smooth** <a id="asap_smooth"></a>
 ```SQL ,ignore
-timescale_analytics_experimental.asap_smooth(
+toolkit_experimental.asap_smooth(
     ts TIMESTAMPTZ,
     value DOUBLE PRECISION,
     resolution INT
@@ -113,9 +113,9 @@ For this examples assume we have a table 'metrics' with columns 'date' and 'read
 ```SQL ,non-transactional
 SET TIME ZONE 'UTC';
 CREATE TABLE metrics(date TIMESTAMPTZ, reading DOUBLE PRECISION);
-INSERT INTO metrics 
+INSERT INTO metrics
 SELECT
-    '2020-1-1 UTC'::timestamptz + make_interval(hours=>foo), 
+    '2020-1-1 UTC'::timestamptz + make_interval(hours=>foo),
     (5 + 5 * sin(foo / 12.0 * PI()))
     FROM generate_series(1,168) foo;
 
@@ -124,12 +124,12 @@ SELECT
 </div>
 
 ```SQL
-SELECT * FROM timescale_analytics_experimental.unnest_series(
-    (SELECT timescale_analytics_experimental.asap_smooth(date, reading, 8)
+SELECT * FROM toolkit_experimental.unnest_series(
+    (SELECT toolkit_experimental.asap_smooth(date, reading, 8)
      FROM metrics));
 ```
 ```output
-          time          |        value        
+          time          |        value
 ------------------------+---------------------
  2020-01-01 01:00:00+00 | 5.3664814565722665
  2020-01-01 21:00:00+00 |  5.949469264090644

@@ -3,7 +3,7 @@ use pgx::*;
 /// nop function that forces the extension binary to be loaded, this ensures
 /// that if a user sees the error message the guc will in fact be active
 #[pg_extern]
-fn timescale_analytics_probe() {
+fn timescaledb_toolkit_probe() {
 
 }
 
@@ -17,7 +17,7 @@ DECLARE
   experimental_schema_id oid;
 BEGIN
 
-  guc_set := current_setting('timescale_analytics_acknowledge_auto_drop', true);
+  guc_set := current_setting('timescaledb_toolkit_acknowledge_auto_drop', true);
   IF guc_set IS NOT NULL AND guc_set = 'on' THEN
     RETURN;
   END IF;
@@ -25,7 +25,7 @@ BEGIN
   SELECT oid schema_oid
   INTO experimental_schema_id
   FROM pg_catalog.pg_namespace
-  WHERE nspname='timescale_analytics_experimental'
+  WHERE nspname='toolkit_experimental'
   LIMIT 1;
 
   IF EXISTS (
@@ -41,9 +41,9 @@ BEGIN
         WHERE NOT obj.in_extension
       ) created ON created.id = depend.objid))
   THEN
-    PERFORM timescale_analytics_probe();
-    RAISE EXCEPTION 'features in timescale_analytics_experimental are unstable, and objects depending on them will be deleted on extension update (there will be a DROP SCHEMA timescale_analytics_experimental CASCADE), which on Forge can happen at any time.'
-      USING DETAIL='If you really want to do this, and are willing to accept the possibility that objects so created may be deleted without warning, set timescale_analytics_acknowledge_auto_drop to ''true''.';
+    PERFORM timescaledb_toolkit_probe();
+    RAISE EXCEPTION 'features in toolkit_experimental are unstable, and objects depending on them will be deleted on extension update (there will be a DROP SCHEMA toolkit_experimental CASCADE), which on Forge can happen at any time.'
+      USING DETAIL='If you really want to do this, and are willing to accept the possibility that objects so created may be deleted without warning, set timescaledb_toolkit_acknowledge_auto_drop to ''true''.';
   END IF;
 END;
 $$;
@@ -57,7 +57,7 @@ DECLARE
   experimental_schema_id oid;
 BEGIN
 
-  guc_set := current_setting('timescale_analytics_acknowledge_auto_drop', true);
+  guc_set := current_setting('timescaledb_toolkit_acknowledge_auto_drop', true);
   IF guc_set IS NOT NULL AND guc_set = 'on' THEN
     RETURN;
   END IF;
@@ -65,7 +65,7 @@ BEGIN
   SELECT oid schema_oid
   INTO experimental_schema_id
   FROM pg_catalog.pg_namespace
-  WHERE nspname='timescale_analytics_experimental'
+  WHERE nspname='toolkit_experimental'
   LIMIT 1;
 
   -- views do not depend directly on objects, instead the rewrite rule depends
@@ -85,9 +85,9 @@ BEGIN
       INNER JOIN pg_catalog.pg_depend depend2 ON depend2.objid = depend.objid)
     )
   THEN
-    PERFORM timescale_analytics_probe();
-    RAISE EXCEPTION 'features in timescale_analytics_experimental are unstable, and objects depending on them will be deleted on extension update (there will be a DROP SCHEMA timescale_analytics_experimental CASCADE), which on Forge can happen at any time.'
-        USING DETAIL='If you really want to do this, and are willing to accept the possibility that objects so created may be deleted without warning, set timescale_analytics_acknowledge_auto_drop to ''true''.';
+    PERFORM timescaledb_toolkit_probe();
+    RAISE EXCEPTION 'features in toolkit_experimental are unstable, and objects depending on them will be deleted on extension update (there will be a DROP SCHEMA toolkit_experimental CASCADE), which on Forge can happen at any time.'
+        USING DETAIL='If you really want to do this, and are willing to accept the possibility that objects so created may be deleted without warning, set timescaledb_toolkit_acknowledge_auto_drop to ''true''.';
   END IF;
 END;
 $$;

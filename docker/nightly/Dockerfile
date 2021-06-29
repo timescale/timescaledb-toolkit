@@ -1,4 +1,4 @@
-FROM timescale/timescaledb-ha:pg13-latest AS analytics-tools
+FROM timescale/timescaledb-ha:pg13-latest AS toolkit-tools
 
 USER root
 
@@ -43,5 +43,5 @@ RUN set -ex \
 # ship the build tools.
 FROM timescale/timescaledb-ha:pg13-latest AS nightly
 
-COPY --from=analytics-tools /usr/share/postgresql /usr/share/postgresql
-COPY --from=analytics-tools /usr/lib/postgresql /usr/lib/postgresql
+COPY --from=toolkit-tools /usr/share/postgresql /usr/share/postgresql
+COPY --from=toolkit-tools /usr/lib/postgresql /usr/lib/postgresql

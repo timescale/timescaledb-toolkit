@@ -8,7 +8,7 @@
 
 [Largest Triangle Three Buckets](https://github.com/sveinn-steinarsson/flot-downsample)
 is a downsampling method that tries to retain visual similarity between the
-downsampled data and the original dataset. Timescale analytics provides an
+downsampled data and the original dataset. TimescaleDB Toolkit provides an
 implementation of this which takes `(timestamp, value)` pairs, sorts them if
 needed, and downsamples them.
 
@@ -40,8 +40,8 @@ to 34 points
 
 ```SQL
 SELECT time, value::numeric(10,2)
-FROM timescale_analytics_experimental.unnest_series((
-    SELECT timescale_analytics_experimental.lttb(time, val, 34)
+FROM toolkit_experimental.unnest_series((
+    SELECT toolkit_experimental.lttb(time, val, 34)
     FROM sample_data))
 ```
 
@@ -101,8 +101,8 @@ resulting data looks less and less like the original
 
 ```SQL
 SELECT time, value::numeric(10,2)
-FROM timescale_analytics_experimental.unnest_series((
-    SELECT timescale_analytics_experimental.lttb(time, val, 17)
+FROM toolkit_experimental.unnest_series((
+    SELECT toolkit_experimental.lttb(time, val, 17)
     FROM sample_data))
 ```
 ```output
@@ -132,8 +132,8 @@ FROM timescale_analytics_experimental.unnest_series((
 
 ```SQL
 SELECT time, value::numeric(10,2)
-FROM timescale_analytics_experimental.unnest_series((
-    SELECT timescale_analytics_experimental.lttb(time, val, 8)
+FROM toolkit_experimental.unnest_series((
+    SELECT toolkit_experimental.lttb(time, val, 8)
     FROM sample_data))
 ```
 ```output
@@ -157,7 +157,7 @@ FROM timescale_analytics_experimental.unnest_series((
 ---
 ## **lttb** <a id="lttb"></a>
 ```SQL,ignore
-timescale_analytics_experimental.lttb(
+toolkit_experimental.lttb(
     time TIMESTAMPTZ,
     value DOUBLE PRECISION,
     resolution INTEGER
@@ -165,7 +165,7 @@ timescale_analytics_experimental.lttb(
 ```
 
 This will construct and return a sorted timeseries with at most `resolution`
-points. `timescale_analytics_experimental.unnest_series(...)` can be used to
+points. `toolkit_experimental.unnest_series(...)` can be used to
 extract the `(time, value)` pairs from this series
 
 ### Required Arguments <a id="lttb-required-arguments"></a>
@@ -180,8 +180,8 @@ extract the `(time, value)` pairs from this series
 
 ```SQL
 SELECT time, value
-FROM timescale_analytics_experimental.unnest_series((
-    SELECT timescale_analytics_experimental.lttb(time, val, 4)
+FROM toolkit_experimental.unnest_series((
+    SELECT toolkit_experimental.lttb(time, val, 4)
     FROM sample_data))
 ```
 ```output

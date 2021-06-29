@@ -24,7 +24,7 @@ pub (crate) fn generate_from_install(
 ) {
     writeln!(
         &mut upgrade_file,
-        "DROP SCHEMA timescale_analytics_experimental CASCADE;\n\
+        "DROP SCHEMA toolkit_experimental CASCADE;\n\
         -- drop the EVENT TRIGGERs; there's no CREATE OR REPLACE for those
         DROP EVENT TRIGGER disallow_experimental_deps CASCADE;\n\
         DROP EVENT TRIGGER disallow_experimental_dependencies_on_views CASCADE;"

@@ -209,7 +209,24 @@ fn validate_output(output: Vec<SimpleQueryMessage>, test: &Test) -> Result<(), T
             "output has a different number of rows than expected.",
         )));
     }
-    if test.output != rows {
+
+    fn clamp_len<'s>(mut col: &'s str, idx: usize, test: &Test) -> &'s str {
+        let max_len = test.precision_limits.get(&idx);
+        if let Some(&max_len) = max_len {
+            if col.len() > max_len {
+                col = &col[..max_len]
+            }
+        }
+        col
+    }
+
+    let all_eq = test.output.iter().zip(rows.iter()).all(|(out, row)| {
+        out.len() == row.len()
+        && out.iter().zip(row.iter()).enumerate().all(|(i, (o, r))| {
+            clamp_len(o, i, test) == clamp_len(r, i, test)
+        })
+    });
+    if !all_eq {
         return Err(TestError::OutputError(output_error(
             "output has a different values than expected.",
         )));

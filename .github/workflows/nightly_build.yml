@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'docker/nightly/**'
+      - '.github/workflows/nightly_build.yml'
   workflow_dispatch:
   schedule:
     # we build at 8am UTC, 3am Eastern, midnight Pacific
@@ -36,29 +37,20 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # - name: Build
-      #   id: tester_build
-      #   uses: docker/build-push-action@v2
-      #   with:
-      #     target: toolkit-tools
-      #     push: false
-      #     load: true
-      #     context: .
-      #     file: ./docker/nightly/Dockerfile
-      #     tags: timescaledev/timescaledb-toolkit:tester
-      #     cache-from: type=local,src=/tmp/.buildx-cache
-      #     cache-to: type=local,dest=/tmp/.buildx-cache
+      - name: Build
+        uses: docker/build-push-action@v2
+        with:
+          push: false
+          load: true
+          context: .
+          file: ./docker/nightly/Dockerfile
+          tags: timescaledev/timescaledb-toolkit:nightly
 
-      # - name: Run Tests
-      #   run: |
-      #       docker run -d --name toolkit_test -e POSTGRES_HOST_AUTH_METHOD=trust timescaledev/timescaledb-toolkit:tester
-      #       docker exec toolkit_test /bin/bash -c 'PATH=\"${PATH}:/root/.cargo/bin\" \
-      #         && cd /rust/timescaledb-analytics/crates \
-      #         && cargo test --release --workspace --exclude timescaledb_toolkit'
-      #       docker stop toolkit_test
-      # TODO we also want to run our extension tests, but we don't want to restart the DB, need a pgx patch
-
-      #TODO run doctests
+      - name: Run Doc Tests
+        run: |
+          docker run -d --name toolkit_test -e POSTGRES_HOST_AUTH_METHOD=trust -p 5432:5432 timescaledev/timescaledb-toolkit:nightly
+          cargo run --manifest-path ./tools/sql-doctester/Cargo.toml -- -h localhost -s "CREATE EXTENSION timescaledb_toolkit; SET SESSION TIMEZONE TO 'UTC'" -p 5432 docs
+      #TODO can/should we run our other tests also?
 
       - name: Push
         id: image_build

@@ -63,7 +63,7 @@ FROM response_times
 GROUP BY 1, 2
 ORDER BY 3 DESC LIMIT 15;
 ```
-```output
+```output, precision(2: 7)
          bucket         | api_id |        avg        |       median
 ------------------------+--------+-------------------+--------------------
  2020-01-01 00:00:00+00 |     12 | 963.7133258896499 |  718.5239744582293
@@ -103,7 +103,7 @@ GROUP BY 1, 2
 ORDER BY 3 DESC LIMIT 15;
 ```
 
-```output
+```output, precision(2: 7)
          bucket         | api_id |        avg         |       median
 ------------------------+--------+--------------------+--------------------
  2020-01-01 09:00:00+00 |      9 | 11508.507742106061 |  568.5874170077199
@@ -134,7 +134,7 @@ FROM response_times
 GROUP BY 1, 2
 ORDER BY 4 DESC, 2, 1 LIMIT 15;
 ```
-```output
+```output, precision(2: 7)
          bucket         | api_id |        avg         |       median
 ------------------------+--------+--------------------+--------------------
  2020-01-01 00:00:00+00 |     12 |    963.71332588965 |  718.5239744582293
@@ -175,7 +175,7 @@ FROM response_times
 GROUP BY 1, 2
 ORDER BY 5 DESC LIMIT 15;
 ```
-```output
+```output, precision(2: 7)
                   bucket         | api_id |        avg         |    true_median     |   approx_median
 ------------------------+--------+--------------------+--------------------+--------------------
  2020-01-01 00:00:00+00 |     12 |    963.71332588965 |  718.5239744582293 |   717.572650368603
@@ -222,7 +222,7 @@ SELECT
 FROM response_times_hourly
 ORDER BY 4 DESC, 2, 1 LIMIT 15;
 ```
-```output
+```output, precision(2: 7)
          bucket         | api_id |        avg         |   approx_median
 ------------------------+--------+--------------------+--------------------
  2020-01-01 00:00:00+00 |     12 |    963.71332588965 |   717.572650368603
@@ -278,7 +278,7 @@ FROM response_times_hourly
 GROUP BY api_id
 ORDER BY api_id;
 ```
-```output
+```output, precision(1: 7)
  api_id |        avg         |   approx_median
 --------+--------------------+--------------------
       1 |  71.55322907526073 |  54.57028044425955

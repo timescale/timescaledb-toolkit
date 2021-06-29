@@ -1,5 +1,6 @@
 use std::{
     borrow::Cow,
+    collections::HashMap,
     ffi::OsStr,
     fs,
     io::{self, Write},
@@ -92,6 +93,7 @@ pub struct Test {
     output: Vec<Vec<String>>,
     transactional: bool,
     ignore_output: bool,
+    precision_limits: HashMap<usize, usize>,
 }
 
 fn extract_tests(root: &str) -> Vec<TestFile> {

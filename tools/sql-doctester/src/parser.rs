@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use pulldown_cmark::{
     CodeBlockKind::Fenced,
     CowStr, Event, Parser,
@@ -86,6 +88,7 @@ pub fn extract_tests_from_string(s: &str, file_stem: &str) -> TestFile {
                     output: Vec::new(),
                     transactional: code_block_info.transactional,
                     ignore_output: code_block_info.ignore_output,
+                    precision_limits: code_block_info.precision_limits,
                 };
 
                 // consume the lines of the test
@@ -108,6 +111,14 @@ pub fn extract_tests_from_string(s: &str, file_stem: &str) -> TestFile {
 
                                 // output, consume it
                                 BlockKind::Output => {
+                                    if !test.precision_limits.is_empty()
+                                        && !code_block_info.precision_limits.is_empty() {
+                                        panic!(
+                                            "cannot have precision limits on both test and output.\n{}:{} {:?}",
+                                            file_stem, current_line, heading_stack
+                                        )
+                                    }
+                                    test.precision_limits = code_block_info.precision_limits;
                                     let _ = parser.next();
                                     break;
                                 }
@@ -162,6 +173,7 @@ struct CodeBlockInfo {
     kind: BlockKind,
     transactional: bool,
     ignore_output: bool,
+    precision_limits: HashMap<usize, usize>,
 }
 
 #[derive(Clone, Copy)]
@@ -178,6 +190,7 @@ fn parse_code_block_info(info: &str) -> CodeBlockInfo {
         kind: BlockKind::Other,
         transactional: true,
         ignore_output: false,
+        precision_limits: HashMap::new(),
     };
 
     for token in tokens {
@@ -191,6 +204,27 @@ fn parse_code_block_info(info: &str) -> CodeBlockInfo {
             "ignore-output" => info.ignore_output = true,
             "output" => info.kind = BlockKind::Output,
             s if s.to_ascii_lowercase() == "sql" => info.kind = BlockKind::SQL,
+            p if p.starts_with("precision") => {
+                // syntax `precision(col: bytes)`
+                let precision_err = || -> ! {
+                    panic!("invalid syntax for `precision(col: bytes)` found `{}`", p)
+                };
+                let arg = &p["precision".len()..];
+                if arg.as_bytes().first() != Some(&b'(') || arg.as_bytes().last() != Some(&b')') {
+                    precision_err()
+                }
+                let arg = &arg[1..arg.len()-1];
+                let args: Vec<_> = arg.split(':').collect();
+                if args.len() != 2 {
+                    precision_err()
+                }
+                let column = args[0].trim().parse().unwrap_or_else(|_| precision_err());
+                let length = args[1].trim().parse().unwrap_or_else(|_| precision_err());
+                let old = info.precision_limits.insert(column, length);
+                if old.is_some() {
+                    panic!("duplicate precision for column {}", column)
+                }
+            },
             _ => {}
         }
     }
@@ -200,6 +234,8 @@ fn parse_code_block_info(info: &str) -> CodeBlockInfo {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
+
 
     #[test]
     fn extract() {
@@ -231,7 +267,7 @@ select * from foo
 ```SQL,non-transactional
 select * from bar
 ```
-```output
+```output, precision(1: 3)
  a | b
 ---+---
  1 | 2
@@ -265,6 +301,7 @@ select * from qat
                     output: vec![],
                     transactional: true,
                     ignore_output: false,
+                    precision_limits: HashMap::new(),
                 },
                 Test {
                     location: "/test/file.md:9".to_string(),
@@ -273,6 +310,7 @@ select * from qat
                     output: vec![vec!["value".to_string()]],
                     transactional: true,
                     ignore_output: false,
+                    precision_limits: HashMap::new(),
                 },
                 Test {
                     location: "/test/file.md:24".to_string(),
@@ -281,6 +319,7 @@ select * from qat
                     output: vec![vec!["1".to_string(), "2".to_string()]],
                     transactional: false,
                     ignore_output: false,
+                    precision_limits: [(1,3)].iter().cloned().collect(),
                 },
                 Test {
                     location: "/test/file.md:34".to_string(),
@@ -289,6 +328,7 @@ select * from qat
                     output: vec![],
                     transactional: true,
                     ignore_output: true,
+                    precision_limits: HashMap::new(),
                 },
                 Test {
                     location: "/test/file.md:39".to_string(),
@@ -297,6 +337,7 @@ select * from qat
                     output: vec![],
                     transactional: true,
                     ignore_output: false,
+                    precision_limits: HashMap::new(),
                 },
                 Test {
                     location: "/test/file.md:44".to_string(),
@@ -305,6 +346,7 @@ select * from qat
                     output: vec![],
                     transactional: true,
                     ignore_output: false,
+                    precision_limits: HashMap::new(),
                 },
             ],
         };

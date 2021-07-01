@@ -1,3 +1,6 @@
+[![CI](https://github.com/timescale/timescaledb-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/timescale/timescaledb-toolkit/actions/workflows/ci.yml) [![nightly](https://github.com/timescale/timescaledb-toolkit/actions/workflows/nightly_build.yml/badge.svg)](https://github.com/timescale/timescaledb-toolkit/actions/workflows/nightly_build.yml)
+
+
 # TimescaleDB Toolkit #
 
 This repository is the home of the TimescaleDB Toolkit team. Our mission is to

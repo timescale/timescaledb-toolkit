@@ -25,52 +25,58 @@ pg_type! {
 
 json_inout_funcs!(UnstableTimeseriesPipelineElement);
 
-// hack to allow us to qualify names with "timescale_analytics_experimental"
-// so that pgx generates the correct SQL
-pub mod timescale_analytics_experimental {
-    pub(crate) use super::*;
-    varlena_type!(UnstableTimeseriesPipelineElement);
-
-    // TODO once we start stabilizing elements, create a type TimeseriesPipeline
-    //      stable elements will create a stable pipeline, but adding an unstable
-    //      element to a stable pipeline will create an unstable pipeline
-    // FIXME switch to a pg_type once padding is ready
-    type USPED<'e> = UnstableTimeseriesPipelineElementData<'e>;
-    #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PostgresType)]
-    pub struct UnstableTimeseriesPipeline<'a> {
-        pub elements: Vec<USPED<'a>>,
+// TODO once we start stabilizing elements, create a type TimeseriesPipeline
+//      stable elements will create a stable pipeline, but adding an unstable
+//      element to a stable pipeline will create an unstable pipeline
+type USPED = UnstableTimeseriesPipelineElementData;
+pg_type! {
+    #[derive(Debug)]
+    struct UnstableTimeseriesPipeline<'input> {
+        num_elements: u64,
+        elements: [USPED; self.num_elements],
     }
-
 }
 
-#[pg_extern(immutable, parallel_safe, schema="timescale_analytics_experimental")]
+json_inout_funcs!(UnstableTimeseriesPipeline);
+
+// hack to allow us to qualify names with "toolkit_experimental"
+// so that pgx generates the correct SQL
+pub mod toolkit_experimental {
+    pub(crate) use super::*;
+    varlena_type!(UnstableTimeseriesPipeline);
+    varlena_type!(UnstableTimeseriesPipelineElement);
+}
+
+pub enum MaybeOwnedTs<'s> {
+    Borrowed(TimeSeries<'s>),
+    Owned(TimeSeries<'static>),
+}
+
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
 pub fn run_pipeline<'s, 'p>(
-    timeseries: timescale_analytics_experimental::TimeSeries<'s>,
-    pipeline: timescale_analytics_experimental::UnstableTimeseriesPipeline<'p>,
-) -> timescale_analytics_experimental::TimeSeries<'static> {
-    let mut owned_timeseries = None;
-    for element in &pipeline.elements {
+    timeseries: toolkit_experimental::TimeSeries<'s>,
+    pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
+) -> toolkit_experimental::TimeSeries<'static> {
+    let mut timeseries = MaybeOwnedTs::Borrowed(timeseries);
+    for element in pipeline.elements.iter() {
         let element = element.element;
-        let new_timeseries = match owned_timeseries {
-            None => execute_pipeline_element(timeseries, element),
-            Some(timeseries) => execute_pipeline_element(timeseries, element),
-        };
-        if owned_timeseries.is_none() || new_timeseries.is_some() {
-            owned_timeseries = new_timeseries
+        let new_timeseries = execute_pipeline_element(&mut timeseries, &element);
+        if let Some(series) = new_timeseries {
+            timeseries = MaybeOwnedTs::Owned(series)
         }
     }
-    if let Some(timeseries) = owned_timeseries {
-        return timeseries
+    match timeseries {
+        MaybeOwnedTs::Borrowed(series) => series.in_current_context(),
+        MaybeOwnedTs::Owned(series) => series,
     }
-    return timeseries.in_current_context()
 }
 
-#[pg_extern(immutable, parallel_safe, schema="timescale_analytics_experimental")]
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
 pub fn run_pipeline_element<'s, 'p>(
-    timeseries: timescale_analytics_experimental::TimeSeries<'s>,
-    element: timescale_analytics_experimental::UnstableTimeseriesPipelineElement<'p>,
-) -> timescale_analytics_experimental::TimeSeries<'static> {
-    let owned_timeseries = execute_pipeline_element(timeseries, element.element);
+    timeseries: toolkit_experimental::TimeSeries<'s>,
+    element: toolkit_experimental::UnstableTimeseriesPipelineElement<'p>,
+) -> toolkit_experimental::TimeSeries<'static> {
+    let owned_timeseries = execute_pipeline_element(&mut MaybeOwnedTs::Borrowed(timeseries), &element.element);
     if let Some(timeseries) = owned_timeseries {
         return timeseries
     }
@@ -78,44 +84,53 @@ pub fn run_pipeline_element<'s, 'p>(
 }
 
 // TODO need cow-like for timeseries input
-pub fn execute_pipeline_element<'s, 'e, 'o: 's>(
-    timeseries: timescale_analytics_experimental::TimeSeries<'s>,
-    element: Element<'e>
-) -> Option<timescale_analytics_experimental::TimeSeries<'o>> {
-    match element {
-        Element::LTTB{resolution} => {
-            return Some(crate::lttb::lttb_ts(timeseries, *resolution as _))
+pub fn execute_pipeline_element<'s, 'e>(
+    timeseries: &mut MaybeOwnedTs<'s>,
+    element: &Element
+) -> Option<toolkit_experimental::TimeSeries<'static>> {
+    use MaybeOwnedTs::{Borrowed, Owned};
+    match (element, timeseries) {
+        (Element::LTTB{resolution}, Borrowed(timeseries)) => {
+            return Some(crate::lttb::lttb_ts(*timeseries, *resolution as _))
+        }
+        (Element::LTTB{resolution}, Owned(timeseries)) => {
+            return Some(crate::lttb::lttb_ts(*timeseries, *resolution as _))
         }
     }
 }
 
+
 // TODO is (immutable, parallel_safe) correct?
-#[pg_extern(immutable, parallel_safe, schema="timescale_analytics_experimental")]
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
 pub fn add_unstable_element<'p, 'e>(
-    pipeline: timescale_analytics_experimental::UnstableTimeseriesPipeline<'p>,
-    element: timescale_analytics_experimental::UnstableTimeseriesPipelineElement<'e>,
-) -> timescale_analytics_experimental::UnstableTimeseriesPipeline<'p> {
-    let mut pipeline = pipeline.clone();
+    pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
+    element: toolkit_experimental::UnstableTimeseriesPipelineElement<'e>,
+) -> toolkit_experimental::UnstableTimeseriesPipeline<'p> {
     unsafe {
-        pipeline.elements.push(element.flatten().0);
+        let elements: Vec<_> = pipeline.elements.iter().chain(Some(element.flatten().0)).collect();
+        flatten! {
+            UnstableTimeseriesPipeline {
+                num_elements: elements.len().try_into().unwrap(),
+                elements: (&*elements).into(),
+            }
+        }
     }
-    pipeline
 }
 
 // using this instead of pg_operator since the latter doesn't support schemas yet
 // FIXME there is no CREATE OR REPLACE OPERATOR need to update post-install.rs
 //       need to ensure this works with out unstable warning
 extension_sql!(r#"
-CREATE OPERATOR timescale_analytics_experimental.|> (
-    PROCEDURE=timescale_analytics_experimental."run_pipeline",
-    LEFTARG=timescale_analytics_experimental.TimeSeries,
-    RIGHTARG=timescale_analytics_experimental.UnstableTimeseriesPipeline
+CREATE OPERATOR toolkit_experimental.|> (
+    PROCEDURE=toolkit_experimental."run_pipeline",
+    LEFTARG=toolkit_experimental.TimeSeries,
+    RIGHTARG=toolkit_experimental.UnstableTimeseriesPipeline
 );
 
-CREATE OPERATOR timescale_analytics_experimental.|> (
-    PROCEDURE=timescale_analytics_experimental."run_pipeline_element",
-    LEFTARG=timescale_analytics_experimental.TimeSeries,
-    RIGHTARG=timescale_analytics_experimental.UnstableTimeseriesPipelineElement
+CREATE OPERATOR toolkit_experimental.|> (
+    PROCEDURE=toolkit_experimental."run_pipeline_element",
+    LEFTARG=toolkit_experimental.TimeSeries,
+    RIGHTARG=toolkit_experimental.UnstableTimeseriesPipelineElement
 );
 "#);
 
@@ -124,16 +139,16 @@ CREATE OPERATOR timescale_analytics_experimental.|> (
     immutable,
     parallel_safe,
     name="lttb",
-    schema="timescale_analytics_experimental"
+    schema="toolkit_experimental"
 )]
 pub fn lttb_pipeline_element<'p, 'e>(
     resolution: i32,
-) -> timescale_analytics_experimental::UnstableTimeseriesPipelineElement<'e> {
+) -> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
     unsafe {
         flatten!(
             UnstableTimeseriesPipelineElement {
                 element: Element::LTTB {
-                    resolution: &(resolution.try_into().unwrap()),
+                    resolution: resolution.try_into().unwrap(),
                 }
             }
         )
@@ -149,9 +164,9 @@ mod tests {
         Spi::execute(|client| {
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
-            let sp = client.select("SELECT format(' %s, timescale_analytics_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select("SET timescale_analytics_acknowledge_auto_drop TO 'true'", None, None);
+            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             client.select(
                 "CREATE TABLE lttb_pipe (series timeseries)",

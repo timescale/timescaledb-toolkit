@@ -17,7 +17,7 @@ mod pipeline;
 type bytea = pg_sys::Datum;
 
 pg_type! {
-    #[derive(Debug)]
+    #[derive(Debug, Copy)]
     struct TimeSeries<'input> {
         series: enum SeriesType<'input> {
             type_id: u64,
@@ -79,7 +79,7 @@ impl<'input> InOutFuncs for TimeSeries<'input> {
             flatten! {
                 TimeSeries {
                     series: SeriesType::ExplicitSeries {
-                        num_points: &(series.len() as u64),
+                        num_points: series.len() as u64,
                         points: &*series,
                     }
                 }

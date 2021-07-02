@@ -175,11 +175,11 @@ pub fn lttb_on_timeseries(
 }
 
 // based on https://github.com/jeromefroe/lttb-rs version 0.2.0
-pub fn lttb_ts<'s, 'o: 's>(
+pub fn lttb_ts<'s>(
     data: crate::time_series::toolkit_experimental::TimeSeries<'s>,
     threshold: usize
 )
--> crate::time_series::timescale_analytics_experimental::TimeSeries<'o>
+-> crate::time_series::toolkit_experimental::TimeSeries<'static>
 {
     if !data.is_sorted() {
         panic!("lttb requires sorted timeseries");

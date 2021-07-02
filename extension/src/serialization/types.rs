@@ -1,7 +1,11 @@
 use std::{
     ffi::{CStr, CString},
     os::raw::{c_char, c_int},
+    slice,
+    mem::{size_of, align_of, MaybeUninit},
 };
+
+use flat_serialize::{impl_flat_serializable, FlatSerializable, WrapErr};
 
 use serde::{Deserialize, Serialize};
 
@@ -12,9 +16,11 @@ use pgx::*;
 /// serialize and deserialize type Oids as `(namespace, name)` pairs, special
 /// casing a number of types with hadcoded Oids that we expect to be common so
 /// that these types can be stored more compactly if desired.
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[repr(transparent)]
-pub struct ShortTypeId(pub Oid);
+pub struct ShortTypeId(pub u32);
+
+impl_flat_serializable!(ShortTypeId);
 
 impl Serialize for ShortTypeId {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>

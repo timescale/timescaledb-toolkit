@@ -7,5 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+flat_serialize = {path="../flat_serialize/flat_serialize"}
+flat_serialize_macro = {path="../flat_serialize/flat_serialize_macro"}
 serde = { version = "1.0", features = ["derive"] }
 time_series = {path="../time-series"}

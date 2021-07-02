@@ -1,9 +1,12 @@
 use serde::{Deserialize, Serialize};
 use time_series::TSPoint;
-#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize)]
+
+use flat_serialize_macro::FlatSerializable;
+
+#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize, FlatSerializable)]
 #[repr(u8)]
 pub enum TimeWeightMethod {
-    LOCF,
+    LOCF = 0,
     Linear,
 }
 

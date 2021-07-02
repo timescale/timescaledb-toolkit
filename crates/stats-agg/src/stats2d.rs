@@ -1,10 +1,10 @@
-// 2D stats are based on the Youngs-Cramer implementation in PG here: 
+// 2D stats are based on the Youngs-Cramer implementation in PG here:
 // https://github.com/postgres/postgres/blob/472e518a44eacd9caac7d618f1b6451672ca4481/src/backend/utils/adt/float.c#L3260
 use serde::{Deserialize, Serialize};
 use crate::{StatsError, XYPair, INV_FLOATING_ERROR_THRESHOLD};
+use flat_serialize_macro::FlatSerializable;
 
-
-#[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize, FlatSerializable)]
 #[repr(C)]
 pub struct StatsSummary2D {
     pub n: u64,   // count
@@ -118,15 +118,15 @@ impl StatsSummary2D {
     }
 
     // inverse transition function (inverse of accum) for windowed aggregates, return None if we want to re-calculate from scratch
-    // we won't modify in place here because of that return bit, it might be that we want to modify accum to also 
-    // copy just for symmetry. 
+    // we won't modify in place here because of that return bit, it might be that we want to modify accum to also
+    // copy just for symmetry.
     // Assumption: no need for Result/error possibility because we can't overflow, as we are doing an inverse operation of something that already happened, so if it worked forward, it should work in reverse?
     // We're extending the Youngs Cramer algorithm here with the algebraic transformation to figure out the reverse calculations.
     // This goes beyond what the PG code does, and is our extension for performance in windowed calculations.
-    
+
     // There is a case where the numerical error can get very large that we will try to avoid: if we have an outlier value that is much larger than the surrounding values
-    // we can get something like: v1 + v2 + v3 + ... vn = outlier + v1 + v2 + v3 + ... + vn - outlier when the outlier is removed from the window. This will cause significant error in the 
-    // resulting calculation of v1 + ... + vn, more than we're comfortable with, so we'll return None in that case which will force recalculation from scratch of v1 + ... + vn. 
+    // we can get something like: v1 + v2 + v3 + ... vn = outlier + v1 + v2 + v3 + ... + vn - outlier when the outlier is removed from the window. This will cause significant error in the
+    // resulting calculation of v1 + ... + vn, more than we're comfortable with, so we'll return None in that case which will force recalculation from scratch of v1 + ... + vn.
 
     // Algebra for removal:
     // n = n_old + 1 -> n_old = n - 1
@@ -145,17 +145,17 @@ impl StatsSummary2D {
         if p.x / self.sx > INV_FLOATING_ERROR_THRESHOLD || p.y / self.sy > INV_FLOATING_ERROR_THRESHOLD{
             return None;
         }
-        
+
         // we can't have an initial value of n = 0 if we're removing something...
         if self.n <= 0 {
             panic!(); //perhaps we should do error handling here, but I think this is reasonable as we are assuming that the removal is of an already-added item in the rest of this
         }
 
-        // if we're removing the last point we should just return a completely empty value to eliminate any errors, it can only be completely empty at that point. 
+        // if we're removing the last point we should just return a completely empty value to eliminate any errors, it can only be completely empty at that point.
         if self.n == 1 {
             return Some(StatsSummary2D::new());
         }
-        
+
         let mut new = StatsSummary2D {
             n: self.n - 1,
             sx: self.sx - p.x,
@@ -163,14 +163,14 @@ impl StatsSummary2D {
             sxx: 0.0, // initialize these for now.
             syy: 0.0,
             sxy: 0.0,
-        }; 
+        };
         let tmpx = p.x * self.n64() - self.sx;
         let tmpy = p.y * self.n64() - self.sy;
         let scale = 1.0 / (self.n64() * new.n64());
         new.sxx = self.sxx - tmpx * tmpx * scale;
         new.syy = self.syy - tmpy * tmpy * scale;
         new.sxy = self.sxy - tmpx * tmpy * scale;
-        Some(new) 
+        Some(new)
     }
 
     ///create a StatsSummary2D from a vector of XYPairs
@@ -236,23 +236,23 @@ impl StatsSummary2D {
         }
         Ok(r)
     }
-    
-    // This is the inverse combine function for use in the window function context when we want to reverse the operation of the normal combine function 
+
+    // This is the inverse combine function for use in the window function context when we want to reverse the operation of the normal combine function
     // for re-aggregation over a window, this is what will get called in tumbling window averages for instance.
     // As with any window function, returning None will cause a re-calculation, so we do that in several cases where either we're dealing with infinites or we have some potential problems with outlying sums
     // so here, self is the previously combined StatsSummary, and we're removing the input and returning the part that would have been there before.
     pub fn remove_combined(&self, remove: StatsSummary2D) -> Option<Self>{
         let combined = &self; // just to lessen confusion with naming
         // handle the trivial n = 0 and equal n cases here, and don't worry about divide by zero errors later.
-        if combined.n == remove.n { 
+        if combined.n == remove.n {
             return Some(StatsSummary2D::new());
         }  else if remove.n == 0 {
             return Some(*self);
         } else if combined.n == 0 {
             // if we've gotten here remove.n != 0, this should never occur, we can't subtract from nothing
-            panic!(); 
+            panic!();
         } else if  combined.n < remove.n {
-            panic!(); //  given that we're always removing things that we've previously added, we shouldn't be able to get a case where we're removing an n that's larger. 
+            panic!(); //  given that we're always removing things that we've previously added, we shouldn't be able to get a case where we're removing an n that's larger.
         }
         // if the sum we're removing is very large compared to the overall value we need to recalculate, see note on the remove function
         if remove.sx / combined.sx > INV_FLOATING_ERROR_THRESHOLD || remove.sy / combined.sy > INV_FLOATING_ERROR_THRESHOLD {
@@ -268,12 +268,12 @@ impl StatsSummary2D {
         };
         let tmpx = part.sx / part.n64() - remove.sx / remove.n64(); //gets squared so order doesn't matter
         let tmpy = part.sy / part.n64() - remove.sy / remove.n64();
-        part.sxx = combined.sxx - remove.sxx - part.n64() * remove.n64() * tmpx * tmpx / combined.n64(); 
+        part.sxx = combined.sxx - remove.sxx - part.n64() * remove.n64() * tmpx * tmpx / combined.n64();
         part.syy = combined.syy - remove.syy - part.n64() * remove.n64() * tmpy * tmpy / combined.n64();
         part.sxy = combined.sxy - remove.sxy - part.n64() * remove.n64() * tmpx * tmpy / combined.n64();
         Some(part)
     }
-   
+
 
     /// offsets all values accumulated in a StatsSummary2D by a given amount in X & Y. This
     /// only works if all values are offset by that amount. This is used for allowing
@@ -281,26 +281,26 @@ impl StatsSummary2D {
     /// other regions where all points are offset by the same amount. The main use case
     /// for now is in the counter case where, when partials are combined you can get a new
     /// offset for all points in the counter.
-    // Note that when offsetting, the offset of the previous partial  be multiplied by N and added to the Sy value. All the other values are 
-    // unaffected because they rely on the expression (Y-Sy/N), (and analogous for the X values) which is basically each value subtracted from the 
-    // average of all values and if all values are shifted by a constant, then the average shifts by the same constant so it cancels out: 
+    // Note that when offsetting, the offset of the previous partial  be multiplied by N and added to the Sy value. All the other values are
+    // unaffected because they rely on the expression (Y-Sy/N), (and analogous for the X values) which is basically each value subtracted from the
+    // average of all values and if all values are shifted by a constant, then the average shifts by the same constant so it cancels out:
     // i.e. If a constant C is added to each Y, then (Y-Sy/N) reduces back to itself as follows:
-        //(Y + C) - (Sy + NC)/N 
-        // Y + C - Sy/N - NC/N 
-        // Y + C - Sy/N - C 
+        //(Y + C) - (Sy + NC)/N
+        // Y + C - Sy/N - NC/N
+        // Y + C - Sy/N - C
         // Y - Sy/N
     pub fn offset(&mut self, offset: XYPair) -> Result<(), StatsError> {
         self.sx = self.sx + self.n64() * offset.x;
         self.sy = self.sy + self.n64() * offset.y;
         if self.has_infinite() && offset.x.is_finite() && offset.y.is_finite(){
-            return Err(StatsError::DoubleOverflow);  
+            return Err(StatsError::DoubleOverflow);
         }
-        Ok(())      
+        Ok(())
     }
 
-    //TODO: Add tests for offsets  
+    //TODO: Add tests for offsets
 
-    
+
     ///returns the sum of squares of both the independent (x) and dependent (y) variables
     ///as an XYPair, where the sum of squares is defined as: sum(x^2) - sum(x)^2 / n)
     ///```
@@ -470,7 +470,7 @@ impl StatsSummary2D {
     /// returns the x intercept of the least squares fit line
     // y = mx + b (y = 0)
     // -b = mx
-    // x = -b / m 
+    // x = -b / m
     pub fn x_intercept(&self) -> Option<f64> {
         // vertical line does have an x intercept
         if self.n > 1 && self.sxx == 0.0 {
@@ -480,9 +480,9 @@ impl StatsSummary2D {
         if self.syy == 0.0 {
             return None;
         }
-        Some(-1.0 * self.intercept()? / self.slope()?) 
+        Some(-1.0 * self.intercept()? / self.slope()?)
     }
-    
+
     /// returns the square of the correlation coefficent (aka the coefficient of determination)
     pub fn determination_coeff(&self) -> Option<f64> {
         if self.n == 0 || self.sxx == 0.0 {

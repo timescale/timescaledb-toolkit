@@ -126,10 +126,9 @@ pub fn str_from_db_encoding(s: &CStr) -> &str {
 pub(crate) mod serde_reference_adaptor {
     use serde::{Deserialize, Deserializer};
 
-    pub(crate) fn deserialize<'de, D, T>(deserializer: D) -> Result<&'static T, D::Error>
+    pub(crate) fn deserialize<'de, D, T>(deserializer: D) -> Result<T, D::Error>
     where D: Deserializer<'de>, T: Deserialize<'de> {
-        let boxed = T::deserialize(deserializer)?.into();
-        Ok(Box::leak(boxed))
+        T::deserialize(deserializer)
     }
 
     pub(crate) fn deserialize_slice<'de, D, T>(deserializer: D) -> Result<&'static [T], D::Error>
@@ -138,11 +137,11 @@ pub(crate) mod serde_reference_adaptor {
         Ok(Box::leak(boxed))
     }
 
-    pub(crate) fn default_padding() -> &'static [u8; 3] {
-        &[0; 3]
+    pub(crate) fn default_padding() -> [u8; 3] {
+        [0; 3]
     }
 
-    pub(crate) fn default_header() -> &'static u32 {
-        &0
+    pub(crate) fn default_header() -> u32 {
+        0
     }
 }

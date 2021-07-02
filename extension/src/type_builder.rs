@@ -3,15 +3,16 @@ macro_rules! pg_type {
     // base case, all fields are collected into $vals
     (
         $(#[$attrs: meta])*
-        struct $name: ident {
+        struct $name: ident $(<$inlife: lifetime>)? {
             $(,)?
         }
 
         $(%($($vals:tt)*))?
     ) => {
         $crate::pg_type_impl!{
+            'input
             $(#[$attrs])*
-            struct $name {
+            struct $name $(<$inlife>)? {
                 $($($vals)*)?
             }
         }
@@ -19,7 +20,7 @@ macro_rules! pg_type {
     // eat a struct field and add it to $vals
     (
         $(#[$attrs: meta])*
-        struct $name: ident {
+        struct $name: ident $(<$inlife: lifetime>)? {
             $(#[$fattrs: meta])* $field:ident : $typ: tt $(<$life:lifetime>)?,
             $($tail: tt)*
         }
@@ -28,7 +29,7 @@ macro_rules! pg_type {
     ) => {
         $crate::pg_type!{
             $(#[$attrs])*
-            struct $name {
+            struct $name $(<$inlife>)? {
                 $($tail)*
             }
 
@@ -40,8 +41,8 @@ macro_rules! pg_type {
     // eat an enum field, define the enum, and add the equivalent struct field to $vals
     (
         $(#[$attrs: meta])*
-        struct $name: ident {
-            $(#[$fattrs: meta])* $estructfield: ident : $(#[$enumattrs: meta])* enum $ename:ident {
+        struct $name: ident $(<$inlife: lifetime>)? {
+            $(#[$fattrs: meta])* $estructfield: ident : $(#[$enumattrs: meta])* enum $ename:ident $(<$elife: lifetime>)? {
                 $($enum_def:tt)*
             },
             $($tail: tt)*
@@ -57,20 +58,20 @@ macro_rules! pg_type {
                 fixed = r##"#[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]"##,
                 variable = r##"#[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize_slice")]"##,
             )]
-            enum $ename {
+            enum $ename $(<$elife>)? {
                 $($enum_def)*
             }
         }
         $crate::pg_type!{
             $(#[$attrs])*
-            struct $name {
+            struct $name $(<$inlife>)? {
                 $($tail)*
             }
 
             %( $($($vals)*)?
                 $(#[$fattrs])*
                 #[flat_serialize::flatten]
-                $estructfield : $ename<'a>,
+                $estructfield : $ename $(<$elife>)?,
             )
         }
     }
@@ -79,8 +80,9 @@ macro_rules! pg_type {
 #[macro_export]
 macro_rules! pg_type_impl {
     (
+        $lifetemplate: lifetime
         $(#[$attrs: meta])*
-        struct $name: ident {
+        struct $name: ident $(<$inlife: lifetime>)? {
             $($(#[$fattrs: meta])* $field:ident : $typ: tt $(<$life:lifetime>)?),*
             $(,)?
         }
@@ -89,7 +91,7 @@ macro_rules! pg_type_impl {
             $(#[$attrs])*
             #[derive(pgx::PostgresType, Copy, Clone)]
             #[inoutfuncs]
-            pub struct $name<'input>([<$name Data>]<'input>, Option<&'input [u8]>);
+            pub struct $name<$lifetemplate>([<$name Data>] $(<$inlife>)?, Option<&$lifetemplate [u8]>);
 
             flat_serialize_macro::flat_serialize! {
                 $(#[$attrs])*
@@ -98,7 +100,7 @@ macro_rules! pg_type_impl {
                     fixed = r##"#[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]"##,
                     variable = r##"#[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize_slice")]"##,
                 )]
-                struct [<$name Data>] {
+                struct [<$name Data>] $(<$inlife>)? {
                     #[serde(skip, default="crate::serialization::serde_reference_adaptor::default_header")]
                     header: u32,
                     version: u8,
@@ -114,11 +116,11 @@ macro_rules! pg_type_impl {
                 }
             } 
 
-            impl<'input> [<$name Data>]<'input> {
-                pub unsafe fn flatten(&self) -> $name<'static> {
-                    let bytes = self.to_pg_bytes();
+            impl<$lifetemplate> [<$name Data>] $(<$inlife>)? {
+                pub unsafe fn flatten<'any>(&self) -> $name<'any> {
+                    let bytes: &'static [u8] = self.to_pg_bytes();
                     let wrapped = [<$name Data>]::try_ref(bytes).unwrap().0;
-                    (wrapped, bytes).into()
+                    $name(wrapped, Some(bytes))
                 }
 
                 pub fn to_pg_bytes(&self) -> &'static [u8] {
@@ -131,7 +133,7 @@ macro_rules! pg_type_impl {
                 }
             }
 
-            impl<'input> pgx::FromDatum for $name<'input> {
+            impl<$lifetemplate> pgx::FromDatum for $name<$lifetemplate> {
                 unsafe fn from_datum(datum: pgx::pg_sys::Datum, is_null: bool, _: pg_sys::Oid) -> Option<Self>
                 where
                     Self: Sized,
@@ -156,7 +158,7 @@ macro_rules! pg_type_impl {
                 }
             }
 
-            impl<'input> pgx::IntoDatum for $name<'input> {
+            impl<$lifetemplate> pgx::IntoDatum for $name<$lifetemplate> {
                 fn into_datum(self) -> Option<pgx::pg_sys::Datum> {
                     let datum = match self.1 {
                         Some(bytes) => bytes.as_ptr() as pgx::pg_sys::Datum,
@@ -170,28 +172,22 @@ macro_rules! pg_type_impl {
                 }
             }
 
-            impl<'input> ::std::ops::Deref for $name<'input> {
-                type Target=[<$name Data>]<'input>;
+            impl<$lifetemplate> ::std::ops::Deref for $name <$lifetemplate> {
+                type Target=[<$name Data>] $(<$inlife>)?;
                 fn deref(&self) -> &Self::Target {
                     &self.0
                 }
             }
 
-            impl<'input> From<[<$name Data>]<'input>> for $name<'input> {
-                fn from(inner: [<$name Data>]<'input>) -> Self {
+            impl<$lifetemplate> From<[<$name Data>]$(<$inlife>)?> for $name<$lifetemplate> {
+                fn from(inner: [<$name Data>]$(<$inlife>)?) -> Self {
                     Self(inner, None)
                 }
             }
 
-            impl<'input> From<[<$name Data>]<'input>> for Option<$name<'input>> {
-                fn from(inner: [<$name Data>]<'input>) -> Self {
+            impl<$lifetemplate> From<[<$name Data>]$(<$inlife>)?> for Option<$name<$lifetemplate>> {
+                fn from(inner: [<$name Data>]$(<$inlife>)?) -> Self {
                     Some($name(inner, None))
-                }
-            }
-
-            impl<'input> From<([<$name Data>]<'input>, &'input [u8])> for $name<'input> {
-                fn from((inner, bytes): ([<$name Data>]<'input>, &'input [u8])) -> Self {
-                    Self(inner, Some(bytes))
                 }
             }
         }
@@ -212,7 +208,7 @@ macro_rules! json_inout_funcs {
                 }
             }
 
-            fn input(input: &std::ffi::CStr) -> Self
+            fn input(input: &std::ffi::CStr) -> $name<'input>
             where
                 Self: Sized,
             {
@@ -240,9 +236,9 @@ macro_rules! flatten {
         {
             let data = ::paste::paste! {
                 [<$typ Data>] {
-                    header: &0,
-                    version: &1,
-                    padding: &[0; 3],
+                    header: 0,
+                    version: 1,
+                    padding: [0; 3],
                     $(
                         $field: $value
                     ),*

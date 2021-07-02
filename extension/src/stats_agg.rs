@@ -61,18 +61,17 @@ mod toolkit_experimental {
 impl<'input> StatsSummary1D<'input> {
     fn to_internal(&self) -> InternalStatsSummary1D {
         InternalStatsSummary1D{
-            n: *self.n,
-            sx: *self.sx,
-            sxx: *self.sxx,
+            n: self.n,
+            sx: self.sx,
+            sxx: self.sxx,
         }
     }
     fn from_internal(st: InternalStatsSummary1D) -> Self {
         unsafe{
-            flatten!(
-            StatsSummary1D {
-                n: &st.n,
-                sx: &st.sx,
-                sxx: &st.sxx,
+            flatten!(StatsSummary1D {
+                n: st.n,
+                sx: st.sx,
+                sxx: st.sxx,
             })
         }
     }
@@ -81,24 +80,24 @@ impl<'input> StatsSummary1D<'input> {
 impl<'input> StatsSummary2D<'input> {
     fn to_internal(&self) -> InternalStatsSummary2D {
         InternalStatsSummary2D{
-            n: *self.n,
-            sx: *self.sx,
-            sxx: *self.sxx,
-            sy: *self.sy,
-            syy: *self.syy,
-            sxy: *self.sxy,
+            n: self.n,
+            sx: self.sx,
+            sxx: self.sxx,
+            sy: self.sy,
+            syy: self.syy,
+            sxy: self.sxy,
         }
     }
     fn from_internal(st: InternalStatsSummary2D) -> Self {
         unsafe{
             flatten!(
             StatsSummary2D {
-                n: &st.n,
-                sx: &st.sx,
-                sxx: &st.sxx,
-                sy: &st.sy,
-                syy: &st.syy,
-                sxy: &st.sxy,
+                n: st.n,
+                sx: st.sx,
+                sxx: st.sxx,
+                sy: st.sy,
+                syy: st.syy,
+                sxy: st.sxy,
             })
         }
     }

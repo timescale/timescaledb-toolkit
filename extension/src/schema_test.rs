@@ -81,67 +81,117 @@ mod tests {
         });
     }
 
+    macro_rules! version_stabilized {
+        (## event trigger $name:ident) => {
+            stringify!(event trigger $name)
+        };
+        (## function $name:ident()) => {
+            concat!(stringify!(function $name), "()")
+        };
+        (## function $name:ident($($typ:ident)+)) => {
+            concat!(stringify!(function $name), '(', stringify!($($typ)+), ')')
+        };
+        (## function $name:ident($($($typ:ident)+),+)) => {
+            concat!(stringify!(function $name), '(' $( , stringify!($($typ)+), )','+ ')')
+        };
+        (## type $name:ident) => {
+            stringify!(type $name)
+        };
+        (## operator $opr:literal($($($typ:ident)+),+)) => {
+            concat!(stringify!(operator), " ", $opr, '(' $( , stringify!($($typ)+), )','+ ')')
+        };
+        ($($version:expr => { $($feature_1:tt $feature_2:tt $($feature_3:ident)? $( ($($feature_args:tt)*) )? ;)+ })*) => {
+            &[$(
+                $(version_stabilized!(## $feature_1 $feature_2 $($feature_3)? $(($($feature_args)*))?),)+
+            )*]
+        };
+    }
+
+
     // list of features that are released and can be in places other than the
     // experimental schema
-    // TODO it may pay to auto-discover this list based on the previous version of
-    //      the extension, once we have a released extension
-    static RELEASED_FEATURES: &[&'static str] = &[
-        "event trigger disallow_experimental_deps",
-        "event trigger disallow_experimental_dependencies_on_views",
-        "function disallow_experimental_dependencies()",
-        "function disallow_experimental_view_dependencies()",
-        "function timescaledb_toolkit_probe()",
-        "function approx_percentile(double precision,uddsketch)",
-        "function approx_percentile_rank(double precision,uddsketch)",
-        "function error(uddsketch)",
-        "function mean(uddsketch)",
-        "function num_vals(uddsketch)",
-        "function percentile_agg(double precision)",
-        "function percentile_agg(uddsketch)",
-        "function percentile_agg_trans(internal,double precision)",
-        "function uddsketch(integer,double precision,double precision)",
-        "function rollup(uddsketch)",
-        "function uddsketch_combine(internal,internal)",
-        "function uddsketch_compound_trans(internal,uddsketch)",
-        "function uddsketch_deserialize(bytea,internal)",
-        "function uddsketch_final(internal)",
-        "function uddsketch_in(cstring)",
-        "function uddsketch_out(uddsketch)",
-        "function uddsketch_serialize(internal)",
-        "function uddsketch_trans(internal,integer,double precision,double precision)",
-        "type uddsketch",
-        "function approx_percentile(double precision,tdigest)",
-        "function approx_percentile_rank(double precision,tdigest)",
-        "function max_val(tdigest)",
-        "function min_val(tdigest)",
-        "function mean(tdigest)",
-        "function num_vals(tdigest)",
-        "function tdigest(integer,double precision)",
-        "function rollup(tdigest)",
-        "function tdigest_combine(internal,internal)",
-        "function tdigest_compound_combine(internal,internal)",
-        "function tdigest_compound_deserialize(bytea,internal)",
-        "function tdigest_compound_final(internal)",
-        "function tdigest_compound_serialize(internal)",
-        "function tdigest_compound_trans(internal,tdigest)",
-        "function tdigest_deserialize(bytea,internal)",
-        "function tdigest_final(internal)",
-        "function tdigest_in(cstring)",
-        "function tdigest_out(tdigest)",
-        "function tdigest_serialize(internal)",
-        "function tdigest_trans(internal,integer,double precision)",
-        "type tdigest",
-        "function average(timeweightsummary)",
-        "function time_weight(text,timestamp with time zone,double precision)",
-        "function rollup(timeweightsummary)",
-        "function time_weight_combine(internal,internal)",
-        "function time_weight_final(internal)",
-        "function time_weight_summary_trans(internal,timeweightsummary)",
-        "function time_weight_trans(internal,text,timestamp with time zone,double precision)",
-        "function time_weight_trans_deserialize(bytea,internal)",
-        "function time_weight_trans_serialize(internal)",
-        "function timeweightsummary_in(cstring)",
-        "function timeweightsummary_out(timeweightsummary)",
-        "type timeweightsummary",
-    ];
+    // operator syntax like
+    //    operator "@@"(double precision,uddsketch),
+    static RELEASED_FEATURES: &[&'static str] = version_stabilized! {
+        1.0.0 => {
+            event trigger disallow_experimental_deps;
+            event trigger disallow_experimental_dependencies_on_views;
+            function disallow_experimental_dependencies();
+            function disallow_experimental_view_dependencies();
+            function timescaledb_toolkit_probe();
+            function approx_percentile(double precision,uddsketch);
+            function approx_percentile_rank(double precision,uddsketch);
+            function error(uddsketch);
+            function mean(uddsketch);
+            function num_vals(uddsketch);
+            function percentile_agg(double precision);
+            function percentile_agg(uddsketch);
+            function percentile_agg_trans(internal,double precision);
+            function uddsketch(integer,double precision,double precision);
+            function rollup(uddsketch);
+            function uddsketch_combine(internal,internal);
+            function uddsketch_compound_trans(internal,uddsketch);
+            function uddsketch_deserialize(bytea,internal);
+            function uddsketch_final(internal);
+            function uddsketch_in(cstring);
+            function uddsketch_out(uddsketch);
+            function uddsketch_serialize(internal);
+            function uddsketch_trans(internal,integer,double precision,double precision);
+            type uddsketch;
+            function approx_percentile(double precision,tdigest);
+            function approx_percentile_rank(double precision,tdigest);
+            function max_val(tdigest);
+            function min_val(tdigest);
+            function mean(tdigest);
+            function num_vals(tdigest);
+            function tdigest(integer,double precision);
+            function rollup(tdigest);
+            function tdigest_combine(internal,internal);
+            function tdigest_compound_combine(internal,internal);
+            function tdigest_compound_deserialize(bytea,internal);
+            function tdigest_compound_final(internal);
+            function tdigest_compound_serialize(internal);
+            function tdigest_compound_trans(internal,tdigest);
+            function tdigest_deserialize(bytea,internal);
+            function tdigest_final(internal);
+            function tdigest_in(cstring);
+            function tdigest_out(tdigest);
+            function tdigest_serialize(internal);
+            function tdigest_trans(internal,integer,double precision);
+            type tdigest;
+            function average(timeweightsummary);
+            function time_weight(text,timestamp with time zone,double precision);
+            function rollup(timeweightsummary);
+            function time_weight_combine(internal,internal);
+            function time_weight_final(internal);
+            function time_weight_summary_trans(internal,timeweightsummary);
+            function time_weight_trans(internal,text,timestamp with time zone,double precision);
+            function time_weight_trans_deserialize(bytea,internal);
+            function time_weight_trans_serialize(internal);
+            function timeweightsummary_in(cstring);
+            function timeweightsummary_out(timeweightsummary);
+            type timeweightsummary;
+        }
+    };
+
+    #[test]
+    fn version_stabilized_parses() {
+        let values = version_stabilized!{
+            0.0.1 => {
+                type foo;
+                function bar(foo,double precision);
+            }
+            300.1.1 => {
+                operator "!@#$)"(double precision, foo);
+            }
+        };
+        assert_eq!(
+            values,
+            &[
+                "type foo",
+                "function bar(foo,double precision)",
+                "operator !@#$)(double precision,foo)",
+            ],
+        );
+    }
 }

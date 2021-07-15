@@ -149,5 +149,9 @@ mod tests {
         "function timeweightsummary_in(cstring)",
         "function timeweightsummary_out(timeweightsummary)",
         "type timeweightsummary",
+        "operator |>(toolkit_experimental.timeseries,toolkit_experimental.unstabletimeseriespipeline)",
+        "operator |>(toolkit_experimental.timeseries,toolkit_experimental.unstabletimeseriespipelineelement)",
+        "operator |>(toolkit_experimental.unstabletimeseriespipeline,toolkit_experimental.unstabletimeseriespipelineelement)",
+        "operator |>(toolkit_experimental.unstabletimeseriespipelineelement,toolkit_experimental.unstabletimeseriespipelineelement)",
     ];
 }

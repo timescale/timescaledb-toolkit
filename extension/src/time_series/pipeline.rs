@@ -99,6 +99,21 @@ pub fn execute_pipeline_element<'s, 'e>(
     }
 }
 
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
+pub fn build_unstable_pipepine<'s, 'p>(
+    first: toolkit_experimental::UnstableTimeseriesPipelineElement<'s>,
+    second: toolkit_experimental::UnstableTimeseriesPipelineElement<'p>,
+) -> toolkit_experimental::UnstableTimeseriesPipeline<'static> {
+    unsafe {
+        let elements: Vec<_> = vec!(first.flatten().0, second.flatten().0);
+        flatten! {
+            UnstableTimeseriesPipeline {
+                num_elements: 2,
+                elements: (&*elements).into(),
+            }
+        }
+    }
+}
 
 // TODO is (immutable, parallel_safe) correct?
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
@@ -121,15 +136,27 @@ pub fn add_unstable_element<'p, 'e>(
 // FIXME there is no CREATE OR REPLACE OPERATOR need to update post-install.rs
 //       need to ensure this works with out unstable warning
 extension_sql!(r#"
-CREATE OPERATOR toolkit_experimental.|> (
+CREATE OPERATOR |> (
     PROCEDURE=toolkit_experimental."run_pipeline",
     LEFTARG=toolkit_experimental.TimeSeries,
     RIGHTARG=toolkit_experimental.UnstableTimeseriesPipeline
 );
 
-CREATE OPERATOR toolkit_experimental.|> (
+CREATE OPERATOR |> (
     PROCEDURE=toolkit_experimental."run_pipeline_element",
     LEFTARG=toolkit_experimental.TimeSeries,
+    RIGHTARG=toolkit_experimental.UnstableTimeseriesPipelineElement
+);
+
+CREATE OPERATOR |> (
+    PROCEDURE=toolkit_experimental."build_unstable_pipepine",
+    LEFTARG=toolkit_experimental.UnstableTimeseriesPipelineElement,
+    RIGHTARG=toolkit_experimental.UnstableTimeseriesPipelineElement
+);
+
+CREATE OPERATOR |> (
+    PROCEDURE=toolkit_experimental."add_unstable_element",
+    LEFTARG=toolkit_experimental.UnstableTimeseriesPipeline,
     RIGHTARG=toolkit_experimental.UnstableTimeseriesPipelineElement
 );
 "#);
@@ -178,7 +205,7 @@ mod tests {
                 SELECT timeseries(time, val) FROM ( \
                     SELECT \
                         '2020-01-01 UTC'::TIMESTAMPTZ + make_interval(days=>(foo*10)::int) as time, \
-                        10 + 5 * cos(foo) as val \
+                        TRUNC((10 + 5 * cos(foo))::numeric, 4) as val \
                     FROM generate_series(1,11,0.1) foo \
                 ) bar",
                 None,
@@ -193,23 +220,23 @@ mod tests {
                 .first()
                 .get_one::<String>();
             assert_eq!(val.unwrap(), "[\
-                {\"ts\":\"2020-01-11 00:00:00+00\",\"val\":12.7015115293407},\
-                {\"ts\":\"2020-01-13 00:00:00+00\",\"val\":11.811788772383368},\
-                {\"ts\":\"2020-01-22 00:00:00+00\",\"val\":7.475769477000712},\
-                {\"ts\":\"2020-01-28 00:00:00+00\",\"val\":5.479639289914694},\
-                {\"ts\":\"2020-02-03 00:00:00+00\",\"val\":5.062601150455675},\
-                {\"ts\":\"2020-02-09 00:00:00+00\",\"val\":6.370338478999299},\
-                {\"ts\":\"2020-02-14 00:00:00+00\",\"val\":8.463335650107904},\
-                {\"ts\":\"2020-02-24 00:00:00+00\",\"val\":13.173464379713174},\
-                {\"ts\":\"2020-03-01 00:00:00+00\",\"val\":14.80085143325183},\
-                {\"ts\":\"2020-03-07 00:00:00+00\",\"val\":14.751162959792648},\
-                {\"ts\":\"2020-03-13 00:00:00+00\",\"val\":13.041756572661273},\
-                {\"ts\":\"2020-03-23 00:00:00+00\",\"val\":8.304225695080827},\
-                {\"ts\":\"2020-03-29 00:00:00+00\",\"val\":5.94453492969172},\
-                {\"ts\":\"2020-04-04 00:00:00+00\",\"val\":5.0015347898239675},\
-                {\"ts\":\"2020-04-10 00:00:00+00\",\"val\":5.804642354617738},\
-                {\"ts\":\"2020-04-14 00:00:00+00\",\"val\":7.195078712863856},\
-                {\"ts\":\"2020-04-20 00:00:00+00\",\"val\":10.022128489940254}\
+                {\"ts\":\"2020-01-11 00:00:00+00\",\"val\":12.7015},\
+                {\"ts\":\"2020-01-13 00:00:00+00\",\"val\":11.8117},\
+                {\"ts\":\"2020-01-22 00:00:00+00\",\"val\":7.4757},\
+                {\"ts\":\"2020-01-28 00:00:00+00\",\"val\":5.4796},\
+                {\"ts\":\"2020-02-03 00:00:00+00\",\"val\":5.0626},\
+                {\"ts\":\"2020-02-09 00:00:00+00\",\"val\":6.3703},\
+                {\"ts\":\"2020-02-14 00:00:00+00\",\"val\":8.4633},\
+                {\"ts\":\"2020-02-24 00:00:00+00\",\"val\":13.1734},\
+                {\"ts\":\"2020-03-01 00:00:00+00\",\"val\":14.8008},\
+                {\"ts\":\"2020-03-07 00:00:00+00\",\"val\":14.7511},\
+                {\"ts\":\"2020-03-13 00:00:00+00\",\"val\":13.0417},\
+                {\"ts\":\"2020-03-23 00:00:00+00\",\"val\":8.3042},\
+                {\"ts\":\"2020-03-29 00:00:00+00\",\"val\":5.9445},\
+                {\"ts\":\"2020-04-04 00:00:00+00\",\"val\":5.0015},\
+                {\"ts\":\"2020-04-10 00:00:00+00\",\"val\":5.8046},\
+                {\"ts\":\"2020-04-14 00:00:00+00\",\"val\":7.195},\
+                {\"ts\":\"2020-04-20 00:00:00+00\",\"val\":10.0221}\
             ]");
 
             let val = client.select(
@@ -220,14 +247,14 @@ mod tests {
                 .first()
                 .get_one::<String>();
             assert_eq!(val.unwrap(), "[\
-                {\"ts\":\"2020-01-11 00:00:00+00\",\"val\":12.7015115293407},\
-                {\"ts\":\"2020-01-27 00:00:00+00\",\"val\":5.715556233155263},\
-                {\"ts\":\"2020-02-06 00:00:00+00\",\"val\":5.516207918329265},\
-                {\"ts\":\"2020-02-27 00:00:00+00\",\"val\":14.173563924195799},\
-                {\"ts\":\"2020-03-09 00:00:00+00\",\"val\":14.346987451749126},\
-                {\"ts\":\"2020-03-30 00:00:00+00\",\"val\":5.672823953794438},\
-                {\"ts\":\"2020-04-09 00:00:00+00\",\"val\":5.554044236873196},\
-                {\"ts\":\"2020-04-20 00:00:00+00\",\"val\":10.022128489940254}\
+                {\"ts\":\"2020-01-11 00:00:00+00\",\"val\":12.7015},\
+                {\"ts\":\"2020-01-27 00:00:00+00\",\"val\":5.7155},\
+                {\"ts\":\"2020-02-06 00:00:00+00\",\"val\":5.5162},\
+                {\"ts\":\"2020-02-27 00:00:00+00\",\"val\":14.1735},\
+                {\"ts\":\"2020-03-09 00:00:00+00\",\"val\":14.3469},\
+                {\"ts\":\"2020-03-30 00:00:00+00\",\"val\":5.6728},\
+                {\"ts\":\"2020-04-09 00:00:00+00\",\"val\":5.554},\
+                {\"ts\":\"2020-04-20 00:00:00+00\",\"val\":10.0221}\
             ]");
 
             let val = client.select(
@@ -238,14 +265,32 @@ mod tests {
                 .first()
                 .get_one::<String>();
             assert_eq!(val.unwrap(), "[\
-                {\"ts\":\"2020-01-11 00:00:00+00\",\"val\":12.7015115293407},\
-                {\"ts\":\"2020-01-27 00:00:00+00\",\"val\":5.715556233155263},\
-                {\"ts\":\"2020-02-06 00:00:00+00\",\"val\":5.516207918329265},\
-                {\"ts\":\"2020-02-27 00:00:00+00\",\"val\":14.173563924195799},\
-                {\"ts\":\"2020-03-09 00:00:00+00\",\"val\":14.346987451749126},\
-                {\"ts\":\"2020-03-30 00:00:00+00\",\"val\":5.672823953794438},\
-                {\"ts\":\"2020-04-09 00:00:00+00\",\"val\":5.554044236873196},\
-                {\"ts\":\"2020-04-20 00:00:00+00\",\"val\":10.022128489940254}\
+                {\"ts\":\"2020-01-11 00:00:00+00\",\"val\":12.7015},\
+                {\"ts\":\"2020-01-27 00:00:00+00\",\"val\":5.7155},\
+                {\"ts\":\"2020-02-06 00:00:00+00\",\"val\":5.5162},\
+                {\"ts\":\"2020-02-27 00:00:00+00\",\"val\":14.1735},\
+                {\"ts\":\"2020-03-09 00:00:00+00\",\"val\":14.3469},\
+                {\"ts\":\"2020-03-30 00:00:00+00\",\"val\":5.6728},\
+                {\"ts\":\"2020-04-09 00:00:00+00\",\"val\":5.554},\
+                {\"ts\":\"2020-04-20 00:00:00+00\",\"val\":10.0221}\
+            ]");
+
+            let val = client.select(
+                "SELECT (series |> (lttb(8) |> lttb(8) |> lttb(8)))::TEXT FROM lttb_pipe",
+                None,
+                None
+            )
+                .first()
+                .get_one::<String>();
+            assert_eq!(val.unwrap(), "[\
+                {\"ts\":\"2020-01-11 00:00:00+00\",\"val\":12.7015},\
+                {\"ts\":\"2020-01-27 00:00:00+00\",\"val\":5.7155},\
+                {\"ts\":\"2020-02-06 00:00:00+00\",\"val\":5.5162},\
+                {\"ts\":\"2020-02-27 00:00:00+00\",\"val\":14.1735},\
+                {\"ts\":\"2020-03-09 00:00:00+00\",\"val\":14.3469},\
+                {\"ts\":\"2020-03-30 00:00:00+00\",\"val\":5.6728},\
+                {\"ts\":\"2020-04-09 00:00:00+00\",\"val\":5.554},\
+                {\"ts\":\"2020-04-20 00:00:00+00\",\"val\":10.0221}\
             ]");
         });
     }

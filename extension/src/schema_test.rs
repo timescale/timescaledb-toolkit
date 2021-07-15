@@ -63,6 +63,12 @@ mod tests {
                             return None
                     }
 
+                    let operator_prefix = "operator toolkit_experimental.";
+                    if val.starts_with(operator_prefix)
+                        && val.strip_prefix(operator_prefix).is_some() {
+                            return None
+                    }
+
                     // ignore the pgx test schema
                     let test_prefix = "function tests.";
                     if val.starts_with(test_prefix)
@@ -143,5 +149,9 @@ mod tests {
         "function timeweightsummary_in(cstring)",
         "function timeweightsummary_out(timeweightsummary)",
         "type timeweightsummary",
+        "operator |>(toolkit_experimental.timeseries,toolkit_experimental.unstabletimeseriespipeline)",
+        "operator |>(toolkit_experimental.timeseries,toolkit_experimental.unstabletimeseriespipelineelement)",
+        "operator |>(toolkit_experimental.unstabletimeseriespipeline,toolkit_experimental.unstabletimeseriespipelineelement)",
+        "operator |>(toolkit_experimental.unstabletimeseriespipelineelement,toolkit_experimental.unstabletimeseriespipelineelement)",
     ];
 }

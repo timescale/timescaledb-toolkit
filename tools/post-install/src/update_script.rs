@@ -18,6 +18,8 @@ static ALTERABLE_PROPERTIES: [&'static str; 6] = [
 // 3. we replace `^CREATE AGGREGATE` with `^CREATE OR REPLACE AGGREGATE`
 // 4. we add a guard around `CREATE TYPE` to make it work as if there was
 //    `CREATE OR REPLACE TYPE`
+// 5. we add a guard around `CREATE OPERATOR` to make it work as if there was
+//    `CREATE OR REPLACE OPERATOR`
 pub (crate) fn generate_from_install(
     extension_file: impl BufRead,
     mut upgrade_file: impl Write,
@@ -43,46 +45,67 @@ pub (crate) fn generate_from_install(
         .peekable();
 
     while lines.peek().is_some() {
-        // search for `CREATE TYPE <name> ...`
-        let create_line = find_create_type(&mut lines, &mut upgrade_file);
+        // search for `CREATE TYPE <name> ...` or `CREATE OPERATOR <name> ...`
+        let create_line = find_create_line(&mut lines, &mut upgrade_file);
         let mut create_line = match create_line {
             Some(line) => line,
             None => continue,
         };
 
-        let type_name = extract_type_name(&create_line);
+        if create_line.trim_start().starts_with("CREATE TYPE") {
+            let type_name = extract_type_name(&create_line);
 
-        if create_line.trim_end().ends_with(';') {
-            // found `CREATE TYPE <name>;`
-            write_guarded_create_start(&mut upgrade_file, &create_line);
-        } else if create_line.trim_end().ends_with('(') {
-            // found
+            if create_line.trim_end().ends_with(';') {
+                // found `CREATE TYPE <name>;`
+                write_guarded_create_start(&mut upgrade_file, &create_line);
+            } else if create_line.trim_end().ends_with('(') {
+                // found
+                // ```
+                // CREATE TYPE <name> (
+                //     ...
+                // );
+                // ```
+                create_line.push('\n');
+                let alters = get_alterable_properties(
+                    &mut lines,
+                    &mut create_line
+                );
+                write_guarded_create_end(
+                    &mut upgrade_file,
+                    &type_name,
+                    &create_line,
+                    &alters
+                );
+            }
+        } else if create_line.trim_start().starts_with("CREATE OPERATOR") {
+
+            // Operators should all follow the form
             // ```
-            // CREATE TYPE <name> (
+            // CREATE OPERATOR <name> (
             //     ...
             // );
             // ```
             create_line.push('\n');
-            let alters = get_alterable_properties(
-                &mut lines,
-                &mut create_line
-            );
-            write_guarded_create_end(
-                &mut upgrade_file,
-                &type_name,
-                &create_line,
-                &alters
-            );
+            while let Some(line) = lines.next() {
+                create_line.push_line(&line);
+                if line.trim_start().starts_with(")") {
+                    break
+                }
+            }
+
+            write_guarded_create_op(&mut upgrade_file, &create_line);            
+        } else {
+            panic!("Unhandled CREATE statement");
         }
     }
 }
 
-fn find_create_type(
+fn find_create_line(
     mut lines: impl Iterator<Item=String>, mut upgrade_file: impl Write
 ) -> Option<String> {
     while let Some(line) = lines.next() {
         // search for `CREATE TYPE <name>;`
-        if line.trim_start().starts_with("CREATE TYPE") {
+        if line.trim_start().starts_with("CREATE TYPE") || line.trim_start().starts_with("CREATE OPERATOR") {
             return Some(line)
         }
 
@@ -108,6 +131,20 @@ DO $$
     BEGIN
         {}
     EXCEPTION WHEN duplicate_object THEN
+        -- TODO validate that the object belongs to us
+        RETURN;
+    END
+$$;",
+        create_start,
+    ).expect("cannot write type header");
+}
+
+fn write_guarded_create_op(mut upgrade_file: impl Write, create_start: &str) {
+    writeln!(upgrade_file, "\
+DO $$
+    BEGIN
+        {}
+    EXCEPTION WHEN duplicate_function THEN
         -- TODO validate that the object belongs to us
         RETURN;
     END
@@ -147,7 +184,9 @@ fn get_alterable_properties(
             }
         }
     }
-    alters
+    // Should return alters here, except PG12 doesn't allow alterations to type properties.
+    // Once we no longer support PG12 change this back to returning alters
+    vec![]
 }
 
 fn write_guarded_create_end(
@@ -176,8 +215,9 @@ fn write_guarded_create_end(
             "{} = {}", ALTERABLE_PROPERTIES[i], value
         ).expect("cannot write ALTER");
     }
-    alter_statement.push_str(");");
-
+    if !alter_statement.is_empty() {
+        alter_statement.push_str(");");
+    }
 
     writeln!(&mut upgrade_file, "\
 DO $$

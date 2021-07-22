@@ -159,7 +159,8 @@ pub fn asap_on_timeseries(
                 Err(_) => unreachable!()
             }
         },
-        InternalTimeSeries::Normal(normal) => normal
+        InternalTimeSeries::Normal(normal) => normal,
+        InternalTimeSeries::GappyNormal(_) => panic!("Series must be gapfilled before running asap smoothing"),
     };
 
     // Drop the last value to match the reference implementation

@@ -7,7 +7,11 @@ use crate::{
     aggregate_utils::in_aggregate_context, pg_type, flatten, palloc::Internal,
 };
 
-use time_series::{TSPoint, TimeSeries as InternalTimeSeries, ExplicitTimeSeries, NormalTimeSeries, GapfillMethod};
+use time_series::{
+    TSPoint, TimeSeries as InternalTimeSeries, 
+    ExplicitTimeSeries, NormalTimeSeries, GappyNormalTimeSeries,
+    GapfillMethod
+};
 
 use flat_serialize::*;
 
@@ -35,6 +39,14 @@ pg_type! {
             ExplicitSeries: 3 {
                 num_points: u64,  // required to be aligned
                 points: [TSPoint; self.num_points],
+            },
+            GappyNormalSeries: 4 {
+                start_ts: i64,
+                step_interval: i64,
+                num_vals: u64,  // required to be aligned
+                count: u64,
+                values: [f64; self.num_vals],
+                present: [u64; (self.count + 63) / 64]
             },
         },
     }
@@ -122,6 +134,16 @@ impl<'input> TimeSeries<'input> {
                         values: values.to_vec(),
                     }
                 ),
+            SeriesType::GappyNormalSeries{start_ts, step_interval, values, count, present, ..} =>
+                InternalTimeSeries::GappyNormal(
+                    GappyNormalTimeSeries {
+                        start_ts: start_ts,
+                        step_interval: step_interval,
+                        count,
+                        values: values.to_vec(),
+                        present: present.to_vec(),
+                    }
+                ),
         }
     }
 
@@ -132,6 +154,8 @@ impl<'input> TimeSeries<'input> {
             SeriesType::ExplicitSeries{points, ..} =>
                 points.len(),
             SeriesType::NormalSeries{values, ..} =>
+                values.len(),
+            SeriesType::GappyNormalSeries{values, ..} =>
                 values.len(),
         }
     }
@@ -171,6 +195,20 @@ impl<'input> TimeSeries<'input> {
                             }
                         }
                     )
+                },
+                InternalTimeSeries::GappyNormal(series) => {
+                    flatten!(
+                        TimeSeries {
+                            series : SeriesType::GappyNormalSeries {
+                                start_ts: series.start_ts,
+                                step_interval: series.step_interval,
+                                num_vals: series.values.len() as u64,
+                                count: series.count,
+                                values: &series.values,
+                                present: &series.present,
+                            }
+                        }
+                    )
                 }
             }
         }
@@ -190,6 +228,8 @@ impl<'input> TimeSeries<'input> {
                 Some(points[index]),
             SeriesType::NormalSeries{start_ts, step_interval, values, ..} =>
                 Some(TSPoint{ts: start_ts + index as i64 * step_interval, val: values[index]}),
+            SeriesType::GappyNormalSeries{..} => 
+                panic!("Can not efficient index into the middle of a normalized timeseries with gaps"),
         }
     }
 
@@ -200,6 +240,8 @@ impl<'input> TimeSeries<'input> {
             SeriesType::ExplicitSeries{..} =>
                 false, // a sorted ExplicitSeries is written out as a SortedSeries
             SeriesType::NormalSeries{..} =>
+                true,
+            SeriesType::GappyNormalSeries{..} =>
                 true,
         }
     }
@@ -222,6 +264,18 @@ pub fn unnest_series(
                 let step_interval = step_interval;
                 (start_ts + num_steps * step_interval, values[i as usize])
             })),
+
+        SeriesType::GappyNormalSeries{start_ts, step_interval, num_vals, values, present, ..} => {
+            let mut index = 0;
+            Box::new((0..num_vals).map(move |i| {
+                while present[index / 64] & (1 << index % 64) == 0 {
+                    index += 1;
+                }
+                let num_steps = index as i64;
+                let step_interval = step_interval;
+                (start_ts + num_steps * step_interval, values[i as usize])
+            }))
+        },
     };
     iter
 }

@@ -157,10 +157,21 @@ pub struct NormalTimeSeries {
     pub values: Vec<f64>
 }
 
+// Normal timeseries, but may be missing values.  First and last values are required.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct GappyNormalTimeSeries {
+    pub start_ts: i64,
+    pub step_interval: i64,    // ts delta between values
+    pub count: u64,            // num values + num gaps
+    pub present: Vec<u64>,     // bitmap, 0 = gap...
+    pub values: Vec<f64>
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub enum TimeSeries {
     Explicit(ExplicitTimeSeries),
-    Normal(NormalTimeSeries)
+    Normal(NormalTimeSeries),
+    GappyNormal(GappyNormalTimeSeries),
 }
 
 pub enum TimeSeriesError {
@@ -311,6 +322,72 @@ impl ExplicitTimeSeries {
     }
 }
 
+impl GappyNormalTimeSeries {
+    pub fn is_present(&self, index: u64) -> bool {
+        let outer = index / 64;
+        let inner = index % 64;
+
+        return self.present[outer as usize] & ((1 as u64) << inner) != 0;
+    }
+
+    fn add_gap(&mut self) {
+        let gap_idx = self.count;
+        self.count += 1;
+        if gap_idx % 64 == 0 {
+            self.present.push(u64::MAX ^ 1);
+        } else {
+            self.present[(gap_idx / 64) as usize] ^= 1 << (gap_idx % 64);
+        }
+    }
+
+    pub fn has_value(&self, time: i64) -> bool {
+        if time < self.start_ts || (time - self.start_ts) % self.step_interval != 0 {
+            return false;
+        }
+        let index = ((time - self.start_ts) / self.step_interval) as u64;
+        if index > self.count {
+            return false;
+        }
+        self.is_present(index)
+    }
+
+    pub fn fill_to(&mut self, time: i64) {
+        let mut next = self.start_ts + self.count as i64 * self.step_interval;
+        while next < time {
+            self.add_gap();
+            next += self.step_interval;
+        }
+        assert_eq!(next, time);
+    }
+}
+
+#[derive(Clone)]
+pub struct GappyNormalTimeSeriesIterator<'a> {
+    container: &'a GappyNormalTimeSeries,
+    next_time_idx: u64,
+    next_value_idx: u64,
+}
+
+impl<'a> Iterator for GappyNormalTimeSeriesIterator<'a> {
+    type Item = TSPoint;
+
+    fn next(&mut self) -> Option<TSPoint> {
+        if self.next_time_idx >= self.container.count {
+            None
+        } else {
+            assert!(self.next_value_idx < self.container.values.len() as u64);
+            while !self.container.is_present(self.next_time_idx) {
+                self.next_time_idx += 1;
+            }
+            let val = self.container.values[self.next_value_idx as usize];
+            let ts = self.container.start_ts + self.next_time_idx as i64 * self.container.step_interval;
+            self.next_time_idx += 1;
+            self.next_value_idx += 1;
+            Some(TSPoint{ts, val})
+        }
+    }
+}
+
 impl TimeSeries {
     pub fn new_explicit_series() -> TimeSeries {
         TimeSeries::Explicit(
@@ -341,6 +418,12 @@ impl TimeSeries {
                 // TODO: return error rather than assert
                 assert_eq!(normal.start_ts + normal.values.len() as i64 * normal.step_interval, point.ts);
                 normal.values.push(point.val);
+            },
+            TimeSeries::GappyNormal(series) => {
+                // TODO: return error rather than assert
+                assert!(point.ts > series.start_ts + (series.step_interval * series.count as i64) && point.ts - series.start_ts % series.step_interval == 0);
+                series.fill_to(point.ts);
+                series.values.push(point.val);
             }
         }
     }
@@ -350,7 +433,8 @@ impl TimeSeries {
             TimeSeries::Explicit(series) => {
                 series.sort();
             },
-            TimeSeries::Normal(_) => ()
+            TimeSeries::Normal(_) => (),
+            TimeSeries::GappyNormal(_) => (),
         }
     }
 
@@ -365,6 +449,9 @@ impl TimeSeries {
                     TSPoint{ts, val}
                 });
                 Box::new(iter)
+            },
+            TimeSeries::GappyNormal(series) => {
+                Box::new(GappyNormalTimeSeriesIterator {container: series, next_time_idx: 0, next_value_idx: 0})
             }
         }
     }
@@ -372,7 +459,8 @@ impl TimeSeries {
     pub fn num_vals(&self) -> usize {
         match &self {
             TimeSeries::Explicit(explicit) => explicit.points.len(),
-            TimeSeries::Normal(normal) => normal.values.len()
+            TimeSeries::Normal(normal) => normal.values.len(),
+            TimeSeries::GappyNormal(normal) => normal.values.len(),
         }
     }
 
@@ -436,6 +524,7 @@ impl TimeSeries {
             match self {
                 TimeSeries::Explicit(series) => Some(series.points[0]),
                 TimeSeries::Normal(NormalTimeSeries { start_ts, values, ..}) => Some(TSPoint{ts: *start_ts, val: values[0]}),
+                TimeSeries::GappyNormal(GappyNormalTimeSeries { start_ts, values, ..}) => Some(TSPoint{ts: *start_ts, val: values[0]}),
             }
         }
     }
@@ -447,6 +536,7 @@ impl TimeSeries {
             match self {
                 TimeSeries::Explicit(series) => Some(*series.points.last().unwrap()),
                 TimeSeries::Normal(NormalTimeSeries { start_ts, step_interval, values }) => Some(TSPoint{ts: *start_ts + step_interval * (values.len() as i64 - 1), val: *values.last().unwrap()}),
+                TimeSeries::GappyNormal(GappyNormalTimeSeries { start_ts, step_interval, values, count, .. }) => Some(TSPoint{ts: *start_ts + step_interval * (count - 1) as i64, val: *values.last().unwrap()}),
             }
         }
     }

@@ -330,13 +330,22 @@ impl GappyNormalTimeSeries {
         return self.present[outer as usize] & ((1 as u64) << inner) != 0;
     }
 
-    fn add_gap(&mut self) {
-        let gap_idx = self.count;
+    pub fn add_gap(&mut self) {
+        self.add_next_present(false);
+    }
+
+    pub fn has_next_value(&mut self) {
+        self.add_next_present(true);
+    }
+
+    fn add_next_present(&mut self, is_present: bool) {
+        let idx = self.count;
+        let val = if is_present { 1 } else { 0 };
         self.count += 1;
-        if gap_idx % 64 == 0 {
-            self.present.push(u64::MAX ^ 1);
-        } else {
-            self.present[(gap_idx / 64) as usize] ^= 1 << (gap_idx % 64);
+        if idx % 64 == 0 {
+            self.present.push(val);
+        } else if is_present {
+            self.present[(idx / 64) as usize] ^= 1 << (idx % 64);
         }
     }
 
@@ -408,6 +417,18 @@ impl TimeSeries {
         )
     }
 
+    pub fn new_gappy_normal_series(start: TSPoint, interval: i64) -> TimeSeries {
+        TimeSeries::GappyNormal(
+            GappyNormalTimeSeries {
+                start_ts: start.ts,
+                step_interval: interval,
+                count: 1,
+                values: vec![start.val],
+                present: vec![1],
+            }
+        )
+    }
+
     pub fn add_point(&mut self, point: TSPoint) {
         match self {
             TimeSeries::Explicit(series) => {
@@ -421,8 +442,9 @@ impl TimeSeries {
             },
             TimeSeries::GappyNormal(series) => {
                 // TODO: return error rather than assert
-                assert!(point.ts > series.start_ts + (series.step_interval * series.count as i64) && point.ts - series.start_ts % series.step_interval == 0);
+                assert!(point.ts >= series.start_ts + (series.step_interval * series.count as i64) && (point.ts - series.start_ts) % series.step_interval == 0);
                 series.fill_to(point.ts);
+                series.has_next_value();
                 series.values.push(point.val);
             }
         }

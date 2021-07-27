@@ -306,7 +306,7 @@ impl<'a> Iterator for TimeSeriesIter<'a> {
                 if idx >= count {
                     return None;
                 }
-                while present[(*idx/64) as usize] & (1 >> *idx % 64) == 0 {
+                while present[(*idx/64) as usize] & (1 << (*idx % 64)) == 0 {
                     *idx += 1;
                 }
                 let ts = *start + *idx as i64 * *step;

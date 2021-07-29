@@ -32,26 +32,29 @@ We recommend installing rust using the [official instructions](https://www.rust-
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
-and clang, the postgres headers, and OpenSSl in the preferred manner for your system. For Ubuntu this could be
+and clang, the postgres headers, in the preferred manner for your system. You may also need to install OpenSSl, and package-config.
+For Ubuntu this could be
 ```bash
-sudo apt-get install clang postgresql-server-dev-13 libssl-dev
+sudo apt-get install clang postgresql-server-dev-13 libssl-dev pkg-config
 ```
 and finally, [fork](https://github.com/JLockerman/pgx/tree/timescale)
 of [pgx](https://github.com/zombodb/pgx) can be installed with
 ```bash
-cargo install --git https://github.com/JLockerman/pgx.git --branch timescale cargo-pgx && cargo pgx init
+cargo install --git https://github.com/JLockerman/pgx.git --branch timescale cargo-pgx && \
+cargo pgx init --pg13 pg_config
 ```
 
 ### 💾 Building and Installing the extension ###
 
 Download or clone this repository, and switch to the `extension` subdirectory, e.g.
 ```bash
-git clone https://github.com/timescale/timescale-analytics &&
+git clone https://github.com/timescale/timescale-analytics && \
+cd timescale-analytics/extension
 ```
 Then run
 ```
 cargo pgx install --release && \
-cargo run --manifest-path ./tools/post-install/Cargo.toml --  /path/to/your/pg_config
+cargo run --manifest-path ../tools/post-install/Cargo.toml -- pg_config
 ```
 
 ## ✏️ Get Involved ##
@@ -71,7 +74,8 @@ The extension is built using a [fork](https://github.com/JLockerman/pgx/tree/tim
 of [pgx](https://github.com/zombodb/pgx). To install pgx use
 
 ```bash
-cargo install --git https://github.com/JLockerman/pgx.git --branch timescale cargo-pgx && cargo pgx init
+cargo install --git https://github.com/JLockerman/pgx.git --branch timescale cargo-pgx && \
+cargo pgx init
 ```
 
 Once you have `pgx` installed, clone this repo and swich into the extension directory, e.g

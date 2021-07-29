@@ -32,9 +32,9 @@ We recommend installing rust using the [official instructions](https://www.rust-
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
-and clang and the postgres header in the preferred manner for your system. For Ubuntu this could be
+and clang, the postgres headers, and OpenSSl in the preferred manner for your system. For Ubuntu this could be
 ```bash
-sudo apt-get clang postgresql-server-dev-13
+sudo apt-get install clang postgresql-server-dev-13 libssl-dev
 ```
 and finally, [fork](https://github.com/JLockerman/pgx/tree/timescale)
 of [pgx](https://github.com/zombodb/pgx) can be installed with

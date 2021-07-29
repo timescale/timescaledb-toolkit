@@ -124,12 +124,17 @@ macro_rules! pg_type_impl {
                 }
 
                 pub fn to_pg_bytes(&self) -> &'static [u8] {
-                    let mut output = vec![];
-                    self.fill_vec(&mut output);
+                    use std::{mem::MaybeUninit, slice};
                     unsafe {
-                        ::pgx::set_varsize(output.as_mut_ptr() as *mut _, output.len() as i32);
+                        let len = self.len();
+                        let memory: *mut MaybeUninit<u8> = pg_sys::palloc0(len).cast();
+                        let slice = slice::from_raw_parts_mut(memory, len);
+                        let rem = self.fill_slice(slice);
+                        debug_assert_eq!(rem.len(), 0);
+
+                        ::pgx::set_varsize(memory.cast(), len as i32);
+                        slice::from_raw_parts(memory.cast(), len)
                     }
-                    &*output.leak()
                 }
             }
 

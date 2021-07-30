@@ -1,6 +1,8 @@
 
 mod fill_holes;
 mod resample_to_rate;
+mod sort;
+mod delta;
 
 use std::convert::TryInto;
 
@@ -22,6 +24,9 @@ use resample_to_rate::{
     ResampleMethod,
 };
 
+use sort::sort_timeseries;
+use delta::timeseries_delta;
+
 // TODO once we start stabilizing elements, create a type
 //      `TimeseriesPipelineElement` and move stable variants to that.
 pg_type! {
@@ -39,6 +44,10 @@ pg_type! {
             },
             FillHoles: 3 {
                 fill_method: FillMethod,
+            },
+            Sort: 4 {
+            },
+            Delta: 5 {
             },
         },
     }
@@ -129,6 +138,18 @@ pub fn execute_pipeline_element<'s, 'e>(
         }
         (Element::FillHoles{..}, Owned(timeseries)) => {
             return Some(fill_holes(timeseries, &element));
+        }
+        (Element::Sort{..}, Borrowed(timeseries)) => {
+            return Some(sort_timeseries(timeseries));
+        }
+        (Element::Sort{..}, Owned(timeseries)) => {
+            return Some(sort_timeseries(timeseries));
+        }
+        (Element::Delta{..}, Borrowed(timeseries)) => {
+            return Some(timeseries_delta(timeseries));
+        }
+        (Element::Delta{..}, Owned(timeseries)) => {
+            return Some(timeseries_delta(timeseries));
         }
     }
 }

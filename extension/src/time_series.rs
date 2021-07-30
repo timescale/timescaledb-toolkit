@@ -7,7 +7,11 @@ use crate::{
     aggregate_utils::in_aggregate_context, pg_type, flatten, palloc::Internal,
 };
 
-use time_series::{TSPoint, TimeSeries as InternalTimeSeries, ExplicitTimeSeries, NormalTimeSeries, GapfillMethod};
+use time_series::{
+    TSPoint, TimeSeries as InternalTimeSeries, 
+    ExplicitTimeSeries, NormalTimeSeries, GappyNormalTimeSeries,
+    GapfillMethod
+};
 
 use flat_serialize::*;
 
@@ -35,6 +39,14 @@ pg_type! {
             ExplicitSeries: 3 {
                 num_points: u64,  // required to be aligned
                 points: [TSPoint; self.num_points],
+            },
+            GappyNormalSeries: 4 {
+                start_ts: i64,
+                step_interval: i64,
+                num_vals: u64,  // required to be aligned
+                count: u64,
+                values: [f64; self.num_vals],
+                present: [u64; (self.count + 63) / 64]
             },
         },
     }
@@ -122,6 +134,16 @@ impl<'input> TimeSeries<'input> {
                         values: values.to_vec(),
                     }
                 ),
+            SeriesType::GappyNormalSeries{start_ts, step_interval, values, count, present, ..} =>
+                InternalTimeSeries::GappyNormal(
+                    GappyNormalTimeSeries {
+                        start_ts: start_ts,
+                        step_interval: step_interval,
+                        count,
+                        values: values.to_vec(),
+                        present: present.to_vec(),
+                    }
+                ),
         }
     }
 
@@ -132,6 +154,8 @@ impl<'input> TimeSeries<'input> {
             SeriesType::ExplicitSeries{points, ..} =>
                 points.len(),
             SeriesType::NormalSeries{values, ..} =>
+                values.len(),
+            SeriesType::GappyNormalSeries{values, ..} =>
                 values.len(),
         }
     }
@@ -171,6 +195,34 @@ impl<'input> TimeSeries<'input> {
                             }
                         }
                     )
+                },
+                InternalTimeSeries::GappyNormal(series) => {
+                    if series.count == series.values.len() as u64 {
+                        // No gaps, write out as a normal series
+                        flatten!(
+                            TimeSeries {
+                                series : SeriesType::NormalSeries {
+                                    start_ts: series.start_ts,
+                                    step_interval: series.step_interval,
+                                    num_vals: series.values.len() as u64,
+                                    values: &series.values,
+                                }
+                            }
+                        )
+                    } else {
+                        flatten!(
+                            TimeSeries {
+                                series : SeriesType::GappyNormalSeries {
+                                    start_ts: series.start_ts,
+                                    step_interval: series.step_interval,
+                                    num_vals: series.values.len() as u64,
+                                    count: series.count,
+                                    values: &series.values,
+                                    present: &series.present,
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }
@@ -190,6 +242,8 @@ impl<'input> TimeSeries<'input> {
                 Some(points[index]),
             SeriesType::NormalSeries{start_ts, step_interval, values, ..} =>
                 Some(TSPoint{ts: start_ts + index as i64 * step_interval, val: values[index]}),
+            SeriesType::GappyNormalSeries{..} => 
+                panic!("Can not efficient index into the middle of a normalized timeseries with gaps"),
         }
     }
 
@@ -201,6 +255,80 @@ impl<'input> TimeSeries<'input> {
                 false, // a sorted ExplicitSeries is written out as a SortedSeries
             SeriesType::NormalSeries{..} =>
                 true,
+            SeriesType::GappyNormalSeries{..} =>
+                true,
+        }
+    }
+}
+
+enum TimeSeriesIter<'a> {
+    TSPointSliceWrapper {
+        iter: std::slice::Iter<'a, TSPoint>
+    },
+    NormalSeriesIter {
+        idx: u64,
+        start: i64,
+        step: i64,
+        vals: std::slice::Iter<'a, f64>,
+    },
+    GappyNormalSeriesIter {
+        idx: u64,
+        count: u64,
+        start: i64,
+        step: i64,
+        present: &'a [u64],
+        vals: std::slice::Iter<'a, f64>,
+    },
+}
+
+impl<'a> Iterator for TimeSeriesIter<'a> {
+    type Item = TSPoint;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            TimeSeriesIter::TSPointSliceWrapper{iter} => {
+                match iter.next() {
+                    None => None,
+                    Some(point) => Some(*point)
+                }
+            },
+            TimeSeriesIter::NormalSeriesIter{idx, start, step, vals} => {
+                let val = vals.next();
+                if val.is_none() {
+                    return None;
+                }
+                let val = *val.unwrap();
+                let ts = *start + *idx as i64 * *step;
+                *idx += 1;
+                Some(TSPoint{ts, val})
+            }
+            TimeSeriesIter::GappyNormalSeriesIter{idx, count, start, step, present, vals} => {
+                if idx >= count {
+                    return None;
+                }
+                while present[(*idx/64) as usize] & (1 << (*idx % 64)) == 0 {
+                    *idx += 1;
+                }
+                let ts = *start + *idx as i64 * *step;
+                let val = *vals.next().unwrap();  // last entry of gappy series is required to be a value, so this must not return None here
+                *idx += 1;
+                Some(TSPoint{ts, val})
+            }
+        }
+    }
+}
+
+impl<'a> TimeSeries<'a> {
+    fn iter(&self) -> TimeSeriesIter<'a> {
+        match self.series {
+            SeriesType::SortedSeries{points, ..} =>
+                TimeSeriesIter::TSPointSliceWrapper{iter: points.iter()},
+            SeriesType::ExplicitSeries{points, ..} =>
+                TimeSeriesIter::TSPointSliceWrapper{iter: points.iter()},
+            SeriesType::NormalSeries{start_ts, step_interval, values, ..} =>
+                TimeSeriesIter::NormalSeriesIter{idx: 0, start: start_ts, step: step_interval, vals: values.iter()},
+            SeriesType::GappyNormalSeries{count, start_ts, step_interval, present, values, ..} =>
+                TimeSeriesIter::GappyNormalSeriesIter{idx: 0, count, start: start_ts, step: step_interval, present, vals: values.iter()},
         }
     }
 }
@@ -209,21 +337,7 @@ impl<'input> TimeSeries<'input> {
 pub fn unnest_series(
     series: toolkit_experimental::TimeSeries,
 ) -> impl std::iter::Iterator<Item = (name!(time,pg_sys::TimestampTz),name!(value,f64))> + '_ {
-    let iter: Box<dyn Iterator<Item=_>> = match series.series {
-        SeriesType::SortedSeries{points, ..} =>
-            Box::new(points.iter().map(|points| (points.ts, points.val))),
-
-        SeriesType::ExplicitSeries{points, ..} =>
-            Box::new(points.iter().map(|points| (points.ts, points.val))),
-
-        SeriesType::NormalSeries{start_ts, step_interval, num_vals, values} =>
-            Box::new((0..num_vals).map(move |i| {
-                let num_steps = i as i64;
-                let step_interval = step_interval;
-                (start_ts + num_steps * step_interval, values[i as usize])
-            })),
-    };
-    iter
+    Box::new(series.iter().map(|points| (points.ts, points.val)))
 }
 
 #[pg_extern(schema = "toolkit_experimental")]

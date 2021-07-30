@@ -3,6 +3,10 @@ use std::convert::TryInto;
 
 use pgx::*;
 
+use flat_serialize_macro::FlatSerializable;
+
+use serde::{Deserialize, Serialize};
+
 use super::*;
 
 use crate::{
@@ -19,14 +23,13 @@ pg_type! {
             LTTB: 1 {
                 resolution: u64,
             },
-            Downsample: 2 {
+            ResampleToRate: 2 {
                 interval: i64,
-                downsample_method: i64,
+                resample_method: ResampleMethod,
+                snap_to_rate: i64, // padded bool
             },
-            // TODO: this currently only works with GappyNormalSeries (and as a noop on NormalSeries),
-            // we need to decide on what the semantics of this are with regard to an ExplicictSeries
-            Gapfill: 3 {
-                gapfill_method: i64,
+            FillHoles: 3 {
+                fill_method: FillMethod,
             },
         },
     }
@@ -106,17 +109,17 @@ pub fn execute_pipeline_element<'s, 'e>(
         (Element::LTTB{resolution}, Owned(timeseries)) => {
             return Some(crate::lttb::lttb_ts(*timeseries, *resolution as _))
         }
-        (Element::Downsample{..}, Borrowed(timeseries)) => {
-            return Some(downsample(timeseries, &element));
+        (Element::ResampleToRate{..}, Borrowed(timeseries)) => {
+            return Some(resample_to_rate(timeseries, &element));
         }
-        (Element::Downsample{..}, Owned(timeseries)) => {
-            return Some(downsample(timeseries, &element));
+        (Element::ResampleToRate{..}, Owned(timeseries)) => {
+            return Some(resample_to_rate(timeseries, &element));
         }
-        (Element::Gapfill{..}, Borrowed(timeseries)) => {
-            return Some(gapfill(timeseries, &element));
+        (Element::FillHoles{..}, Borrowed(timeseries)) => {
+            return Some(fill_holes(timeseries, &element));
         }
-        (Element::Gapfill{..}, Owned(timeseries)) => {
-            return Some(gapfill(timeseries, &element));
+        (Element::FillHoles{..}, Owned(timeseries)) => {
+            return Some(fill_holes(timeseries, &element));
         }
     }
 }
@@ -206,54 +209,44 @@ pub fn lttb_pipeline_element<'p, 'e>(
 
 type Interval = pg_sys::Datum;
 
-pub enum DownsampleMethod {
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug, FlatSerializable)]
+#[repr(u64)]
+pub enum ResampleMethod {
     Average,
     WeightedAverage,
     Nearest,
+    TrailingAverage,
 }
 
-impl From<i64> for DownsampleMethod {
-    fn from(item: i64) -> Self {
-        match item {
-            1 => DownsampleMethod::Average,
-            2 => DownsampleMethod::WeightedAverage,
-            3 => DownsampleMethod::Nearest,
-            _ => panic!("Invalid downsample method")
-        }
-    }
-}
-
-impl Into<i64> for DownsampleMethod {
-    fn into(self) -> i64 {
+impl ResampleMethod {
+    pub fn process(&self, vals: &[TSPoint], leading_edge: i64, interval: i64) -> TSPoint {
         match self {
-            DownsampleMethod::Average => 1,
-            DownsampleMethod::WeightedAverage => 2,
-            DownsampleMethod::Nearest => 3,
-        }
-    }
-}
-
-impl DownsampleMethod {
-    pub fn process(&self, vals: &std::vec::Vec<TSPoint>, target: i64, interval: i64) -> TSPoint {
-        match self {
-            DownsampleMethod::Average => {
+            ResampleMethod::Average | ResampleMethod::TrailingAverage => {
+                let ts = if *self == ResampleMethod::TrailingAverage {
+                    leading_edge
+                } else {
+                    leading_edge + interval / 2
+                };
                 let mut sum = 0.0;
                 for TSPoint{val, ..} in vals.iter() {
                     sum += val;
                 }
-                TSPoint{ts: target, val: sum / vals.len() as f64}
+                TSPoint{ts, val: sum / vals.len() as f64}
             }
-            DownsampleMethod::WeightedAverage => {
+            ResampleMethod::WeightedAverage => {
+                let target = leading_edge + interval / 2;
                 let mut sum = 0.0;
                 let mut wsum  = 0.0;
                 for TSPoint{ts, val} in vals.iter() {
-                    let weight = (ts - target).abs() as f64 / interval as f64 / 2.0;
+                    let weight = 1.0 - ((ts - target).abs() as f64 / (interval as f64 / 2.0));
+                    let weight = 0.1 + 0.9 * weight;  // use 0.1 as minimum weight to bound max_weight/min_weight to 10 (also fixes potential div0)
                     sum += val * weight;
                     wsum += weight;
                 }
                 TSPoint{ts: target, val: sum / wsum as f64}
             }
-            DownsampleMethod::Nearest => {
+            ResampleMethod::Nearest => {
+                let target = leading_edge + interval / 2;
                 let mut closest = i64::MAX;
                 let mut result = 0.0;
                 for TSPoint{ts, val} in vals.iter() {
@@ -275,24 +268,13 @@ impl DownsampleMethod {
 #[pg_extern(
     immutable,
     parallel_safe,
-    name="downsample",
+    name="resample_to_rate",
     schema="toolkit_experimental"
 )]
-pub fn downsample_pipeline_element_default<'p, 'e>(
+pub fn resample_pipeline_element<'p, 'e>(
+    resample_method: String,
     interval: Interval,
-) -> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
-    downsample_pipeline_element(interval, "average".to_string())
-}
-
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    name="downsample",
-    schema="toolkit_experimental"
-)]
-pub fn downsample_pipeline_element<'p, 'e>(
-    interval: Interval,
-    downsample_method: String,
+    snap_to_rate: bool,
 ) -> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
     unsafe {
         let interval = interval as *const pg_sys::Interval;
@@ -301,43 +283,64 @@ pub fn downsample_pipeline_element<'p, 'e>(
         }
         let interval = (*interval).time;
 
-        let downsample_method = match downsample_method.to_lowercase().as_str() {
-            "average" => DownsampleMethod::Average,
-            "weighted_average" => DownsampleMethod::WeightedAverage,
-            "nearest" => DownsampleMethod::Nearest,
+        let resample_method = match resample_method.to_lowercase().as_str() {
+            "average" => ResampleMethod::Average,
+            "weighted_average" => ResampleMethod::WeightedAverage,
+            "nearest" => ResampleMethod::Nearest,
+            "trailing_average" => ResampleMethod::TrailingAverage,
             _ => panic!("Invalid downsample method")
         };
 
         flatten!(
             UnstableTimeseriesPipelineElement {
-                element: Element::Downsample {
+                element: Element::ResampleToRate {
                     interval,
-                    downsample_method: downsample_method.into()
+                    resample_method,
+                    snap_to_rate: if snap_to_rate {1} else {0},
                 }
             }
         )
     }
 }
 
-fn downsample(
+fn determine_offset_from_rate(first_timestamp: i64, rate: i64, snap_to_rate: bool, method: &ResampleMethod) -> i64 {
+    let result = if snap_to_rate {
+        0
+    } else {
+        first_timestamp % rate
+    };
+
+    match method {
+        ResampleMethod::Average | ResampleMethod::Nearest | ResampleMethod::WeightedAverage => result - rate / 2,
+        ResampleMethod::TrailingAverage => result, 
+    }
+}
+
+fn resample_to_rate(
     series: &toolkit_experimental::TimeSeries, 
     element: &toolkit_experimental::Element
 ) -> toolkit_experimental::TimeSeries<'static> {
-    let (interval, method) = match element {
-        Element::Downsample{interval, downsample_method} => (interval, downsample_method),
+    let (interval, method, snap) = match element {
+        Element::ResampleToRate{interval, resample_method, snap_to_rate} => (interval, resample_method, snap_to_rate),
         _ => panic!("Downsample evaluator called on incorrect pipeline element")
     };
     let interval = *interval;
-    let method = DownsampleMethod::from(*method);
+    let snap = *snap == 1;
 
     let mut result = None;
     let mut current = None;
     let mut points = Vec::new();
+    let mut offset_from_rate = None;
+
     for point in series.iter() {
         let TSPoint{ts, ..} = point;
-        let target = (ts + (interval / 2) as i64 - 1) / interval as i64 * interval as i64;
+        if offset_from_rate.is_none() {
+            offset_from_rate = Some(determine_offset_from_rate(ts, interval, snap, method));
+        }
+
+        let target = (ts - offset_from_rate.unwrap()) / interval * interval + offset_from_rate.unwrap();
         if current != Some(target) {
-            if current != None {
+            if current.is_some() {
                 let new_pt = method.process(&points, current.unwrap(), interval);
                 match result {
                     None => result = Some(InternalTimeSeries::new_gappy_normal_series(new_pt, interval)),
@@ -346,7 +349,7 @@ fn downsample(
             }
             
             current = Some(target);
-            points = Vec::new();
+            points.clear();
         }
         points.push(point);
     }
@@ -361,37 +364,20 @@ fn downsample(
 }
 
 // TODO: there are one or two other gapfill objects in this extension, these should be unified
-pub enum GapfillMethod {
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug, FlatSerializable)]
+#[repr(u64)]
+pub enum FillMethod {
     LOCF,
     Interpolate,
 }
 
-impl From<i64> for GapfillMethod {
-    fn from(item: i64) -> Self {
-        match item {
-            1 => GapfillMethod::LOCF,
-            2 => GapfillMethod::Interpolate,
-            _ => panic!("Invalid downsample method")
-        }
-    }
-}
-
-impl Into<i64> for GapfillMethod {
-    fn into(self) -> i64 {
-        match self {
-            GapfillMethod::LOCF => 1,
-            GapfillMethod::Interpolate => 2,
-        }
-    }
-}
-
-impl GapfillMethod {
+impl FillMethod {
     pub fn process<'s>(&self, series: &TimeSeries<'s>) -> MaybeOwnedTs<'s> {
         unsafe {
             match series.series {
                 SeriesType::GappyNormalSeries{start_ts, step_interval, count, present, values, ..} => {
                     match self {
-                        GapfillMethod::LOCF => {
+                        FillMethod::LOCF => {
                             let mut results = Vec::new();
                             let mut last_val = 0.0;
                             let mut vidx = 0;
@@ -417,7 +403,7 @@ impl GapfillMethod {
                                 )
                             )
                         }
-                        GapfillMethod::Interpolate => {
+                        FillMethod::Interpolate => {
                             let mut iter = series.iter();
                             let mut prev = iter.next().unwrap();
                             let mut results = vec!(prev.val);
@@ -460,39 +446,38 @@ impl GapfillMethod {
 #[pg_extern(
     immutable,
     parallel_safe,
-    name="gapfill",
+    name="fill_holes",
     schema="toolkit_experimental"
 )]
-pub fn gapfill_pipeline_element<'e> (
-    gapfill_method: String,
+pub fn nullfill_pipeline_element<'e> (
+    fill_method: String,
 ) -> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
     unsafe {
-        let gapfill_method = match gapfill_method.to_lowercase().as_str() {
-            "locf" => GapfillMethod::LOCF,
-            "interpolate" => GapfillMethod::Interpolate,
-            "linear" => GapfillMethod::Interpolate,
+        let fill_method = match fill_method.to_lowercase().as_str() {
+            "locf" => FillMethod::LOCF,
+            "interpolate" => FillMethod::Interpolate,
+            "linear" => FillMethod::Interpolate,
             _ => panic!("Invalid downsample method")
         };
 
         flatten!(
             UnstableTimeseriesPipelineElement {
-                element: Element::Gapfill {
-                    gapfill_method: gapfill_method.into()
+                element: Element::FillHoles {
+                    fill_method
                 }
             }
         )
     }
 }
 
-fn gapfill(
+fn fill_holes(
     series: &toolkit_experimental::TimeSeries, 
     element: &toolkit_experimental::Element
 ) -> toolkit_experimental::TimeSeries<'static> {
     let method = match element {
-        Element::Gapfill{gapfill_method} => gapfill_method,
+        Element::FillHoles{fill_method: gapfill_method} => gapfill_method,
         _ => panic!("Gapfill evaluator called on incorrect pipeline element")
     };
-    let method = GapfillMethod::from(*method);
 
     match method.process(series) {
         MaybeOwnedTs::Owned(series) => series,
@@ -612,56 +597,97 @@ mod tests {
             ]");
 
             let val = client.select(
-                "SELECT (series |> downsample('240 hours'))::TEXT FROM lttb_pipe",
+                "SELECT (series |> resample_to_rate('average', '240 hours', true))::TEXT FROM lttb_pipe",
                 None,
                 None
             )
                 .first()
                 .get_one::<String>();
             assert_eq!(val.unwrap(), "[\
-                {\"ts\":\"2020-01-06 00:00:00+00\",\"val\":12.7015},\
-                {\"ts\":\"2020-01-16 00:00:00+00\",\"val\":10.09967},\
-                {\"ts\":\"2020-01-26 00:00:00+00\",\"val\":6.018800000000001},\
-                {\"ts\":\"2020-02-05 00:00:00+00\",\"val\":5.598180000000001},\
-                {\"ts\":\"2020-02-15 00:00:00+00\",\"val\":9.22451},\
-                {\"ts\":\"2020-02-25 00:00:00+00\",\"val\":13.56377},\
-                {\"ts\":\"2020-03-06 00:00:00+00\",\"val\":14.626499999999998},\
-                {\"ts\":\"2020-03-16 00:00:00+00\",\"val\":11.435550000000001},\
-                {\"ts\":\"2020-03-26 00:00:00+00\",\"val\":6.92475},\
-                {\"ts\":\"2020-04-05 00:00:00+00\",\"val\":5.24124},\
-                {\"ts\":\"2020-04-15 00:00:00+00\",\"val\":7.93288}\
+                {\"ts\":\"2020-01-16 00:00:00+00\",\"val\":10.5779},\
+                {\"ts\":\"2020-01-26 00:00:00+00\",\"val\":6.30572},\
+                {\"ts\":\"2020-02-05 00:00:00+00\",\"val\":5.430009999999999},\
+                {\"ts\":\"2020-02-15 00:00:00+00\",\"val\":8.75585},\
+                {\"ts\":\"2020-02-25 00:00:00+00\",\"val\":13.22552},\
+                {\"ts\":\"2020-03-06 00:00:00+00\",\"val\":14.729629999999997},\
+                {\"ts\":\"2020-03-16 00:00:00+00\",\"val\":11.885259999999999},\
+                {\"ts\":\"2020-03-26 00:00:00+00\",\"val\":7.30756},\
+                {\"ts\":\"2020-04-05 00:00:00+00\",\"val\":5.20521},\
+                {\"ts\":\"2020-04-15 00:00:00+00\",\"val\":7.51113},\
+                {\"ts\":\"2020-04-25 00:00:00+00\",\"val\":10.0221}\
             ]");
 
             let val = client.select(
-                "SELECT (series |> downsample('240 hours', 'weighted_average'))::TEXT FROM lttb_pipe",
+                "SELECT (series |> resample_to_rate('trailing_average', '240 hours', false))::TEXT FROM lttb_pipe",
                 None,
                 None
             )
                 .first()
                 .get_one::<String>();
             assert_eq!(val.unwrap(), "[\
-                {\"ts\":\"2020-01-06 00:00:00+00\",\"val\":12.7015},\
-                {\"ts\":\"2020-01-16 00:00:00+00\",\"val\":9.852736000000002},\
-                {\"ts\":\"2020-01-26 00:00:00+00\",\"val\":5.963883999999999},\
-                {\"ts\":\"2020-02-05 00:00:00+00\",\"val\":5.785756000000001},\
-                {\"ts\":\"2020-02-15 00:00:00+00\",\"val\":9.482128000000001},\
-                {\"ts\":\"2020-02-25 00:00:00+00\",\"val\":13.654568000000001},\
-                {\"ts\":\"2020-03-06 00:00:00+00\",\"val\":14.467004000000003},\
-                {\"ts\":\"2020-03-16 00:00:00+00\",\"val\":11.172388},\
-                {\"ts\":\"2020-03-26 00:00:00+00\",\"val\":6.79988},\
-                {\"ts\":\"2020-04-05 00:00:00+00\",\"val\":5.369460000000001},\
-                {\"ts\":\"2020-04-15 00:00:00+00\",\"val\":8.196308}\
+                {\"ts\":\"2020-01-11 00:00:00+00\",\"val\":10.5779},\
+                {\"ts\":\"2020-01-21 00:00:00+00\",\"val\":6.30572},\
+                {\"ts\":\"2020-01-31 00:00:00+00\",\"val\":5.430009999999999},\
+                {\"ts\":\"2020-02-10 00:00:00+00\",\"val\":8.75585},\
+                {\"ts\":\"2020-02-20 00:00:00+00\",\"val\":13.22552},\
+                {\"ts\":\"2020-03-01 00:00:00+00\",\"val\":14.729629999999997},\
+                {\"ts\":\"2020-03-11 00:00:00+00\",\"val\":11.885259999999999},\
+                {\"ts\":\"2020-03-21 00:00:00+00\",\"val\":7.30756},\
+                {\"ts\":\"2020-03-31 00:00:00+00\",\"val\":5.20521},\
+                {\"ts\":\"2020-04-10 00:00:00+00\",\"val\":7.51113},\
+                {\"ts\":\"2020-04-20 00:00:00+00\",\"val\":10.0221}\
             ]");
 
             let val = client.select(
-                "SELECT (series |> downsample('240 hours', 'NEAREST'))::TEXT FROM lttb_pipe",
+                "SELECT (series |> resample_to_rate('trailing_average', '240 hours', true))::TEXT FROM lttb_pipe",
                 None,
                 None
             )
                 .first()
                 .get_one::<String>();
             assert_eq!(val.unwrap(), "[\
-                {\"ts\":\"2020-01-06 00:00:00+00\",\"val\":12.7015},\
+                {\"ts\":\"2020-01-06 00:00:00+00\",\"val\":11.793660000000001},\
+                {\"ts\":\"2020-01-16 00:00:00+00\",\"val\":8.22446},\
+                {\"ts\":\"2020-01-26 00:00:00+00\",\"val\":5.2914699999999995},\
+                {\"ts\":\"2020-02-05 00:00:00+00\",\"val\":6.68741},\
+                {\"ts\":\"2020-02-15 00:00:00+00\",\"val\":11.12889},\
+                {\"ts\":\"2020-02-25 00:00:00+00\",\"val\":14.53243},\
+                {\"ts\":\"2020-03-06 00:00:00+00\",\"val\":13.768830000000003},\
+                {\"ts\":\"2020-03-16 00:00:00+00\",\"val\":9.54011},\
+                {\"ts\":\"2020-03-26 00:00:00+00\",\"val\":5.73418},\
+                {\"ts\":\"2020-04-05 00:00:00+00\",\"val\":5.850160000000001},\
+                {\"ts\":\"2020-04-15 00:00:00+00\",\"val\":8.80205}\
+            ]");
+
+            let val = client.select(
+                "SELECT (series |> resample_to_rate('weighted_average', '240 hours', true))::TEXT FROM lttb_pipe",
+                None,
+                None
+            )
+                .first()
+                .get_one::<String>();
+            assert_eq!(val.unwrap(), "[\
+                {\"ts\":\"2020-01-16 00:00:00+00\",\"val\":10.38865781818182},\
+                {\"ts\":\"2020-01-26 00:00:00+00\",\"val\":6.115898545454545},\
+                {\"ts\":\"2020-02-05 00:00:00+00\",\"val\":5.414132363636364},\
+                {\"ts\":\"2020-02-15 00:00:00+00\",\"val\":8.928520727272726},\
+                {\"ts\":\"2020-02-25 00:00:00+00\",\"val\":13.427980727272729},\
+                {\"ts\":\"2020-03-06 00:00:00+00\",\"val\":14.775747636363638},\
+                {\"ts\":\"2020-03-16 00:00:00+00\",\"val\":11.732629818181818},\
+                {\"ts\":\"2020-03-26 00:00:00+00\",\"val\":7.096518181818182},\
+                {\"ts\":\"2020-04-05 00:00:00+00\",\"val\":5.129781818181818},\
+                {\"ts\":\"2020-04-15 00:00:00+00\",\"val\":7.640666181818182},\
+                {\"ts\":\"2020-04-25 00:00:00+00\",\"val\":10.0221}\
+            ]");
+
+            let val = client.select(
+                "SELECT (series |> resample_to_rate('NEAREST' ,'240 hours', true))::TEXT FROM lttb_pipe",
+                None,
+                None
+            )
+                .first()
+                .get_one::<String>();
+            assert_eq!(val.unwrap(), "[\
                 {\"ts\":\"2020-01-16 00:00:00+00\",\"val\":10.3536},\
                 {\"ts\":\"2020-01-26 00:00:00+00\",\"val\":5.9942},\
                 {\"ts\":\"2020-02-05 00:00:00+00\",\"val\":5.3177},\
@@ -671,7 +697,8 @@ mod tests {
                 {\"ts\":\"2020-03-16 00:00:00+00\",\"val\":11.7331},\
                 {\"ts\":\"2020-03-26 00:00:00+00\",\"val\":6.9899},\
                 {\"ts\":\"2020-04-05 00:00:00+00\",\"val\":5.0141},\
-                {\"ts\":\"2020-04-15 00:00:00+00\",\"val\":7.6223}\
+                {\"ts\":\"2020-04-15 00:00:00+00\",\"val\":7.6223},\
+                {\"ts\":\"2020-04-25 00:00:00+00\",\"val\":10.0221}\
             ]");
         });
     }
@@ -722,70 +749,71 @@ mod tests {
             );
 
             let val = client.select(
-                "SELECT (timeseries(time, value) |> downsample('240 hours'))::TEXT FROM gappy_series",
+                "SELECT (timeseries(time, value) |> resample_to_rate('average', '240 hours', true))::TEXT FROM gappy_series",
                 None,
                 None
             )
                 .first()
                 .get_one::<String>();
             assert_eq!(val.unwrap(), "[\
-                {\"ts\":\"2020-01-06 00:00:00+00\",\"val\":12.7015},\
-                {\"ts\":\"2020-01-16 00:00:00+00\",\"val\":10.09967},\
-                {\"ts\":\"2020-01-26 00:00:00+00\",\"val\":6.018800000000001},\
-                {\"ts\":\"2020-02-05 00:00:00+00\",\"val\":5.598180000000001},\
-                {\"ts\":\"2020-02-15 00:00:00+00\",\"val\":9.22451},\
-                {\"ts\":\"2020-02-25 00:00:00+00\",\"val\":14.243366666666667},\
-                {\"ts\":\"2020-03-06 00:00:00+00\",\"val\":14.626499999999998},\
-                {\"ts\":\"2020-03-16 00:00:00+00\",\"val\":11.435550000000001},\
-                {\"ts\":\"2020-04-15 00:00:00+00\",\"val\":10.0221},\
-                {\"ts\":\"2020-04-25 00:00:00+00\",\"val\":12.52496},\
-                {\"ts\":\"2020-05-05 00:00:00+00\",\"val\":14.79556}\
+                {\"ts\":\"2020-01-16 00:00:00+00\",\"val\":10.5779},\
+                {\"ts\":\"2020-01-26 00:00:00+00\",\"val\":6.30572},\
+                {\"ts\":\"2020-02-05 00:00:00+00\",\"val\":5.430009999999999},\
+                {\"ts\":\"2020-02-15 00:00:00+00\",\"val\":8.75585},\
+                {\"ts\":\"2020-02-25 00:00:00+00\",\"val\":13.679616666666666},\
+                {\"ts\":\"2020-03-06 00:00:00+00\",\"val\":14.729629999999997},\
+                {\"ts\":\"2020-03-16 00:00:00+00\",\"val\":11.885259999999999},\
+                {\"ts\":\"2020-03-26 00:00:00+00\",\"val\":9.2724},\
+                {\"ts\":\"2020-04-25 00:00:00+00\",\"val\":12.10525},\
+                {\"ts\":\"2020-05-05 00:00:00+00\",\"val\":14.76376},\
+                {\"ts\":\"2020-05-15 00:00:00+00\",\"val\":14.5372}\
+            ]");
+
+
+            let val = client.select(
+                "SELECT (timeseries(time, value) |> resample_to_rate('average', '240 hours', true) |> fill_holes('LOCF'))::TEXT FROM gappy_series",
+                None,
+                None
+            )
+                .first()
+                .get_one::<String>();
+            assert_eq!(val.unwrap(), "[\
+                {\"ts\":\"2020-01-16 00:00:00+00\",\"val\":10.5779},\
+                {\"ts\":\"2020-01-26 00:00:00+00\",\"val\":6.30572},\
+                {\"ts\":\"2020-02-05 00:00:00+00\",\"val\":5.430009999999999},\
+                {\"ts\":\"2020-02-15 00:00:00+00\",\"val\":8.75585},\
+                {\"ts\":\"2020-02-25 00:00:00+00\",\"val\":13.679616666666666},\
+                {\"ts\":\"2020-03-06 00:00:00+00\",\"val\":14.729629999999997},\
+                {\"ts\":\"2020-03-16 00:00:00+00\",\"val\":11.885259999999999},\
+                {\"ts\":\"2020-03-26 00:00:00+00\",\"val\":9.2724},\
+                {\"ts\":\"2020-04-05 00:00:00+00\",\"val\":9.2724},\
+                {\"ts\":\"2020-04-15 00:00:00+00\",\"val\":9.2724},\
+                {\"ts\":\"2020-04-25 00:00:00+00\",\"val\":12.10525},\
+                {\"ts\":\"2020-05-05 00:00:00+00\",\"val\":14.76376},\
+                {\"ts\":\"2020-05-15 00:00:00+00\",\"val\":14.5372}\
             ]");
 
             let val = client.select(
-                "SELECT (timeseries(time, value) |> downsample('240 hours') |> gapfill('LOCF'))::TEXT FROM gappy_series",
+                "SELECT (timeseries(time, value) |> resample_to_rate('average', '240 hours', true) |> fill_holes('interpolate'))::TEXT FROM gappy_series",
                 None,
                 None
             )
                 .first()
                 .get_one::<String>();
             assert_eq!(val.unwrap(), "[\
-                {\"ts\":\"2020-01-06 00:00:00+00\",\"val\":12.7015},\
-                {\"ts\":\"2020-01-16 00:00:00+00\",\"val\":10.09967},\
-                {\"ts\":\"2020-01-26 00:00:00+00\",\"val\":6.018800000000001},\
-                {\"ts\":\"2020-02-05 00:00:00+00\",\"val\":5.598180000000001},\
-                {\"ts\":\"2020-02-15 00:00:00+00\",\"val\":9.22451},\
-                {\"ts\":\"2020-02-25 00:00:00+00\",\"val\":14.243366666666667},\
-                {\"ts\":\"2020-03-06 00:00:00+00\",\"val\":14.626499999999998},\
-                {\"ts\":\"2020-03-16 00:00:00+00\",\"val\":11.435550000000001},\
-                {\"ts\":\"2020-03-26 00:00:00+00\",\"val\":11.435550000000001},\
-                {\"ts\":\"2020-04-05 00:00:00+00\",\"val\":11.435550000000001},\
-                {\"ts\":\"2020-04-15 00:00:00+00\",\"val\":10.0221},\
-                {\"ts\":\"2020-04-25 00:00:00+00\",\"val\":12.52496},\
-                {\"ts\":\"2020-05-05 00:00:00+00\",\"val\":14.79556}\
-            ]");
-
-            let val = client.select(
-                "SELECT (timeseries(time, value) |> downsample('240 hours') |> gapfill('interpolate'))::TEXT FROM gappy_series",
-                None,
-                None
-            )
-                .first()
-                .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
-                {\"ts\":\"2020-01-06 00:00:00+00\",\"val\":12.7015},\
-                {\"ts\":\"2020-01-16 00:00:00+00\",\"val\":10.09967},\
-                {\"ts\":\"2020-01-26 00:00:00+00\",\"val\":6.018800000000001},\
-                {\"ts\":\"2020-02-05 00:00:00+00\",\"val\":5.598180000000001},\
-                {\"ts\":\"2020-02-15 00:00:00+00\",\"val\":9.22451},\
-                {\"ts\":\"2020-02-25 00:00:00+00\",\"val\":14.243366666666667},\
-                {\"ts\":\"2020-03-06 00:00:00+00\",\"val\":14.626499999999998},\
-                {\"ts\":\"2020-03-16 00:00:00+00\",\"val\":11.435550000000001},\
-                {\"ts\":\"2020-03-26 00:00:00+00\",\"val\":10.964400000000001},\
-                {\"ts\":\"2020-04-05 00:00:00+00\",\"val\":10.49325},\
-                {\"ts\":\"2020-04-15 00:00:00+00\",\"val\":10.0221},\
-                {\"ts\":\"2020-04-25 00:00:00+00\",\"val\":12.52496},\
-                {\"ts\":\"2020-05-05 00:00:00+00\",\"val\":14.79556}\
+                {\"ts\":\"2020-01-16 00:00:00+00\",\"val\":10.5779},\
+                {\"ts\":\"2020-01-26 00:00:00+00\",\"val\":6.30572},\
+                {\"ts\":\"2020-02-05 00:00:00+00\",\"val\":5.430009999999999},\
+                {\"ts\":\"2020-02-15 00:00:00+00\",\"val\":8.75585},\
+                {\"ts\":\"2020-02-25 00:00:00+00\",\"val\":13.679616666666666},\
+                {\"ts\":\"2020-03-06 00:00:00+00\",\"val\":14.729629999999997},\
+                {\"ts\":\"2020-03-16 00:00:00+00\",\"val\":11.885259999999999},\
+                {\"ts\":\"2020-03-26 00:00:00+00\",\"val\":9.2724},\
+                {\"ts\":\"2020-04-05 00:00:00+00\",\"val\":10.216683333333332},\
+                {\"ts\":\"2020-04-15 00:00:00+00\",\"val\":11.160966666666667},\
+                {\"ts\":\"2020-04-25 00:00:00+00\",\"val\":12.10525},\
+                {\"ts\":\"2020-05-05 00:00:00+00\",\"val\":14.76376},\
+                {\"ts\":\"2020-05-15 00:00:00+00\",\"val\":14.5372}\
             ]");
         });
     }

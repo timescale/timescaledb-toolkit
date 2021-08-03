@@ -574,7 +574,7 @@ impl FlatSerializeEnum {
         let tag_ident = self.tag.ident.as_ref().unwrap();
 
         quote! {
-            #[allow(unused_assignments, unused_variables)]
+            #[allow(unused_assignments, unused_variables, unreachable_code)]
             #[inline(always)]
             unsafe fn try_ref(mut input: & #lifetime [u8]) -> Result<(Self, & #lifetime [u8]), flat_serialize::WrapErr> {
                 let __packet_macro_read_len = 0usize;

@@ -330,15 +330,15 @@ impl GappyNormalTimeSeries {
         return self.present[outer as usize] & ((1 as u64) << inner) != 0;
     }
 
-    pub fn add_gap(&mut self) {
-        self.add_next_present(false);
+    fn add_gap(&mut self) {
+        self.add_next_present_bit(false);
     }
 
-    pub fn has_next_value(&mut self) {
-        self.add_next_present(true);
+    fn add_present(&mut self) {
+        self.add_next_present_bit(true);
     }
 
-    fn add_next_present(&mut self, is_present: bool) {
+    fn add_next_present_bit(&mut self, is_present: bool) {
         let idx = self.count;
         let val = if is_present { 1 } else { 0 };
         self.count += 1;
@@ -444,7 +444,7 @@ impl TimeSeries {
                 // TODO: return error rather than assert
                 assert!(point.ts >= series.start_ts + (series.step_interval * series.count as i64) && (point.ts - series.start_ts) % series.step_interval == 0);
                 series.fill_to(point.ts);
-                series.has_next_value();
+                series.add_present();
                 series.values.push(point.val);
             }
         }

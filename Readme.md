@@ -32,10 +32,10 @@ We recommend installing rust using the [official instructions](https://www.rust-
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 ```
-and clang, the postgres headers, in the preferred manner for your system. You may also need to install OpenSSl, and package-config.
+and build tools, the postgres headers, in the preferred manner for your system. You may also need to install OpenSSl.
 For Ubuntu you can follow the [postgres install instructions](https://www.postgresql.org/download/linux/ubuntu/) then run
 ```bash
-sudo apt-get install clang postgresql-server-dev-13 libssl-dev pkg-config
+sudo apt-get install make gcc pkg-config clang postgresql-server-dev-13 libssl-dev
 ```
 and finally, the toolkit uses a [fork](https://github.com/JLockerman/pgx/tree/timescale)
 of [pgx](https://github.com/zombodb/pgx) while our patches are being upstreamed. It can be installed with

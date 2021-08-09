@@ -1,12 +1,17 @@
 # Timeseries [<sup><mark>experimental</mark></sup>](/docs/README.md#tag-notes)
 
 > [Description](#timeseries-description)<br>
+> [Timeseries Pipelines](#timeseries-pipelines)<br>
 > [Example](#timeseries-example)<br>
 > [API](#timeseries-api)
 
 ## Description <a id="timeseries-description"></a>
 
 A timeseries is an intermediate representation of a particular value over time used by the extension.  It is a space efficient representation used to store the result of analytic functions such as [asap_smooth]((asap.md#asap_smooth)) or [lttb]((lttb.md#lttb)).  Data can also be directly aggregated into a timeseries and passed to functions which support this representation.  The [unnest](#timeseries_unnest) API can be used to get the data back from a timeseries.
+
+## Timeseries Pipelines <a id="timeseries-pipelines"></a>
+
+In an attempt to streamline the timeseries interface and make them as easy to use as possible, we've provided a custom operator `|>` for applying common operations to timeseries and chaining such operations together.  This is much more fully documented in the [timeseries pipeline elements](timeseries_pipeline_elements.md) page.
 
 ## Usage Example <a id="timeseries-example"></a>
 

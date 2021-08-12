@@ -214,8 +214,46 @@ pub fn hyperloglog_union<'input>(
     flatten_log(&mut a)
 }
 
-fn flatten_log(hyperloglog: &mut HLL<Datum, DatumHashBuilder>)
--> toolkit_experimental::HyperLogLog<'static> {
+#[pg_extern(schema = "toolkit_experimental")]
+pub fn hyperloglog_union_many<'input>(
+    // bs: pgx::Array<toolkit_experimental::HyperLogLog<'input>>,
+    bs: Vec<Option<toolkit_experimental::HyperLogLog<'input>>>,
+) -> Option<toolkit_experimental::HyperLogLog<'static>> {
+    let mut rv: Option<toolkit_experimental::HyperLogLog<'static>> = None;
+    for b in bs {
+        match rv {
+            None => {
+                if let Some(b) = b {
+                    rv = Some(flatten_log(&mut unflatten_log(b.clone())));
+                }
+            }
+            Some(a) => {
+                rv = {
+                    //TODO check type id and collation for equality
+                    let mut a2 = unflatten_log(a);
+                    match b {
+                        None => Some(flatten_log(&mut a2)),
+                        Some(b) => {
+                            let b2 = unflatten_log(b);
+                            if a2.buildhasher.type_id != b2.buildhasher.type_id {
+                                error!("missmatched types")
+                            }
+                            // TODO error on mismatched collation?
+                            let mut a3 = a2.clone();
+                            a3.merge_in(&b2);
+                            Some(flatten_log(&mut a3))
+                        }
+                    }
+                }
+            }
+        }
+    }
+    rv
+}
+
+fn flatten_log(
+    hyperloglog: &mut HLL<Datum, DatumHashBuilder>,
+) -> toolkit_experimental::HyperLogLog<'static> {
     let (element_type, collation) = {
         let hasher = &hyperloglog.buildhasher;
         (ShortTypeId(hasher.type_id), PgCollationId(hasher.collation))

@@ -66,7 +66,7 @@ rollup(
 ) RETURNS Hyperloglog
 ```
 
-Returns a Hyperloglog over the union of the input elements.
+Returns a Hyperloglog by aggregating over the union of the input elements.
 
 ### Required Arguments <a id="hyperloglog-required-arguments"></a>
 |Name| Type |Description|
@@ -84,12 +84,12 @@ Returns a Hyperloglog over the union of the input elements.
 ### Sample Usages <a id="summary-form-examples"></a>
 
 ```SQL
-SELECT toolkit_experimental.hyperloglog_count(
-    toolkit_experimental.rollup(
-        (SELECT toolkit_experimental.hyperloglog(32, v::text) FROM generate_series(1, 100) v),
-        (SELECT toolkit_experimental.hyperloglog(32, v::text) FROM generate_series(50, 150) v)
-    )
-)
+SELECT toolkit_experimental.hyperloglog_count(toolkit_experimental.rollup(logs))
+FROM (
+    (SELECT toolkit_experimental.hyperloglog(32, v::text) logs FROM generate_series(1, 100) v)
+    UNION ALL
+    (SELECT toolkit_experimental.hyperloglog(32, v::text) FROM generate_series(50, 150) v)
+) hll;
 ```
 ```output
  count

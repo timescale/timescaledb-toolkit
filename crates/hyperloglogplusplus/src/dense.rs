@@ -42,6 +42,15 @@ impl<'s> Storage<'s> {
         }
     }
 
+    pub fn into_owned(&self) -> Storage<'static> {
+        Storage {
+            registers: self.registers.into_owned(),
+            index_shift: self.index_shift,
+            precision: self.precision,
+            hash_mask: self.hash_mask,
+        }
+    }
+
     pub fn add_hash(&mut self, hash: u64) {
         let (idx, count) = self.idx_count_from_hash(hash);
         self.registers.set_max(idx as usize, count as u8);

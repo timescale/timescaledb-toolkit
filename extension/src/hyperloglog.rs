@@ -170,7 +170,7 @@ fn hyperloglog_final(
 }
 
 extension_sql!(
-    r#"
+r#"
 CREATE AGGREGATE toolkit_experimental.hyperloglog(size int, value AnyElement)
 (
     stype = internal,
@@ -184,6 +184,50 @@ CREATE AGGREGATE toolkit_experimental.hyperloglog(size int, value AnyElement)
 );
 
 #[pg_extern(schema = "toolkit_experimental")]
+pub fn hyperloglog_union<'input>(
+    state: Option<Internal<HyperLogLogTrans>>,
+    other: toolkit_experimental::HyperLogLog<'input>,
+    fc: pg_sys::FunctionCallInfo,
+) -> Option<Internal<HyperLogLogTrans>> {
+    unsafe {
+        in_aggregate_context(fc, || {
+            let mut state = match state {
+                Some(state) => state,
+                None => {
+                    let state = HyperLogLogTrans {
+                        logger: unflatten_log(other).into_owned(),
+                    };
+                    return Some(state.into())
+                },
+            };
+            let other = unflatten_log(other);
+            if state.logger.buildhasher.type_id != other.buildhasher.type_id {
+                error!("missmatched types")
+            }
+            // TODO error on mismatched collation?
+            state.logger.merge_in(&other);
+            Some(state)
+        })
+    }
+}
+
+extension_sql!(
+r#"
+CREATE AGGREGATE toolkit_experimental.rollup(hyperloglog toolkit_experimental.Hyperloglog)
+(
+    stype = internal,
+    sfunc = toolkit_experimental.hyperloglog_union,
+    finalfunc = toolkit_experimental.hyperloglog_final,
+    combinefunc = toolkit_experimental.hyperloglog_combine,
+    serialfunc = toolkit_experimental.hyperloglog_serialize,
+    deserialfunc = toolkit_experimental.hyperloglog_deserialize
+);
+"#
+);
+
+
+
+#[pg_extern(schema = "toolkit_experimental")]
 pub fn hyperloglog_count<'input>(
     hyperloglog: toolkit_experimental::HyperLogLog<'input>
 ) -> i64 {
@@ -195,23 +239,6 @@ pub fn hyperloglog_count<'input>(
         HLL::<Datum, ()>::from_dense_parts(registers, precision, ()),
     };
     log.immutable_estimate_count() as i64
-}
-
-#[pg_extern(name="rollup", schema = "toolkit_experimental")]
-pub fn hyperloglog_union<'input>(
-    a: toolkit_experimental::HyperLogLog<'input>,
-    b: toolkit_experimental::HyperLogLog<'input>,
-) -> toolkit_experimental::HyperLogLog<'static> {
-    //TODO check type id and collation for equality
-    let a = unflatten_log(a);
-    let b = unflatten_log(b);
-    if a.buildhasher.type_id != b.buildhasher.type_id {
-        error!("missmatched types")
-    }
-    // TODO error on mismatched collation?
-    let mut a = a.clone();
-    a.merge_in(&b);
-    flatten_log(&mut a)
 }
 
 fn flatten_log(hyperloglog: &mut HLL<Datum, DatumHashBuilder>)
@@ -599,10 +626,14 @@ mod tests {
 
                 let text = client
                     .select(
-                        "SELECT toolkit_experimental.rollup(\
-                            toolkit_experimental.hyperloglog(32, v::text), \
-                            toolkit_experimental.hyperloglog(32, v::text)\
-                        )::TEXT FROM generate_series(1, 100) v",
+                        "SELECT toolkit_experimental.rollup(logs)::text \
+                        FROM (\
+                            (SELECT toolkit_experimental.hyperloglog(32, v::text) logs \
+                             FROM generate_series(1, 100) v\
+                            ) UNION ALL \
+                            (SELECT toolkit_experimental.hyperloglog(32, v::text) \
+                             FROM generate_series(1, 100) v)\
+                        ) q",
                         None,
                         None,
                     )
@@ -615,12 +646,14 @@ mod tests {
             {
                 // differing unions should be a sum of the distinct counts
                 let query =
-                    "SELECT toolkit_experimental.hyperloglog_count(\
-                        toolkit_experimental.rollup(\
-                            (SELECT toolkit_experimental.hyperloglog(32, v::text) FROM generate_series(1, 100) v),\
-                            (SELECT toolkit_experimental.hyperloglog(32, v::text) FROM generate_series(50, 150) v)\
-                        )\
-                    )";
+                    "SELECT toolkit_experimental.hyperloglog_count(toolkit_experimental.rollup(logs)) \
+                    FROM (\
+                        (SELECT toolkit_experimental.hyperloglog(32, v::text) logs \
+                         FROM generate_series(1, 100) v) \
+                        UNION ALL \
+                        (SELECT toolkit_experimental.hyperloglog(32, v::text) \
+                         FROM generate_series(50, 150) v)\
+                    ) q";
                 let count = client
                     .select(
                         query,

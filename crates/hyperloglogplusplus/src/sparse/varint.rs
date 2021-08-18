@@ -33,6 +33,10 @@ impl<'c> Compressed<'c> {
     pub fn cap(&self) -> usize {
         self.0.len()
     }
+
+    pub fn into_owned(&self) -> Compressed<'static> {
+        Compressed(Cow::from(self.0.clone().into_owned()))
+    }
 }
 
 

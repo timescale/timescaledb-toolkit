@@ -596,7 +596,7 @@ fn stats1d_sum(
 #[pg_extern(name="stddev", schema = "toolkit_experimental", immutable)]
 fn stats1d_stddev(
     summary: Option<toolkit_experimental::StatsSummary1D>,
-    method: default!(String, "population"),
+    method: default!(String, "sample"),
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     match method.trim().to_lowercase().as_str() {
@@ -609,7 +609,7 @@ fn stats1d_stddev(
 #[pg_extern(name="variance", schema = "toolkit_experimental", immutable)]
 fn stats1d_variance(
     summary: Option<toolkit_experimental::StatsSummary1D>,
-    method: default!(String, "population"),
+    method: default!(String, "sample"),
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     match method.trim().to_lowercase().as_str() {
@@ -662,7 +662,7 @@ fn stats2d_sum_y(
 #[pg_extern(name="stddev_x", schema = "toolkit_experimental", immutable)]
 fn stats2d_stddev_x(
     summary: Option<toolkit_experimental::StatsSummary2D>,
-    method: default!(String, "population"),
+    method: default!(String, "sample"),
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     match method.trim().to_lowercase().as_str() {
@@ -675,7 +675,7 @@ fn stats2d_stddev_x(
 #[pg_extern(name="stddev_y", schema = "toolkit_experimental", immutable)]
 fn stats2d_stddev_y(
     summary: Option<toolkit_experimental::StatsSummary2D>,
-    method: default!(String, "population"),
+    method: default!(String, "sample"),
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     match method.trim().to_lowercase().as_str() {
@@ -688,7 +688,7 @@ fn stats2d_stddev_y(
 #[pg_extern(name="variance_x", schema = "toolkit_experimental", immutable)]
 fn stats2d_variance_x(
     summary: Option<toolkit_experimental::StatsSummary2D>,
-    method: default!(String, "population"),
+    method: default!(String, "sample"),
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     match method.trim().to_lowercase().as_str() {
@@ -701,12 +701,12 @@ fn stats2d_variance_x(
 #[pg_extern(name="variance_y", schema = "toolkit_experimental", immutable)]
 fn stats2d_variance_y(
     summary: Option<toolkit_experimental::StatsSummary2D>,
-    method: default!(String, "population"),
+    method: default!(String, "sample"),
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     match method.trim().to_lowercase().as_str() {
-        "population" | "pop" => Some(summary?.to_internal().var_pop()?.x),
-        "sample" | "samp" => Some(summary?.to_internal().var_samp()?.x),
+        "population" | "pop" => Some(summary?.to_internal().var_pop()?.y),
+        "sample" | "samp" => Some(summary?.to_internal().var_samp()?.y),
         _ => panic!("unknown analysis method"),
     }
 }
@@ -762,7 +762,7 @@ fn stats2d_determination_coeff(
 #[pg_extern(name="covariance", schema = "toolkit_experimental", immutable)]
 fn stats2d_covar(
     summary: Option<toolkit_experimental::StatsSummary2D>,
-    method: default!(String, "population"),
+    method: default!(String, "sample"),
     _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     match method.trim().to_lowercase().as_str() {
@@ -817,3 +817,212 @@ fn stats2d_covar(
 //     //     });
 //     // }
 // }
+
+#[cfg(any(test, feature = "pg_test"))]
+mod tests {
+    use pgx::*;
+    use approx::relative_eq;
+    use rand::rngs::SmallRng;
+    use rand::seq::SliceRandom;
+    use rand::{self, Rng, SeedableRng};
+
+    const RUNS: usize = 10;          // Number of runs to generate
+    const VALS: usize = 10000;       // Number of values to use for each run
+    const SEED: Option<u64> = None;  // RNG seed, generated from entropy if None
+    const PRINT_VALS: bool = false;  // Print out test values on error, this can be spammy if VALS is high
+
+    #[pg_test]
+    fn stats_agg_fuzz() {
+        let mut state = TestState::new(RUNS, VALS, SEED);
+        for _ in 0..state.runs {
+            state.populate_values();
+            test_aggs(&mut state);
+            state.passed += 1;
+        }
+    }
+
+    struct TestState {
+        runs: usize,
+        values: usize,
+        passed: usize,
+        x_values: Vec<f64>,
+        y_values: Vec<f64>,
+        seed: u64,
+        gen: SmallRng,
+    }
+
+    impl TestState {
+        pub fn new(runs: usize, values: usize, seed: Option<u64>) -> TestState {
+            let seed = match seed {
+                Some(s) => s,
+                None => SmallRng::from_entropy().gen()
+            };
+
+            TestState {
+                runs,
+                values,
+                passed: 0,
+                x_values: Vec::new(),
+                y_values: Vec::new(),
+                seed,
+                gen: SmallRng::seed_from_u64(seed),
+            }
+        }
+
+        pub fn populate_values(&mut self) {
+            // Discard old values
+            self.x_values = Vec::with_capacity(self.values);
+            self.y_values = Vec::with_capacity(self.values);
+
+            // We'll cluster the exponential components of the random values around a particular value
+            let exp_base = self.gen.gen_range((f64::MIN_EXP / 10) as f64..(f64::MAX_EXP / 10) as f64);
+
+            for _ in 0..self.values {
+                let exp = self.gen.gen_range((exp_base - 2.)..=(exp_base + 2.));
+                let mantissa = self.gen.gen_range((1.)..2.);
+                let sign = [-1., 1.].choose(&mut self.gen).unwrap();
+                self.x_values.push(sign * mantissa * exp.exp2());
+                
+                let exp = self.gen.gen_range((exp_base - 2.)..=(exp_base + 2.));
+                let mantissa = self.gen.gen_range((1.)..2.);
+                let sign = [-1., 1.].choose(&mut self.gen).unwrap();
+                self.y_values.push(sign * mantissa * exp.exp2());
+            }
+        }
+
+        pub fn failed_msg(&self, dump_vals: bool) -> String {
+            format!("Failed after {} successful iterations, run using {} values generated from seed {}{}", self.passed, self.x_values.len(), self.seed,
+                if dump_vals {
+                    format!("\nX-values:\n{:?}\n\nY-values:\n{:?}", self.x_values, self.y_values)
+                } else {
+                    "".to_string()
+                }
+            )
+        }
+    }
+
+    fn check_agg_equivalence(state: &TestState, client: &SpiClient, pg_cmd: &String, tk_cmd: &String, allowed_diff: f64) {
+        let pg_result = client.select(&pg_cmd, None, None)
+            .first()
+            .get_one::<f64>()
+            .unwrap();
+
+        let tk_result = client.select(&tk_cmd, None, None)
+            .first()
+            .get_one::<f64>()
+            .unwrap();
+
+        let result = if allowed_diff == 0.0 {
+            pg_result == tk_result
+        } else {
+            relative_eq!(pg_result, tk_result, max_relative = allowed_diff)
+        };
+
+        if !result {
+            let abs_diff = f64::abs(pg_result - tk_result);
+            let abs_max = f64::abs(pg_result).max(f64::abs(tk_result));
+            panic!(
+                "Output didn't match between postgres command: {}\n\
+                and stats_agg command: {} \n\
+                \tpostgres result: {}\n\
+                \tstatsagg result: {}\n\
+                \trelative difference:         {}\n\
+                \tallowed relative difference: {}\n\
+                {}", pg_cmd, tk_cmd, pg_result, tk_result, abs_diff / abs_max, allowed_diff, state.failed_msg(PRINT_VALS));
+        }
+    }
+
+    fn pg1d_aggx(agg: &str) -> String {
+        format!("SELECT {}(test_x) FROM test_table", agg)
+    }
+
+    fn pg1d_aggy(agg: &str) -> String {
+        format!("SELECT {}(test_y) FROM test_table", agg)
+    }
+
+    fn pg2d_agg(agg: &str) -> String {
+        format!("SELECT {}(test_y, test_x) FROM test_table", agg)
+    }
+
+    fn tk1d_agg(agg: &str) -> String {
+        format!("SELECT toolkit_experimental.{}(toolkit_experimental.stats_agg(test_x)) FROM test_table", agg)
+    }
+
+    fn tk1d_agg_arg(agg: &str, arg: &str) -> String {
+        format!("SELECT toolkit_experimental.{}(toolkit_experimental.stats_agg(test_x), '{}') FROM test_table", agg, arg)
+    }
+
+    fn tk2d_agg(agg: &str) -> String {
+        format!("SELECT toolkit_experimental.{}(toolkit_experimental.stats_agg(test_y, test_x)) FROM test_table", agg)
+    }
+
+    fn tk2d_agg_arg(agg: &str, arg: &str) -> String {
+        format!("SELECT toolkit_experimental.{}(toolkit_experimental.stats_agg(test_y, test_x), '{}') FROM test_table", agg, arg)
+    }
+
+    fn test_aggs(state: &mut TestState) {
+        Spi::execute(|client| {
+            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
+
+            client.select(
+                "CREATE TABLE test_table (test_x DOUBLE PRECISION, test_y DOUBLE PRECISION)",
+                None,
+                None
+            );
+            
+            client.select(&format!("INSERT INTO test_table VALUES {}", 
+                state.x_values.iter().zip(state.y_values.iter()).map(
+                    |(x, y)| "(".to_string() + &x.to_string() + "," + &y.to_string()+ ")" + ","
+                ).collect::<String>().trim_end_matches(",")), None, None);
+
+            // Definitions for allowed errors for different aggregates
+            const NONE: f64 = 0.;                 // Exact match
+            const EPS1: f64 = f64::EPSILON;       // Generally enough to handle float rounding
+            const EPS2: f64 = 2. * f64::EPSILON;  // stddev is sqrt(variance), so a bit tighter bound
+            const EPS3: f64 = 3. * f64::EPSILON;  // Sum of squares in variance agg accumulates a bit more error
+
+            check_agg_equivalence(&state, &client, &pg1d_aggx("avg"), &tk1d_agg("average"), NONE);
+            check_agg_equivalence(&state, &client, &pg1d_aggx("sum"), &tk1d_agg("sum"), NONE);
+            check_agg_equivalence(&state, &client, &pg1d_aggx("count"), &tk1d_agg("num_vals"), NONE);
+            check_agg_equivalence(&state, &client, &pg1d_aggx("stddev"), &tk1d_agg("stddev"), EPS2);
+            check_agg_equivalence(&state, &client, &pg1d_aggx("stddev_pop"), &tk1d_agg_arg("stddev", "population"), EPS2);
+            check_agg_equivalence(&state, &client, &pg1d_aggx("stddev_samp"), &tk1d_agg_arg("stddev", "sample"), EPS2);
+            check_agg_equivalence(&state, &client, &pg1d_aggx("variance"), &tk1d_agg("variance"), EPS3);
+            check_agg_equivalence(&state, &client, &pg1d_aggx("var_pop"), &tk1d_agg_arg("variance", "population"), EPS3);
+            check_agg_equivalence(&state, &client, &pg1d_aggx("var_samp"), &tk1d_agg_arg("variance", "sample"), EPS3);
+
+            check_agg_equivalence(&state, &client, &pg2d_agg("regr_avgx"), &tk2d_agg("average_x"), NONE);
+            check_agg_equivalence(&state, &client, &pg2d_agg("regr_avgy"), &tk2d_agg("average_y"), NONE);
+            check_agg_equivalence(&state, &client, &pg1d_aggx("sum"), &tk2d_agg("sum_x"), NONE);
+            check_agg_equivalence(&state, &client, &pg1d_aggy("sum"), &tk2d_agg("sum_y"), NONE);
+            check_agg_equivalence(&state, &client, &pg1d_aggx("stddev"), &tk2d_agg("stddev_x"), EPS2);
+            check_agg_equivalence(&state, &client, &pg1d_aggy("stddev"), &tk2d_agg("stddev_y"), EPS2);
+            check_agg_equivalence(&state, &client, &pg1d_aggx("stddev_pop"), &tk2d_agg_arg("stddev_x", "population"), EPS2);
+            check_agg_equivalence(&state, &client, &pg1d_aggy("stddev_pop"), &tk2d_agg_arg("stddev_y", "population"), EPS2);
+            check_agg_equivalence(&state, &client, &pg1d_aggx("stddev_samp"), &tk2d_agg_arg("stddev_x", "sample"), EPS2);
+            check_agg_equivalence(&state, &client, &pg1d_aggy("stddev_samp"), &tk2d_agg_arg("stddev_y", "sample"), EPS2);
+            check_agg_equivalence(&state, &client, &pg1d_aggx("variance"), &tk2d_agg("variance_x"), EPS3);
+            check_agg_equivalence(&state, &client, &pg1d_aggy("variance"), &tk2d_agg("variance_y"), EPS3);
+            check_agg_equivalence(&state, &client, &pg1d_aggx("var_pop"), &tk2d_agg_arg("variance_x", "population"), EPS3);
+            check_agg_equivalence(&state, &client, &pg1d_aggy("var_pop"), &tk2d_agg_arg("variance_y", "population"), EPS3);
+            check_agg_equivalence(&state, &client, &pg1d_aggx("var_samp"), &tk2d_agg_arg("variance_x", "sample"), EPS3);
+            check_agg_equivalence(&state, &client, &pg1d_aggy("var_samp"), &tk2d_agg_arg("variance_y", "sample"), EPS3);
+            check_agg_equivalence(&state, &client, &pg2d_agg("regr_count"), &tk2d_agg("num_vals"), NONE);
+
+            check_agg_equivalence(&state, &client, &pg2d_agg("regr_slope"), &tk2d_agg("slope"), EPS1);
+            check_agg_equivalence(&state, &client, &pg2d_agg("corr"), &tk2d_agg("corr"), EPS1);
+            check_agg_equivalence(&state, &client, &pg2d_agg("regr_intercept"), &tk2d_agg("intercept"), EPS1);
+            // check_agg_equivalence(&state, &client, &pg2d_agg(""), &tk2d_agg("x_intercept"), 0.0000001); !!! No postgres equivalent for x_intercept
+            check_agg_equivalence(&state, &client, &pg2d_agg("regr_r2"), &tk2d_agg("determination_coeff"), EPS1);
+            check_agg_equivalence(&state, &client, &pg2d_agg("covar_pop"), &tk2d_agg_arg("covariance", "population"), EPS1);
+            check_agg_equivalence(&state, &client, &pg2d_agg("covar_samp"), &tk2d_agg_arg("covariance", "sample"), EPS1);
+
+            client.select("DROP TABLE test_table",
+                None,
+                None
+            );
+        });
+    }
+}

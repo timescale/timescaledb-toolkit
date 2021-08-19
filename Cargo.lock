@@ -754,6 +754,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "itertools"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "69ddb889f9d0d08a67338271fa9b62996bc788c7796a5c18cf057420aaed5eaf"
+dependencies = [
+ "either",
+]
+
+[[package]]
 name = "itoa"
 version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1625,6 +1634,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "spacesaving"
+version = "0.1.0"
+dependencies = [
+ "rand 0.8.3",
+ "serde",
+ "zipf",
+]
+
+[[package]]
 name = "sql-doctester"
 version = "0.1.0"
 dependencies = [
@@ -1885,6 +1903,7 @@ dependencies = [
  "flat_serialize",
  "flat_serialize_macro",
  "hyperloglogplusplus",
+ "itertools",
  "paste",
  "pgx",
  "pgx-macros",
@@ -1894,6 +1913,7 @@ dependencies = [
  "rand_distr",
  "serde",
  "serde_json",
+ "spacesaving",
  "stats_agg",
  "tdigest",
  "time_series",
@@ -2230,3 +2250,12 @@ name = "xshell-macros"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0607c095c96c1d8420ce4a018a0954fb15d73d5eb59b521a05a0f04cffc05059"
+
+[[package]]
+name = "zipf"
+version = "7.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "835688a7a1b5d2dfaeb5b7e1b4cfb979e7095a70cd1c72fe083f4904ef3e995e"
+dependencies = [
+ "rand 0.8.3",
+]

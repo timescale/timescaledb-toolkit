@@ -11,6 +11,7 @@ members = [
     "crates/hyperloglogplusplus",
     "crates/udd-sketch",
     "crates/time-weighted-average",
+    "crates/spacesaving",
     "tools/post-install",
     "tools/sql-doctester",
     "tools/testrunner",

@@ -227,7 +227,7 @@ CREATE AGGREGATE toolkit_experimental.rollup(hyperloglog toolkit_experimental.Hy
 
 
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn hyperloglog_count<'input>(
     hyperloglog: toolkit_experimental::HyperLogLog<'input>
 ) -> i64 {
@@ -239,6 +239,17 @@ pub fn hyperloglog_count<'input>(
         HLL::<Datum, ()>::from_dense_parts(registers, precision, ()),
     };
     log.immutable_estimate_count() as i64
+}
+
+#[pg_extern(name="stderror" schema = "toolkit_experimental", immutable, parallel_safe)]
+pub fn hyperloglog_error<'input>(
+    hyperloglog: toolkit_experimental::HyperLogLog<'input>
+) -> f64 {
+    let precision = match hyperloglog.log {
+        Storage::Sparse { precision, .. } => precision,
+        Storage::Dense { precision, .. } => precision,
+    };
+    hyperloglogplusplus::error_for_precision(precision)
 }
 
 fn flatten_log(hyperloglog: &mut HLL<Datum, DatumHashBuilder>)

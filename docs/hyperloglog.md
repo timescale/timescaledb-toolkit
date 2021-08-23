@@ -131,3 +131,56 @@ FROM generate_series(1, 100) data
 -------------------
                114
 ```
+
+## **hyperloglog_count** <a id="hyperloglog_stderror"></a>
+
+```SQL ,ignore
+toolkit_experimental.stderror(hyperloglog Hyperloglog) RETURNS DOUBLE PRECISION
+```
+
+Returns an estimate of the relative stderror of the hyperloglog based on the
+hyperloglog error formula. Approximate result are:
+```
+ precision ┃ registers ┃  error ┃  bytes
+━━━━━━━━━━━╋━━━━━━━━━━━╋━━━━━━━━╋━━━━━━━━
+         4 ┃        16 ┃ 0.2600 ┃     12
+         5 ┃        32 ┃ 0.1838 ┃     24
+         6 ┃        64 ┃ 0.1300 ┃     48
+         7 ┃       128 ┃ 0.0919 ┃     96
+         8 ┃       256 ┃ 0.0650 ┃    192
+         9 ┃       512 ┃ 0.0460 ┃    384
+        10 ┃      1024 ┃ 0.0325 ┃    768
+        11 ┃      2048 ┃ 0.0230 ┃   1536
+        12 ┃      4096 ┃ 0.0163 ┃   3072
+        13 ┃      8192 ┃ 0.0115 ┃   6144
+        14 ┃     16384 ┃ 0.0081 ┃  12288
+        15 ┃     32768 ┃ 0.0057 ┃  24576
+        16 ┃     65536 ┃ 0.0041 ┃  49152
+        17 ┃    131072 ┃ 0.0029 ┃  98304
+        18 ┃    262144 ┃ 0.0020 ┃ 196608
+```
+
+### Required Arguments <a id="hyperloglog_stderror-required-arguments"></a>
+|Name|Type|Description|
+|---|---|---|
+| `hyperloglog` | `Hyperloglog` | The hyperloglog to extract the count from. |
+<br>
+
+### Returns
+
+|Column|Type|Description|
+|---|---|---|
+| `stderror` | `BIGINT` | The number of distinct elements counted by the hyperloglog. |
+<br>
+
+### Sample Usages <a id="hyperloglog_stderror-examples"></a>
+
+```SQL
+SELECT toolkit_experimental.stderror(toolkit_experimental.hyperloglog(64, data))
+FROM generate_series(1, 100) data
+```
+```output
+ stderror
+----------
+     0.13
+```

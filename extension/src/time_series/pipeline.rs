@@ -3,6 +3,7 @@ mod fill_holes;
 mod resample_to_rate;
 mod sort;
 mod delta;
+mod map;
 
 use std::convert::TryInto;
 
@@ -49,6 +50,10 @@ pg_type! {
             },
             Delta: 5 {
             },
+            MapData: 6 {
+                // FIXME serialize/deserialize as `name(type)`
+                function: pg_sys::regproc,
+            }
         },
     }
 }
@@ -114,6 +119,8 @@ pub fn execute_pipeline_element<'s, 'e>(
             return sort_timeseries(timeseries),
         Element::Delta{..} =>
             return timeseries_delta(&timeseries),
+        Element::MapData { function } =>
+            return map::apply_to(timeseries, *function),
     }
 }
 

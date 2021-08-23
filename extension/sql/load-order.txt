@@ -13,6 +13,7 @@ time_series_pipeline.generated.sql
 triggers.generated.sql
 time_series_pipeline_delta.generated.sql
 time_series_pipeline_fill_holes.generated.sql
+time_series_pipeline_map.generated.sql
 time_series_pipeline_resample_to_rate.generated.sql
 time_series_pipeline_sort.generated.sql
 schema_test.generated.sql

@@ -227,7 +227,7 @@ CREATE AGGREGATE toolkit_experimental.rollup(hyperloglog toolkit_experimental.Hy
 
 
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(name="distinct_count", schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn hyperloglog_count<'input>(
     hyperloglog: toolkit_experimental::HyperLogLog<'input>
 ) -> i64 {
@@ -239,6 +239,17 @@ pub fn hyperloglog_count<'input>(
         HLL::<Datum, ()>::from_dense_parts(registers, precision, ()),
     };
     log.immutable_estimate_count() as i64
+}
+
+#[pg_extern(name="stderror" schema = "toolkit_experimental", immutable, parallel_safe)]
+pub fn hyperloglog_error<'input>(
+    hyperloglog: toolkit_experimental::HyperLogLog<'input>
+) -> f64 {
+    let precision = match hyperloglog.log {
+        Storage::Sparse { precision, .. } => precision,
+        Storage::Dense { precision, .. } => precision,
+    };
+    hyperloglogplusplus::error_for_precision(precision)
 }
 
 fn flatten_log(hyperloglog: &mut HLL<Datum, DatumHashBuilder>)
@@ -485,7 +496,7 @@ mod tests {
 
             let count = client
                 .select("SELECT \
-                    toolkit_experimental.hyperloglog_count(\
+                    toolkit_experimental.distinct_count(\
                         toolkit_experimental.hyperloglog(32, v::float)\
                     ) \
                     FROM generate_series(1, 100) v", None, None)
@@ -495,7 +506,7 @@ mod tests {
 
             let count2 = client
                 .select(
-                    &format!("SELECT toolkit_experimental.hyperloglog_count('{}')", expected),
+                    &format!("SELECT toolkit_experimental.distinct_count('{}')", expected),
                     None,
                     None,
                 )
@@ -536,7 +547,7 @@ mod tests {
 
             let count = client
                 .select("SELECT \
-                toolkit_experimental.hyperloglog_count(\
+                toolkit_experimental.distinct_count(\
                     toolkit_experimental.hyperloglog(32, v::int)\
                 ) FROM generate_series(1, 100) v", None, None)
                 .first()
@@ -545,7 +556,7 @@ mod tests {
 
             let count2 = client
                 .select(
-                    &format!("SELECT toolkit_experimental.hyperloglog_count('{}')", expected),
+                    &format!("SELECT toolkit_experimental.distinct_count('{}')", expected),
                     None,
                     None,
                 )
@@ -588,7 +599,7 @@ mod tests {
             assert_eq!(text.unwrap(), expected);
 
             let count = client
-                .select("SELECT toolkit_experimental.hyperloglog_count(\
+                .select("SELECT toolkit_experimental.distinct_count(\
                     toolkit_experimental.hyperloglog(32, v::text)\
                 ) FROM generate_series(1, 100) v", None, None)
                 .first()
@@ -597,7 +608,7 @@ mod tests {
 
             let count2 = client
                 .select(
-                    &format!("SELECT toolkit_experimental.hyperloglog_count('{}')", expected),
+                    &format!("SELECT toolkit_experimental.distinct_count('{}')", expected),
                     None,
                     None,
                 )
@@ -646,7 +657,7 @@ mod tests {
             {
                 // differing unions should be a sum of the distinct counts
                 let query =
-                    "SELECT toolkit_experimental.hyperloglog_count(toolkit_experimental.rollup(logs)) \
+                    "SELECT toolkit_experimental.distinct_count(toolkit_experimental.rollup(logs)) \
                     FROM (\
                         (SELECT toolkit_experimental.hyperloglog(32, v::text) logs \
                          FROM generate_series(1, 100) v) \

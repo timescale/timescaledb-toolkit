@@ -201,6 +201,23 @@ impl Extractable for u32 {
     }
 }
 
+pub fn error_for_precision(precision: u8) -> f64 {
+    1.04/2.0f64.powi(precision.into()).sqrt()
+}
+
+pub fn precision_for_error(max_error: f64) -> u8 {
+    // error = 1.04/sqrt(number_of_registers)
+    // error*sqrt(number_of_registers) = 1.04
+    // sqrt(number_of_registers) = 1.04/error
+    // number_of_registers = (1.04/error)^2
+    let num_registers = (1.04f64/max_error).powi(2);
+    let precision = num_registers.log2().ceil();
+    if precision < 4.0 || precision > 18.0 {
+        panic!("derived precision is not valid, error should be in the range [0.26, 0.00203125]")
+    }
+    precision as u8
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::HashSet;
@@ -409,5 +426,12 @@ mod tests {
         hll_a.merge_all();
         hll_b.merge_in(&hll_a);
         assert_eq!(hll_b.estimate_count(), baseline.estimate_count())
+    }
+
+    #[test]
+    fn precision_for_error() {
+        for precision in 4..=18 {
+            assert_eq!(super::precision_for_error(super::error_for_precision(precision)), precision)
+        }
     }
 }

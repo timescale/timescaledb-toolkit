@@ -15,7 +15,7 @@ Timescale's HyperLogLog is implemented as an aggregate function in PostgreSQL.  
 
 ## Command List (A-Z) <a id="hyperloglog-api"></a>
 > - [hyperloglog](#hyperloglog)
-> - [hyperloglog_count](#hyperloglog_count)
+> - [distinct_count](#distinct_count)
 
 ---
 ## **hyperloglog** <a id="hyperloglog"></a>
@@ -84,7 +84,7 @@ Returns a Hyperloglog by aggregating over the union of the input elements.
 ### Sample Usages <a id="summary-form-examples"></a>
 
 ```SQL
-SELECT toolkit_experimental.hyperloglog_count(toolkit_experimental.rollup(logs))
+SELECT toolkit_experimental.distinct_count(toolkit_experimental.rollup(logs))
 FROM (
     (SELECT toolkit_experimental.hyperloglog(32, v::text) logs FROM generate_series(1, 100) v)
     UNION ALL
@@ -99,15 +99,14 @@ FROM (
 
 ---
 
-## **hyperloglog_count** <a id="hyperloglog_count"></a>
-
+## **distinct_count** <a id="distinct_count
 ```SQL ,ignore
-toolkit_experimental.hyperloglog_count(hyperloglog Hyperloglog) RETURNS BIGINT
+toolkit_experimental.distinct_count(hyperloglog Hyperloglog) RETURNS BIGINT
 ```
 
 Get the number of distinct values from a hyperloglog.
 
-### Required Arguments <a id="hyperloglog_count-required-arguments"></a>
+### Required Arguments <a id="distinct_count-required-arguments"></a>
 |Name|Type|Description|
 |---|---|---|
 | `hyperloglog` | `Hyperloglog` | The hyperloglog to extract the count from. |
@@ -117,22 +116,22 @@ Get the number of distinct values from a hyperloglog.
 
 |Column|Type|Description|
 |---|---|---|
-| `hyperloglog_count` | `BIGINT` | The number of distinct elements counted by the hyperloglog. |
+| `distinct_count` | `BIGINT` | The number of distinct elements counted by the hyperloglog. |
 <br>
 
-### Sample Usages <a id="hyperloglog_count-examples"></a>
+### Sample Usages <a id="distinct_count-examples"></a>
 
 ```SQL
-SELECT toolkit_experimental.hyperloglog_count(toolkit_experimental.hyperloglog(64, data))
+SELECT toolkit_experimental.distinct_count(toolkit_experimental.hyperloglog(64, data))
 FROM generate_series(1, 100) data
 ```
 ```output
- hyperloglog_count
--------------------
-               114
+ distinct_count
+----------------
+            114
 ```
 
-## **hyperloglog_count** <a id="hyperloglog_stderror"></a>
+## **stderror** <a id="hyperloglog_stderror"></a>
 
 ```SQL ,ignore
 toolkit_experimental.stderror(hyperloglog Hyperloglog) RETURNS DOUBLE PRECISION

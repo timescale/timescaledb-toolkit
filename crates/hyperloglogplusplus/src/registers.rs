@@ -141,6 +141,10 @@ impl<'s> Registers<'s> {
 
         merged
     }
+
+    pub fn into_owned(&self) -> Registers<'static> {
+        Registers(Cow::from(self.0.clone().into_owned()))
+    }
 }
 
 #[cfg(test)]

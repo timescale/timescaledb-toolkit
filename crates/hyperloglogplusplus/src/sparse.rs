@@ -60,6 +60,15 @@ impl<'s> Storage<'s> {
         }
     }
 
+    pub fn into_owned(&self) -> Storage<'static> {
+        Storage {
+            to_merge: self.to_merge.clone(),
+            compressed: self.compressed.into_owned(),
+            num_compressed: self.num_compressed,
+            precision: self.precision,
+        }
+    }
+
     pub fn add_hash(&mut self, hash: u64) -> Overflowing {
         let encoded = Encoded::from_hash(hash, self.precision);
         self.add_encoded(encoded)

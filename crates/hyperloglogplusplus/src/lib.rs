@@ -110,6 +110,20 @@ impl<'s, T, B> HyperLogLog<'s, T, B> {
             HyperLogLogStorage::Dense(_) => {},
         }
     }
+
+    pub fn into_owned(&self) -> HyperLogLog<'static, T, B>
+    where B: Clone {
+        use HyperLogLogStorage::*;
+        let storage = match &self.storage {
+            Sparse(s) => Sparse(s.into_owned()),
+            Dense(s) => Dense(s.into_owned()),
+        };
+        HyperLogLog {
+            storage,
+            buildhasher: self.buildhasher.clone(),
+            _pd: PhantomData
+        }
+    }
 }
 
 impl<'s, T, B> HyperLogLog<'s, T, B>

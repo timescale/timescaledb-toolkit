@@ -28,6 +28,12 @@ use resample_to_rate::{
 use sort::sort_timeseries;
 use delta::timeseries_delta;
 
+use map::{
+    map_series_pipeline_element,
+    check_user_function_type,
+    apply_to_series,
+};
+
 use crate::serialization::PgProcId;
 
 // TODO once we start stabilizing elements, create a type
@@ -191,6 +197,124 @@ CREATE OPERATOR |> (
     PROCEDURE=toolkit_experimental."add_unstable_element",
     LEFTARG=toolkit_experimental.UnstableTimeseriesPipeline,
     RIGHTARG=toolkit_experimental.UnstableTimeseriesPipelineElement
+);
+"#);
+
+#[pg_extern(stable, parallel_safe, schema="toolkit_experimental")]
+pub fn run_user_pipeline_element<'s, 'p>(
+    timeseries: toolkit_experimental::TimeSeries<'s>,
+    function: pg_sys::regproc,
+) -> toolkit_experimental::TimeSeries<'static> {
+    check_user_function_type(function);
+    apply_to_series(timeseries, function).in_current_context()
+}
+
+#[pg_extern(stable, parallel_safe, schema="toolkit_experimental")]
+pub fn build_unstable_pipepine_a<'s, 'p>(
+    first: toolkit_experimental::UnstableTimeseriesPipelineElement<'s>,
+    second: pg_sys::regproc,
+) -> toolkit_experimental::UnstableTimeseriesPipeline<'static> {
+    let elements: Vec<_> = vec![
+        first.0,
+        map_series_pipeline_element(second).0,
+    ];
+    build! {
+        UnstableTimeseriesPipeline {
+            num_elements: 2,
+            elements: elements.into(),
+        }
+    }
+}
+
+#[pg_extern(stable, parallel_safe, schema="toolkit_experimental")]
+pub fn build_unstable_pipepine_b<'s, 'p>(
+    first: pg_sys::regproc,
+    second: toolkit_experimental::UnstableTimeseriesPipelineElement<'s>,
+) -> toolkit_experimental::UnstableTimeseriesPipeline<'static> {
+    let elements: Vec<_> = vec![
+        map_series_pipeline_element(first).0,
+        second.0,
+    ];
+    build! {
+        UnstableTimeseriesPipeline {
+            num_elements: 2,
+            elements: elements.into(),
+        }
+    }
+}
+
+#[pg_extern(stable, parallel_safe, schema="toolkit_experimental")]
+pub fn build_unstable_pipepine_c<'s, 'p>(
+    first: pg_sys::regproc,
+    second: pg_sys::regproc,
+) -> toolkit_experimental::UnstableTimeseriesPipeline<'static> {
+    let elements: Vec<_> = vec![
+        map_series_pipeline_element(first).0,
+        map_series_pipeline_element(second).0,
+    ];
+    build! {
+        UnstableTimeseriesPipeline {
+            num_elements: 2,
+            elements: elements.into(),
+        }
+    }
+}
+
+#[pg_extern(stable, parallel_safe, schema="toolkit_experimental")]
+pub fn add_user_pipeline_element<'p, 'e>(
+    pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
+    function: pg_sys::regproc,
+) -> toolkit_experimental::UnstableTimeseriesPipeline<'p> {
+    let elements: Vec<_> = pipeline.elements.iter()
+        .chain(Some(map_series_pipeline_element(function).0))
+        .collect();
+    build! {
+        UnstableTimeseriesPipeline {
+            num_elements: elements.len().try_into().unwrap(),
+            elements: elements.into(),
+        }
+    }
+}
+
+// using this instead of pg_operator since the latter doesn't support schemas yet
+// if we use `|>` for both this and and the regular timeseries elements trying
+// to do `series |> 'custom_element'` gets an ambiguous operator error
+// `timeseries |> unknown` is not unique. For now we just use a different
+// operator for user-defined pipeline elements. In the future we could consider
+// changing the element input function to fallback to checking if the input is
+// a regproc if it doesn't recognize it; the formats should be different enough
+// that there's no risk of collision...
+// FIXME there is no CREATE OR REPLACE OPERATOR need to update post-install.rs
+//       need to ensure this works with out unstable warning
+extension_sql!(r#"
+CREATE OPERATOR |>> (
+    PROCEDURE=toolkit_experimental."run_user_pipeline_element",
+    LEFTARG=toolkit_experimental.TimeSeries,
+    RIGHTARG=regproc
+);
+
+CREATE OPERATOR |>> (
+    PROCEDURE=toolkit_experimental."build_unstable_pipepine_a",
+    LEFTARG=toolkit_experimental.UnstableTimeseriesPipelineElement,
+    RIGHTARG=regproc
+);
+
+CREATE OPERATOR |>> (
+    PROCEDURE=toolkit_experimental."build_unstable_pipepine_b",
+    LEFTARG=regproc,
+    RIGHTARG=toolkit_experimental.UnstableTimeseriesPipelineElement
+);
+
+CREATE OPERATOR |>> (
+    PROCEDURE=toolkit_experimental."build_unstable_pipepine_c",
+    LEFTARG=regproc,
+    RIGHTARG=regproc
+);
+
+CREATE OPERATOR |>> (
+    PROCEDURE=toolkit_experimental."add_user_pipeline_element",
+    LEFTARG=toolkit_experimental.UnstableTimeseriesPipeline,
+    RIGHTARG=regproc
 );
 "#);
 

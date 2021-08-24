@@ -19,6 +19,17 @@ use crate::{
 pub fn map_series_pipeline_element<'e>(
     function: pg_sys::regproc,
 ) -> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
+    check_user_function_type(function);
+    unsafe {
+        flatten!(
+            UnstableTimeseriesPipelineElement {
+                element: Element::MapSeries { function: PgProcId(function) }
+            }
+        )
+    }
+}
+
+pub fn check_user_function_type(function: pg_sys::regproc) {
     let mut argtypes: *mut pg_sys::Oid = ptr::null_mut();
     let mut nargs: ::std::os::raw::c_int = 0;
     let rettype = unsafe {
@@ -35,14 +46,6 @@ pub fn map_series_pipeline_element<'e>(
 
     if rettype != *crate::time_series::TIMESERIES_OID {
         error!("invalid return type, expected fn(timeseries) RETURNS timeseries")
-    }
-
-    unsafe {
-        flatten!(
-            UnstableTimeseriesPipelineElement {
-                element: Element::MapSeries { function: PgProcId(function) }
-            }
-        )
     }
 }
 
@@ -323,6 +326,15 @@ mod tests {
                 .first()
                 .get_one::<String>();
             assert_eq!(val.unwrap(), "[{\"ts\":\"2020-01-03 00:00:00+00\",\"val\":60.0}]");
+
+            let val = client.select(
+                "SELECT (timeseries(time, value) |>> 'jan_3_x3')::TEXT FROM series",
+                None,
+                None
+            )
+                .first()
+                .get_one::<String>();
+            assert_eq!(val.unwrap(), "[{\"ts\":\"2020-01-03 00:00:00+00\",\"val\":60.0}]");
         });
     }
 
@@ -412,6 +424,7 @@ mod tests {
             }";
             assert_eq!((&*a.unwrap(), &*b.unwrap()), (one, two));
 
+            // FIXME this doesn't work yet
             let (a, b) = client.select(
                 &*format!("SELECT \
                     '{}'::UnstableTimeseriesPipelineElement::Text, \

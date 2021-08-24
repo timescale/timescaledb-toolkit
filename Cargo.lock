@@ -1894,6 +1894,7 @@ dependencies = [
  "flat_serialize",
  "flat_serialize_macro",
  "hyperloglogplusplus",
+ "once_cell",
  "paste",
  "pgx",
  "pgx-macros",

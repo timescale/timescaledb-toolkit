@@ -53,6 +53,10 @@ pg_type! {
             MapData: 6 {
                 // FIXME serialize/deserialize as `name(type)`
                 function: pg_sys::regproc,
+            },
+            MapSeries: 7 {
+                // FIXME serialize/deserialize as `name(type)`
+                function: pg_sys::regproc,
             }
         },
     }
@@ -121,6 +125,8 @@ pub fn execute_pipeline_element<'s, 'e>(
             return timeseries_delta(&timeseries),
         Element::MapData { function } =>
             return map::apply_to(timeseries, *function),
+        Element::MapSeries { function } =>
+            return map::apply_to_series(timeseries, *function),
     }
 }
 

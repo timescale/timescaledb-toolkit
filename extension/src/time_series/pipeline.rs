@@ -90,10 +90,7 @@ pub fn run_pipeline<'s, 'p>(
     let mut timeseries = MaybeOwnedTs::Borrowed(timeseries);
     for element in pipeline.elements.iter() {
         let element = element.element;
-        let new_timeseries = execute_pipeline_element(&mut timeseries, &element);
-        if let Some(series) = new_timeseries {
-            timeseries = MaybeOwnedTs::Owned(series)
-        }
+        timeseries = execute_pipeline_element(timeseries, &element);
     }
     match timeseries {
         MaybeOwnedTs::Borrowed(series) => series.in_current_context(),
@@ -106,50 +103,50 @@ pub fn run_pipeline_element<'s, 'p>(
     timeseries: toolkit_experimental::TimeSeries<'s>,
     element: toolkit_experimental::UnstableTimeseriesPipelineElement<'p>,
 ) -> toolkit_experimental::TimeSeries<'static> {
-    let owned_timeseries = execute_pipeline_element(&mut MaybeOwnedTs::Borrowed(timeseries), &element.element);
-    if let Some(timeseries) = owned_timeseries {
-        return timeseries
+    let timeseries = execute_pipeline_element(MaybeOwnedTs::Borrowed(timeseries), &element.element);
+    match timeseries {
+        MaybeOwnedTs::Borrowed(series) => series.in_current_context(),
+        MaybeOwnedTs::Owned(series) => series,
     }
-    return timeseries.in_current_context()
 }
 
 // TODO need cow-like for timeseries input
 pub fn execute_pipeline_element<'s, 'e>(
-    timeseries: &mut MaybeOwnedTs<'s>,
+    timeseries: MaybeOwnedTs<'s>,
     element: &Element
-) -> Option<toolkit_experimental::TimeSeries<'static>> {
+) -> MaybeOwnedTs<'s> {
     use MaybeOwnedTs::{Borrowed, Owned};
 
     match (element, timeseries) {
         (Element::LTTB{resolution}, Borrowed(timeseries)) => {
-            return Some(crate::lttb::lttb_ts(*timeseries, *resolution as _))
+            return Owned(crate::lttb::lttb_ts(timeseries, *resolution as _))
         }
         (Element::LTTB{resolution}, Owned(timeseries)) => {
-            return Some(crate::lttb::lttb_ts(*timeseries, *resolution as _))
+            return Owned(crate::lttb::lttb_ts(timeseries, *resolution as _))
         }
         (Element::ResampleToRate{..}, Borrowed(timeseries)) => {
-            return Some(resample_to_rate(timeseries, &element));
+            return Owned(resample_to_rate(&timeseries, &element));
         }
         (Element::ResampleToRate{..}, Owned(timeseries)) => {
-            return Some(resample_to_rate(timeseries, &element));
+            return Owned(resample_to_rate(&timeseries, &element));
         }
         (Element::FillHoles{..}, Borrowed(timeseries)) => {
-            return Some(fill_holes(timeseries, &element));
+            return Owned(fill_holes(&timeseries, &element));
         }
         (Element::FillHoles{..}, Owned(timeseries)) => {
-            return Some(fill_holes(timeseries, &element));
+            return Owned(fill_holes(&timeseries, &element));
         }
         (Element::Sort{..}, Borrowed(timeseries)) => {
-            return Some(sort_timeseries(timeseries));
+            return Owned(sort_timeseries(&timeseries));
         }
         (Element::Sort{..}, Owned(timeseries)) => {
-            return Some(sort_timeseries(timeseries));
+            return Owned(sort_timeseries(&timeseries));
         }
         (Element::Delta{..}, Borrowed(timeseries)) => {
-            return Some(timeseries_delta(timeseries));
+            return Owned(timeseries_delta(&timeseries));
         }
         (Element::Delta{..}, Owned(timeseries)) => {
-            return Some(timeseries_delta(timeseries));
+            return Owned(timeseries_delta(&timeseries));
         }
     }
 }

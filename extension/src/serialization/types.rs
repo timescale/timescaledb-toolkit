@@ -1,6 +1,5 @@
 use std::{
     ffi::{CStr, CString},
-    os::raw::{c_char, c_int},
     slice,
     mem::{size_of, align_of, MaybeUninit},
 };
@@ -195,12 +194,7 @@ impl ShortTypIdSerializer {
 #[repr(transparent)]
 pub struct PgTypId(pub Oid);
 
-// FIXME upstream to pgx
-const PG_UTF8: i32 = 6;
-extern "C" {
-    fn pg_server_to_any(s: *const c_char, len: c_int, encoding: c_int) -> *const c_char;
-    fn pg_any_to_server(s: *const c_char, len: c_int, encoding: c_int) -> *const c_char;
-}
+use super::{pg_server_to_any, pg_any_to_server, PG_UTF8};
 
 impl Serialize for PgTypId {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>

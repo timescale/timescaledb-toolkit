@@ -2,9 +2,11 @@
 use std::{convert::TryInto, ffi::CStr, os::raw::{c_char, c_int}};
 pub use self::types::{PgTypId, ShortTypeId};
 pub use self::collations::PgCollationId;
+pub use self::functions::PgProcId;
 
 use pgx::pg_sys;
 
+mod functions;
 mod types;
 mod collations;
 

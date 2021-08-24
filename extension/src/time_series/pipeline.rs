@@ -28,6 +28,8 @@ use resample_to_rate::{
 use sort::sort_timeseries;
 use delta::timeseries_delta;
 
+use crate::serialization::PgProcId;
+
 // TODO once we start stabilizing elements, create a type
 //      `TimeseriesPipelineElement` and move stable variants to that.
 pg_type! {
@@ -52,11 +54,11 @@ pg_type! {
             },
             MapData: 6 {
                 // FIXME serialize/deserialize as `name(type)`
-                function: pg_sys::regproc,
+                function: PgProcId,
             },
             MapSeries: 7 {
                 // FIXME serialize/deserialize as `name(type)`
-                function: pg_sys::regproc,
+                function: PgProcId,
             }
         },
     }
@@ -124,9 +126,9 @@ pub fn execute_pipeline_element<'s, 'e>(
         Element::Delta{..} =>
             return timeseries_delta(&timeseries),
         Element::MapData { function } =>
-            return map::apply_to(timeseries, *function),
+            return map::apply_to(timeseries, function.0),
         Element::MapSeries { function } =>
-            return map::apply_to_series(timeseries, *function),
+            return map::apply_to_series(timeseries, function.0),
     }
 }
 

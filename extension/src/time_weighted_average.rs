@@ -345,6 +345,7 @@ mod tests {
     #[pg_test]
     fn test_time_weight_io() {
         Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
             let stmt = "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)";
             client.select(stmt, None, None);
 

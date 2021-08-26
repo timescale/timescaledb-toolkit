@@ -40,7 +40,7 @@ sudo apt-get install make gcc pkg-config clang postgresql-server-dev-13 libssl-d
 and finally, the toolkit uses a [fork](https://github.com/JLockerman/pgx/tree/timescale)
 of [pgx](https://github.com/zombodb/pgx) while our patches are being upstreamed. It can be installed with
 ```bash
-cargo install --git https://github.com/JLockerman/pgx.git --branch timescale cargo-pgx && \
+cargo install --git https://github.com/JLockerman/pgx.git --branch timescale2 cargo-pgx && \
 cargo pgx init --pg13 pg_config
 ```
 
@@ -74,7 +74,7 @@ The extension is built using a [fork](https://github.com/JLockerman/pgx/tree/tim
 of [pgx](https://github.com/zombodb/pgx). To install pgx use
 
 ```bash
-cargo install --git https://github.com/JLockerman/pgx.git --branch timescale cargo-pgx && \
+cargo install --git https://github.com/JLockerman/pgx.git --branch timescale2 cargo-pgx && \
 cargo pgx init
 ```
 

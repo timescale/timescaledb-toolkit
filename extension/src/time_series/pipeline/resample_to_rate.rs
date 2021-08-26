@@ -116,12 +116,12 @@ fn determine_offset_from_rate(first_timestamp: i64, rate: i64, snap_to_rate: boo
 
     match method {
         ResampleMethod::Average | ResampleMethod::Nearest | ResampleMethod::WeightedAverage => result - rate / 2,
-        ResampleMethod::TrailingAverage => result, 
+        ResampleMethod::TrailingAverage => result,
     }
 }
 
 pub fn resample_to_rate(
-    series: &toolkit_experimental::TimeSeries, 
+    series: &toolkit_experimental::TimeSeries,
     element: &toolkit_experimental::Element
 ) -> toolkit_experimental::TimeSeries<'static> {
     let (interval, method, snap) = match element {
@@ -151,7 +151,7 @@ pub fn resample_to_rate(
                     Some(ref mut series) => series.add_point(new_pt),
                 }
             }
-            
+
             current = Some(target);
             points.clear();
         }
@@ -174,6 +174,7 @@ mod tests {
     #[pg_test]
     fn test_pipeline_resample() {
         Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();

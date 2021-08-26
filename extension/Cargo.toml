@@ -15,8 +15,8 @@ pg13 = ["pgx/pg13", "pgx-tests/pg13"]
 pg_test = ["approx"]
 
 [dependencies]
-pgx = {git="https://github.com/JLockerman/pgx.git", branch="timescale"}
-pgx-macros = {git="https://github.com/JLockerman/pgx.git", branch="timescale"}
+pgx = {git="https://github.com/JLockerman/pgx.git", branch="timescale2"}
+pgx-macros = {git="https://github.com/JLockerman/pgx.git", branch="timescale2"}
 encodings = {path="../crates/encodings"}
 flat_serialize = {path="../crates/flat_serialize/flat_serialize"}
 flat_serialize_macro = {path="../crates/flat_serialize/flat_serialize_macro"}
@@ -39,5 +39,5 @@ rand_distr = "0.4.0"
 rand_chacha = "0.3.0"
 
 [dev-dependencies]
-pgx-tests = {git="https://github.com/JLockerman/pgx.git", branch="timescale"}
+pgx-tests = {git="https://github.com/JLockerman/pgx.git", branch="timescale2"}
 approx = "0.4.0"

@@ -193,6 +193,7 @@ mod tests {
     #[pg_test]
     fn test_asap() {
         Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
             client.select("CREATE TABLE asap_test (date timestamptz, value DOUBLE PRECISION)", None, None);
 
             // Create a table with some cyclic data

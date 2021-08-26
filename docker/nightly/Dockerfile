@@ -24,7 +24,7 @@ ENV PATH="/build/.cargo/bin:${PATH}"
 RUN set -ex \
     && rm -rf "${CARGO_HOME}/registry" "${CARGO_HOME}/git" \
     && chown postgres:postgres -R "${CARGO_HOME}" \
-    && cargo install --git https://github.com/JLockerman/pgx.git --branch timescale cargo-pgx \
+    && cargo install --git https://github.com/JLockerman/pgx.git --branch timescale2 cargo-pgx \
     && cargo pgx init --pg13 /usr/lib/postgresql/13/bin/pg_config
 
 COPY . /rust/timescale-analytics

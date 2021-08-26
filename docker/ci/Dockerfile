@@ -8,7 +8,7 @@ RUN useradd -ms /bin/bash postgres
 USER postgres
 
 # custom pgx until upstream workspace support is added
-RUN cargo install --git https://github.com/JLockerman/pgx.git --branch timescale cargo-pgx
+RUN cargo install --git https://github.com/JLockerman/pgx.git --branch timescale2 cargo-pgx
 
 # only use pg12 for now timescaledb doesn't support 13
 RUN set -ex \

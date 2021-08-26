@@ -7,7 +7,7 @@ edition = "2018"
 bytecount = "0.6.2"
 clap = { version = "2.33", features = ["wrap_help"] }
 colored = "2.0.0"
-postgres = "0.19.0"
+postgres = "0.19.1"
 pulldown-cmark = "0.8.0"
 rayon = "1.5"
 uuid = { version = "0.8", features = ["v4"] }

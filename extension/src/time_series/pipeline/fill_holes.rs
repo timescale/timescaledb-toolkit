@@ -34,7 +34,7 @@ impl FillMethod {
                                 if present[pidx as usize / 64] & 1 << (pidx % 64) != 0 {
                                     last_val = values[vidx];
                                     vidx += 1;
-                                } 
+                                }
                                 results.push(last_val);
                             }
 
@@ -119,7 +119,7 @@ pub fn holefill_pipeline_element<'e> (
 }
 
 pub fn fill_holes(
-    series: &toolkit_experimental::TimeSeries, 
+    series: &toolkit_experimental::TimeSeries,
     element: &toolkit_experimental::Element
 ) -> toolkit_experimental::TimeSeries<'static> {
     let method = match element {
@@ -141,6 +141,7 @@ mod tests {
     #[pg_test]
     fn test_pipeline_gapfill() {
         Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
@@ -172,7 +173,7 @@ mod tests {
                 None,
                 None
             );
-            
+
             client.select(
                 "INSERT INTO gappy_series \
                     SELECT \

@@ -55,6 +55,7 @@ mod tests {
     #[pg_test]
     fn test_pipeline_sort() {
         Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();

@@ -46,7 +46,7 @@ pub fn timeseries_delta(
             TimeSeries {
                 series: SeriesType::SortedSeries {
                     num_points: delta_points.len() as u64,
-                    points: &delta_points,
+                    points: (&*delta_points).into(),
                 }
             }
         )

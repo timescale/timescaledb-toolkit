@@ -28,18 +28,19 @@ pub fn sort_pipeline_element<'p, 'e>(
 pub fn sort_timeseries(
     series: &toolkit_experimental::TimeSeries,
 ) -> toolkit_experimental::TimeSeries<'static> {
-    match series.series {
+    match &series.series {
         SeriesType::GappyNormalSeries{..} | SeriesType::NormalSeries{..} | SeriesType::SortedSeries{..} => series.in_current_context(),
         SeriesType::ExplicitSeries{points, ..} => {
             unsafe {
-                let mut points = points.to_vec();
+                // TODO do in place
+                let mut points: Vec<_> = points.iter().collect();
                 points.sort_by(|a, b| a.ts.cmp(&b.ts));
 
                 flatten!(
                     TimeSeries {
                         series: SeriesType::SortedSeries {
                             num_points: points.len() as u64,
-                            points: &points,
+                            points: (&*points).into(),
                         }
                     }
                 )

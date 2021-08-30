@@ -178,7 +178,7 @@ pub fn add_unstable_element<'p, 'e>(
         flatten! {
             UnstableTimeseriesPipeline {
                 num_elements: elements.len().try_into().unwrap(),
-                elements: (&*elements).into(),
+                elements: elements.into(),
             }
         }
     }

@@ -21,7 +21,7 @@ mod pipeline;
 type bytea = pg_sys::Datum;
 
 pg_type! {
-    #[derive(Debug, Copy)]
+    #[derive(Debug)]
     struct TimeSeries<'input> {
         series: enum SeriesType<'input> {
             type_id: u64,
@@ -92,7 +92,7 @@ impl<'input> InOutFuncs for TimeSeries<'input> {
                 TimeSeries {
                     series: SeriesType::ExplicitSeries {
                         num_points: series.len() as u64,
-                        points: &*series,
+                        points: (&*series).into(),
                     }
                 }
             }
@@ -110,12 +110,12 @@ pub mod toolkit_experimental {
 impl<'input> TimeSeries<'input> {
     #[allow(dead_code)]
     pub fn to_internal_time_series(&self) -> InternalTimeSeries {
-        match self.series {
+        match &self.series {
             SeriesType::SortedSeries{points, ..} =>
                 InternalTimeSeries::Explicit(
                     ExplicitTimeSeries {
                         ordered: true,
-                        points: points.to_vec(),
+                        points: points.iter().collect(),
                     }
                 ),
             // This is assumed unordered
@@ -123,32 +123,32 @@ impl<'input> TimeSeries<'input> {
                     InternalTimeSeries::Explicit(
                         ExplicitTimeSeries {
                             ordered: false,
-                            points: points.to_vec(),
+                            points: points.iter().collect(),
                         }
                     ),
             SeriesType::NormalSeries{start_ts, step_interval, values, ..} =>
                 InternalTimeSeries::Normal(
                     NormalTimeSeries {
-                        start_ts: start_ts,
-                        step_interval: step_interval,
-                        values: values.to_vec(),
+                        start_ts: *start_ts,
+                        step_interval: *step_interval,
+                        values: values.iter().collect(),
                     }
                 ),
             SeriesType::GappyNormalSeries{start_ts, step_interval, values, count, present, ..} =>
                 InternalTimeSeries::GappyNormal(
                     GappyNormalTimeSeries {
-                        start_ts: start_ts,
-                        step_interval: step_interval,
-                        count,
-                        values: values.to_vec(),
-                        present: present.to_vec(),
+                        start_ts: *start_ts,
+                        step_interval: *step_interval,
+                        count: *count,
+                        values: values.iter().collect(),
+                        present: present.iter().collect(),
                     }
                 ),
         }
     }
 
     pub fn num_points(&self) -> usize {
-        match self.series {
+        match &self.series {
             SeriesType::SortedSeries{points, ..} =>
                 points.len(),
             SeriesType::ExplicitSeries{points, ..} =>
@@ -169,7 +169,7 @@ impl<'input> TimeSeries<'input> {
                             TimeSeries {
                                 series: SeriesType::ExplicitSeries {
                                     num_points: series.points.len() as u64,
-                                    points: &series.points,
+                                    points: (&*series.points).into(),
                                 }
                             }
                         )
@@ -178,7 +178,7 @@ impl<'input> TimeSeries<'input> {
                             TimeSeries {
                                 series: SeriesType::SortedSeries {
                                     num_points: series.points.len() as u64,
-                                    points: &series.points,
+                                    points: (&*series.points).into(),
                                 }
                             }
                         )
@@ -191,7 +191,7 @@ impl<'input> TimeSeries<'input> {
                                 start_ts: series.start_ts,
                                 step_interval: series.step_interval,
                                 num_vals: series.values.len() as u64,
-                                values: &series.values,
+                                values: (&*series.values).into(),
                             }
                         }
                     )
@@ -205,7 +205,7 @@ impl<'input> TimeSeries<'input> {
                                     start_ts: series.start_ts,
                                     step_interval: series.step_interval,
                                     num_vals: series.values.len() as u64,
-                                    values: &series.values,
+                                    values: (&*series.values).into(),
                                 }
                             }
                         )
@@ -217,8 +217,8 @@ impl<'input> TimeSeries<'input> {
                                     step_interval: series.step_interval,
                                     num_vals: series.values.len() as u64,
                                     count: series.count,
-                                    values: &series.values,
-                                    present: &series.present,
+                                    values: (&*series.values).into(),
+                                    present: (&*series.present).into(),
                                 }
                             }
                         )
@@ -235,14 +235,14 @@ impl<'input> TimeSeries<'input> {
             return None;
         }
 
-        match self.series {
+        match &self.series {
             SeriesType::SortedSeries{points, ..} =>
-                Some(points[index]),
+                Some(points.as_slice()[index]),
             SeriesType::ExplicitSeries{points, ..} =>
-                Some(points[index]),
+                Some(points.as_slice()[index]),
             SeriesType::NormalSeries{start_ts, step_interval, values, ..} =>
-                Some(TSPoint{ts: start_ts + index as i64 * step_interval, val: values[index]}),
-            SeriesType::GappyNormalSeries{..} => 
+                Some(TSPoint{ts: start_ts + index as i64 * step_interval, val: values.as_slice()[index]}),
+            SeriesType::GappyNormalSeries{..} =>
                 panic!("Can not efficient index into the middle of a normalized timeseries with gaps"),
         }
     }
@@ -263,13 +263,13 @@ impl<'input> TimeSeries<'input> {
 
 enum TimeSeriesIter<'a> {
     TSPointSliceWrapper {
-        iter: std::slice::Iter<'a, TSPoint>
+        iter: flat_serialize::I<'a, 'a, TSPoint>
     },
     NormalSeriesIter {
         idx: u64,
         start: i64,
         step: i64,
-        vals: std::slice::Iter<'a, f64>,
+        vals: flat_serialize::I<'a, 'a, f64>,
     },
     GappyNormalSeriesIter {
         idx: u64,
@@ -277,7 +277,7 @@ enum TimeSeriesIter<'a> {
         start: i64,
         step: i64,
         present: &'a [u64],
-        vals: std::slice::Iter<'a, f64>,
+        vals: flat_serialize::I<'a, 'a, f64>,
     },
 }
 
@@ -289,7 +289,7 @@ impl<'a> Iterator for TimeSeriesIter<'a> {
             TimeSeriesIter::TSPointSliceWrapper{iter} => {
                 match iter.next() {
                     None => None,
-                    Some(point) => Some(*point)
+                    Some(point) => Some(point)
                 }
             },
             TimeSeriesIter::NormalSeriesIter{idx, start, step, vals} => {
@@ -297,7 +297,7 @@ impl<'a> Iterator for TimeSeriesIter<'a> {
                 if val.is_none() {
                     return None;
                 }
-                let val = *val.unwrap();
+                let val = val.unwrap();
                 let ts = *start + *idx as i64 * *step;
                 *idx += 1;
                 Some(TSPoint{ts, val})
@@ -310,7 +310,7 @@ impl<'a> Iterator for TimeSeriesIter<'a> {
                     *idx += 1;
                 }
                 let ts = *start + *idx as i64 * *step;
-                let val = *vals.next().unwrap();  // last entry of gappy series is required to be a value, so this must not return None here
+                let val = vals.next().unwrap();  // last entry of gappy series is required to be a value, so this must not return None here
                 *idx += 1;
                 Some(TSPoint{ts, val})
             }
@@ -319,25 +319,38 @@ impl<'a> Iterator for TimeSeriesIter<'a> {
 }
 
 impl<'a> TimeSeries<'a> {
-    fn iter(&self) -> TimeSeriesIter<'a> {
-        match self.series {
+    fn iter(&self) -> TimeSeriesIter<'_> {
+        match &self.series {
             SeriesType::SortedSeries{points, ..} =>
                 TimeSeriesIter::TSPointSliceWrapper{iter: points.iter()},
             SeriesType::ExplicitSeries{points, ..} =>
                 TimeSeriesIter::TSPointSliceWrapper{iter: points.iter()},
             SeriesType::NormalSeries{start_ts, step_interval, values, ..} =>
-                TimeSeriesIter::NormalSeriesIter{idx: 0, start: start_ts, step: step_interval, vals: values.iter()},
+                TimeSeriesIter::NormalSeriesIter{idx: 0, start: *start_ts, step: *step_interval, vals: values.iter()},
             SeriesType::GappyNormalSeries{count, start_ts, step_interval, present, values, ..} =>
-                TimeSeriesIter::GappyNormalSeriesIter{idx: 0, count, start: start_ts, step: step_interval, present, vals: values.iter()},
+                TimeSeriesIter::GappyNormalSeriesIter{idx: 0, count: *count, start: *start_ts, step: *step_interval, present: present.as_slice(), vals: values.iter()},
+        }
+    }
+
+    fn into_iter(self) -> TimeSeriesIter<'a> {
+        match self.0.series {
+            SeriesType::SortedSeries{points, ..} =>
+                TimeSeriesIter::TSPointSliceWrapper{iter: points.into_iter()},
+            SeriesType::ExplicitSeries{points, ..} =>
+                TimeSeriesIter::TSPointSliceWrapper{iter: points.into_iter()},
+            SeriesType::NormalSeries{start_ts, step_interval, values, ..} =>
+                TimeSeriesIter::NormalSeriesIter{idx: 0, start: start_ts, step: step_interval, vals: values.into_iter()},
+            SeriesType::GappyNormalSeries{count, start_ts, step_interval, present, values, ..} =>
+                TimeSeriesIter::GappyNormalSeriesIter{idx: 0, count: count, start: start_ts, step: step_interval, present: present.slice(), vals: values.into_iter()},
         }
     }
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn unnest_series(
-    series: toolkit_experimental::TimeSeries,
+    series: toolkit_experimental::TimeSeries<'_>,
 ) -> impl std::iter::Iterator<Item = (name!(time,pg_sys::TimestampTz),name!(value,f64))> + '_ {
-    Box::new(series.iter().map(|points| (points.ts, points.val)))
+    series.into_iter().map(|points| (points.ts, points.val))
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
@@ -501,7 +514,7 @@ pub fn normalize (
             Some(x) => x,
             None => true,
         };
-        if series.len() < 2 {
+        if series.num_points() < 2 {
             panic!("Need at least two points to normalize a timeseries")
         }
 

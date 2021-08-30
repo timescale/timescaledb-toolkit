@@ -22,7 +22,7 @@ pub enum FillMethod {
 impl FillMethod {
     pub fn process<'s>(&self, series: &TimeSeries<'s>) -> MaybeOwnedTs<'s> {
         unsafe {
-            match series.series {
+            match &series.series {
                 SeriesType::GappyNormalSeries{start_ts, step_interval, count, present, values, ..} => {
                     match self {
                         FillMethod::LOCF => {
@@ -30,9 +30,9 @@ impl FillMethod {
                             let mut last_val = 0.0;
                             let mut vidx = 0;
 
-                            for pidx in 0..count {
-                                if present[pidx as usize / 64] & 1 << (pidx % 64) != 0 {
-                                    last_val = values[vidx];
+                            for pidx in 0..*count {
+                                if present.as_slice()[pidx as usize / 64] & 1 << (pidx % 64) != 0 {
+                                    last_val = values.as_slice()[vidx];
                                     vidx += 1;
                                 }
                                 results.push(last_val);
@@ -42,10 +42,10 @@ impl FillMethod {
                                 flatten!(
                                     TimeSeries {
                                         series : SeriesType::NormalSeries {
-                                            start_ts,
-                                            step_interval,
-                                            num_vals: count,
-                                            values: &results,
+                                            start_ts: *start_ts,
+                                            step_interval: *step_interval,
+                                            num_vals: *count,
+                                            values: (&*results).into(),
                                         }
                                     }
                                 )
@@ -68,10 +68,10 @@ impl FillMethod {
                                 flatten!(
                                     TimeSeries {
                                         series : SeriesType::NormalSeries {
-                                            start_ts,
-                                            step_interval,
-                                            num_vals: count,
-                                            values: &results,
+                                            start_ts: *start_ts,
+                                            step_interval: *step_interval,
+                                            num_vals: *count,
+                                            values: (&*results).into(),
                                         }
                                     }
                                 )
@@ -81,7 +81,8 @@ impl FillMethod {
                 }
 
                 SeriesType::NormalSeries{..} => {
-                    MaybeOwnedTs::Borrowed(*series)
+                    // TODO can we do without the clone if it's expensive?
+                    MaybeOwnedTs::Borrowed(series.clone())
                 }
 
                 _ => panic!("Gapfill not currently implemented for explicit timeseries")

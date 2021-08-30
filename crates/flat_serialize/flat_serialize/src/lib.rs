@@ -167,9 +167,25 @@ impl <'input, T: 'input> Iterable<'input, T> {
     }
 }
 
+impl<'input, T> std::iter::IntoIterator for Iterable<'input, T>
+where T: FlatSerializable<'input> + Clone {
+    type Item = T;
+
+    type IntoIter = I<'input, 'input, T>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            Iterable::Iter(iter) => I::Iter(iter),
+            Iterable::Slice(slice) => I::Slice(slice),
+            Iterable::Owned(vec) => I::Owned(vec.into_iter()),
+        }
+    }
+}
+
 pub enum I<'input, 'borrow, T: 'input,> {
     Iter(Iter<'input, T>),
     Slice(&'borrow [T]),
+    Owned(std::vec::IntoIter<T>),
 }
 
 impl<'input, 'borrow, T: 'input> Iterator for I<'input, 'borrow, T>
@@ -197,6 +213,7 @@ where T: FlatSerializable<'input> + Clone {
                 }
                 val
             },
+            Self::Owned(i) => i.next(),
         }
 
     }
@@ -232,6 +249,53 @@ impl<'input, T: 'input> Iterable<'input, T> {
             _pd: PhantomData,
         })
     }
+
+    pub fn len(&self) -> usize
+    where T: Clone + FlatSerializable<'input> {
+        match self {
+            Iterable::Iter(..) => self.iter().count(),
+            Iterable::Slice(s) => s.len(),
+            Iterable::Owned(o) => o.len(),
+        }
+    }
+
+    pub fn as_owned(&mut self) -> &mut Vec<T>
+    where T: Clone + FlatSerializable<'input> {
+        match self {
+            Iterable::Iter(_) => {
+                let vec = self.iter().collect();
+                *self = Iterable::Owned(vec);
+
+            },
+            Iterable::Slice(s) => {
+                *self = Iterable::Owned(s.to_vec());
+            },
+            Iterable::Owned(..) => (),
+        }
+        match self {
+            Iterable::Owned(vec) => vec,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn as_slice(&self) -> &[T]
+    where T: Clone + FlatSerializable<'input> {
+        match self {
+            Iterable::Iter(_) =>
+                panic!("cannot convert iterator to slice without mutating"),
+            Iterable::Slice(s) => &*s,
+            Iterable::Owned(o) => &*o,
+        }
+    }
+
+    pub fn slice(&self) -> &'input [T]
+    where T: Clone + FlatSerializable<'input> {
+        match self {
+            Iterable::Slice(s) => &*s,
+            _ =>
+                panic!("cannot convert to slice without mutating"),
+        }
+    }
 }
 
 impl<'input, T: 'input> Iterator for Iter<'input, T>
@@ -253,6 +317,12 @@ where T: FlatSerializable<'input> {
 impl<'input, T: 'input> From<&'input [T]> for Iterable<'input, T> {
     fn from(val: &'input [T]) -> Self {
         Self::Slice(val)
+    }
+}
+
+impl<'input, T: 'input> From<Vec<T>> for Iterable<'input, T> {
+    fn from(val: Vec<T>) -> Self {
+        Self::Owned(val)
     }
 }
 
@@ -283,7 +353,7 @@ where T: serde::Serialize + Clone + FlatSerializable<'i> {
     }
 }
 
-impl<'de, T> serde::Deserialize<'de> for Iterable<'static, T>
+impl<'de, 'i, T> serde::Deserialize<'de> for Iterable<'i, T>
 where T: serde::Deserialize<'de> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

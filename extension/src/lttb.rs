@@ -74,7 +74,7 @@ pub fn lttb_final(
                 TimeSeries {
                     series: SeriesType::SortedSeries {
                         num_points: downsampled.len() as u64,
-                        points: &*downsampled,
+                        points: (&*downsampled).into(),
                     }
                 }
             ).into()

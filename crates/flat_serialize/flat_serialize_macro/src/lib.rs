@@ -613,7 +613,7 @@ impl FlatSerializeEnum {
             #[allow(unused_assignments, unused_variables)]
             unsafe fn fill_slice<'out>(&self, input: &'out mut [std::mem::MaybeUninit<u8>])
             -> &'out mut [std::mem::MaybeUninit<u8>] {
-                let total_len = self.len();
+                let total_len = self.num_bytes();
                 let (mut input, rem) = input.split_at_mut(total_len);
                 match self {
                     #(#bodies),*
@@ -645,7 +645,7 @@ impl FlatSerializeEnum {
         });
         quote! {
             #[allow(unused_assignments, unused_variables)]
-            fn len(&self) -> usize {
+            fn num_bytes(&self) -> usize {
                 match self {
                     #(#bodies)*
                 }
@@ -828,7 +828,7 @@ impl FlatSerializeStruct {
             #[allow(unused_assignments, unused_variables)]
             #[inline(always)]
             unsafe fn fill_slice<'out>(&self, input: &'out mut [std::mem::MaybeUninit<u8>]) -> &'out mut [std::mem::MaybeUninit<u8>] {
-                let total_len = self.len();
+                let total_len = self.num_bytes();
                 let (mut input, rem) = input.split_at_mut(total_len);
                 let #id { #fields } = self;
                 #fill_slice_with
@@ -862,7 +862,7 @@ impl FlatSerializeStruct {
         quote! {
             #[allow(unused_assignments, unused_variables)]
             #[inline(always)]
-            fn len(&self) -> usize {
+            fn num_bytes(&self) -> usize {
                 let #id { #(#field),* } = self;
                 0usize #(+ #size)*
             }
@@ -1146,7 +1146,7 @@ impl FlatSerializeField {
             Some(info @ VariableLenFieldInfo { is_optional: false, .. }) => {
                 let count = info.counter_expr();
                 quote! {
-                    (<_ as flat_serialize::Slice<'_>>::len(#ident, (#count) as usize))
+                    (<_ as flat_serialize::Slice<'_>>::num_bytes(#ident, (#count) as usize))
                 }
             }
             Some(info @ VariableLenFieldInfo { is_optional: true, .. }) => {
@@ -1154,7 +1154,7 @@ impl FlatSerializeField {
                 let is_present = info.counter_expr();
                 quote! {
                     (if #is_present {
-                        <#ty as flat_serialize::FlatSerializable>::len(#ident.as_ref().unwrap())
+                        <#ty as flat_serialize::FlatSerializable>::num_bytes(#ident.as_ref().unwrap())
                     } else {
                         0
                     })
@@ -1162,7 +1162,7 @@ impl FlatSerializeField {
             }
             None => {
                 let nominal_ty = self.ty_without_lifetime();
-                quote!( <#nominal_ty as flat_serialize::FlatSerializable>::len(#ident) )
+                quote!( <#nominal_ty as flat_serialize::FlatSerializable>::num_bytes(#ident) )
             }
         }
     }
@@ -1305,7 +1305,7 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
                     }
 
                     #[inline(always)]
-                    fn len(&self) -> usize {
+                    fn num_bytes(&self) -> usize {
                         std::mem::size_of::<Self>()
                     }
                 }

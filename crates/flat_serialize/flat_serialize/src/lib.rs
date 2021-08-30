@@ -20,7 +20,7 @@ pub unsafe trait FlatSerializable<'input>: Sized + 'input {
     unsafe fn try_ref(input: &'input [u8]) -> Result<(Self, &'input [u8]), WrapErr>;
     fn fill_vec(&self, input: &mut Vec<u8>) {
         let start = input.len();
-        let my_len = self.len();
+        let my_len = self.num_bytes();
         input.reserve(my_len);
         // simulate unstable spare_capacity_mut()
         let slice = unsafe {
@@ -40,7 +40,7 @@ pub unsafe trait FlatSerializable<'input>: Sized + 'input {
     #[must_use]
     unsafe fn fill_slice<'out>(&self, input: &'out mut [MaybeUninit<u8>])
     -> &'out mut [MaybeUninit<u8>];
-    fn len(&self) -> usize;
+    fn num_bytes(&self) -> usize;
 }
 
 #[macro_export]
@@ -82,7 +82,7 @@ macro_rules! impl_flat_serializable {
                 }
 
                 #[inline(always)]
-                fn len(&self) -> usize {
+                fn num_bytes(&self) -> usize {
                     size_of::<Self>()
                 }
             }
@@ -144,8 +144,8 @@ where T: FlatSerializable<'i> + 'i {
     }
 
     #[inline(always)]
-    fn len(&self) -> usize {
-        self.iter().map(T::len).sum()
+    fn num_bytes(&self) -> usize {
+        self.iter().map(T::num_bytes).sum()
     }
 }
 
@@ -307,7 +307,7 @@ pub unsafe trait Slice<'input>: Sized {
     #[must_use]
     unsafe fn fill_slice<'out>(&self, count: usize, input: &'out mut [MaybeUninit<u8>])
     -> &'out mut [MaybeUninit<u8>];
-    fn len(&self, count: usize) -> usize;
+    fn num_bytes(&self, count: usize) -> usize;
 }
 
 unsafe impl<'i, T: 'i> Slice<'i> for &'i [T]
@@ -347,7 +347,7 @@ where T: FlatSerializable<'i> {
     }
 
     #[inline(always)]
-    fn len(&self, count: usize) -> usize {
+    fn num_bytes(&self, count: usize) -> usize {
         assert!(<T as FlatSerializable>::TRIVIAL_COPY);
         if !<T as FlatSerializable>::TRIVIAL_COPY {
             return len_of_iterable::<T, _, _>(self.iter(), count)
@@ -369,7 +369,7 @@ where T: FlatSerializable<'i> + Clone {
         let mut old_ptr = input.as_ptr() as usize;
         for _ in 0..count {
             let (field, rem) = T::try_ref(tmp)?;
-            debug_assert_eq!(rem.as_ptr() as usize - old_ptr, field.len());
+            debug_assert_eq!(rem.as_ptr() as usize - old_ptr, field.num_bytes());
 
             let additional_len = aligning_len(rem.as_ptr() as _, T::REQUIRED_ALIGNMENT);
             if rem.len() < additional_len {
@@ -404,9 +404,9 @@ where T: FlatSerializable<'i> + Clone {
     }
 
     #[inline(always)]
-    fn len(&self, count: usize) -> usize {
+    fn num_bytes(&self, count: usize) -> usize {
         if let (true, Self::Slice(values)) = (T::TRIVIAL_COPY, self) {
-            return <&[T]>::len(values, count)
+            return <&[T]>::num_bytes(values, count)
         }
         len_of_iterable(self.iter(), count)
     }
@@ -445,7 +445,7 @@ fn len_of_iterable<'i, T: FlatSerializable<'i>, V: ValOrRef<T>, I: Iterator<Item
     let mut len = 0;
     for v in iter.take(count) {
         filled += 1;
-        len += v.to_ref().len();
+        len += v.to_ref().num_bytes();
         if len % T::REQUIRED_ALIGNMENT != 0 {
             len += T::REQUIRED_ALIGNMENT - (len % T::REQUIRED_ALIGNMENT);
         }

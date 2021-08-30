@@ -47,7 +47,7 @@ This will construct and return a Hyperloglog with at least the specified number 
 For this examples assume we have a table 'samples' with a column 'weights' holding `DOUBLE PRECISION` values.  The following will simply return a digest over that column
 
 ```SQL ,ignore
-SELECT toolkit_experimental.hyperloglog(64, data) FROM samples;
+SELECT toolkit_experimental.hyperloglog(64, weights) FROM samples;
 ```
 
 It may be more useful to build a view from the aggregate that we can later pass to other tdigest functions.

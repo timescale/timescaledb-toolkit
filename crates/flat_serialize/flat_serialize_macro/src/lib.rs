@@ -1270,7 +1270,7 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
                     const REQUIRED_ALIGNMENT: usize = std::mem::align_of::<Self>();
                     const MAX_PROVIDED_ALIGNMENT: Option<usize> = None;
                     const TRIVIAL_COPY: bool = true;
-                    type SLICE = &'i [#name];
+                    type SLICE = flat_serialize::Iterable<'i, #name>;
 
                     #[inline(always)]
                     #[allow(non_upper_case_globals)]
@@ -1359,7 +1359,7 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
             #min_len
 
             const TRIVIAL_COPY: bool = true;
-            type SLICE = &'a [#ident];
+            type SLICE = flat_serialize::Iterable<'a, #ident>;
 
             #try_ref
 

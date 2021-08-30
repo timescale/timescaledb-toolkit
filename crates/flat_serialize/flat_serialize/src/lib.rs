@@ -52,7 +52,7 @@ macro_rules! impl_flat_serializable {
                 const REQUIRED_ALIGNMENT: usize = align_of::<Self>();
                 const MAX_PROVIDED_ALIGNMENT: Option<usize> = None;
                 const TRIVIAL_COPY: bool = true;
-                type SLICE = &'i [$typ];
+                type SLICE = $crate::Iterable<'i, $typ>;
 
                 #[inline(always)]
                 unsafe fn try_ref(input: &'i [u8])
@@ -215,6 +215,9 @@ where T: FlatSerializable<'i> + Clone + PartialEq {
         <I<'_, '_, T> as Iterator>::eq(self.iter(), other.iter())
     }
 }
+
+impl<'i, T: 'i> Eq for Iterable<'i, T>
+where T: FlatSerializable<'i> + Clone + Eq {}
 
 #[derive(Debug)]
 pub struct Iter<'input, T: 'input> {
@@ -517,12 +520,12 @@ mod tests {
             rem,
         ) = unsafe { Basic::try_ref(&bytes).unwrap() };
         assert_eq!(
-            (header, data_len, array, data, &data2, rem),
+            (header, data_len, array, &data, &data2, rem),
             (
                 33,
                 6,
                 [202, 404, 555],
-                &[1, 3, 5, 7, 9, 11][..],
+                &Iterable::Slice(&[1, 3, 5, 7, 9, 11][..]),
                 &Iterable::Slice(&[[4, 4], [95, 99]]),
                 &[][..]
             )
@@ -533,7 +536,7 @@ mod tests {
         Basic {
             header,
             data_len,
-            data,
+            data: data.clone(),
             data2: data2.clone(),
             array,
         }
@@ -574,7 +577,7 @@ mod tests {
             header: 1,
             data_len: 5,
             array: [0; 3],
-            data: &[1],
+            data: Iterable::Slice(&[1]),
             data2: Iterable::Slice(&[[2, 2]]),
         }
         .fill_vec(&mut output);
@@ -589,7 +592,7 @@ mod tests {
             header: 1,
             data_len: 5,
             array: [0; 3],
-            data: &[1, 2, 3, 4, 5],
+            data: Iterable::Slice(&[1, 2, 3, 4, 5]),
             data2: Iterable::Slice(&[]),
         }
         .fill_vec(&mut output);
@@ -733,13 +736,13 @@ mod tests {
             rem,
         ) = unsafe { Nested::try_ref(&bytes).unwrap() };
         assert_eq!(
-            (prefix, header, data_len, array, data, &data2, rem),
+            (prefix, header, data_len, array, &data, &data2, rem),
             (
                 101010101,
                 33,
                 6,
                 [202, 404, 555],
-                &[1, 3, 5, 7, 9, 11][..],
+                &Iterable::Slice(&[1, 3, 5, 7, 9, 11][..]),
                 &Iterable::Slice(&[[3, 0], [104, 2]]),
                 &[][..]
             )
@@ -915,7 +918,7 @@ mod tests {
 
     #[test]
     fn basic_enum1() {
-        use crate::{FlatSerializable, WrapErr};
+        use crate::{FlatSerializable, WrapErr, Iterable};
         let mut bytes = Vec::new();
         bytes.extend_from_slice(&2u64.to_ne_bytes());
         bytes.extend_from_slice(&6u32.to_ne_bytes());
@@ -925,8 +928,8 @@ mod tests {
             _ => unreachable!(),
         };
         assert_eq!(
-            (data_len, data, rem),
-            (6, &[1, 3, 5, 7, 9, 11][..], &[][..])
+            (data_len, &data, rem),
+            (6, &Iterable::Slice(&[1, 3, 5, 7, 9, 11][..]), &[][..])
         );
 
         let mut output = vec![];
@@ -994,7 +997,7 @@ mod tests {
 
     #[test]
     fn padded_enum1() {
-        use crate::{FlatSerializable, WrapErr};
+        use crate::{FlatSerializable, WrapErr, Iterable};
         let mut bytes = Vec::new();
         bytes.extend_from_slice(&2u8.to_ne_bytes());
         bytes.extend_from_slice(&[0xf, 0xf, 0xf]);
@@ -1005,8 +1008,8 @@ mod tests {
             _ => unreachable!(),
         };
         assert_eq!(
-            (padding, data_len, data, rem),
-            ([0xf, 0xf, 0xf], 6, &[1, 3, 5, 7, 9, 11][..], &[][..])
+            (padding, data_len, &data, rem),
+            ([0xf, 0xf, 0xf], 6, &Iterable::Slice(&[1, 3, 5, 7, 9, 11][..]), &[][..])
         );
 
         let mut output = vec![];
@@ -1065,7 +1068,7 @@ mod tests {
 
     #[test]
     fn many_enum() {
-        use crate::{FlatSerializable, WrapErr};
+        use crate::{FlatSerializable, WrapErr, Iterable};
         let mut bytes = Vec::new();
         bytes.extend_from_slice(&4u64.to_ne_bytes());
         {
@@ -1106,10 +1109,10 @@ mod tests {
         assert_eq!((count, rem), (4, &[][..]));
         let enums_vec: Vec<_> = enums.iter().collect();
         assert_eq!(&*enums_vec, &[
-            BasicEnum::First { data_len: 6, data: &[1, 3, 5, 7, 9, 11]},
+            BasicEnum::First { data_len: 6, data: Iterable::Slice(&[1, 3, 5, 7, 9, 11])},
             BasicEnum::Fixed { array: [3, 6, 9] },
-            BasicEnum::First { data_len: 1, data: &[44u8]},
-            BasicEnum::First { data_len: 2, data: &[89u8, 123]},
+            BasicEnum::First { data_len: 1, data: Iterable::Slice(&[44u8])},
+            BasicEnum::First { data_len: 2, data: Iterable::Slice(&[89u8, 123])},
         ]);
 
         let mut output = vec![];

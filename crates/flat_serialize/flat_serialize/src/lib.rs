@@ -157,7 +157,7 @@ pub enum Iterable<'input, T: 'input,> {
 }
 
 impl <'input, T: 'input> Iterable<'input, T> {
-    pub fn iter<'s>(&'s self) -> I<'s, T>
+    pub fn iter<'s>(&'s self) -> I<'input, 's, T>
     where 'input: 's {
         match self {
             Iterable::Iter(iter) => I::Iter(*iter),
@@ -167,12 +167,12 @@ impl <'input, T: 'input> Iterable<'input, T> {
     }
 }
 
-pub enum I<'input, T: 'input,> {
+pub enum I<'input, 'borrow, T: 'input,> {
     Iter(Iter<'input, T>),
-    Slice(&'input [T]),
+    Slice(&'borrow [T]),
 }
 
-impl<'input, T: 'input> Iterator for I<'input, T>
+impl<'input, 'borrow, T: 'input> Iterator for I<'input, 'borrow, T>
 where T: FlatSerializable<'input> + Clone {
     type Item = T;
 
@@ -203,16 +203,16 @@ where T: FlatSerializable<'input> + Clone {
 }
 
 impl<'i, T: 'i> fmt::Debug for Iterable<'i, T>
-where T: fmt::Debug + for<'s> FlatSerializable<'s> + Clone {
+where T: fmt::Debug + FlatSerializable<'i> + Clone {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_list().entries(self.iter()).finish()
     }
 }
 
 impl<'i, T: 'i> PartialEq for Iterable<'i, T>
-where T: for<'s> FlatSerializable<'s> + Clone + PartialEq {
+where T: FlatSerializable<'i> + Clone + PartialEq {
     fn eq(&self, other: &Self) -> bool {
-        <I<'_, T> as Iterator>::eq(self.iter(), other.iter())
+        <I<'_, '_, T> as Iterator>::eq(self.iter(), other.iter())
     }
 }
 
@@ -265,7 +265,7 @@ where T: Clone {
 }
 
 impl<'i, T> serde::Serialize for Iterable<'i, T>
-where T: serde::Serialize + Clone + for<'t> FlatSerializable<'t> {
+where T: serde::Serialize + Clone + FlatSerializable<'i> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer {
@@ -354,7 +354,7 @@ where T: FlatSerializable<'i> {
 }
 
 unsafe impl<'i, T: 'i> Slice<'i> for Iterable<'i, T>
-where T: for<'s> FlatSerializable<'s> + Clone {
+where T: FlatSerializable<'i> + Clone {
     #[inline(always)]
     unsafe fn try_ref(input: &'i [u8], count: usize) -> Result<(Self, &'i [u8]), WrapErr> {
         if T::TRIVIAL_COPY {
@@ -410,7 +410,9 @@ where T: for<'s> FlatSerializable<'s> + Clone {
 }
 
 #[inline(always)]
-unsafe fn fill_slice_from_iter<'i, 'out, T: FlatSerializable<'i>, V: ValOrRef<T>, I: Iterator<Item=V>>(
+unsafe fn fill_slice_from_iter<
+    'i, 'out, T: FlatSerializable<'i>, V: ValOrRef<T>, I: Iterator<Item=V>
+>(
     iter: I,
     count: usize,
     mut input: &'out mut [MaybeUninit<u8>]
@@ -898,7 +900,7 @@ mod tests {
     }
 
     flat_serialize! {
-        #[derive(Debug)]
+        #[derive(Debug, PartialEq, Eq)]
         enum BasicEnum<'input> {
             k: u64,
             First: 2 {
@@ -1049,6 +1051,73 @@ mod tests {
             let res = unsafe {
                 PaddedEnum::try_ref(&bytes[..i])
             };
+            assert!(matches!(res, Err(WrapErr::NotEnoughBytes(..))), "{:?}", res);
+        }
+    }
+
+    flat_serialize! {
+        #[derive(Debug)]
+        struct ManyEnum<'input> {
+            count: u64,
+            enums: [BasicEnum<'input>; self.count],
+        }
+    }
+
+    #[test]
+    fn many_enum() {
+        use crate::{FlatSerializable, WrapErr};
+        let mut bytes = Vec::new();
+        bytes.extend_from_slice(&4u64.to_ne_bytes());
+        {
+            bytes.extend_from_slice(&2u64.to_ne_bytes());
+            bytes.extend_from_slice(&6u32.to_ne_bytes());
+            bytes.extend_from_slice(&[1, 3, 5, 7, 9, 11]);
+            while bytes.len() % 8 != 0 {
+                bytes.push(0)
+            }
+        }
+        {
+            bytes.extend_from_slice(&3u64.to_ne_bytes());
+            bytes.extend_from_slice(&3u16.to_ne_bytes());
+            bytes.extend_from_slice(&6u16.to_ne_bytes());
+            bytes.extend_from_slice(&9u16.to_ne_bytes());
+            while bytes.len() % 8 != 0 {
+                bytes.push(0)
+            }
+        }
+        {
+            bytes.extend_from_slice(&2u64.to_ne_bytes());
+            bytes.extend_from_slice(&1u32.to_ne_bytes());
+            bytes.extend_from_slice(&[44u8]);
+            while bytes.len() % 8 != 0 {
+                bytes.push(0)
+            }
+        }
+        {
+            bytes.extend_from_slice(&2u64.to_ne_bytes());
+            bytes.extend_from_slice(&2u32.to_ne_bytes());
+            bytes.extend_from_slice(&[89u8, 123u8]);
+            while bytes.len() % 8 != 0 {
+                bytes.push(0)
+            }
+        }
+
+        let (ManyEnum{ count, enums }, rem) = unsafe { ManyEnum::try_ref(&bytes).unwrap() };
+        assert_eq!((count, rem), (4, &[][..]));
+        let enums_vec: Vec<_> = enums.iter().collect();
+        assert_eq!(&*enums_vec, &[
+            BasicEnum::First { data_len: 6, data: &[1, 3, 5, 7, 9, 11]},
+            BasicEnum::Fixed { array: [3, 6, 9] },
+            BasicEnum::First { data_len: 1, data: &[44u8]},
+            BasicEnum::First { data_len: 2, data: &[89u8, 123]},
+        ]);
+
+        let mut output = vec![];
+        ManyEnum{ count, enums }.fill_vec(&mut output);
+        assert_eq!(output, bytes);
+
+        for i in 0..bytes.len()-1 {
+            let res = unsafe { ManyEnum::try_ref(&bytes[..i]) };
             assert!(matches!(res, Err(WrapErr::NotEnoughBytes(..))), "{:?}", res);
         }
     }

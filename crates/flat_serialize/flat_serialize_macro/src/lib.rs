@@ -996,12 +996,6 @@ impl FlatSerializeField {
         match &self.length_info {
             Some(info @ VariableLenFieldInfo { is_optional: false, .. }) => {
                 let count = info.len_from_bytes();
-                let ty = &info.ty;
-                if parser::has_lifetime(ty) {
-                    return quote_spanned!{ty.span()=>
-                        compile_error!("flattened types are not allowed in variable-length fields")
-                    }
-                }
                 quote! {
                     {
                         let count = (#count) as usize;

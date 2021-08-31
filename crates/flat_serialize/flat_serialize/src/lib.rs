@@ -15,6 +15,7 @@ pub unsafe trait FlatSerializable<'input>: Sized + 'input {
     const MAX_PROVIDED_ALIGNMENT: Option<usize>;
     const TRIVIAL_COPY: bool = false;
     type SLICE;
+    type OWNED: 'static;
 
 
     unsafe fn try_ref(input: &'input [u8]) -> Result<(Self, &'input [u8]), WrapErr>;
@@ -41,6 +42,9 @@ pub unsafe trait FlatSerializable<'input>: Sized + 'input {
     unsafe fn fill_slice<'out>(&self, input: &'out mut [MaybeUninit<u8>])
     -> &'out mut [MaybeUninit<u8>];
     fn num_bytes(&self) -> usize;
+
+    fn make_owned(&mut self);
+    fn into_owned(self) -> Self::OWNED;
 }
 
 #[macro_export]
@@ -53,6 +57,7 @@ macro_rules! impl_flat_serializable {
                 const MAX_PROVIDED_ALIGNMENT: Option<usize> = None;
                 const TRIVIAL_COPY: bool = true;
                 type SLICE = $crate::Iterable<'i, $typ>;
+                type OWNED = Self;
 
                 #[inline(always)]
                 unsafe fn try_ref(input: &'i [u8])
@@ -85,6 +90,16 @@ macro_rules! impl_flat_serializable {
                 fn num_bytes(&self) -> usize {
                     size_of::<Self>()
                 }
+
+                #[inline(always)]
+                fn make_owned(&mut self) {
+                    // nop
+                }
+
+                #[inline(always)]
+                fn into_owned(self) -> Self::OWNED {
+                    self
+                }
             }
         )+
     };
@@ -103,6 +118,7 @@ where T: FlatSerializable<'i> + 'i {
     const TRIVIAL_COPY: bool = T::TRIVIAL_COPY;
     // FIXME ensure no padding
     type SLICE = Iterable<'i, [T; N]>;
+    type OWNED = [T::OWNED; N];
 
     #[inline(always)]
     unsafe fn try_ref(mut input: &'i [u8])
@@ -146,6 +162,26 @@ where T: FlatSerializable<'i> + 'i {
     #[inline(always)]
     fn num_bytes(&self) -> usize {
         self.iter().map(T::num_bytes).sum()
+    }
+
+    fn make_owned(&mut self) {
+        for val in self {
+            val.make_owned()
+        }
+    }
+
+    fn into_owned(self) -> Self::OWNED {
+        use std::array::IntoIter;
+        let mut output: [MaybeUninit<T::OWNED>; N] = unsafe {
+            MaybeUninit::uninit().assume_init()
+        };
+        for (i, t) in IntoIter::new(self).map(|s| s.into_owned()).enumerate() {
+            output[i] = MaybeUninit::new(t)
+        }
+
+        unsafe {
+            (&mut output as *mut [MaybeUninit<T::OWNED>; N]).cast::<Self::OWNED>().read()
+        }
     }
 }
 
@@ -257,6 +293,24 @@ impl<'input, T: 'input> Iterable<'input, T> {
             Iterable::Slice(s) => s.len(),
             Iterable::Owned(o) => o.len(),
         }
+    }
+
+    pub fn make_owned(&mut self)
+    where T: Clone + FlatSerializable<'input> {
+        self.as_owned();
+    }
+
+    pub fn into_owned(self) -> Iterable<'static, T::OWNED>
+    where T: Clone + FlatSerializable<'input> {
+        let vec = match self {
+            Iterable::Iter(_) =>
+                self.iter().map(|t| t.into_owned()).collect(),
+            Iterable::Slice(s) =>
+                s.into_iter().map(|t| t.clone().into_owned()).collect(),
+            Iterable::Owned(v) =>
+                v.into_iter().map(|t| t.into_owned()).collect(),
+        };
+        Iterable::Owned(vec)
     }
 
     pub fn as_owned(&mut self) -> &mut Vec<T>
@@ -1653,6 +1707,7 @@ mod tests {
     #[derive(FlatSerializable)]
     #[allow(dead_code)]
     #[derive(Debug)]
+    #[repr(C)]
     struct Foo {
         a: i32,
         b: i32,

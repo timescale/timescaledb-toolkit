@@ -251,7 +251,33 @@ where T: FlatSerializable<'input> + Clone {
             },
             Self::Owned(i) => i.next(),
         }
+    }
 
+    fn nth(&mut self, n: usize) -> Option<Self::Item> {
+        match self {
+            Self::Iter(i) => {
+                for _ in 0.. n {
+                    i.next()?;
+                }
+                i.next()
+            },
+            Self::Slice(s) => {
+                *s = s.get(n..)?;
+                return self.next()
+            },
+            Self::Owned(i) => return i.nth(n),
+        }
+    }
+}
+
+impl<'input, 'borrow, T: 'input> I<'input, 'borrow, T>
+where T: FlatSerializable<'input> + Clone {
+    pub fn len(&self) -> usize {
+        match self {
+            Self::Iter(i) => i.clone().count(),
+            Self::Slice(s) => s.len(),
+            Self::Owned(i) => i.as_slice().len(),
+        }
     }
 }
 
@@ -300,17 +326,21 @@ impl<'input, T: 'input> Iterable<'input, T> {
         self.as_owned();
     }
 
-    pub fn into_owned(self) -> Iterable<'static, T::OWNED>
+    pub fn into_vec(self) -> Vec<T::OWNED>
     where T: Clone + FlatSerializable<'input> {
-        let vec = match self {
+        match self {
             Iterable::Iter(_) =>
                 self.iter().map(|t| t.into_owned()).collect(),
             Iterable::Slice(s) =>
                 s.into_iter().map(|t| t.clone().into_owned()).collect(),
             Iterable::Owned(v) =>
                 v.into_iter().map(|t| t.into_owned()).collect(),
-        };
-        Iterable::Owned(vec)
+        }
+    }
+
+    pub fn into_owned(self) -> Iterable<'static, T::OWNED>
+    where T: Clone + FlatSerializable<'input> {
+        Iterable::Owned(self.into_vec())
     }
 
     pub fn as_owned(&mut self) -> &mut Vec<T>

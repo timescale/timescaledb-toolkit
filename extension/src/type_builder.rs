@@ -176,6 +176,13 @@ macro_rules! pg_type_impl {
                 }
             }
 
+            impl<$lifetemplate> ::std::ops::DerefMut for $name <$lifetemplate> {
+                fn deref_mut(&mut self) -> &mut Self::Target {
+                    self.1 = None;
+                    &mut self.0
+                }
+            }
+
             impl<$lifetemplate> From<[<$name Data>]$(<$inlife>)?> for $name<$lifetemplate> {
                 fn from(inner: [<$name Data>]$(<$inlife>)?) -> Self {
                     Self(inner, None)
@@ -242,6 +249,24 @@ macro_rules! flatten {
                 }
             };
             data.flatten()
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! build {
+    ($typ:ident { $($field:ident: $value:expr),* $(,)? }) => {
+        {
+            <$typ>::from(::paste::paste! {
+                [<$typ Data>] {
+                    header: 0,
+                    version: 1,
+                    padding: [0; 3],
+                    $(
+                        $field: $value
+                    ),*
+                }
+            })
         }
     }
 }

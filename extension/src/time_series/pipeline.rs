@@ -137,10 +137,10 @@ pub fn execute_pipeline_element<'s, 'e>(
             return Owned(fill_holes(&timeseries, &element));
         }
         (Element::Sort{..}, Borrowed(timeseries)) => {
-            return Owned(sort_timeseries(&timeseries));
+            return Borrowed(sort_timeseries(timeseries));
         }
         (Element::Sort{..}, Owned(timeseries)) => {
-            return Owned(sort_timeseries(&timeseries));
+            return Owned(sort_timeseries(timeseries));
         }
         (Element::Delta{..}, Borrowed(timeseries)) => {
             return Owned(timeseries_delta(&timeseries));

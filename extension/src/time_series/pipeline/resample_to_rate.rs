@@ -145,10 +145,10 @@ pub fn resample_to_rate(
         let target = (ts - offset_from_rate.unwrap()) / interval * interval + offset_from_rate.unwrap();
         if current != Some(target) {
             if current.is_some() {
-                let new_pt = method.process(&points, current.unwrap(), interval);
-                match result {
-                    None => result = Some(InternalTimeSeries::new_gappy_normal_series(new_pt, interval)),
-                    Some(ref mut series) => series.add_point(new_pt),
+                let TSPoint { ts, val } = method.process(&points, current.unwrap(), interval);
+                match &mut result {
+                    None => result = Some(GappyTimeSeriesBuilder::new(ts, interval, val)),
+                    Some(series) => series.push_point(ts, val),
                 }
             }
 
@@ -158,14 +158,75 @@ pub fn resample_to_rate(
         points.push(point);
     }
 
-    let new_pt = method.process(&points, current.unwrap(), interval);
-    match result {
-        None => result = Some(InternalTimeSeries::new_gappy_normal_series(new_pt, interval)),
-        Some(ref mut series) => series.add_point(new_pt),
+    let TSPoint { ts, val } = method.process(&points, current.unwrap(), interval);
+    match &mut result {
+        None => result = Some(GappyTimeSeriesBuilder::new(ts, interval, val)),
+        Some(series) => series.push_point(ts, val),
     }
 
-    TimeSeries::from_internal_time_series(&result.unwrap())
+    let result = result.unwrap();
+    build! {
+        TimeSeries {
+            series: SeriesType::GappyNormalSeries {
+                start_ts: result.start_ts,
+                step_interval: result.step_interval,
+                num_vals: result.values.len() as _,
+                count: result.count,
+                values: result.values.into(),
+                present: result.present.into(),
+            }
+        }
+    }
 }
+
+struct GappyTimeSeriesBuilder {
+    pub start_ts: i64,
+    pub step_interval: i64,    // ts delta between values
+    pub count: u64,            // num values + num gaps
+    pub present: Vec<u64>,     // bitmap, 0 = gap...
+    pub values: Vec<f64>
+}
+
+impl GappyTimeSeriesBuilder {
+    fn new(start_time: i64, step_interval: i64, first_value: f64) -> Self {
+        Self {
+            start_ts: start_time,
+            step_interval,
+            count: 1,
+            present: vec![1],
+            values: vec![first_value],
+        }
+    }
+
+    fn push_point(&mut self, time: i64, value: f64) {
+        // TODO
+        // assert!(point.ts >= series.start_ts + (series.step_interval * series.count as i64) && (point.ts - series.start_ts) % series.step_interval == 0);
+        self.add_gap_until(time);
+        self.push_present_bit(true);
+        self.values.push(value);
+    }
+
+    fn add_gap_until(&mut self, time: i64) {
+        let mut next = self.start_ts + self.count as i64 * self.step_interval;
+        while next < time {
+            self.push_present_bit(false);
+            next += self.step_interval;
+        }
+        assert_eq!(next, time);
+    }
+
+    fn push_present_bit(&mut self, is_present: bool) {
+        let idx = self.count;
+        let val = if is_present { 1 } else { 0 };
+        self.count += 1;
+        if idx % 64 == 0 {
+            self.present.push(val);
+        } else if is_present {
+            self.present[(idx / 64) as usize] ^= 1 << (idx % 64);
+        }
+    }
+}
+
 
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {

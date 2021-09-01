@@ -26,25 +26,23 @@ pub fn sort_pipeline_element<'p, 'e>(
 }
 
 pub fn sort_timeseries(
-    series: &toolkit_experimental::TimeSeries,
-) -> toolkit_experimental::TimeSeries<'static> {
-    match &series.series {
-        SeriesType::GappyNormalSeries{..} | SeriesType::NormalSeries{..} | SeriesType::SortedSeries{..} => series.in_current_context(),
+    mut series: toolkit_experimental::TimeSeries<'_>,
+) -> toolkit_experimental::TimeSeries<'_> {
+    match &mut series.series {
+        SeriesType::GappyNormalSeries{..} | SeriesType::NormalSeries{..} | SeriesType::SortedSeries{..} => series,
         SeriesType::ExplicitSeries{points, ..} => {
-            unsafe {
-                // TODO do in place
-                let mut points: Vec<_> = points.iter().collect();
-                points.sort_by(|a, b| a.ts.cmp(&b.ts));
-
-                flatten!(
-                    TimeSeries {
-                        series: SeriesType::SortedSeries {
-                            num_points: points.len() as u64,
-                            points: (&*points).into(),
-                        }
-                    }
-                )
-            }
+            let points = points.as_owned();
+            let mut points = std::mem::replace(points, vec![]);
+            points.sort_by(|a, b| a.ts.cmp(&b.ts));
+            TimeSeriesData {
+                header: 0,
+                version: 1,
+                padding: [0; 3],
+                series: SeriesType::SortedSeries {
+                    num_points: points.len() as u64,
+                    points: points.into(),
+                },
+            }.into()
         }
     }
 }

@@ -120,44 +120,7 @@ pub fn str_from_db_encoding(s: &CStr) -> &str {
     return unsafe { CStr::from_ptr(encoded).to_str().unwrap() }
 }
 
-// NOTE this module assumes that the rust allocator is the postgres allocator,
-//      and thus leaks memory assuming that MemoryContext deletion will clean
-//      it up
 pub(crate) mod serde_reference_adaptor {
-    use serde::{Deserialize, Deserializer};
-
-    pub(crate) fn deserialize<'de, D, T>(deserializer: D) -> Result<T, D::Error>
-    where D: Deserializer<'de>, T: Deserialize<'de> {
-        T::deserialize(deserializer)
-    }
-
-    pub(crate) fn deserialize_slice<'de, D, S>(deserializer: D) -> Result<S, D::Error>
-    where D: Deserializer<'de>, S: LeakableSlice<'de> {
-        S::deserialize_slice(deserializer)
-    }
-
-    pub(crate) trait LeakableSlice<'de>: Sized {
-        fn deserialize_slice<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'de>;
-    }
-
-    impl<'de, T> LeakableSlice<'de> for &'static [T]
-    where T: Deserialize<'de> {
-        fn deserialize_slice<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'de> {
-            let boxed = <Box<[T]>>::deserialize(deserializer)?.into();
-            Ok(Box::leak(boxed))
-        }
-    }
-
-    impl<'de, T> LeakableSlice<'de> for flat_serialize::Iterable<'static, T>
-    where T: Deserialize<'de> {
-        fn deserialize_slice<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: Deserializer<'de> {
-            Self::deserialize(deserializer)
-        }
-    }
-
     pub(crate) fn default_padding() -> [u8; 3] {
         [0; 3]
     }

@@ -113,10 +113,6 @@ pg_type! {
 
 flat_serialize_macro::flat_serialize! {
     #[derive(Debug, Serialize, Deserialize)]
-    #[flat_serialize::field_attr(
-        fixed = r##"#[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]"##,
-        variable = r##"#[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize_slice")]"##,
-    )]
     enum Storage<'a> {
         storage_kind: u64,
         Sparse: 1 {

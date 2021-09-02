@@ -4,13 +4,13 @@ use Iter::*;
 
 pub enum Iter<'a> {
     Slice {
-        iter: flat_serialize::I<'a, 'a, TSPoint>
+        iter: flat_serialize::Iter<'a, 'a, TSPoint>
     },
     Normal {
         idx: u64,
         start: i64,
         step: i64,
-        vals: flat_serialize::I<'a, 'a, f64>,
+        vals: flat_serialize::Iter<'a, 'a, f64>,
     },
     GappyNormal {
         idx: u64,
@@ -18,7 +18,7 @@ pub enum Iter<'a> {
         start: i64,
         step: i64,
         present: &'a [u64],
-        vals: flat_serialize::I<'a, 'a, f64>,
+        vals: flat_serialize::Iter<'a, 'a, f64>,
     },
 }
 

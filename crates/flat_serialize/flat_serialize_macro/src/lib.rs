@@ -205,7 +205,7 @@ fn flat_serialize_struct(input: FlatSerializeStruct) -> TokenStream2 {
 
                 // cannot be TRIVIAL_COPY unless the struct is #[repr(C)]
                 const TRIVIAL_COPY: bool = false;
-                type SLICE = flat_serialize::Iterable<#rl, #ident #lifetime_args>;
+                type SLICE = flat_serialize::Slice<#rl, #ident #lifetime_args>;
                 type OWNED = #ident #owned_lifetime;
 
                 #try_ref
@@ -305,7 +305,7 @@ fn flat_serialize_enum(input: FlatSerializeEnum) -> TokenStream2 {
 
             // cannot be TRIVIAL_COPY since the rust enum layout is unspecified
             const TRIVIAL_COPY: bool = false;
-            type SLICE = flat_serialize::Iterable<#rl, #ident #lifetime_args>;
+            type SLICE = flat_serialize::Slice<#rl, #ident #lifetime_args>;
             type OWNED = #ident #owned_lifetime;
 
             #try_ref
@@ -1061,7 +1061,7 @@ impl FlatSerializeField {
                 quote! {
                     {
                         let count = (#count) as usize;
-                        let (field, rem) = match <_ as flat_serialize::Slice <'_
+                        let (field, rem) = match <_ as flat_serialize::VariableLen <'_
                         >>::try_ref(input, count) {
                             Ok((f, b)) => (f, b),
                             Err(flat_serialize::WrapErr::InvalidTag(offset)) =>
@@ -1118,7 +1118,7 @@ impl FlatSerializeField {
                 quote! {
                     unsafe {
                         let count = (#count) as usize;
-                        input = <_ as flat_serialize::Slice<'_>>::fill_slice(#ident, count, input);
+                        input = <_ as flat_serialize::VariableLen<'_>>::fill_slice(#ident, count, input);
                     }
                 }
             }
@@ -1208,7 +1208,7 @@ impl FlatSerializeField {
             Some(info @ VariableLenFieldInfo { is_optional: false, .. }) => {
                 let count = info.counter_expr();
                 quote! {
-                    (<_ as flat_serialize::Slice<'_>>::num_bytes(#ident, (#count) as usize))
+                    (<_ as flat_serialize::VariableLen<'_>>::num_bytes(#ident, (#count) as usize))
                 }
             }
             Some(info @ VariableLenFieldInfo { is_optional: true, .. }) => {
@@ -1233,7 +1233,7 @@ impl FlatSerializeField {
         let ident = self.ident.as_ref().unwrap();
         match &self.length_info {
             Some(VariableLenFieldInfo { is_optional: false, .. }) => {
-                quote! { flat_serialize::Iterable::make_owned(#ident); }
+                quote! { flat_serialize::Slice::make_owned(#ident); }
             }
             Some(VariableLenFieldInfo { is_optional: true, .. }) => {
                 let ty = self.ty_without_lifetime();
@@ -1252,7 +1252,7 @@ impl FlatSerializeField {
         let ident = self.ident.as_ref().unwrap();
         match &self.length_info {
             Some(VariableLenFieldInfo { is_optional: false, .. }) => {
-                quote! { #ident: flat_serialize::Iterable::into_owned(#ident), }
+                quote! { #ident: flat_serialize::Slice::into_owned(#ident), }
             }
             Some(VariableLenFieldInfo { is_optional: true, .. }) => {
                 let ty = self.ty_without_lifetime();
@@ -1370,7 +1370,7 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
                     const REQUIRED_ALIGNMENT: usize = std::mem::align_of::<Self>();
                     const MAX_PROVIDED_ALIGNMENT: Option<usize> = None;
                     const TRIVIAL_COPY: bool = true;
-                    type SLICE = flat_serialize::Iterable<'i, #name>;
+                    type SLICE = flat_serialize::Slice<'i, #name>;
                     type OWNED = Self;
 
                     #[inline(always)]
@@ -1491,7 +1491,7 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
             #min_len
 
             const TRIVIAL_COPY: bool = true;
-            type SLICE = flat_serialize::Iterable<'a, #ident>;
+            type SLICE = flat_serialize::Slice<'a, #ident>;
             type OWNED = Self;
 
             #try_ref

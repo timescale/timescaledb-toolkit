@@ -120,10 +120,10 @@ fn determine_offset_from_rate(first_timestamp: i64, rate: i64, snap_to_rate: boo
     }
 }
 
-pub fn resample_to_rate(
-    series: &toolkit_experimental::TimeSeries,
+pub fn resample_to_rate<'s>(
+    series: &toolkit_experimental::TimeSeries<'s>,
     element: &toolkit_experimental::Element
-) -> toolkit_experimental::TimeSeries<'static> {
+) -> toolkit_experimental::TimeSeries<'s> {
     let (interval, method, snap) = match element {
         Element::ResampleToRate{interval, resample_method, snap_to_rate} => (interval, resample_method, snap_to_rate),
         _ => panic!("Downsample evaluator called on incorrect pipeline element")

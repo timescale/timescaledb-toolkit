@@ -25,32 +25,30 @@ pub fn delta_pipeline_element<'p, 'e>(
     }
 }
 
-pub fn timeseries_delta(
-    series: &toolkit_experimental::TimeSeries,
-) -> toolkit_experimental::TimeSeries<'static> {
-    unsafe {
-        if !series.is_sorted() {
-            panic!("can only compute deltas for sorted timeseries");
-        }
-
-        let mut it = series.iter();
-        let mut prev = it.next().unwrap().val;
-        let mut delta_points = Vec::new();
-
-        for pt in it {
-            delta_points.push(TSPoint{ts: pt.ts, val: pt.val - prev});
-            prev = pt.val;
-        }
-
-        flatten!(
-            TimeSeries {
-                series: SeriesType::SortedSeries {
-                    num_points: delta_points.len() as u64,
-                    points: (&*delta_points).into(),
-                }
-            }
-        )
+pub fn timeseries_delta<'s>(
+    series: &toolkit_experimental::TimeSeries<'s>,
+) -> toolkit_experimental::TimeSeries<'s> {
+    if !series.is_sorted() {
+        panic!("can only compute deltas for sorted timeseries");
     }
+
+    let mut it = series.iter();
+    let mut prev = it.next().unwrap().val;
+    let mut delta_points = Vec::new();
+
+    for pt in it {
+        delta_points.push(TSPoint{ts: pt.ts, val: pt.val - prev});
+        prev = pt.val;
+    }
+
+    build!(
+        TimeSeries {
+            series: SeriesType::SortedSeries {
+                num_points: delta_points.len() as u64,
+                points: delta_points.into(),
+            }
+        }
+    )
 }
 
 #[cfg(any(test, feature = "pg_test"))]

@@ -20,73 +20,64 @@ pub enum FillMethod {
 }
 
 impl FillMethod {
-    pub fn process<'s>(&self, series: &TimeSeries<'s>) -> MaybeOwnedTs<'s> {
-        unsafe {
-            match &series.series {
-                SeriesType::GappyNormalSeries{start_ts, step_interval, count, present, values, ..} => {
-                    match self {
-                        FillMethod::LOCF => {
-                            let mut results = Vec::new();
-                            let mut last_val = 0.0;
-                            let mut vidx = 0;
+    pub fn process<'s>(&self, series: TimeSeries<'s>) -> TimeSeries<'s> {
+        match &series.series {
+            SeriesType::GappyNormalSeries{start_ts, step_interval, count, present, values, ..} => {
+                match self {
+                    FillMethod::LOCF => {
+                        let mut results = Vec::new();
+                        let mut last_val = 0.0;
+                        let mut vidx = 0;
 
-                            for pidx in 0..*count {
-                                if present.as_slice()[pidx as usize / 64] & 1 << (pidx % 64) != 0 {
-                                    last_val = values.as_slice()[vidx];
-                                    vidx += 1;
-                                }
-                                results.push(last_val);
+                        for pidx in 0..*count {
+                            if present.as_slice()[pidx as usize / 64] & 1 << (pidx % 64) != 0 {
+                                last_val = values.as_slice()[vidx];
+                                vidx += 1;
                             }
-
-                            MaybeOwnedTs::Owned(
-                                flatten!(
-                                    TimeSeries {
-                                        series : SeriesType::NormalSeries {
-                                            start_ts: *start_ts,
-                                            step_interval: *step_interval,
-                                            num_vals: *count,
-                                            values: (&*results).into(),
-                                        }
-                                    }
-                                )
-                            )
+                            results.push(last_val);
                         }
-                        FillMethod::Interpolate => {
-                            let mut iter = series.iter();
-                            let mut prev = iter.next().unwrap();
-                            let mut results = vec!(prev.val);
 
-                            for point in iter {
-                                let points = (point.ts - prev.ts) / step_interval;
-                                for p in 1..=points {
-                                    results.push(prev.val + (point.val - prev.val) * (p as f64 / points as f64));
+                        build!(
+                            TimeSeries {
+                                series : SeriesType::NormalSeries {
+                                    start_ts: *start_ts,
+                                    step_interval: *step_interval,
+                                    num_vals: *count,
+                                    values: results.into(),
                                 }
-                                prev = point;
                             }
+                        )
+                    }
+                    FillMethod::Interpolate => {
+                        let mut iter = series.iter();
+                        let mut prev = iter.next().unwrap();
+                        let mut results = vec!(prev.val);
 
-                            MaybeOwnedTs::Owned(
-                                flatten!(
-                                    TimeSeries {
-                                        series : SeriesType::NormalSeries {
-                                            start_ts: *start_ts,
-                                            step_interval: *step_interval,
-                                            num_vals: *count,
-                                            values: (&*results).into(),
-                                        }
-                                    }
-                                )
-                            )
+                        for point in iter {
+                            let points = (point.ts - prev.ts) / step_interval;
+                            for p in 1..=points {
+                                results.push(prev.val + (point.val - prev.val) * (p as f64 / points as f64));
+                            }
+                            prev = point;
                         }
+
+                        build!(
+                            TimeSeries {
+                                series : SeriesType::NormalSeries {
+                                    start_ts: *start_ts,
+                                    step_interval: *step_interval,
+                                    num_vals: *count,
+                                    values: results.into(),
+                                }
+                            }
+                        )
                     }
                 }
-
-                SeriesType::NormalSeries{..} => {
-                    // TODO can we do without the clone if it's expensive?
-                    MaybeOwnedTs::Borrowed(series.clone())
-                }
-
-                _ => panic!("Gapfill not currently implemented for explicit timeseries")
             }
+
+            SeriesType::NormalSeries{..} => series.clone(),
+
+            _ => panic!("Gapfill not currently implemented for explicit timeseries")
         }
     }
 }
@@ -119,19 +110,16 @@ pub fn holefill_pipeline_element<'e> (
     }
 }
 
-pub fn fill_holes(
-    series: &toolkit_experimental::TimeSeries,
+pub fn fill_holes<'s>(
+    series: toolkit_experimental::TimeSeries<'s>,
     element: &toolkit_experimental::Element
-) -> toolkit_experimental::TimeSeries<'static> {
+) -> toolkit_experimental::TimeSeries<'s> {
     let method = match element {
         Element::FillHoles{fill_method: gapfill_method} => gapfill_method,
         _ => panic!("Gapfill evaluator called on incorrect pipeline element")
     };
 
-    match method.process(series) {
-        MaybeOwnedTs::Owned(series) => series,
-        MaybeOwnedTs::Borrowed(series) => series.in_current_context(),
-    }
+    method.process(series)
 }
 
 

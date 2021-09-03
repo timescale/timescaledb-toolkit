@@ -179,7 +179,7 @@ pub fn lttb_ts<'s>(
     data: crate::time_series::toolkit_experimental::TimeSeries<'s>,
     threshold: usize
 )
--> crate::time_series::toolkit_experimental::TimeSeries<'static>
+-> crate::time_series::toolkit_experimental::TimeSeries<'s>
 {
     if !data.is_sorted() {
         panic!("lttb requires sorted timeseries");

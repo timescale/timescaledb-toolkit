@@ -207,7 +207,7 @@ impl CounterSummary {
             return Err(CounterError::BoundsInvalid);
         }
         //must have at least 2 values
-        if self.single_value() || self.bounds.unwrap().is_singleton(){ //technically, the is_singleton check is redundant, it's included for clarity (any singleton bound that is valid can only be one point)
+        if self.single_value() || self.bounds.unwrap().is_singleton() { //technically, the is_singleton check is redundant, it's included for clarity (any singleton bound that is valid can only be one point)
             return Ok(None);
         }
 
@@ -216,7 +216,9 @@ impl CounterSummary {
         // all calculated durations in seconds in Prom implementation, so we'll do that here.
         // we can unwrap all of the bounds accesses as they are guaranteed to be there from the checks above
         let mut duration_to_start = to_seconds((self.first.ts - self.bounds.unwrap().left.unwrap()) as f64);
-        let duration_to_end = to_seconds((self.bounds.unwrap().right.unwrap() - self.last.ts) as f64);
+
+        /* bounds stores [L,H), but Prom takes the duration using the inclusive range [L, H-1ms]. Subtract an extra ms, ours is in microseconds. */
+        let duration_to_end = to_seconds((self.bounds.unwrap().right.unwrap() - self.last.ts - 1_000) as f64);
         let sampled_interval = self.time_delta();
         let avg_duration_between_samples = sampled_interval / (self.stats.n - 1) as f64; // don't have to worry about divide by zero because we know we have at least 2 values from the above.
         
@@ -260,7 +262,11 @@ impl CounterSummary {
         }
         let delta = delta.unwrap();
         let bounds = self.bounds.unwrap() ; // if we got through delta without error then we have bounds
-        let duration = bounds.duration().unwrap(); // only returns None if we have an infinite bound, which is checked in the delta stuff 
+        /* bounds stores [L,H), but Prom takes the duration using the inclusive range [L, H-1ms]. So subtract an extra ms from the duration*/
+        let duration = bounds.duration().unwrap() - 1_000; 
+        if duration <= 0 {
+            return Ok(None); // if we have a total duration under a ms, it's less than prom could deal with so we return none. 
+        }
         Ok(Some(delta / to_seconds(duration as f64))) // don't have to deal with 0 case because that is checked in delta as well (singleton)
     }
 }

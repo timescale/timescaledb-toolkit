@@ -295,32 +295,44 @@ pub mod tests {
     #[test]
     fn test_prometheus_extrapolation_simple(){
         //error on lack of bounds provided
-        let summary = CounterSummary::new(&TSPoint{ts: 5, val:15.0}, None);
+        let summary = CounterSummary::new(&TSPoint{ts: 5000, val:15.0}, None);
         assert_eq!(summary.prometheus_delta().unwrap_err(), CounterError::BoundsInvalid);
         assert_eq!(summary.prometheus_rate().unwrap_err(), CounterError::BoundsInvalid);
         
         //error on infinite bounds
-        let summary = CounterSummary::new(&TSPoint{ts: 5, val:15.0}, Some(I64Range{left:None, right:Some(20)}));
+        let summary = CounterSummary::new(&TSPoint{ts: 5000, val:15.0}, Some(I64Range{left:None, right:Some(21000)}));
         assert_eq!(summary.prometheus_delta().unwrap_err(), CounterError::BoundsInvalid);
         assert_eq!(summary.prometheus_rate().unwrap_err(), CounterError::BoundsInvalid);
-
-
-        let mut summary = CounterSummary::new(&TSPoint{ts: 5, val:15.0}, Some(I64Range{left:Some(0), right:Some(20)}));
+        
+        //ranges less than 1ms are treated as zero by Prom
+        let mut summary = CounterSummary::new(&TSPoint{ts: 300, val:15.0}, Some(I64Range{left:Some(0), right:Some(900)}));
+        summary.add_point(&TSPoint{ts: 600, val:20.0}).unwrap();
+        assert_eq!(summary.prometheus_rate().unwrap(), None);
+        
+        //ranges should go out an extra 1000 so that we account for the extra duration that prom subtracts (1 ms)
+        let mut summary = CounterSummary::new(&TSPoint{ts: 5000, val:15.0}, Some(I64Range{left:Some(0), right:Some(21000)}));
         // singletons should return none
         assert_eq!(summary.prometheus_delta().unwrap(), None);
         assert_eq!(summary.prometheus_rate().unwrap(), None);
 
-        summary.add_point(&TSPoint{ts: 10, val:20.0}).unwrap();
-        summary.add_point(&TSPoint{ts: 15, val: 25.0}).unwrap();
+        summary.add_point(&TSPoint{ts: 10000, val:20.0}).unwrap();
+        //ranges should go out an extra 1000 so that we account for the extra duration that prom subtracts (1 ms)
+        let mut summary = CounterSummary::new(&TSPoint{ts: 5000, val:15.0}, Some(I64Range{left:Some(0), right:Some(21000)}));
+        // singletons should return none
+        assert_eq!(summary.prometheus_delta().unwrap(), None);
+        assert_eq!(summary.prometheus_rate().unwrap(), None);
 
+        summary.add_point(&TSPoint{ts: 10000, val:20.0}).unwrap();
+        summary.add_point(&TSPoint{ts: 15000, val: 25.0}).unwrap();
+        
         assert_relative_eq!(summary.delta(), 10.0);
-        assert_relative_eq!(summary.rate().unwrap(),to_micro(1.0));
+        assert_relative_eq!(summary.rate().unwrap(),to_micro(0.001));
         assert_relative_eq!(summary.prometheus_delta().unwrap().unwrap(), 20.0);
         // linear cases like this should be equal
         assert_relative_eq!(summary.prometheus_rate().unwrap().unwrap(), summary.rate().unwrap());
         
         // add a point outside our bounds and make sure we error correctly
-        summary.add_point(&TSPoint{ts: 25, val: 35.0}).unwrap();
+        summary.add_point(&TSPoint{ts: 25000, val: 35.0}).unwrap();
         assert_eq!(summary.prometheus_delta().unwrap_err(), CounterError::BoundsInvalid);
         assert_eq!(summary.prometheus_rate().unwrap_err(), CounterError::BoundsInvalid);
 
@@ -328,45 +340,45 @@ pub mod tests {
 
     #[test]
     fn test_prometheus_extrapolation_bound_size(){
-        let mut summary = CounterSummary::new(&TSPoint{ts: 20, val:40.0}, Some(I64Range{left:Some(10), right:Some(50)}));
-        summary.add_point(&TSPoint{ts: 30, val:20.0}).unwrap();
-        summary.add_point(&TSPoint{ts: 40, val: 40.0}).unwrap();
+        let mut summary = CounterSummary::new(&TSPoint{ts: 20000, val:40.0}, Some(I64Range{left:Some(10000), right:Some(51000)}));
+        summary.add_point(&TSPoint{ts: 30000, val:20.0}).unwrap();
+        summary.add_point(&TSPoint{ts: 40000, val: 40.0}).unwrap();
         assert_relative_eq!(summary.delta(), 40.0);
-        assert_relative_eq!(summary.rate().unwrap(),to_micro(2.0));
-        //we go all the way to the edge of the bounds here because it's within 1.1 average steps
+        assert_relative_eq!(summary.rate().unwrap(),to_micro(0.002));
+        //we go all the way to the edge of the bounds here because it's within 1.1 average steps (when you subtract the extra 1000 for ms it goes to 50000)
         assert_relative_eq!(summary.prometheus_delta().unwrap().unwrap(), 80.0);
         // linear cases like this should be equal
         assert_relative_eq!(summary.prometheus_rate().unwrap().unwrap(), summary.rate().unwrap());
         
         // now lets push the bounds to be a bit bigger
-        summary.bounds = Some(I64Range{left:Some(8), right:Some(52)});
+        summary.bounds = Some(I64Range{left:Some(8000), right:Some(53000)});
         // now because we're further than 1.1 out on each side, we end projecting out to half the avg distance on each side
         assert_relative_eq!(summary.prometheus_delta().unwrap().unwrap(), 60.0);
         // but the rate is still divided by the full bound duration
-        assert_relative_eq!(summary.prometheus_rate().unwrap().unwrap(), to_micro(60.0 / 44.0));
+        assert_relative_eq!(summary.prometheus_rate().unwrap().unwrap(), to_micro(60.0 / 44000.0));
 
         //this should all be the same as the last one in the first part. 
         // The change occurs because we hit the zero boundary condition 
         // so things change on the second bit because of where resets occur and our starting value
-        let mut summary = CounterSummary::new(&TSPoint{ts: 20, val:20.0}, Some(I64Range{left:Some(10), right:Some(50)}));
-        summary.add_point(&TSPoint{ts: 30, val:40.0}).unwrap();
-        summary.add_point(&TSPoint{ts: 40, val: 20.0}).unwrap();
+        let mut summary = CounterSummary::new(&TSPoint{ts: 20000, val:20.0}, Some(I64Range{left:Some(10000), right:Some(51000)}));
+        summary.add_point(&TSPoint{ts: 30000, val:40.0}).unwrap();
+        summary.add_point(&TSPoint{ts: 40000, val: 20.0}).unwrap();
         assert_relative_eq!(summary.delta(), 40.0);
-        assert_relative_eq!(summary.rate().unwrap(),to_micro(2.0));
+        assert_relative_eq!(summary.rate().unwrap(),to_micro(0.002));
         //we go all the way to the edge of the bounds here because it's within 1.1 average steps
         assert_relative_eq!(summary.prometheus_delta().unwrap().unwrap(), 80.0);
         // linear cases like this should be equal
         assert_relative_eq!(summary.prometheus_rate().unwrap().unwrap(), summary.rate().unwrap());
         
         // now lets push the bounds to be a bit bigger
-        summary.bounds = Some(I64Range{left:Some(8), right:Some(52)});
+        summary.bounds = Some(I64Range{left:Some(8000), right:Some(53000)});
         // now because we're further than 1.1 out on the right side, 
         // we end projecting out to half the avg distance on that side, 
         // but because we hit the inferred zero point  on the left (0 in this case)
         // we use zero as the bound on the left side
         assert_relative_eq!(summary.prometheus_delta().unwrap().unwrap(), 70.0);
         // but the rate is still divided by the full bound duration
-        assert_relative_eq!(summary.prometheus_rate().unwrap().unwrap(), to_micro(70.0 / 44.0));
+        assert_relative_eq!(summary.prometheus_rate().unwrap().unwrap(), to_micro(70.0 / 44000.0));
         
     }   
 

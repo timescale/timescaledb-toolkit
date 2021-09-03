@@ -543,14 +543,15 @@ mod tests {
 
             let stmt = "SELECT time_delta(counter_agg(ts, val)) FROM test";
             assert_relative_eq!(select_one!(client, stmt, f64), 60.0);
-
-            let stmt = "SELECT extrapolated_delta(counter_agg(ts, val, '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00+00)'), 'prometheus') FROM test";
+            
+            // have to add 1 ms to right bounds to get full range and simple values because prometheus subtracts a ms
+            let stmt = "SELECT extrapolated_delta(counter_agg(ts, val, '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00.001+00)'), 'prometheus') FROM test";
             assert_relative_eq!(select_one!(client, stmt, f64), 20.0);
             // doesn't matter if we set the bounds before or after
-            let stmt = "SELECT extrapolated_delta(with_bounds(counter_agg(ts, val), '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00+00)'), 'prometheus') FROM test";
+            let stmt = "SELECT extrapolated_delta(with_bounds(counter_agg(ts, val), '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00.001+00)'), 'prometheus') FROM test";
             assert_relative_eq!(select_one!(client, stmt, f64), 20.0);
 
-            let stmt = "SELECT extrapolated_rate(counter_agg(ts, val, '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00+00)'), 'prometheus') FROM test";
+            let stmt = "SELECT extrapolated_rate(counter_agg(ts, val, '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00.001+00)'), 'prometheus') FROM test";
             assert_relative_eq!(select_one!(client, stmt, f64), 20.0 / 120.0);
 
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)";

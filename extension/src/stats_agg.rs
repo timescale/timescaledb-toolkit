@@ -105,7 +105,7 @@ impl<'input> StatsSummary2D<'input> {
 
 
 
-#[pg_extern(schema = "toolkit_experimental", strict)]
+#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe, strict)]
 pub fn stats1d_trans_serialize<'s>(
     state: Internal<StatsSummary1D<'s>>,
 ) -> bytea {
@@ -113,7 +113,7 @@ pub fn stats1d_trans_serialize<'s>(
     crate::do_serialize!(ser)
 }
 
-#[pg_extern(schema = "toolkit_experimental", strict)]
+#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe, strict)]
 pub fn stats1d_trans_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
@@ -122,7 +122,7 @@ pub fn stats1d_trans_deserialize(
     de.into()
 }
 
-#[pg_extern(schema = "toolkit_experimental", strict)]
+#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe, strict)]
 pub fn stats2d_trans_serialize<'s>(
     state: Internal<StatsSummary2D<'s>>,
 ) -> bytea {
@@ -130,7 +130,7 @@ pub fn stats2d_trans_serialize<'s>(
     crate::do_serialize!(ser)
 }
 
-#[pg_extern(schema = "toolkit_experimental", strict)]
+#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe, strict)]
 pub fn stats2d_trans_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
@@ -139,7 +139,7 @@ pub fn stats2d_trans_deserialize(
     de.into()
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe)]
 pub fn stats1d_trans<'s>(
     state: Option<Internal<StatsSummary1D<'s>>>,
     val: Option<f64>,
@@ -167,7 +167,7 @@ pub fn stats1d_trans<'s>(
 }
 // Note that in general, for all stats2d cases, if either the y or x value is missing, we disregard the entire point as the n is shared between them
 // if the user wants us to treat nulls as a particular value (ie zero), they can use COALESCE to do so
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe)]
 pub fn stats2d_trans<'s>(
     state: Option<Internal<StatsSummary2D<'s>>>,
     y: Option<f64>,
@@ -201,7 +201,7 @@ pub fn stats2d_trans<'s>(
 }
 
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental",immutable)]
 pub fn stats1d_inv_trans<'s>(
     state: Option<Internal<StatsSummary1D<'s>>>,
     val: Option<f64>,
@@ -225,7 +225,7 @@ pub fn stats1d_inv_trans<'s>(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental",immutable)]
 pub fn stats2d_inv_trans<'s>(
     state: Option<Internal<StatsSummary2D<'s>>>,
     y: Option<f64>,
@@ -256,7 +256,7 @@ pub fn stats2d_inv_trans<'s>(
 }
 
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe)]
 pub fn stats1d_summary_trans<'s, 'v>(
     state: Option<Internal<StatsSummary1D<'s>>>,
     value: Option<toolkit_experimental::StatsSummary1D<'v>>,
@@ -281,7 +281,7 @@ pub fn stats1d_summary_trans<'s, 'v>(
 
 
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe)]
 pub fn stats2d_summary_trans<'s, 'v>(
     state: Option<Internal<StatsSummary2D<'s>>>,
     value: Option<toolkit_experimental::StatsSummary2D<'v>>,
@@ -304,7 +304,7 @@ pub fn stats2d_summary_trans<'s, 'v>(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe)]
 pub fn stats1d_summary_inv_trans<'s, 'v>(
     state: Option<Internal<StatsSummary1D<'s>>>,
     value: Option<toolkit_experimental::StatsSummary1D<'v>>,
@@ -329,7 +329,7 @@ pub fn stats1d_summary_inv_trans<'s, 'v>(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe)]
 pub fn stats2d_summary_inv_trans<'s, 'v>(
     state: Option<Internal<StatsSummary2D<'s>>>,
     value: Option<toolkit_experimental::StatsSummary2D<'v>>,
@@ -354,7 +354,7 @@ pub fn stats2d_summary_inv_trans<'s, 'v>(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe)]
 pub fn stats1d_combine<'s, 'v>(
     state1: Option<Internal<StatsSummary1D<'s>>>,
     state2: Option<Internal<StatsSummary1D<'v>>>,
@@ -383,7 +383,7 @@ pub fn stats1d_combine<'s, 'v>(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe)]
 pub fn stats2d_combine<'s, 'v>(
     state1: Option<Internal<StatsSummary2D<'s>>>,
     state2: Option<Internal<StatsSummary2D<'v>>>,
@@ -412,7 +412,7 @@ pub fn stats2d_combine<'s, 'v>(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe)]
 fn stats1d_final<'s>(
     state: Option<Internal<StatsSummary1D<'s>>>,
     fcinfo: pg_sys::FunctionCallInfo,
@@ -427,7 +427,7 @@ fn stats1d_final<'s>(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe)]
 fn stats2d_final<'s>(
     state: Option<Internal<StatsSummary2D<'s>>>,
     fcinfo: pg_sys::FunctionCallInfo,
@@ -577,7 +577,7 @@ CREATE AGGREGATE toolkit_experimental.rolling(ss toolkit_experimental.statssumma
 
 
 
-#[pg_extern(name="average", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="average", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats1d_average(
     summary: toolkit_experimental::StatsSummary1D,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -585,7 +585,7 @@ fn stats1d_average(
     summary.to_internal().avg()
 }
 
-#[pg_extern(name="sum", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="sum", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats1d_sum(
     summary: toolkit_experimental::StatsSummary1D,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -593,7 +593,7 @@ fn stats1d_sum(
     summary.to_internal().sum()
 }
 
-#[pg_extern(name="stddev", schema = "toolkit_experimental", immutable)]
+#[pg_extern(name="stddev", schema = "toolkit_experimental", immutable, parallel_safe)]
 fn stats1d_stddev(
     summary: Option<toolkit_experimental::StatsSummary1D>,
     method: default!(String, "sample"),
@@ -606,7 +606,7 @@ fn stats1d_stddev(
     }
 }
 
-#[pg_extern(name="variance", schema = "toolkit_experimental", immutable)]
+#[pg_extern(name="variance", schema = "toolkit_experimental", immutable, parallel_safe)]
 fn stats1d_variance(
     summary: Option<toolkit_experimental::StatsSummary1D>,
     method: default!(String, "sample"),
@@ -619,7 +619,7 @@ fn stats1d_variance(
     }
 }
 
-#[pg_extern(name="num_vals", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="num_vals", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats1d_num_vals(
     summary: toolkit_experimental::StatsSummary1D,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -627,7 +627,7 @@ fn stats1d_num_vals(
     summary.to_internal().count()
 }
 
-#[pg_extern(name="average_x", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="average_x", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_average_x(
     summary: toolkit_experimental::StatsSummary2D,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -635,7 +635,7 @@ fn stats2d_average_x(
     Some(summary.to_internal().avg()?.x)
 }
 
-#[pg_extern(name="average_y", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="average_y", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_average_y(
     summary: toolkit_experimental::StatsSummary2D,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -643,7 +643,7 @@ fn stats2d_average_y(
     Some(summary.to_internal().avg()?.y)
 }
 
-#[pg_extern(name="sum_x", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="sum_x", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_sum_x(
     summary: toolkit_experimental::StatsSummary2D,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -651,7 +651,7 @@ fn stats2d_sum_x(
     Some(summary.to_internal().sum()?.x)
 }
 
-#[pg_extern(name="sum_y", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="sum_y", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_sum_y(
     summary: toolkit_experimental::StatsSummary2D,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -659,7 +659,7 @@ fn stats2d_sum_y(
     Some(summary.to_internal().sum()?.y)
 }
 
-#[pg_extern(name="stddev_x", schema = "toolkit_experimental", immutable)]
+#[pg_extern(name="stddev_x", schema = "toolkit_experimental", immutable, parallel_safe)]
 fn stats2d_stddev_x(
     summary: Option<toolkit_experimental::StatsSummary2D>,
     method: default!(String, "sample"),
@@ -672,7 +672,7 @@ fn stats2d_stddev_x(
     }
 }
 
-#[pg_extern(name="stddev_y", schema = "toolkit_experimental", immutable)]
+#[pg_extern(name="stddev_y", schema = "toolkit_experimental", immutable, parallel_safe)]
 fn stats2d_stddev_y(
     summary: Option<toolkit_experimental::StatsSummary2D>,
     method: default!(String, "sample"),
@@ -685,7 +685,7 @@ fn stats2d_stddev_y(
     }
 }
 
-#[pg_extern(name="variance_x", schema = "toolkit_experimental", immutable)]
+#[pg_extern(name="variance_x", schema = "toolkit_experimental", immutable, parallel_safe)]
 fn stats2d_variance_x(
     summary: Option<toolkit_experimental::StatsSummary2D>,
     method: default!(String, "sample"),
@@ -698,7 +698,7 @@ fn stats2d_variance_x(
     }
 }
 
-#[pg_extern(name="variance_y", schema = "toolkit_experimental", immutable)]
+#[pg_extern(name="variance_y", schema = "toolkit_experimental", immutable, parallel_safe)]
 fn stats2d_variance_y(
     summary: Option<toolkit_experimental::StatsSummary2D>,
     method: default!(String, "sample"),
@@ -711,7 +711,7 @@ fn stats2d_variance_y(
     }
 }
 
-#[pg_extern(name="num_vals", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="num_vals", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_num_vals(
     summary: toolkit_experimental::StatsSummary2D,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -719,7 +719,7 @@ fn stats2d_num_vals(
     summary.to_internal().count()
 }
 
-#[pg_extern(name="slope", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="slope", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_slope(
     summary: toolkit_experimental::StatsSummary2D,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -727,7 +727,7 @@ fn stats2d_slope(
     summary.to_internal().slope()
 }
 
-#[pg_extern(name="corr", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="corr", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_corr(
     summary: toolkit_experimental::StatsSummary2D,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -735,7 +735,7 @@ fn stats2d_corr(
     summary.to_internal().corr()
 }
 
-#[pg_extern(name="intercept", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="intercept", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_intercept(
     summary: toolkit_experimental::StatsSummary2D,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -743,7 +743,7 @@ fn stats2d_intercept(
     summary.to_internal().intercept()
 }
 
-#[pg_extern(name="x_intercept", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="x_intercept", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_x_intercept(
     summary: toolkit_experimental::StatsSummary2D,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -751,7 +751,7 @@ fn stats2d_x_intercept(
     summary.to_internal().x_intercept()
 }
 
-#[pg_extern(name="determination_coeff", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="determination_coeff", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_determination_coeff(
     summary: toolkit_experimental::StatsSummary2D,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -759,7 +759,7 @@ fn stats2d_determination_coeff(
     summary.to_internal().determination_coeff()
 }
 
-#[pg_extern(name="covariance", schema = "toolkit_experimental", immutable)]
+#[pg_extern(name="covariance", schema = "toolkit_experimental", immutable, parallel_safe)]
 fn stats2d_covar(
     summary: Option<toolkit_experimental::StatsSummary2D>,
     method: default!(String, "sample"),

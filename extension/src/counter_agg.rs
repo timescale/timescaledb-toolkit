@@ -157,7 +157,7 @@ impl CounterSummaryTransState {
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn counter_summary_trans_serialize(
     mut state: Internal<CounterSummaryTransState>,
 ) -> bytea {
@@ -165,7 +165,7 @@ pub fn counter_summary_trans_serialize(
     crate::do_serialize!(state)
 }
 
-#[pg_extern(schema = "toolkit_experimental", strict)]
+#[pg_extern(schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 pub fn counter_summary_trans_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
@@ -173,7 +173,7 @@ pub fn counter_summary_trans_deserialize(
     crate::do_deserialize!(bytes, CounterSummaryTransState)
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn counter_agg_trans(
     state: Option<Internal<CounterSummaryTransState>>,
     ts: Option<pg_sys::TimestampTz>,
@@ -203,7 +203,7 @@ pub fn counter_agg_trans(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn counter_agg_trans_no_bounds(
     state: Option<Internal<CounterSummaryTransState>>,
     ts: Option<pg_sys::TimestampTz>,
@@ -214,7 +214,7 @@ pub fn counter_agg_trans_no_bounds(
 }
 
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn counter_agg_summary_trans(
     state: Option<Internal<CounterSummaryTransState>>,
     value: Option<toolkit_experimental::CounterSummary>,
@@ -235,7 +235,7 @@ pub fn counter_agg_summary_trans(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn counter_agg_combine(
     state1: Option<Internal<CounterSummaryTransState>>,
     state2: Option<Internal<CounterSummaryTransState>>,
@@ -260,7 +260,7 @@ pub fn counter_agg_combine(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 fn counter_agg_final(
     state: Option<Internal<CounterSummaryTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
@@ -328,7 +328,7 @@ CREATE AGGREGATE toolkit_experimental.rollup(cs toolkit_experimental.CounterSumm
 );
 "#);
 
-#[pg_extern(name="delta", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="delta", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_delta(
     summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -336,7 +336,7 @@ fn counter_agg_delta(
     summary.to_internal_counter_summary().delta()
 }
 
-#[pg_extern(name="rate", schema = "toolkit_experimental", strict, immutable )]
+#[pg_extern(name="rate", schema = "toolkit_experimental", strict, immutable, parallel_safe )]
 fn counter_agg_rate(
     summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -344,7 +344,7 @@ fn counter_agg_rate(
     summary.to_internal_counter_summary().rate()
 }
 
-#[pg_extern(name="time_delta", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="time_delta", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_time_delta(
     summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -352,7 +352,7 @@ fn counter_agg_time_delta(
     summary.to_internal_counter_summary().time_delta()
 }
 
-#[pg_extern(name="irate_left", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="irate_left", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_irate_left(
     summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -360,7 +360,7 @@ fn counter_agg_irate_left(
     summary.to_internal_counter_summary().irate_left()
 }
 
-#[pg_extern(name="irate_right", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="irate_right", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_irate_right(
     summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -368,7 +368,7 @@ fn counter_agg_irate_right(
     summary.to_internal_counter_summary().irate_right()
 }
 
-#[pg_extern(name="idelta_left", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="idelta_left", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_idelta_left(
     summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -376,7 +376,7 @@ fn counter_agg_idelta_left(
     summary.to_internal_counter_summary().idelta_left()
 }
 
-#[pg_extern(name="idelta_right", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="idelta_right", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_idelta_right(
     summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -384,7 +384,7 @@ fn counter_agg_idelta_right(
     summary.to_internal_counter_summary().idelta_right()
 }
 
-#[pg_extern(name="with_bounds", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="with_bounds", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_with_bounds(
     summary: toolkit_experimental::CounterSummary,
     bounds: tstzrange,
@@ -398,7 +398,7 @@ fn counter_agg_with_bounds(
     }
 }
 
-#[pg_extern(name="extrapolated_delta", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="extrapolated_delta", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_extrapolated_delta(
     summary: toolkit_experimental::CounterSummary,
     method: String,
@@ -412,7 +412,7 @@ fn counter_agg_extrapolated_delta(
     }
 }
 
-#[pg_extern(name="extrapolated_rate", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="extrapolated_rate", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_extrapolated_rate(
     summary: toolkit_experimental::CounterSummary,
     method: String,
@@ -426,7 +426,7 @@ fn counter_agg_extrapolated_rate(
     }
 }
 
-#[pg_extern(name="num_elements", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="num_elements", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_num_elements(
     summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -434,7 +434,7 @@ fn counter_agg_num_elements(
     summary.to_internal_counter_summary().stats.n as i64
 }
 
-#[pg_extern(name="num_changes", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="num_changes", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_num_changes(
     summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -442,7 +442,7 @@ fn counter_agg_num_changes(
     summary.to_internal_counter_summary().num_changes as i64
 }
 
-#[pg_extern(name="num_resets", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="num_resets", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_num_resets(
     summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -450,7 +450,7 @@ fn counter_agg_num_resets(
     summary.to_internal_counter_summary().num_resets as i64
 }
 
-#[pg_extern(name="slope", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="slope", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_slope(
     summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -458,7 +458,7 @@ fn counter_agg_slope(
     summary.to_internal_counter_summary().stats.slope()
 }
 
-#[pg_extern(name="intercept", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="intercept", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_intercept(
     summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -466,7 +466,7 @@ fn counter_agg_intercept(
     summary.to_internal_counter_summary().stats.intercept()
 }
 
-#[pg_extern(name="corr", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="corr", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_corr(
     summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -474,7 +474,7 @@ fn counter_agg_corr(
     summary.to_internal_counter_summary().stats.corr()
 }
 
-#[pg_extern(name="counter_zero_time", schema = "toolkit_experimental", strict, immutable)]
+#[pg_extern(name="counter_zero_time", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_counter_zero_time(
     summary: toolkit_experimental::CounterSummary,
     _fcinfo: pg_sys::FunctionCallInfo,

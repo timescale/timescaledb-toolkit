@@ -12,7 +12,7 @@ use time_series::{TSPoint, TimeSeries as InternalTimeSeries, ExplicitTimeSeries,
 use crate::time_series::TimeSeries;
 
 // This is included for debug purposes and probably should not leave experimental
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn asap_smooth_raw(
     data: Vec<f64>,
     resolution: i32,
@@ -31,7 +31,7 @@ pub struct ASAPTransState {
     resolution: i32,
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn asap_trans(
     state: Option<Internal<ASAPTransState>>,
     ts: Option<pg_sys::TimestampTz>,
@@ -88,7 +88,7 @@ fn find_downsample_interval(series: &ExplicitTimeSeries, resolution: i64) -> i64
     candidate / median * median  // Truncate candidate to a multiple of median
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 fn asap_final(
     state: Option<Internal<ASAPTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
@@ -137,7 +137,7 @@ fn asap_final(
     }
 }
 
-#[pg_extern(name="asap_smooth", schema = "toolkit_experimental")]
+#[pg_extern(name="asap_smooth", schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn asap_on_timeseries(
     series: crate::time_series::toolkit_experimental::TimeSeries<'static>,
     resolution: i32

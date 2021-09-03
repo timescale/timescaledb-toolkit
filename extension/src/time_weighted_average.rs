@@ -86,21 +86,21 @@ impl TimeWeightTransState {
     }
 }
 
-#[pg_extern()]
+#[pg_extern(immutable, parallel_safe)]
 pub fn time_weight_trans_serialize(mut state: Internal<TimeWeightTransState>) -> bytea {
     state.combine_summaries();
     crate::do_serialize!(state)
 }
 
-#[pg_extern(strict)]
+#[pg_extern(strict, immutable, parallel_safe)]
 pub fn time_weight_trans_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
 ) -> Internal<TimeWeightTransState> {
     crate::do_deserialize!(bytes, TimeWeightTransState)
 }
-
-#[pg_extern()]
+// these are technically parallel_safe (as in they can be called in a parallel context) even though the aggregate itself is parallel restricted.
+#[pg_extern(immutable, parallel_safe)]
 pub fn time_weight_trans(
     state: Option<Internal<TimeWeightTransState>>,
     method: String,
@@ -140,7 +140,7 @@ pub fn time_weight_trans(
     }
 }
 
-#[pg_extern()]
+#[pg_extern(immutable, parallel_safe)]
 pub fn time_weight_summary_trans<'b>(
     state: Option<Internal<TimeWeightTransState>>,
     next: Option<TimeWeightSummary<'b>>,
@@ -171,7 +171,7 @@ pub fn time_weight_summary_trans<'b>(
     }
 }
 
-#[pg_extern()]
+#[pg_extern(immutable, parallel_safe)]
 pub fn time_weight_combine(
     state1: Option<Internal<TimeWeightTransState>>,
     state2: Option<Internal<TimeWeightTransState>>,
@@ -204,7 +204,7 @@ pub fn time_weight_combine(
     }
 }
 
-#[pg_extern()]
+#[pg_extern(immutable, parallel_safe)]
 fn time_weight_final(
     state: Option<Internal<TimeWeightTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,

@@ -22,7 +22,7 @@ type int = u32;
 
 // PG function for adding values to a sketch.
 // Null values are ignored.
-#[pg_extern()]
+#[pg_extern(immutable, parallel_safe)]
 pub fn uddsketch_trans(
     state: Option<Internal<UddSketchInternal>>,
     size: int,
@@ -48,7 +48,7 @@ pub fn uddsketch_trans(
 
 // transition function for the simpler percentile_agg aggregate, which doesn't
 // take parameters for the size and error, but uses a default
-#[pg_extern()]
+#[pg_extern(immutable, parallel_safe)]
 pub fn percentile_agg_trans(
     state: Option<Internal<UddSketchInternal>>,
     value: Option<f64>,
@@ -60,7 +60,7 @@ pub fn percentile_agg_trans(
 }
 
 // PG function for merging sketches.
-#[pg_extern()]
+#[pg_extern(immutable, parallel_safe)]
 pub fn uddsketch_combine(
     state1: Option<Internal<UddSketchInternal>>,
     state2: Option<Internal<UddSketchInternal>>,
@@ -85,7 +85,7 @@ pub fn uddsketch_combine(
 #[allow(non_camel_case_types)]
 type bytea = pg_sys::Datum;
 
-#[pg_extern()]
+#[pg_extern(immutable, parallel_safe)]
 pub fn uddsketch_serialize(
     state: Internal<UddSketchInternal>,
 ) -> bytea {
@@ -93,7 +93,7 @@ pub fn uddsketch_serialize(
     crate::do_serialize!(serializable)
 }
 
-#[pg_extern(strict)]
+#[pg_extern(strict, immutable, parallel_safe)]
 pub fn uddsketch_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
@@ -269,7 +269,7 @@ impl<'input> UddSketch<'input> {
 }
 
 // PG function to generate a user-facing UddSketch object from a UddSketchInternal.
-#[pg_extern()]
+#[pg_extern(immutable, parallel_safe)]
 fn uddsketch_final(
     state: Option<Internal<UddSketchInternal>>,
     fcinfo: pg_sys::FunctionCallInfo,
@@ -418,7 +418,7 @@ CREATE AGGREGATE percentile_agg(value DOUBLE PRECISION)
 );
 "#);
 
-#[pg_extern()]
+#[pg_extern(immutable, parallel_safe)]
 pub fn uddsketch_compound_trans(
     state: Option<Internal<UddSketchInternal>>,
     value: Option<UddSketch>,

@@ -31,7 +31,7 @@ pub struct HyperLogLogTrans {
 type int = i32;
 type AnyElement = Datum;
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn hyperloglog_trans(
     state: Option<Internal<HyperLogLogTrans>>,
     size: int,
@@ -67,7 +67,7 @@ pub fn hyperloglog_trans(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn hyperloglog_combine(
     state1: Option<Internal<HyperLogLogTrans>>,
     state2: Option<Internal<HyperLogLogTrans>>,
@@ -90,12 +90,12 @@ pub fn hyperloglog_combine(
 #[allow(non_camel_case_types)]
 type bytea = pg_sys::Datum;
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn hyperloglog_serialize(state: Internal<HyperLogLogTrans>) -> bytea {
     crate::do_serialize!(state)
 }
 
-#[pg_extern(schema = "toolkit_experimental", strict)]
+#[pg_extern(schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 pub fn hyperloglog_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
@@ -152,7 +152,7 @@ mod toolkit_experimental {
 
 json_inout_funcs!(HyperLogLog);
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 fn hyperloglog_final(
     state: Option<Internal<HyperLogLogTrans>>,
     fcinfo: pg_sys::FunctionCallInfo,
@@ -178,12 +178,13 @@ CREATE AGGREGATE toolkit_experimental.hyperloglog(size int, value AnyElement)
     finalfunc = toolkit_experimental.hyperloglog_final,
     combinefunc = toolkit_experimental.hyperloglog_combine,
     serialfunc = toolkit_experimental.hyperloglog_serialize,
-    deserialfunc = toolkit_experimental.hyperloglog_deserialize
+    deserialfunc = toolkit_experimental.hyperloglog_deserialize, 
+    parallel = safe
 );
 "#
 );
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn hyperloglog_union<'input>(
     state: Option<Internal<HyperLogLogTrans>>,
     other: toolkit_experimental::HyperLogLog<'input>,
@@ -220,7 +221,8 @@ CREATE AGGREGATE toolkit_experimental.rollup(hyperloglog toolkit_experimental.Hy
     finalfunc = toolkit_experimental.hyperloglog_final,
     combinefunc = toolkit_experimental.hyperloglog_combine,
     serialfunc = toolkit_experimental.hyperloglog_serialize,
-    deserialfunc = toolkit_experimental.hyperloglog_deserialize
+    deserialfunc = toolkit_experimental.hyperloglog_deserialize, 
+    parallel = safe
 );
 "#
 );

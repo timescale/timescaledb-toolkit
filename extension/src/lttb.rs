@@ -20,7 +20,7 @@ pub struct LttbTrans {
     resolution: usize,
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn lttb_trans(
     state: Option<Internal<LttbTrans>>,
     time: pg_sys::TimestampTz,
@@ -56,7 +56,7 @@ pub fn lttb_trans(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn lttb_final(
     state: Option<Internal<LttbTrans>>,
     fcinfo: pg_sys::FunctionCallInfo,
@@ -166,7 +166,7 @@ pub fn lttb(data: &[TSPoint], threshold: usize) -> Cow<'_, [TSPoint]> {
     Cow::Owned(sampled)
 }
 
-#[pg_extern(name="lttb", schema = "toolkit_experimental")]
+#[pg_extern(name="lttb", schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn lttb_on_timeseries(
     series: crate::time_series::toolkit_experimental::TimeSeries<'static>,
     threshold: i32,

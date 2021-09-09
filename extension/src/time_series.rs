@@ -333,21 +333,21 @@ impl<'a> TimeSeries<'a> {
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn unnest_series(
     series: toolkit_experimental::TimeSeries,
 ) -> impl std::iter::Iterator<Item = (name!(time,pg_sys::TimestampTz),name!(value,f64))> + '_ {
     Box::new(series.iter().map(|points| (points.ts, points.val)))
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn timeseries_serialize(
     state: Internal<InternalTimeSeries>,
 ) -> bytea {
     crate::do_serialize!(state)
 }
 
-#[pg_extern(schema = "toolkit_experimental",strict)]
+#[pg_extern(schema = "toolkit_experimental",strict, immutable, parallel_safe)]
 pub fn timeseries_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
@@ -355,7 +355,7 @@ pub fn timeseries_deserialize(
     crate::do_deserialize!(bytes, InternalTimeSeries)
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn timeseries_trans(
     state: Option<Internal<InternalTimeSeries>>,
     time: Option<pg_sys::TimestampTz>,
@@ -382,7 +382,7 @@ pub fn timeseries_trans(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn timeseries_compound_trans(
     state: Option<Internal<InternalTimeSeries>>,
     series: Option<crate::time_series::toolkit_experimental::TimeSeries<'static>>,
@@ -401,7 +401,7 @@ pub fn timeseries_compound_trans(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn timeseries_combine (
     state1: Option<Internal<InternalTimeSeries>>,
     state2: Option<Internal<InternalTimeSeries>>,
@@ -420,7 +420,7 @@ pub fn timeseries_combine (
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn timeseries_final(
     state: Option<Internal<InternalTimeSeries>>,
     fcinfo: pg_sys::FunctionCallInfo,
@@ -443,7 +443,8 @@ CREATE AGGREGATE toolkit_experimental.timeseries(ts TIMESTAMPTZ, value DOUBLE PR
     finalfunc = toolkit_experimental.timeseries_final,
     combinefunc = toolkit_experimental.timeseries_combine,
     serialfunc = toolkit_experimental.timeseries_serialize,
-    deserialfunc = toolkit_experimental.timeseries_deserialize
+    deserialfunc = toolkit_experimental.timeseries_deserialize,
+    parallel = safe
 );
 "#);
 
@@ -456,13 +457,14 @@ CREATE AGGREGATE toolkit_experimental.rollup(
     finalfunc = toolkit_experimental.timeseries_final,
     combinefunc = toolkit_experimental.timeseries_combine,
     serialfunc = toolkit_experimental.timeseries_serialize,
-    deserialfunc = toolkit_experimental.timeseries_deserialize
+    deserialfunc = toolkit_experimental.timeseries_deserialize,
+    parallel = safe
 );
 "#);
 
 type Interval = pg_sys::Datum;
 
-#[pg_extern(schema = "toolkit_experimental", name="normalize")]
+#[pg_extern(schema = "toolkit_experimental", name="normalize", immutable, parallel_safe)]
 pub fn normalize_default_range (
     series: crate::time_series::toolkit_experimental::TimeSeries<'static>,
     interval: Interval,
@@ -473,7 +475,7 @@ pub fn normalize_default_range (
     normalize(series, interval, method, truncate, None, None, _fcinfo)
 }
 
-#[pg_extern(schema = "toolkit_experimental")]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn normalize (
     series: crate::time_series::toolkit_experimental::TimeSeries<'static>,
     interval: Interval,

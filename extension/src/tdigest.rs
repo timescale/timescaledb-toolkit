@@ -53,7 +53,7 @@ type int = u32;
 
 // PG function for adding values to a digest.
 // Null values are ignored.
-#[pg_extern]
+#[pg_extern(immutable, parallel_safe)]
 pub fn tdigest_trans(
     state: Option<Internal<TDigestTransState>>,
     size: int,
@@ -81,7 +81,7 @@ pub fn tdigest_trans(
 }
 
 // PG function for merging digests.
-#[pg_extern]
+#[pg_extern(immutable, parallel_safe)]
 pub fn tdigest_combine(
     state1: Option<Internal<TDigestTransState>>,
     state2: Option<Internal<TDigestTransState>>,
@@ -117,7 +117,7 @@ pub fn tdigest_combine(
 #[allow(non_camel_case_types)]
 type bytea = pg_sys::Datum;
 
-#[pg_extern]
+#[pg_extern(immutable, parallel_safe)]
 pub fn tdigest_serialize(
     mut state: Internal<TDigestTransState>,
 ) -> bytea {
@@ -125,7 +125,7 @@ pub fn tdigest_serialize(
     crate::do_serialize!(state)
 }
 
-#[pg_extern(strict)]
+#[pg_extern(strict, immutable, parallel_safe)]
 pub fn tdigest_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
@@ -186,7 +186,7 @@ impl<'input> TDigest<'input> {
 }
 
 // PG function to generate a user-facing TDigest object from an internal TDigestTransState.
-#[pg_extern]
+#[pg_extern(immutable, parallel_safe)]
 fn tdigest_final(
     state: Option<Internal<TDigestTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
@@ -218,7 +218,7 @@ CREATE AGGREGATE tdigest(size int, value DOUBLE PRECISION)
 );
 "#);
 
-#[pg_extern]
+#[pg_extern(immutable, parallel_safe)]
 pub fn tdigest_compound_trans(
     state: Option<Internal<InternalTDigest>>,
     value: Option<TDigest<'static>>,
@@ -240,7 +240,7 @@ pub fn tdigest_compound_trans(
     }
 }
 
-#[pg_extern]
+#[pg_extern(immutable, parallel_safe)]
 pub fn tdigest_compound_combine(
     state1: Option<Internal<InternalTDigest>>,
     state2: Option<Internal<InternalTDigest>>,
@@ -263,7 +263,7 @@ pub fn tdigest_compound_combine(
     }
 }
 
-#[pg_extern]
+#[pg_extern(immutable, parallel_safe)]
 fn tdigest_compound_final(
     state: Option<Internal<InternalTDigest>>,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -274,7 +274,7 @@ fn tdigest_compound_final(
     }
 }
 
-#[pg_extern]
+#[pg_extern(immutable, parallel_safe)]
 fn tdigest_compound_serialize(
     state: Internal<InternalTDigest>,
     _fcinfo: pg_sys::FunctionCallInfo,
@@ -282,7 +282,7 @@ fn tdigest_compound_serialize(
     crate::do_serialize!(state)
 }
 
-#[pg_extern]
+#[pg_extern(immutable, parallel_safe)]
 pub fn tdigest_compound_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,

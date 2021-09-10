@@ -77,47 +77,4 @@ impl<'a> Iterator for Iter<'a> {
     {
         self.size_hint().0
     }
-
-    fn last(mut self) -> Option<Self::Item>
-    where
-        Self: Sized,
-    {
-        let remaining = self.size_hint().0;
-        if remaining == 0 {
-            return None
-        }
-        self.nth(remaining - 1)
-    }
-
-    // TODO override advance_by() once stable
-
-    fn nth(&mut self, n: usize) -> Option<Self::Item> {
-        match self {
-            Slice { iter } => iter.nth(n),
-            Normal { idx, start, step, vals } => {
-                let val = vals.nth(n);
-                if val.is_none() {
-                    return None;
-                }
-                let val = val.unwrap();
-                *idx += n as u64;
-                let ts = *start + *idx as i64 * *step;
-                *idx += 1;
-                Some(TSPoint{ts, val})
-            },
-            GappyNormal { idx, count, start, step, present, vals } => {
-                *idx += n as u64;
-                if idx >= count {
-                    return None;
-                }
-                while present[(*idx/64) as usize] & (1 << (*idx % 64)) == 0 {
-                    *idx += 1;
-                }
-                let ts = *start + *idx as i64 * *step;
-                let val = vals.next().unwrap();  // last entry of gappy series is required to be a value, so this must not return None here
-                *idx += 1;
-                Some(TSPoint{ts, val})
-            },
-        }
-    }
 }

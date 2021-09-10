@@ -90,7 +90,7 @@ impl<'input> InOutFuncs for TimeSeries<'input> {
                 TimeSeries {
                     series: SeriesType::ExplicitSeries {
                         num_points: series.len() as u64,
-                        points: (&*series).into(),
+                        points: series.into(),
                     }
                 }
             }
@@ -192,6 +192,10 @@ impl<'a> TimeSeries<'a> {
         }
     }
 }
+
+pub static TIMESERIES_OID: once_cell::sync::Lazy<pg_sys::Oid> = once_cell::sync::Lazy::new(|| {
+    TimeSeries::type_oid()
+});
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn unnest_series(

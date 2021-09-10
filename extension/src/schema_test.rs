@@ -153,5 +153,10 @@ mod tests {
         "operator |>(toolkit_experimental.timeseries,toolkit_experimental.unstabletimeseriespipelineelement)",
         "operator |>(toolkit_experimental.unstabletimeseriespipeline,toolkit_experimental.unstabletimeseriespipelineelement)",
         "operator |>(toolkit_experimental.unstabletimeseriespipelineelement,toolkit_experimental.unstabletimeseriespipelineelement)",
+        "operator |>>(regproc,regproc)",
+        "operator |>>(regproc,toolkit_experimental.unstabletimeseriespipelineelement)",
+        "operator |>>(toolkit_experimental.timeseries,regproc)",
+        "operator |>>(toolkit_experimental.unstabletimeseriespipeline,regproc)",
+        "operator |>>(toolkit_experimental.unstabletimeseriespipelineelement,regproc)",
     ];
 }

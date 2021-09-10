@@ -54,10 +54,6 @@ macro_rules! pg_type {
             $(#[$attrs])*
             $(#[$enumattrs])*
             #[derive(serde::Serialize, serde::Deserialize)]
-            #[flat_serialize::field_attr(
-                fixed = r##"#[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]"##,
-                variable = r##"#[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize_slice")]"##,
-            )]
             enum $ename $(<$elife>)? {
                 $($enum_def)*
             }
@@ -96,10 +92,6 @@ macro_rules! pg_type_impl {
             flat_serialize_macro::flat_serialize! {
                 $(#[$attrs])*
                 #[derive(serde::Serialize, serde::Deserialize)]
-                #[flat_serialize::field_attr(
-                    fixed = r##"#[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]"##,
-                    variable = r##"#[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize_slice")]"##,
-                )]
                 struct [<$name Data>] $(<$inlife>)? {
                     #[serde(skip, default="crate::serialization::serde_reference_adaptor::default_header")]
                     header: u32,
@@ -126,7 +118,7 @@ macro_rules! pg_type_impl {
                 pub fn to_pg_bytes(&self) -> &'static [u8] {
                     use std::{mem::MaybeUninit, slice};
                     unsafe {
-                        let len = self.len();
+                        let len = self.num_bytes();
                         let memory: *mut MaybeUninit<u8> = pg_sys::palloc0(len).cast();
                         let slice = slice::from_raw_parts_mut(memory, len);
                         let rem = self.fill_slice(slice);
@@ -181,6 +173,13 @@ macro_rules! pg_type_impl {
                 type Target=[<$name Data>] $(<$inlife>)?;
                 fn deref(&self) -> &Self::Target {
                     &self.0
+                }
+            }
+
+            impl<$lifetemplate> ::std::ops::DerefMut for $name <$lifetemplate> {
+                fn deref_mut(&mut self) -> &mut Self::Target {
+                    self.1 = None;
+                    &mut self.0
                 }
             }
 
@@ -250,6 +249,24 @@ macro_rules! flatten {
                 }
             };
             data.flatten()
+        }
+    }
+}
+
+#[macro_export]
+macro_rules! build {
+    ($typ:ident { $($field:ident: $value:expr),* $(,)? }) => {
+        {
+            <$typ>::from(::paste::paste! {
+                [<$typ Data>] {
+                    header: 0,
+                    version: 1,
+                    padding: [0; 3],
+                    $(
+                        $field: $value
+                    ),*
+                }
+            })
         }
     }
 }

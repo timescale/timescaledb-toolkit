@@ -187,14 +187,14 @@ pub enum GapfillMethod {
 
 impl GapfillMethod {
     // Adds the given number of points to the end of a non-empty NormalTimeSeries
-    fn fill_normalized_series_gap(&self, series: &mut NormalTimeSeries, points: i32, post_gap_val: f64) {
-        assert!(!series.values.is_empty());
-        let last_val = *series.values.last().unwrap();
+    pub fn fill_normalized_series_gap(&self, values: &mut Vec<f64>, points: i32, post_gap_val: f64) {
+        assert!(!values.is_empty());
+        let last_val = *values.last().unwrap();
         for i in 1..=points {
             match self {
-                GapfillMethod::LOCF => series.values.push(last_val),
-                GapfillMethod::Linear => series.values.push(last_val + (post_gap_val - last_val) * i as f64 / (points + 1) as f64),
-                GapfillMethod::Nearest => series.values.push(if i <= (points + 1) / 2 {last_val} else {post_gap_val}),
+                GapfillMethod::LOCF => values.push(last_val),
+                GapfillMethod::Linear => values.push(last_val + (post_gap_val - last_val) * i as f64 / (points + 1) as f64),
+                GapfillMethod::Nearest => values.push(if i <= (points + 1) / 2 {last_val} else {post_gap_val}),
             }
         }
     }
@@ -294,7 +294,7 @@ impl ExplicitTimeSeries {
                 let new_val = sum / count as f64;
                 // If we missed any intervals prior to the current one, fill in the gap here
                 if gap_count != 0 {
-                    gapfill_method.fill_normalized_series_gap(&mut result, gap_count, new_val);
+                    gapfill_method.fill_normalized_series_gap(&mut result.values, gap_count, new_val);
                     gap_count = 0;
                 }
                 result.values.push(new_val);
@@ -315,7 +315,7 @@ impl ExplicitTimeSeries {
         assert!(count > 0);
         let new_val = sum / count as f64;
         if gap_count != 0 {
-            gapfill_method.fill_normalized_series_gap(&mut result, gap_count, new_val);
+            gapfill_method.fill_normalized_series_gap(&mut result.values, gap_count, new_val);
         }
         result.values.push(sum / count as f64);
         Ok(result)

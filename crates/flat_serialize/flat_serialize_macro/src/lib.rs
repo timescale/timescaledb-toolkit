@@ -161,6 +161,10 @@ fn flat_serialize_struct(input: FlatSerializeStruct) -> TokenStream2 {
         let try_ref = input.fn_try_ref(lifetime.as_ref());
         let fill_slice = input.fn_fill_slice();
         let len = input.fn_len();
+        let field_names = input.fields.iter().map(|f| &f.ident);
+        let field_names1 = field_names.clone();
+        let make_owned = input.fields.iter().map(|f| f.make_owned());
+        let into_owned = input.fields.iter().map(|f| f.into_owned());
         let fields = input
             .fields
             .iter()
@@ -170,6 +174,11 @@ fn flat_serialize_struct(input: FlatSerializeStruct) -> TokenStream2 {
         });
         let ref_liftime = lifetime_args.clone().unwrap_or_else(|| quote!{ <'a> });
         let rl = lifetime.clone().unwrap_or_else(|| quote!{ 'a });
+        let owned_lifetime = if lifetime_args.is_some() {
+                Some(quote!( <'static> ))
+            } else {
+                None
+            };
 
         let attrs = &*input.attrs;
 
@@ -196,13 +205,26 @@ fn flat_serialize_struct(input: FlatSerializeStruct) -> TokenStream2 {
 
                 // cannot be TRIVIAL_COPY unless the struct is #[repr(C)]
                 const TRIVIAL_COPY: bool = false;
-                type SLICE = flat_serialize::Iterable<#rl, #ident #lifetime_args>;
+                type SLICE = flat_serialize::Slice<#rl, #ident #lifetime_args>;
+                type OWNED = #ident #owned_lifetime;
 
                 #try_ref
 
                 #fill_slice
 
                 #len
+
+                fn make_owned(&mut self) {
+                    let Self { #(#field_names,)* } = self;
+                    #(#make_owned)*
+                }
+
+                fn into_owned(self) -> Self::OWNED {
+                    let Self { #(#field_names1,)* } = self;
+                    Self::OWNED {
+                        #(#into_owned)*
+                    }
+                }
             }
         }
     };
@@ -222,10 +244,37 @@ fn flat_serialize_enum(input: FlatSerializeEnum) -> TokenStream2 {
     let max_provided_alignment = input.fn_max_provided_alignment();
     let min_len = input.fn_min_len();
 
+    let make_owned = input.variants.iter().map(|v| {
+        let variant = &v.body.ident;
+        let fields = v.body.fields.iter().map(|f| &f.ident);
+        let make = v.body.fields.iter().map(|f| f.make_owned());
+        quote! {
+            Self::#variant { #(#fields,)* } => {
+                #(#make)*
+            },
+        }
+    });
+
+    let into_owned = input.variants.iter().map(|v| {
+        let variant = &v.body.ident;
+        let fields = v.body.fields.iter().map(|f| &f.ident);
+        let into = v.body.fields.iter().map(|f| f.into_owned());
+        quote! {
+            Self::#variant { #(#fields,)* } => Self::OWNED::#variant {
+                #(#into)*
+            },
+        }
+    });
+
     let lifetime = input.lifetime.as_ref().map(|lifetime| quote!{ #lifetime });
     let lifetime_args = input.lifetime.as_ref().map(|lifetime| quote!{ <#lifetime> });
     let ref_liftime = lifetime_args.clone().unwrap_or_else(|| quote!{ <'a> });
     let rl = lifetime.clone().unwrap_or_else(|| quote!{ 'a });
+    let owned_lifetime = if lifetime_args.is_some() {
+        Some(quote!( <'static> ))
+    } else {
+        None
+    };
 
     let try_ref = input.fn_try_ref(lifetime.as_ref());
     let fill_slice = input.fn_fill_slice();
@@ -256,13 +305,26 @@ fn flat_serialize_enum(input: FlatSerializeEnum) -> TokenStream2 {
 
             // cannot be TRIVIAL_COPY since the rust enum layout is unspecified
             const TRIVIAL_COPY: bool = false;
-            type SLICE = flat_serialize::Iterable<#rl, #ident #lifetime_args>;
+            type SLICE = flat_serialize::Slice<#rl, #ident #lifetime_args>;
+            type OWNED = #ident #owned_lifetime;
 
             #try_ref
 
             #fill_slice
 
             #len
+
+            fn make_owned(&mut self) {
+                match self {
+                    #(#make_owned)*
+                }
+            }
+
+            fn into_owned(self) -> Self::OWNED {
+                match self {
+                    #(#into_owned)*
+                }
+            }
         }
     }
 }
@@ -613,7 +675,7 @@ impl FlatSerializeEnum {
             #[allow(unused_assignments, unused_variables)]
             unsafe fn fill_slice<'out>(&self, input: &'out mut [std::mem::MaybeUninit<u8>])
             -> &'out mut [std::mem::MaybeUninit<u8>] {
-                let total_len = self.len();
+                let total_len = self.num_bytes();
                 let (mut input, rem) = input.split_at_mut(total_len);
                 match self {
                     #(#bodies),*
@@ -645,7 +707,7 @@ impl FlatSerializeEnum {
         });
         quote! {
             #[allow(unused_assignments, unused_variables)]
-            fn len(&self) -> usize {
+            fn num_bytes(&self) -> usize {
                 match self {
                     #(#bodies)*
                 }
@@ -828,7 +890,7 @@ impl FlatSerializeStruct {
             #[allow(unused_assignments, unused_variables)]
             #[inline(always)]
             unsafe fn fill_slice<'out>(&self, input: &'out mut [std::mem::MaybeUninit<u8>]) -> &'out mut [std::mem::MaybeUninit<u8>] {
-                let total_len = self.len();
+                let total_len = self.num_bytes();
                 let (mut input, rem) = input.split_at_mut(total_len);
                 let #id { #fields } = self;
                 #fill_slice_with
@@ -862,7 +924,7 @@ impl FlatSerializeStruct {
         quote! {
             #[allow(unused_assignments, unused_variables)]
             #[inline(always)]
-            fn len(&self) -> usize {
+            fn num_bytes(&self) -> usize {
                 let #id { #(#field),* } = self;
                 0usize #(+ #size)*
             }
@@ -996,16 +1058,10 @@ impl FlatSerializeField {
         match &self.length_info {
             Some(info @ VariableLenFieldInfo { is_optional: false, .. }) => {
                 let count = info.len_from_bytes();
-                let ty = &info.ty;
-                if parser::has_lifetime(ty) {
-                    return quote_spanned!{ty.span()=>
-                        compile_error!("flattened types are not allowed in variable-length fields")
-                    }
-                }
                 quote! {
                     {
                         let count = (#count) as usize;
-                        let (field, rem) = match <_ as flat_serialize::Slice <'_
+                        let (field, rem) = match <_ as flat_serialize::VariableLen <'_
                         >>::try_ref(input, count) {
                             Ok((f, b)) => (f, b),
                             Err(flat_serialize::WrapErr::InvalidTag(offset)) =>
@@ -1062,7 +1118,7 @@ impl FlatSerializeField {
                 quote! {
                     unsafe {
                         let count = (#count) as usize;
-                        input = <_ as flat_serialize::Slice<'_>>::fill_slice(#ident, count, input);
+                        input = <_ as flat_serialize::VariableLen<'_>>::fill_slice(#ident, count, input);
                     }
                 }
             }
@@ -1152,7 +1208,7 @@ impl FlatSerializeField {
             Some(info @ VariableLenFieldInfo { is_optional: false, .. }) => {
                 let count = info.counter_expr();
                 quote! {
-                    (<_ as flat_serialize::Slice<'_>>::len(#ident, (#count) as usize))
+                    (<_ as flat_serialize::VariableLen<'_>>::num_bytes(#ident, (#count) as usize))
                 }
             }
             Some(info @ VariableLenFieldInfo { is_optional: true, .. }) => {
@@ -1160,7 +1216,7 @@ impl FlatSerializeField {
                 let is_present = info.counter_expr();
                 quote! {
                     (if #is_present {
-                        <#ty as flat_serialize::FlatSerializable>::len(#ident.as_ref().unwrap())
+                        <#ty as flat_serialize::FlatSerializable>::num_bytes(#ident.as_ref().unwrap())
                     } else {
                         0
                     })
@@ -1168,7 +1224,45 @@ impl FlatSerializeField {
             }
             None => {
                 let nominal_ty = self.ty_without_lifetime();
-                quote!( <#nominal_ty as flat_serialize::FlatSerializable>::len(#ident) )
+                quote!( <#nominal_ty as flat_serialize::FlatSerializable>::num_bytes(#ident) )
+            }
+        }
+    }
+
+    fn make_owned(&self) -> TokenStream2 {
+        let ident = self.ident.as_ref().unwrap();
+        match &self.length_info {
+            Some(VariableLenFieldInfo { is_optional: false, .. }) => {
+                quote! { flat_serialize::Slice::make_owned(#ident); }
+            }
+            Some(VariableLenFieldInfo { is_optional: true, .. }) => {
+                let ty = self.ty_without_lifetime();
+                quote! {
+                    #ident.as_mut().map(|v| <#ty as flat_serialize::FlatSerializable>::make_owned(v));
+                }
+            }
+            None => {
+                let nominal_ty = self.ty_without_lifetime();
+                quote!( <#nominal_ty as flat_serialize::FlatSerializable>::make_owned(#ident); )
+            }
+        }
+    }
+
+    fn into_owned(&self) -> TokenStream2 {
+        let ident = self.ident.as_ref().unwrap();
+        match &self.length_info {
+            Some(VariableLenFieldInfo { is_optional: false, .. }) => {
+                quote! { #ident: flat_serialize::Slice::into_owned(#ident), }
+            }
+            Some(VariableLenFieldInfo { is_optional: true, .. }) => {
+                let ty = self.ty_without_lifetime();
+                quote! {
+                    #ident: #ident.map(|v| <#ty as flat_serialize::FlatSerializable>::into_owned(v)),
+                }
+            }
+            None => {
+                let nominal_ty = self.ty_without_lifetime();
+                quote!( #ident: <#nominal_ty as flat_serialize::FlatSerializable>::into_owned(#ident), )
             }
         }
     }
@@ -1276,7 +1370,8 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
                     const REQUIRED_ALIGNMENT: usize = std::mem::align_of::<Self>();
                     const MAX_PROVIDED_ALIGNMENT: Option<usize> = None;
                     const TRIVIAL_COPY: bool = true;
-                    type SLICE = &'i [#name];
+                    type SLICE = flat_serialize::Slice<'i, #name>;
+                    type OWNED = Self;
 
                     #[inline(always)]
                     #[allow(non_upper_case_globals)]
@@ -1311,8 +1406,18 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
                     }
 
                     #[inline(always)]
-                    fn len(&self) -> usize {
+                    fn num_bytes(&self) -> usize {
                         std::mem::size_of::<Self>()
+                    }
+
+                    #[inline(always)]
+                    fn make_owned(&mut self) {
+                        // nop
+                    }
+
+                    #[inline(always)]
+                    fn into_owned(self) -> Self::OWNED {
+                        self
                     }
                 }
             };
@@ -1322,8 +1427,29 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
             compile_error!("FlatSerializable not allowed on unions")
         }.into(),
         syn::Data::Struct(s) => s,
-
     };
+
+    let repr: Vec<_> = input.attrs.iter().flat_map(|attr| {
+        let meta = match attr.parse_meta() {
+            Ok(meta) => meta,
+            _ => return None,
+        };
+        let has_repr = meta.path().get_ident().map_or(false, |id| id == "repr");
+        if !has_repr {
+            return None
+        }
+        attr.parse_args().ok().and_then(|ident: Ident| {
+            if ident == "C" {
+                return Some(ident)
+            }
+            None
+        })
+    }).collect();
+    if repr.len() != 1 {
+        return quote_spanned! {s.struct_token.span()=>
+            compile_error!{"FlatSerializable only allowed on #[repr(C)] structs"}
+        }.into()
+    }
 
     let s = FlatSerializeStruct {
         per_field_attrs: Default::default(),
@@ -1365,13 +1491,24 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
             #min_len
 
             const TRIVIAL_COPY: bool = true;
-            type SLICE = &'a [#ident];
+            type SLICE = flat_serialize::Slice<'a, #ident>;
+            type OWNED = Self;
 
             #try_ref
 
             #fill_slice
 
             #len
+
+            #[inline(always)]
+            fn make_owned(&mut self) {
+                // nop
+            }
+
+            #[inline(always)]
+            fn into_owned(self) -> Self::OWNED {
+                self
+            }
         }
     };
     out.into()

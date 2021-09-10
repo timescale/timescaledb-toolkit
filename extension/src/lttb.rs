@@ -6,9 +6,9 @@ use crate::{
     aggregate_utils::in_aggregate_context, flatten, palloc::Internal,
 };
 
-use time_series::{TSPoint, TimeSeries as InternalTimeSeries};
+use time_series::TSPoint;
 
-use crate::time_series::{TimeSeriesData, SeriesType};
+use crate::time_series::{TimeSeriesData, SeriesType, TimeSeries};
 
 // hack to allow us to qualify names with "toolkit_experimental"
 // so that pgx generates the correct SQL
@@ -16,7 +16,7 @@ mod toolkit_experimental {
 }
 
 pub struct LttbTrans {
-    series: InternalTimeSeries,
+    series: Vec<TSPoint>,
     resolution: usize,
 }
 
@@ -41,13 +41,13 @@ pub fn lttb_trans(
                         error!("resolution must be greater than 2")
                     }
                     LttbTrans {
-                        series: InternalTimeSeries::new_explicit_series(),
+                        series: vec![],
                         resolution: resolution as usize,
                     }.into()
                 },
             };
 
-            state.series.add_point(TSPoint {
+            state.series.push(TSPoint {
                 ts: time,
                 val: val,
             });
@@ -67,14 +67,14 @@ pub fn lttb_final(
                 None => return None,
                 Some(state) => state,
             };
-            state.series.sort();
+            state.series.sort_by_key(|point| point.ts);
             let series = Cow::from(&state.series);
             let downsampled = lttb(&*series, state.resolution);
             flatten!(
                 TimeSeries {
                     series: SeriesType::SortedSeries {
                         num_points: downsampled.len() as u64,
-                        points: &*downsampled,
+                        points: (&*downsampled).into(),
                     }
                 }
             ).into()
@@ -179,7 +179,7 @@ pub fn lttb_ts<'s>(
     data: crate::time_series::toolkit_experimental::TimeSeries<'s>,
     threshold: usize
 )
--> crate::time_series::toolkit_experimental::TimeSeries<'static>
+-> crate::time_series::toolkit_experimental::TimeSeries<'s>
 {
     if !data.is_sorted() {
         panic!("lttb requires sorted timeseries");
@@ -190,8 +190,7 @@ pub fn lttb_ts<'s>(
         return data.in_current_context();  // can we avoid this copy???
     }
 
-    // let mut sampled = Vec::with_capacity(threshold);
-    let mut sampled = InternalTimeSeries::new_explicit_series();
+    let mut sampled = Vec::with_capacity(threshold);
 
     // Bucket size. Leave room for start and end data points.
     let every = ((data.num_points() - 2) as f64) / ((threshold - 2) as f64);
@@ -200,7 +199,7 @@ pub fn lttb_ts<'s>(
     let mut a = 0;
 
     // Always add the first point.
-    sampled.add_point(data.get(a).unwrap());
+    sampled.push(data.get(a).unwrap());
 
     for i in 0..threshold - 2 {
         // Calculate point average for next bucket (containing c).
@@ -250,14 +249,21 @@ pub fn lttb_ts<'s>(
             }
         }
 
-        sampled.add_point(data.get(next_a).unwrap()); // Pick this point from the bucket.
+        sampled.push(data.get(next_a).unwrap()); // Pick this point from the bucket.
         a = next_a; // This a is the next a (chosen b).
     }
 
     // Always add the last point.
-    sampled.add_point(data.get(data.num_points() - 1).unwrap());
+    sampled.push(data.get(data.num_points() - 1).unwrap());
 
-    crate::time_series::toolkit_experimental::TimeSeries::from_internal_time_series(&sampled)
+    crate::build! {
+        TimeSeries {
+            series: SeriesType::SortedSeries {
+                num_points: sampled.len() as _,
+                points: sampled.into(),
+            }
+        }
+    }
 }
 
 #[cfg(any(test, feature = "pg_test"))]

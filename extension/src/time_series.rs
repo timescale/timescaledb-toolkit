@@ -4,24 +4,25 @@ use std::{slice};
 use pgx::*;
 
 use crate::{
-    aggregate_utils::in_aggregate_context, pg_type, flatten, palloc::Internal,
+    aggregate_utils::in_aggregate_context, pg_type, build, flatten, palloc::Internal,
 };
 
 use time_series::{
-    TSPoint, TimeSeries as InternalTimeSeries, 
-    ExplicitTimeSeries, NormalTimeSeries, GappyNormalTimeSeries,
-    GapfillMethod
+    TSPoint,
 };
+
+pub use iter::Iter;
 
 use flat_serialize::*;
 
 mod pipeline;
+mod iter;
 
 #[allow(non_camel_case_types)]
 type bytea = pg_sys::Datum;
 
 pg_type! {
-    #[derive(Debug, Copy)]
+    #[derive(Debug)]
     struct TimeSeries<'input> {
         series: enum SeriesType<'input> {
             type_id: u64,
@@ -58,10 +59,7 @@ impl<'input> InOutFuncs for TimeSeries<'input> {
 
         // TODO remove extra allocation
         // FIXME print timestamps as times, not integers
-        let serializer: Vec<_> = self.to_internal_time_series()
-            .iter()
-            // .map(|point| (point.ts, point.val))
-            .collect();
+        let serializer: Vec<_> = self.iter().collect();
 
         let stringified = serde_json::to_string(&*serializer).unwrap();
         match str_to_db_encoding(&stringified) {
@@ -92,7 +90,7 @@ impl<'input> InOutFuncs for TimeSeries<'input> {
                 TimeSeries {
                     series: SeriesType::ExplicitSeries {
                         num_points: series.len() as u64,
-                        points: &*series,
+                        points: (&*series).into(),
                     }
                 }
             }
@@ -108,47 +106,8 @@ pub mod toolkit_experimental {
 }
 
 impl<'input> TimeSeries<'input> {
-    #[allow(dead_code)]
-    pub fn to_internal_time_series(&self) -> InternalTimeSeries {
-        match self.series {
-            SeriesType::SortedSeries{points, ..} =>
-                InternalTimeSeries::Explicit(
-                    ExplicitTimeSeries {
-                        ordered: true,
-                        points: points.to_vec(),
-                    }
-                ),
-            // This is assumed unordered
-            SeriesType::ExplicitSeries{points, ..} =>
-                    InternalTimeSeries::Explicit(
-                        ExplicitTimeSeries {
-                            ordered: false,
-                            points: points.to_vec(),
-                        }
-                    ),
-            SeriesType::NormalSeries{start_ts, step_interval, values, ..} =>
-                InternalTimeSeries::Normal(
-                    NormalTimeSeries {
-                        start_ts: start_ts,
-                        step_interval: step_interval,
-                        values: values.to_vec(),
-                    }
-                ),
-            SeriesType::GappyNormalSeries{start_ts, step_interval, values, count, present, ..} =>
-                InternalTimeSeries::GappyNormal(
-                    GappyNormalTimeSeries {
-                        start_ts: start_ts,
-                        step_interval: step_interval,
-                        count,
-                        values: values.to_vec(),
-                        present: present.to_vec(),
-                    }
-                ),
-        }
-    }
-
     pub fn num_points(&self) -> usize {
-        match self.series {
+        match &self.series {
             SeriesType::SortedSeries{points, ..} =>
                 points.len(),
             SeriesType::ExplicitSeries{points, ..} =>
@@ -160,74 +119,6 @@ impl<'input> TimeSeries<'input> {
         }
     }
 
-    pub fn from_internal_time_series(series: &InternalTimeSeries) -> TimeSeries<'static> {
-        unsafe {
-            match series {
-                InternalTimeSeries::Explicit(series) => {
-                    if !series.ordered {
-                        flatten!(
-                            TimeSeries {
-                                series: SeriesType::ExplicitSeries {
-                                    num_points: series.points.len() as u64,
-                                    points: &series.points,
-                                }
-                            }
-                        )
-                    } else {
-                        flatten!(
-                            TimeSeries {
-                                series: SeriesType::SortedSeries {
-                                    num_points: series.points.len() as u64,
-                                    points: &series.points,
-                                }
-                            }
-                        )
-                    }
-                },
-                InternalTimeSeries::Normal(series) => {
-                    flatten!(
-                        TimeSeries {
-                            series : SeriesType::NormalSeries {
-                                start_ts: series.start_ts,
-                                step_interval: series.step_interval,
-                                num_vals: series.values.len() as u64,
-                                values: &series.values,
-                            }
-                        }
-                    )
-                },
-                InternalTimeSeries::GappyNormal(series) => {
-                    if series.count == series.values.len() as u64 {
-                        // No gaps, write out as a normal series
-                        flatten!(
-                            TimeSeries {
-                                series : SeriesType::NormalSeries {
-                                    start_ts: series.start_ts,
-                                    step_interval: series.step_interval,
-                                    num_vals: series.values.len() as u64,
-                                    values: &series.values,
-                                }
-                            }
-                        )
-                    } else {
-                        flatten!(
-                            TimeSeries {
-                                series : SeriesType::GappyNormalSeries {
-                                    start_ts: series.start_ts,
-                                    step_interval: series.step_interval,
-                                    num_vals: series.values.len() as u64,
-                                    count: series.count,
-                                    values: &series.values,
-                                    present: &series.present,
-                                }
-                            }
-                        )
-                    }
-                }
-            }
-        }
-    }
-
     // Gets the nth point of a timeseries
     // Differs from normal vector get in that it returns a copy rather than a reference (as the point may have to be constructed)
     pub fn get(&self, index: usize) -> Option<TSPoint> {
@@ -235,14 +126,14 @@ impl<'input> TimeSeries<'input> {
             return None;
         }
 
-        match self.series {
+        match &self.series {
             SeriesType::SortedSeries{points, ..} =>
-                Some(points[index]),
+                Some(points.as_slice()[index]),
             SeriesType::ExplicitSeries{points, ..} =>
-                Some(points[index]),
+                Some(points.as_slice()[index]),
             SeriesType::NormalSeries{start_ts, step_interval, values, ..} =>
-                Some(TSPoint{ts: start_ts + index as i64 * step_interval, val: values[index]}),
-            SeriesType::GappyNormalSeries{..} => 
+                Some(TSPoint{ts: start_ts + index as i64 * step_interval, val: values.as_slice()[index]}),
+            SeriesType::GappyNormalSeries{..} =>
                 panic!("Can not efficient index into the middle of a normalized timeseries with gaps"),
         }
     }
@@ -259,109 +150,80 @@ impl<'input> TimeSeries<'input> {
                 true,
         }
     }
-}
 
-enum TimeSeriesIter<'a> {
-    TSPointSliceWrapper {
-        iter: std::slice::Iter<'a, TSPoint>
-    },
-    NormalSeriesIter {
-        idx: u64,
-        start: i64,
-        step: i64,
-        vals: std::slice::Iter<'a, f64>,
-    },
-    GappyNormalSeriesIter {
-        idx: u64,
-        count: u64,
-        start: i64,
-        step: i64,
-        present: &'a [u64],
-        vals: std::slice::Iter<'a, f64>,
-    },
-}
-
-impl<'a> Iterator for TimeSeriesIter<'a> {
-    type Item = TSPoint;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            TimeSeriesIter::TSPointSliceWrapper{iter} => {
-                match iter.next() {
-                    None => None,
-                    Some(point) => Some(*point)
-                }
-            },
-            TimeSeriesIter::NormalSeriesIter{idx, start, step, vals} => {
-                let val = vals.next();
-                if val.is_none() {
-                    return None;
-                }
-                let val = *val.unwrap();
-                let ts = *start + *idx as i64 * *step;
-                *idx += 1;
-                Some(TSPoint{ts, val})
-            }
-            TimeSeriesIter::GappyNormalSeriesIter{idx, count, start, step, present, vals} => {
-                if idx >= count {
-                    return None;
-                }
-                while present[(*idx/64) as usize] & (1 << (*idx % 64)) == 0 {
-                    *idx += 1;
-                }
-                let ts = *start + *idx as i64 * *step;
-                let val = *vals.next().unwrap();  // last entry of gappy series is required to be a value, so this must not return None here
-                *idx += 1;
-                Some(TSPoint{ts, val})
-            }
-        }
+    fn clone_owned(&self) -> TimeSeries<'static> {
+        TimeSeriesData::clone(&*self).into_owned().into()
     }
 }
 
 impl<'a> TimeSeries<'a> {
-    fn iter(&self) -> TimeSeriesIter<'a> {
-        match self.series {
+    fn iter(&self) -> Iter<'_> {
+        match &self.series {
             SeriesType::SortedSeries{points, ..} =>
-                TimeSeriesIter::TSPointSliceWrapper{iter: points.iter()},
+                Iter::Slice{iter: points.iter()},
             SeriesType::ExplicitSeries{points, ..} =>
-                TimeSeriesIter::TSPointSliceWrapper{iter: points.iter()},
+                Iter::Slice{iter: points.iter()},
             SeriesType::NormalSeries{start_ts, step_interval, values, ..} =>
-                TimeSeriesIter::NormalSeriesIter{idx: 0, start: start_ts, step: step_interval, vals: values.iter()},
+                Iter::Normal{idx: 0, start: *start_ts, step: *step_interval, vals: values.iter()},
             SeriesType::GappyNormalSeries{count, start_ts, step_interval, present, values, ..} =>
-                TimeSeriesIter::GappyNormalSeriesIter{idx: 0, count, start: start_ts, step: step_interval, present, vals: values.iter()},
+                Iter::GappyNormal{idx: 0, count: *count, start: *start_ts, step: *step_interval, present: present.as_slice(), vals: values.iter()},
+        }
+    }
+
+    fn into_iter(self) -> Iter<'a> {
+        match self.0.series {
+            SeriesType::SortedSeries{points, ..} =>
+                Iter::Slice{iter: points.into_iter()},
+            SeriesType::ExplicitSeries{points, ..} =>
+                Iter::Slice{iter: points.into_iter()},
+            SeriesType::NormalSeries{start_ts, step_interval, values, ..} =>
+                Iter::Normal{idx: 0, start: start_ts, step: step_interval, vals: values.into_iter()},
+            SeriesType::GappyNormalSeries{count, start_ts, step_interval, present, values, ..} =>
+                Iter::GappyNormal{idx: 0, count: count, start: start_ts, step: step_interval, present: present.slice(), vals: values.into_iter()},
+        }
+    }
+
+    fn num_vals(&self) -> usize {
+        match &self.series {
+            SeriesType::SortedSeries { num_points, .. } => *num_points as _,
+            SeriesType::NormalSeries { num_vals, .. } => *num_vals as _,
+            SeriesType::ExplicitSeries { num_points, ..} => *num_points as _,
+            SeriesType::GappyNormalSeries { num_vals, .. } => *num_vals as _,
         }
     }
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn unnest_series(
-    series: toolkit_experimental::TimeSeries,
+    series: toolkit_experimental::TimeSeries<'_>,
 ) -> impl std::iter::Iterator<Item = (name!(time,pg_sys::TimestampTz),name!(value,f64))> + '_ {
-    Box::new(series.iter().map(|points| (points.ts, points.val)))
+    series.into_iter().map(|points| (points.ts, points.val))
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn timeseries_serialize(
-    state: Internal<InternalTimeSeries>,
+    state: Internal<TimeSeries<'_>>,
 ) -> bytea {
-    crate::do_serialize!(state)
+    let series = &state.series;
+    crate::do_serialize!(series)
 }
 
 #[pg_extern(schema = "toolkit_experimental",strict, immutable, parallel_safe)]
 pub fn timeseries_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
-) -> Internal<InternalTimeSeries> {
-    crate::do_deserialize!(bytes, InternalTimeSeries)
+) -> Internal<TimeSeries<'static>> {
+    let data: TimeSeries<'static> = crate::do_deserialize!(bytes, TimeSeriesData);
+    data.into()
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn timeseries_trans(
-    state: Option<Internal<InternalTimeSeries>>,
+    state: Option<Internal<TimeSeries<'_>>>,
     time: Option<pg_sys::TimestampTz>,
     value: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<InternalTimeSeries>> {
+) -> Option<Internal<TimeSeries<'_>>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let time = match time {
@@ -373,56 +235,222 @@ pub fn timeseries_trans(
                 Some(value) => value,
             };
             let mut state = match state {
-                None => InternalTimeSeries::new_explicit_series().into(),
+                None => Internal::from(build!{
+                    TimeSeries {
+                        series: SeriesType::SortedSeries{
+                            num_points: 0,
+                            points: vec![].into(),
+                        }
+                    }
+                }),
                 Some(state) => state,
             };
-            state.add_point(TSPoint{ts: time, val:value});
+            match &mut state.series {
+                SeriesType::ExplicitSeries { num_points, points } => {
+                    points.as_owned().push(TSPoint{ts: time, val:value});
+                    *num_points = points.len() as _;
+                },
+                SeriesType::SortedSeries { num_points, points } => {
+                    points.as_owned().push(TSPoint{ts: time, val:value});
+                    *num_points = points.len() as _;
+                    if let Some(slice) = points.as_slice().windows(2).last() {
+                        if slice[0].ts > slice[1].ts {
+                            let points = std::mem::replace(points, vec![].into());
+                            *state = build!{
+                                TimeSeries {
+                                    series: SeriesType::ExplicitSeries{
+                                        num_points: points.len() as _,
+                                        points: points,
+                                    }
+                                }
+                            };
+                        }
+                    }
+                },
+                _ => unreachable!(),
+            }
             Some(state)
         })
     }
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn timeseries_compound_trans(
-    state: Option<Internal<InternalTimeSeries>>,
-    series: Option<crate::time_series::toolkit_experimental::TimeSeries<'static>>,
+pub fn timeseries_compound_trans<'b>(
+    state: Option<Internal<TimeSeries<'static>>>,
+    series: Option<toolkit_experimental::TimeSeries<'b>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<InternalTimeSeries>> {
+) -> Option<Internal<TimeSeries<'static>>> {
+    use SeriesType::{SortedSeries, ExplicitSeries};
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state, series) {
                 (None, None) => None,
-                (None, Some(series)) => Some(series.to_internal_time_series().into()),
-                (Some(state), None) => Some(state.clone().into()),
-                (Some(state), Some(series)) =>
-                    Some(InternalTimeSeries::combine(&state, &series.to_internal_time_series()).into())
+                (Some(state), None) => Some(state),
+                (None, Some(series)) => Some(series.clone_owned().into()),
+                (Some(mut state), Some(series)) =>
+                    match &mut state.series {
+                        ExplicitSeries { num_points, points } => {
+                            points.as_owned().extend(series.iter());
+                            *num_points = points.len() as _;
+                            Some(state)
+                        },
+                        SortedSeries { num_points, points } => {
+                            if let SortedSeries { points: other_points, ..} = &series.series {
+                                let is_ordered = || {
+                                    let second = other_points.slice().get(0)?;
+                                    let first = points.slice().last()?;
+                                    Some(second.ts >= first.ts)
+                                };
+                                if is_ordered().unwrap_or(true) {
+                                    points.as_owned().extend_from_slice(other_points.slice());
+                                    *num_points = points.len() as _;
+                                    return Some(state)
+                                }
+                            }
+                            points.as_owned().extend(series.iter());
+                            let points = std::mem::replace(points, vec![].into());
+                            *state = build!{
+                                TimeSeries {
+                                    series: SeriesType::ExplicitSeries{
+                                        num_points: points.len() as _,
+                                        points: points,
+                                    }
+                                }
+                            };
+                            Some(state)
+                        },
+                        _ => unreachable!(),
+
+                    }
             }
         })
     }
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn timeseries_combine (
-    state1: Option<Internal<InternalTimeSeries>>,
-    state2: Option<Internal<InternalTimeSeries>>,
+pub fn timeseries_combine<'a, 'b> (
+    state1: Option<Internal<TimeSeries<'a>>>,
+    state2: Option<Internal<TimeSeries<'b>>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<InternalTimeSeries>> {
+) -> Option<Internal<TimeSeries<'static>>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state1, state2) {
                 (None, None) => None,
-                (None, Some(state2)) => Some(state2.clone().into()),
-                (Some(state1), None) => Some(state1.clone().into()),
+                (None, Some(state2)) => Some(state2.clone_owned().into()),
+                (Some(state1), None) => Some(state1.clone_owned().into()),
                 (Some(state1), Some(state2)) =>
-                    Some(InternalTimeSeries::combine(&state1, &state2).into())
+                    Some(combine(state1.clone(), state2.clone()).into())
             }
         })
     }
 }
 
+pub fn combine(first: TimeSeries<'_>, second: TimeSeries<'_>) -> TimeSeries<'static> {
+    use SeriesType::*;
+    if first.num_vals() == 0 {
+        return second.clone_owned();
+    }
+    if second.num_vals() == 0 {
+        return first.clone_owned();
+    }
+
+    // If two explicit series are sorted and disjoint, return a sorted explicit series
+    if let (
+        SortedSeries{ num_points: _, points: first_points },
+        SortedSeries{ num_points: _, points: second_points }) = (&first.series, &second.series) {
+        if first_points.slice().last().unwrap().ts <= second_points.slice()[0].ts {
+            let mut new_points = first_points.clone().into_owned();
+            new_points.as_owned().extend(second_points.iter());
+            return build! { TimeSeries {
+                series: SortedSeries {
+                    num_points: new_points.len() as _,
+                    points: new_points.into(),
+                }
+            }}
+        }
+
+        if second_points.slice().last().unwrap().ts < first_points.slice()[0].ts {
+            let mut new_points = second_points.clone().into_owned();
+            new_points.as_owned().extend(first_points.iter());
+            return build! { TimeSeries {
+                series: SortedSeries {
+                    num_points: new_points.len() as _,
+                    points: new_points.into(),
+                }
+            }}
+        }
+    };
+
+    // If the series are adjacent normal series, combine them into a larger normal series
+    let mut ordered = false;
+    if let (
+        NormalSeries {
+            start_ts: start_ts_1,
+            step_interval: step_interval_1,
+            num_vals: _,
+            values: values_1
+        },
+        NormalSeries {
+            start_ts: start_ts_2,
+            step_interval: step_interval_2,
+            num_vals: _,
+            values: values_2
+        }
+    ) = (&first.series, &second.series) {
+        if step_interval_1 == step_interval_2 {
+            if *start_ts_2 == start_ts_1 + values_1.len() as i64 * step_interval_1 {
+                let mut new_values = values_1.clone().into_owned();
+                new_values.as_owned().extend(values_2.iter());
+                return build!{ TimeSeries {
+                    series: NormalSeries {
+                        start_ts: *start_ts_1,
+                        step_interval: *step_interval_1,
+                        num_vals: new_values.len() as _,
+                        values: new_values.into(),
+                    }
+                }};
+            }
+
+            if *start_ts_1 == start_ts_2 + values_2.len() as i64 * step_interval_2 {
+                let mut new_values = values_2.clone().into_owned();
+                new_values.as_owned().extend(values_1.iter());
+                return build!{ TimeSeries {
+                    series: NormalSeries {
+                        start_ts: *start_ts_2,
+                        step_interval: *step_interval_2,
+                        num_vals: new_values.len() as _,
+                        values: new_values.into(),
+                    }
+                }};
+            }
+        }
+
+        ordered = start_ts_1 + (values_1.len() - 1) as i64 * step_interval_1 < *start_ts_2
+    };
+
+    // In all other cases, just return a new explicit series containing all the points from both series
+    let points: Vec<_> = first.iter().chain(second.iter()).collect();
+    if ordered {
+        build!{ TimeSeries {
+            series: SortedSeries {
+                num_points: points.len() as _,
+                points: points.into(),
+            }
+        }}
+    } else {
+        build!{ TimeSeries {
+            series: ExplicitSeries {
+                num_points: points.len() as _,
+                points: points.into(),
+            }
+        }}
+    }
+}
+
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn timeseries_final(
-    state: Option<Internal<InternalTimeSeries>>,
+pub fn timeseries_final<'a>(
+    state: Option<Internal<TimeSeries<'a>>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<crate::time_series::toolkit_experimental::TimeSeries<'static>> {
     unsafe {
@@ -431,7 +459,7 @@ pub fn timeseries_final(
                 None => return None,
                 Some(state) => state,
             };
-            TimeSeries::from_internal_time_series(&state).into()
+            Some(state.in_current_context())
         })
     }
 }
@@ -461,188 +489,3 @@ CREATE AGGREGATE toolkit_experimental.rollup(
     parallel = safe
 );
 "#);
-
-type Interval = pg_sys::Datum;
-
-#[pg_extern(schema = "toolkit_experimental", name="normalize", immutable, parallel_safe)]
-pub fn normalize_default_range (
-    series: crate::time_series::toolkit_experimental::TimeSeries<'static>,
-    interval: Interval,
-    method: String,
-    truncate: Option<bool>,
-    _fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_series::toolkit_experimental::TimeSeries<'static>> {
-    normalize(series, interval, method, truncate, None, None, _fcinfo)
-}
-
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn normalize (
-    series: crate::time_series::toolkit_experimental::TimeSeries<'static>,
-    interval: Interval,
-    method: String,
-    truncate: Option<bool>,
-    range_start: Option<pg_sys::TimestampTz>,
-    range_end: Option<pg_sys::TimestampTz>,
-    _fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_series::toolkit_experimental::TimeSeries<'static>> {
-    unsafe {
-        let interval = interval as *const pg_sys::Interval;
-        if (*interval).day > 0 || (*interval).month > 0 {
-            panic!("Normalization intervals are currently restricted to stable units (hours or smaller)");
-        }
-        let interval = (*interval).time;
-        let method = match method.to_ascii_lowercase().as_str() {
-            "locf" => GapfillMethod::LOCF,
-            "nearest" => GapfillMethod::Nearest,
-            "interpolate" => GapfillMethod::Linear,
-            _ => panic!("Unknown normalization method: {} - valid methods are locf, nearest, or interpolate", method)
-        };
-        let truncate = match truncate {
-            Some(x) => x,
-            None => true,
-        };
-        if series.len() < 2 {
-            panic!("Need at least two points to normalize a timeseries")
-        }
-
-        // TODO: if series is sorted we should be able to do this without a copy
-        let mut series = series.to_internal_time_series();
-        series.sort();
-
-        let align = if truncate {interval} else {1};
-        let start = match range_start {
-            Some(t) => t,
-            None => series.first().unwrap().ts,
-        } / align * align;
-
-        let end = match range_end {
-            Some(t) => t,
-            None => series.last().unwrap().ts,
-        } / align * align;
-
-        let mut iter = series.iter().peekable();
-        let mut first = iter.next().unwrap();
-        let mut second = iter.next().unwrap();
-
-        while second.ts < start && iter.peek().is_some() {
-            first = second;
-            second = iter.next().unwrap();
-        }
-
-
-        // TODO: should be able to create new TimeSeries in place
-        let mut result =
-            InternalTimeSeries::new_normal_series(
-                if start < first.ts {
-                    method.predict_left(start, first, Some(second))
-                } else if start == first.ts {
-                    first
-                } else if start < second.ts {
-                    method.gapfill(start, first, second)
-                } else {
-                    method.predict_right(start, second, Some(first))
-                }, interval);
-
-        let mut next = start + interval;
-
-        while next < first.ts {
-            result.add_point(method.predict_left(next, first, Some(second)));
-            next += interval;
-        }
-
-        let mut left = first;
-        let mut right = second;
-
-        while next <= end {
-            if next == left.ts {
-                result.add_point(left);
-                next += interval;
-            }
-            while next < right.ts && next <= end {
-                result.add_point(method.gapfill(next, left, right));
-                next += interval;
-            }
-            if iter.peek().is_some() {
-                left = right;
-                right = iter.next().unwrap();
-            } else {
-                while next <= end {
-                    // This will still behave correctly if next == right.ts
-                    result.add_point(method.predict_right(next, right, Some(left)));
-                    next += interval;
-                }
-            }
-        }
-
-        Some(TimeSeries::from_internal_time_series(&result))
-    }
-}
-
-
-#[cfg(any(test, feature = "pg_test"))]
-mod tests {
-    use pgx::*;
-
-    #[pg_test]
-    fn test_normalization_gapfill() {
-        Spi::execute(|client| {
-            client.select("CREATE TABLE test(time TIMESTAMPTZ, value DOUBLE PRECISION);", None, None);
-            client.select(
-                "INSERT INTO test
-                SELECT '2020-01-01 0:02 UTC'::timestamptz + '10 minutes'::interval * i, 10.0 * i
-                FROM generate_series(0,6) as i", None, None);
-
-            client.select("set timescaledb_toolkit_acknowledge_auto_drop to 'true'", None, None);
-            client.select("CREATE VIEW series AS SELECT toolkit_experimental.timeseries(time, value) FROM test;", None, None);
-
-            // LOCF
-            let results = client.select(
-                "SELECT value
-                FROM toolkit_experimental.unnest_series(
-                    (SELECT toolkit_experimental.normalize(timeseries, '10 min', 'locf', true)
-                     FROM series)
-                );", None, None);
-
-            let expected = vec![0.0, 0.0, 10.0, 20.0, 30.0, 40.0, 50.0];
-
-            assert_eq!(results.len(), expected.len());
-
-            for (e, r) in expected.iter().zip(results) {
-                assert_eq!(r.by_ordinal(1).unwrap().value::<f64>().unwrap(), *e);
-            }
-
-            // Interpolate
-            let results = client.select(
-                "SELECT value
-                FROM toolkit_experimental.unnest_series(
-                    (SELECT toolkit_experimental.normalize(timeseries, '10 min', 'interpolate', true)
-                     FROM series)
-                );", None, None);
-
-            let expected = vec![-2.0, 8.0, 18.0, 28.0, 38.0, 48.0, 58.0];
-
-            assert_eq!(results.len(), expected.len());
-
-            for (e, r) in expected.iter().zip(results) {
-                assert_eq!(r.by_ordinal(1).unwrap().value::<f64>().unwrap(), *e);
-            }
-
-            // Nearest
-            let results = client.select(
-                "SELECT value
-                FROM toolkit_experimental.unnest_series(
-                    (SELECT toolkit_experimental.normalize(timeseries, '10 min', 'nearest', true)
-                     FROM series)
-                );", None, None);
-
-            let expected = vec![0.0, 10.0, 20.0, 30.0, 40.0, 50.0, 60.0];
-
-            assert_eq!(results.len(), expected.len());
-
-            for (e, r) in expected.iter().zip(results) {
-                assert_eq!(r.by_ordinal(1).unwrap().value::<f64>().unwrap(), *e);
-            }
-
-        })
-    }
-}

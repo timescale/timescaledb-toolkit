@@ -7,9 +7,9 @@ use crate::{
     aggregate_utils::in_aggregate_context, palloc::Internal,
 };
 
-use time_series::{TSPoint, TimeSeries as InternalTimeSeries, ExplicitTimeSeries, NormalTimeSeries, GapfillMethod, TimeSeriesError};
+use time_series::{TSPoint, GapfillMethod};
 
-use crate::time_series::TimeSeries;
+use crate::time_series::{TimeSeries, TimeSeriesData, SeriesType};
 
 // This is included for debug purposes and probably should not leave experimental
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
@@ -27,7 +27,8 @@ mod toolkit_experimental {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ASAPTransState {
-    ts: InternalTimeSeries,
+    ts: Vec<TSPoint>,
+    sorted: bool,
     resolution: i32,
 }
 
@@ -50,18 +51,14 @@ pub fn asap_trans(
             match state {
                 None => {
                     Some(ASAPTransState {
-                            ts: InternalTimeSeries::Explicit(
-                                ExplicitTimeSeries {
-                                    ordered: true,
-                                    points: vec![p],
-                                },
-                            ),
-                            resolution
+                            ts: vec![p],
+                            sorted: true,
+                            resolution,
                         }.into()
                     )
                 }
                 Some(mut s) => {
-                    s.ts.add_point(p);
+                    s.add_point(p);
                     Some(s)
                 }
             }
@@ -69,19 +66,30 @@ pub fn asap_trans(
     }
 }
 
-fn find_downsample_interval(series: &ExplicitTimeSeries, resolution: i64) -> i64 {
-    assert!(series.ordered);
+impl ASAPTransState {
+    fn add_point(&mut self, point: TSPoint) {
+        self.ts.push(point);
+        if let Some(window) = self.ts.windows(2).last() {
+            if window[0].ts > window[1].ts {
+                self.sorted = false
+            }
+        }
+    }
+}
+
+fn find_downsample_interval(points: &[TSPoint], resolution: i64) -> i64 {
+    // debug_assert!(points.is_sorted_by_key(|p| p.ts));
 
     // First candidate is simply the total range divided into even size buckets
-    let candidate = (series.points.last().unwrap().ts - series.points.first().unwrap().ts) / resolution;
+    let candidate = (points.last().unwrap().ts - points.first().unwrap().ts) / resolution;
 
     // Problem with this approach is ASAP appears to deliver much rougher graphs if buckets
     // don't contain an equal number of points.  We try to adjust for this by truncating the
     // downsample_interval to a multiple of the average delta, unfortunately this is very
     // susceptible to gaps in the data.  So instead of the average delta, we use the median.
-    let mut diffs = vec!(0; (series.points.len() - 1) as usize);
-    for i in 1..series.points.len() as usize {
-        diffs[i-1] = series.points[i].ts - series.points[i-1].ts;
+    let mut diffs = vec![0; (points.len() - 1) as usize];
+    for i in 1..points.len() as usize {
+        diffs[i-1] = points[i].ts - points[i-1].ts;
     }
     diffs.sort();
     let median = diffs[diffs.len() / 2];
@@ -100,81 +108,146 @@ fn asap_final(
                 Some(state) => state.clone(),
             };
 
-            if let InternalTimeSeries::Explicit(mut series) = state.ts {
-                series.sort();
-
-                // In following the ASAP reference implementation, we only downsample if the number
-                // of points is at least twice the resolution.  Otherwise we keep the number of
-                // points, but still normalize them to equal sized buckets.
-                let normal = if series.points.len() >= 2 * state.resolution as usize {
-                    let downsample_interval = find_downsample_interval(&series, state.resolution as i64);
-                    series.downsample_and_gapfill_to_normal_form(downsample_interval, GapfillMethod::Linear)
-                } else {
-                    series.downsample_and_gapfill_to_normal_form((series.points.last().unwrap().ts - series.points.first().unwrap().ts) / series.points.len() as i64, GapfillMethod::Linear)
-                };
-                let mut normal = match normal {
-                    Ok(series) => series,
-                    Err(TimeSeriesError::InsufficientDataToExtrapolate) => panic!("Not enough data to generate a smoothed representation"),
-                    Err(_) => unreachable!()
-                };
-
-                // Drop the last value to match the reference implementation
-                normal.values.pop();
-
-                let mut result = NormalTimeSeries {start_ts: normal.start_ts,
-                    step_interval: 0,
-                    values: asap_smooth(&normal.values, state.resolution as u32)
-                };
-
-                // Set the step interval for the asap result so that it covers the same interval
-                // as the passed in data
-                result.step_interval = normal.step_interval * normal.values.len() as i64 / result.values.len() as i64;
-                TimeSeries::from_internal_time_series(&InternalTimeSeries::Normal(result)).into()
-            } else {
-                panic!("Unexpected timeseries format encountered");
+            let mut points = state.ts;
+            if !state.sorted {
+                points.sort_by_key(|p| p.ts);
             }
+            // In following the ASAP reference implementation, we only downsample if the number
+            // of points is at least twice the resolution.  Otherwise we keep the number of
+            // points, but still normalize them to equal sized buckets.
+            let downsample_interval;
+            let mut normal = if points.len() >= 2 * state.resolution as usize {
+                downsample_interval = find_downsample_interval(&points, state.resolution as i64);
+                downsample_and_gapfill_to_normal_form(&points, downsample_interval, GapfillMethod::Linear)
+            } else {
+                downsample_interval = (points.last().unwrap().ts - points.first().unwrap().ts)
+                    / points.len() as i64;
+                downsample_and_gapfill_to_normal_form(&points, downsample_interval, GapfillMethod::Linear)
+            };
+            let start_ts = points.first().unwrap().ts;
+
+            // Drop the last value to match the reference implementation
+            normal.pop();
+            let values = asap_smooth(&normal, state.resolution as u32);
+
+            Some(crate::build! {
+                TimeSeries {
+                    series: SeriesType::NormalSeries {
+                        start_ts: start_ts,
+                        // Set the step interval for the asap result so that it covers the same interval
+                        // as the passed in data
+                        step_interval: downsample_interval * normal.len() as i64 / values.len() as i64,
+                        num_vals: values.len() as _,
+                        values: values.into(),
+                    }
+                }
+            })
         })
     }
 }
 
 #[pg_extern(name="asap_smooth", schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn asap_on_timeseries(
-    series: crate::time_series::toolkit_experimental::TimeSeries<'static>,
+    mut series: crate::time_series::toolkit_experimental::TimeSeries<'static>,
     resolution: i32
 ) -> Option<crate::time_series::toolkit_experimental::TimeSeries<'static>> {
     // TODO: implement this using zero copy (requires sort, find_downsample_interval, and downsample_and_gapfill on TimeSeries)
-    let series = series.to_internal_time_series();
-    let mut normal = match series {
-        InternalTimeSeries::Explicit(mut explicit) => {
-            explicit.sort();
-            let normal = if explicit.points.len() >= 2 * resolution as usize {
-                let downsample_interval = find_downsample_interval(&explicit, resolution as i64);
-                explicit.downsample_and_gapfill_to_normal_form(downsample_interval, GapfillMethod::Linear)
-            } else {
-                explicit.downsample_and_gapfill_to_normal_form((explicit.points.last().unwrap().ts - explicit.points.first().unwrap().ts) / explicit.points.len() as i64, GapfillMethod::Linear)
-            };
-            match normal {
-                Ok(series) => series,
-                Err(TimeSeriesError::InsufficientDataToExtrapolate) => panic!("Not enough data to generate a smoothed representation"),
-                Err(_) => unreachable!()
+    let needs_sort = matches!(&series.series, SeriesType::ExplicitSeries{..});
+    let start_ts;
+    let downsample_interval;
+    let mut normal = match &mut series.series {
+        SeriesType::ExplicitSeries { points, .. } | SeriesType::SortedSeries { points, .. }
+        => {
+            if needs_sort {
+                points.as_owned().sort_by_key(|p| p.ts);
             }
+            // TODO points.make_slice()?
+            let normal = if points.len() >= 2 * resolution as usize {
+                downsample_interval = find_downsample_interval(points.as_slice(), resolution as i64);
+                downsample_and_gapfill_to_normal_form(points.as_slice(), downsample_interval, GapfillMethod::Linear)
+            } else {
+                downsample_interval = (points.as_slice().last().unwrap().ts - points.as_slice().first().unwrap().ts) / points.len() as i64;
+                downsample_and_gapfill_to_normal_form(points.as_slice(), downsample_interval, GapfillMethod::Linear)
+            };
+            start_ts = points.as_slice().first().unwrap().ts;
+            normal
         },
-        InternalTimeSeries::Normal(normal) => normal,
-        InternalTimeSeries::GappyNormal(_) => panic!("Series must be gapfilled before running asap smoothing"),
+        SeriesType::NormalSeries { start_ts: start, step_interval, values, .. } => {
+            start_ts = *start;
+            downsample_interval = *step_interval;
+            values.clone().into_vec()
+        },
+        SeriesType::GappyNormalSeries { .. } =>
+            panic!("Series must be gapfilled before running asap smoothing"),
     };
 
     // Drop the last value to match the reference implementation
-    normal.values.pop();
+    normal.pop();
 
-    let mut result = NormalTimeSeries {start_ts: normal.start_ts,
-        step_interval: 0,
-        values: asap_smooth(&normal.values, resolution as u32)
-    };
+    let result = asap_smooth(&normal, resolution as u32);
 
-    // Set the step interval for the asap result so that it covers the same interval
-    // as the passed in data
-    result.step_interval = normal.step_interval * normal.values.len() as i64 / result.values.len() as i64;
-    TimeSeries::from_internal_time_series(&InternalTimeSeries::Normal(result)).into()
+    Some(crate::build! {
+        TimeSeries {
+            series: SeriesType::NormalSeries {
+                start_ts: start_ts,
+                // Set the step interval for the asap result so that it covers the same interval
+                // as the passed in data
+                step_interval: downsample_interval * normal.len() as i64 / result.len() as i64,
+                num_vals: result.len() as _,
+                values: result.into(),
+            }
+        }
+    })
+}
+
+fn downsample_and_gapfill_to_normal_form(
+    points: &[TSPoint],
+    downsample_interval: i64,
+    gapfill_method: GapfillMethod
+) -> Vec<f64> {
+    if points.len() < 2 || points.last().unwrap().ts - points.first().unwrap().ts < downsample_interval {
+        panic!("Not enough data to generate a smoothed representation")
+    }
+    //TODO can we right-size?
+    let mut values = vec![];
+    let mut bound = points.first().unwrap().ts + downsample_interval;
+    let mut sum = 0.0;
+    let mut count = 0;
+    let mut gap_count = 0;
+    for pt in points.iter() {
+        if pt.ts < bound {
+            sum += pt.val;
+            count += 1;
+        } else {
+            assert!(count != 0);
+            let new_val = sum / count as f64;
+            // If we missed any intervals prior to the current one, fill in the gap here
+            if gap_count != 0 {
+                gapfill_method.fill_normalized_series_gap(&mut values, gap_count, new_val);
+                gap_count = 0;
+            }
+            values.push(new_val);
+            sum = pt.val;
+            count = 1;
+            bound += downsample_interval;
+            // If the current point doesn't go in the bucket immediately following the one
+            // we just created, update the bound until we find the correct bucket and track
+            // the number of empty buckets we skip over
+            while bound < pt.ts {
+                bound += downsample_interval;
+                gap_count += 1;
+            }
+        }
+    }
+    // This will handle the last interval, since we always exit the above loop in the middle
+    // of accumulating an interval
+    assert!(count > 0);
+    let new_val = sum / count as f64;
+    if gap_count != 0 {
+        gapfill_method.fill_normalized_series_gap(&mut values, gap_count, new_val);
+    }
+    values.push(sum / count as f64);
+    values
 }
 
 // Aggregate on only values (assumes aggregation over ordered normalized timestamp)

@@ -38,7 +38,6 @@ paste = "1.0"
 rand = { version = "0.8.3", features = ["getrandom", "small_rng"] }
 rand_distr = "0.4.0"
 rand_chacha = "0.3.0"
-itertools = "0.10.1"
 
 [dev-dependencies]
 pgx-tests = {git="https://github.com/JLockerman/pgx.git", branch="timescale2"}

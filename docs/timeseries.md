@@ -73,31 +73,6 @@ toolkit_experimental.unnest_series((SELECT toolkit_experimental.lttb(timeseries,
 2020-01-28 23:50:00+00 |  956.29
 ```
 
-```SQL
-SELECT time, value::numeric(10,2) FROM
-toolkit_experimental.unnest_series((SELECT toolkit_experimental.normalize(timeseries, '20 sec', 'interpolate', true, '2020-01-20 16:00:00 UTC', '2020-01-20 16:05:00 UTC') FROM series));
-```
-```output
-          time          |       value
-------------------------+--------------------
-2020-01-20 16:00:00+00 |  944.75
-2020-01-20 16:00:20+00 |  953.37
-2020-01-20 16:00:40+00 |  961.99
-2020-01-20 16:01:00+00 |  970.61
-2020-01-20 16:01:20+00 |  979.23
-2020-01-20 16:01:40+00 |  987.85
-2020-01-20 16:02:00+00 |  996.47
-2020-01-20 16:02:20+00 | 1005.09
-2020-01-20 16:02:40+00 | 1013.71
-2020-01-20 16:03:00+00 | 1022.33
-2020-01-20 16:03:20+00 | 1030.95
-2020-01-20 16:03:40+00 | 1039.57
-2020-01-20 16:04:00+00 | 1048.19
-2020-01-20 16:04:20+00 | 1056.81
-2020-01-20 16:04:40+00 | 1065.43
-2020-01-20 16:05:00+00 | 1074.05
-```
-
 
 ## Command List (A-Z) <a id="timeseries-api"></a>
 Aggregate Functions
@@ -233,70 +208,4 @@ LIMIT 10;
  ("2020-01-01 01:10:00+00",1102.3464544566375)
  ("2020-01-01 01:20:00+00",952.9509636893868)
  ("2020-01-01 01:30:00+00",1031.9006507123047)
-```
-
----
-
-## **normalize** <a id="timeseries_normalize"></a>
-
-```SQL ,ignore
-normalize(
-    series timeseries,
-    interval interval,
-    method text,
-    truncate boolean,
-    range_start timestamptz,
-    range_end timestamptz
-) RETURNS timeseries
-```
-
-This function will create a new timeseries of uniformly spaced (in time) time, value pairs from an existing timeseries.  Any points in the resulting timeseries that don't exactly match a time from the input series will have their value computed based on the provided method.  The valid values for method are:
-
-|Method type| How value is computed |
-|---|---|
-| `"locf"` | The value will match the value from the last point from the input series prior to the new point's time.  If prior to the first point of the input the value will match the first point |
-| `"nearest"` | The value will match the value of the point from the input series with the closest time to the new point's time.  In case of a tie, the earlier value is used. |
-| `"interpolate"` | The value will be the weighted average of the points immediately left and right of the target time.  If outside the range of the input series, the line from the first or last two points will be exteneded to find the new value |
-
-### Required Arguments <a id="timeseries_normalize-required-arguments"></a>
-|Name|Type|Description|
-|---|---|---|
-| `series` | `timeseries` | The series to return the data from. |
-| `interval` | `interval` | How far apart the points in the new timeseries will be.  Note that this has to be a stable interval, so `days` and higher units of time are not accepted |
-| `method` | `text` | How points not found in the input series will be calculated.  Must match a string from the above table |
-| `truncate` | If true, times of all returned points will be a multiple of interval.  Otherwise, will simply be an interval offset from `range_start` if present, first point of `series` if not |
-| `range_start` | `timestamptz` | Time of the first point of the new series.  If this is omitted or NULL, this will default to the time of the first point of `series` |
-| `range_end` | `timestamptz` | Upper bound of the time of the last point of the new series.  Defaults to the last time point from `series` if null or missing |
-<br>
-
-### Returns
-|Column|Type|Description|
-|---|---|---|
-| `normalize` | `timeseries` | A timeseries of evenly spaced points matching the (possibly truncated) provided range or timespan of `series` |
-<br>
-
-### Sample Usage <a id="timeseries_normalize-examples"></a>
-
-```SQL
-SELECT time, value
-FROM toolkit_experimental.unnest_series(
-    (SELECT toolkit_experimental.normalize(series.timeseries, '10 min', 'nearest', true, '2020-01-20 2:00:00 UTC', '2020-01-20 3:00:00 UTC')
-    FROM
-        (SELECT toolkit_experimental.timeseries(a.time, a.value)
-        FROM
-            (SELECT '2020-01-20 UTC'::timestamptz + '3 min'::interval * i as time, i as value FROM generate_series(0, 100) as i) a
-        ) series
-    )
-);
-```
-```output
-          time          | value
-------------------------+-------
- 2020-01-20 02:00:00+00 |    40
- 2020-01-20 02:10:00+00 |    43
- 2020-01-20 02:20:00+00 |    47
- 2020-01-20 02:30:00+00 |    50
- 2020-01-20 02:40:00+00 |    53
- 2020-01-20 02:50:00+00 |    57
- 2020-01-20 03:00:00+00 |    60
 ```

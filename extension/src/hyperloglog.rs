@@ -113,10 +113,6 @@ pg_type! {
 
 flat_serialize_macro::flat_serialize! {
     #[derive(Debug, Serialize, Deserialize)]
-    #[flat_serialize::field_attr(
-        fixed = r##"#[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize")]"##,
-        variable = r##"#[serde(deserialize_with = "crate::serialization::serde_reference_adaptor::deserialize_slice")]"##,
-    )]
     enum Storage<'a> {
         storage_kind: u64,
         Sparse: 1 {
@@ -234,11 +230,11 @@ pub fn hyperloglog_count<'input>(
     hyperloglog: toolkit_experimental::HyperLogLog<'input>
 ) -> i64 {
     // count does not depend on the type parameters
-    let log = match hyperloglog.log {
+    let log = match &hyperloglog.log {
         Storage::Sparse { num_compressed, precision, compressed, .. } =>
-            HLL::<Datum, ()>::from_sparse_parts(compressed, num_compressed, precision, ()),
+            HLL::<Datum, ()>::from_sparse_parts(compressed.slice(), *num_compressed, *precision, ()),
         Storage::Dense { precision, registers, .. } =>
-        HLL::<Datum, ()>::from_dense_parts(registers, precision, ()),
+        HLL::<Datum, ()>::from_dense_parts(registers.slice(), *precision, ()),
     };
     log.immutable_estimate_count() as i64
 }
@@ -273,7 +269,7 @@ fn flatten_log(hyperloglog: &mut HLL<Datum, DatumHashBuilder>)
                     num_compressed: sparse.num_compressed,
                     precision: sparse.precision,
                     compressed_bytes: sparse.compressed.num_bytes() as u32,
-                    compressed: sparse.compressed.bytes(),
+                    compressed: sparse.compressed.bytes().into(),
                 }
             })
         },
@@ -284,7 +280,7 @@ fn flatten_log(hyperloglog: &mut HLL<Datum, DatumHashBuilder>)
                     element_type: element_type,
                     collation: collation,
                     precision: dense.precision,
-                    registers: dense.registers.bytes(),
+                    registers: dense.registers.bytes().into(),
                 }
             })
         },
@@ -293,7 +289,7 @@ fn flatten_log(hyperloglog: &mut HLL<Datum, DatumHashBuilder>)
 }
 
 fn unflatten_log<'i>(hyperloglog: HyperLogLog<'i>) -> HLL<'i, Datum, DatumHashBuilder> {
-    match hyperloglog.log {
+    match &hyperloglog.log {
         Storage::Sparse {
             num_compressed,
             precision,
@@ -302,15 +298,15 @@ fn unflatten_log<'i>(hyperloglog: HyperLogLog<'i>) -> HLL<'i, Datum, DatumHashBu
             collation,
             compressed_bytes: _
         } => HLL::<Datum, DatumHashBuilder>::from_sparse_parts(
-            compressed,
-            num_compressed,
-            precision,
+            compressed.slice(),
+            *num_compressed,
+            *precision,
             unsafe { DatumHashBuilder::from_type_id(element_type.0, Some(collation.0)) }
         ),
         Storage::Dense { precision, registers, element_type, collation  } =>
             HLL::<Datum, DatumHashBuilder>::from_dense_parts(
-                registers,
-                precision,
+                registers.slice(),
+                *precision,
                 unsafe { DatumHashBuilder::from_type_id(element_type.0, Some(collation.0)) }
             ),
     }

@@ -219,10 +219,10 @@ impl<'a, 'b> From<&'a ReadableUddSketch> for UddSketch<'b> {
                     neg_buckets_bytes: (negative_counts.len() as u32),
                     pos_indexes_bytes: (positive_indexes.len() as u32),
                     pos_buckets_bytes: (positive_counts.len() as u32),
-                    negative_indexes: &*negative_indexes,
-                    negative_counts: &*negative_counts,
-                    positive_indexes: &*positive_indexes,
-                    positive_counts: &*positive_counts,
+                    negative_indexes: (&*negative_indexes).into(),
+                    negative_counts: (&*negative_counts).into(),
+                    positive_indexes: (&*positive_indexes).into(),
+                    positive_counts: (&*positive_counts).into(),
                 }
             }
         }
@@ -256,11 +256,13 @@ impl<'input> InOutFuncs for UddSketch<'input> {
 
 impl<'input> UddSketch<'input> {
     fn keys(&self) -> impl Iterator<Item=SketchHashKey> + '_ {
-        decompress_keys(self.negative_indexes, self.zero_bucket_count != 0, self.positive_indexes)
+        // FIXME does this really need a slice?
+        decompress_keys(self.negative_indexes.as_slice(), self.zero_bucket_count != 0, self.positive_indexes.as_slice())
     }
 
     fn counts(&self) -> impl Iterator<Item=u64> + '_ {
-        decompress_counts(self.negative_counts, self.zero_bucket_count, self.positive_counts)
+        // FIXME does this really need a slice?
+        decompress_counts(self.negative_counts.as_slice(), self.zero_bucket_count, self.positive_counts.as_slice())
     }
 
     fn to_uddsketch(&self) -> UddSketchInternal {
@@ -305,10 +307,10 @@ fn uddsketch_final(
                     neg_buckets_bytes: negative_counts.len() as u32,
                     pos_indexes_bytes: positive_indexes.len() as u32,
                     pos_buckets_bytes: positive_counts.len() as u32,
-                    negative_indexes: &negative_indexes,
-                    negative_counts: &negative_counts,
-                    positive_indexes: &positive_indexes,
-                    positive_counts: &positive_counts,
+                    negative_indexes: negative_indexes.into(),
+                    negative_counts: negative_counts.into(),
+                    positive_indexes: positive_indexes.into(),
+                    positive_counts: positive_counts.into(),
                 }
             ).into()
         })

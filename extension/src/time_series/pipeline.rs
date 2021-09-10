@@ -77,28 +77,16 @@ pub mod toolkit_experimental {
     varlena_type!(UnstableTimeseriesPipelineElement);
 }
 
-pub enum MaybeOwnedTs<'s> {
-    Borrowed(TimeSeries<'s>),
-    Owned(TimeSeries<'static>),
-}
-
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
 pub fn run_pipeline<'s, 'p>(
-    timeseries: toolkit_experimental::TimeSeries<'s>,
+    mut timeseries: toolkit_experimental::TimeSeries<'s>,
     pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
 ) -> toolkit_experimental::TimeSeries<'static> {
-    let mut timeseries = MaybeOwnedTs::Borrowed(timeseries);
     for element in pipeline.elements.iter() {
         let element = element.element;
-        let new_timeseries = execute_pipeline_element(&mut timeseries, &element);
-        if let Some(series) = new_timeseries {
-            timeseries = MaybeOwnedTs::Owned(series)
-        }
+        timeseries = execute_pipeline_element(timeseries, &element);
     }
-    match timeseries {
-        MaybeOwnedTs::Borrowed(series) => series.in_current_context(),
-        MaybeOwnedTs::Owned(series) => series,
-    }
+    timeseries.in_current_context()
 }
 
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
@@ -106,51 +94,26 @@ pub fn run_pipeline_element<'s, 'p>(
     timeseries: toolkit_experimental::TimeSeries<'s>,
     element: toolkit_experimental::UnstableTimeseriesPipelineElement<'p>,
 ) -> toolkit_experimental::TimeSeries<'static> {
-    let owned_timeseries = execute_pipeline_element(&mut MaybeOwnedTs::Borrowed(timeseries), &element.element);
-    if let Some(timeseries) = owned_timeseries {
-        return timeseries
-    }
-    return timeseries.in_current_context()
+    execute_pipeline_element(timeseries, &element.element)
+        .in_current_context()
 }
 
 // TODO need cow-like for timeseries input
 pub fn execute_pipeline_element<'s, 'e>(
-    timeseries: &mut MaybeOwnedTs<'s>,
+    timeseries: TimeSeries<'s>,
     element: &Element
-) -> Option<toolkit_experimental::TimeSeries<'static>> {
-    use MaybeOwnedTs::{Borrowed, Owned};
-
-    match (element, timeseries) {
-        (Element::LTTB{resolution}, Borrowed(timeseries)) => {
-            return Some(crate::lttb::lttb_ts(*timeseries, *resolution as _))
-        }
-        (Element::LTTB{resolution}, Owned(timeseries)) => {
-            return Some(crate::lttb::lttb_ts(*timeseries, *resolution as _))
-        }
-        (Element::ResampleToRate{..}, Borrowed(timeseries)) => {
-            return Some(resample_to_rate(timeseries, &element));
-        }
-        (Element::ResampleToRate{..}, Owned(timeseries)) => {
-            return Some(resample_to_rate(timeseries, &element));
-        }
-        (Element::FillHoles{..}, Borrowed(timeseries)) => {
-            return Some(fill_holes(timeseries, &element));
-        }
-        (Element::FillHoles{..}, Owned(timeseries)) => {
-            return Some(fill_holes(timeseries, &element));
-        }
-        (Element::Sort{..}, Borrowed(timeseries)) => {
-            return Some(sort_timeseries(timeseries));
-        }
-        (Element::Sort{..}, Owned(timeseries)) => {
-            return Some(sort_timeseries(timeseries));
-        }
-        (Element::Delta{..}, Borrowed(timeseries)) => {
-            return Some(timeseries_delta(timeseries));
-        }
-        (Element::Delta{..}, Owned(timeseries)) => {
-            return Some(timeseries_delta(timeseries));
-        }
+) -> TimeSeries<'s> {
+    match element {
+        Element::LTTB{resolution} =>
+            return crate::lttb::lttb_ts(timeseries, *resolution as _),
+        Element::ResampleToRate{..} =>
+            return resample_to_rate(&timeseries, &element),
+        Element::FillHoles{..} =>
+            return fill_holes(timeseries, &element),
+        Element::Sort{..} =>
+            return sort_timeseries(timeseries),
+        Element::Delta{..} =>
+            return timeseries_delta(&timeseries),
     }
 }
 
@@ -181,7 +144,7 @@ pub fn add_unstable_element<'p, 'e>(
         flatten! {
             UnstableTimeseriesPipeline {
                 num_elements: elements.len().try_into().unwrap(),
-                elements: (&*elements).into(),
+                elements: elements.into(),
             }
         }
     }

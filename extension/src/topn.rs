@@ -5,12 +5,10 @@ use pgx::*;
 
 use flat_serialize::*;
 
-use itertools::multizip;
-
 use crate::{
     aggregate_utils::in_aggregate_context,
     json_inout_funcs,
-    flatten,
+    build,
     palloc::Internal, pg_type
 };
 
@@ -62,28 +60,32 @@ pub mod toolkit_experimental {
 
 impl<'input> TopN<'input> {
     fn to_internal_topn(&self) -> InternalTopN {
-        InternalTopN::new_from_components(1. / self.max_values as f64, self.values, self.counts, self.overcounts, self.total_inputs)
+        InternalTopN::new_from_components(
+            1.0 / self.max_values as f64,
+            self.values.slice(),
+            self.counts.slice(),
+            self.overcounts.slice(),
+            self.total_inputs
+        )
     }
 
     fn from_internal_topn(topn: &InternalTopN) -> TopN<'static> {
         let mut values = Vec::new();
         let mut counts = Vec::new();
         let mut overcounts = Vec::new();
-        
+
         topn.generate_component_data(&mut values, &mut counts, &mut overcounts);
 
-        unsafe {
-            flatten!(
-                TopN {
-                    num_values: topn.num_entries() as _,
-                    max_values: topn.max_entries() as _,
-                    total_inputs: topn.total_values(),
-                    values: &values,
-                    counts: &counts,
-                    overcounts: &overcounts
-                }
-            )
-        }
+        build!(
+            TopN {
+                num_values: topn.num_entries() as _,
+                max_values: topn.max_entries() as _,
+                total_inputs: topn.total_values(),
+                values: values.into(),
+                counts: counts.into(),
+                overcounts: overcounts.into(),
+            }
+        )
     }
 }
 
@@ -212,18 +214,22 @@ pub fn num_vals<'input>(
 //   1. The returned value isn't really the iterator, which only lives for the pgx SRF glue
 //      code, but the tuple of integers and floats returned by said iterator. This tuple does
 //      have the requisite static lifetime.
-//   2. The arguments to the SRF should live across multiple calls to the SRF, which is a 
+//   2. The arguments to the SRF should live across multiple calls to the SRF, which is a
 //      lifetime rust is not capable of expressing, so we model it using 'static.
 #[pg_extern(immutable, parallel_safe, name="topn", schema = "toolkit_experimental")]
 pub fn topn_iter (
     n: i32,
-    agg: toolkit_experimental::TopN<'static>,
+    agg: toolkit_experimental::TopN<'_>,
 ) -> impl std::iter::Iterator<Item = (name!(value,i64),name!(min_freq,f64),name!(max_freq,f64))> + '_ {
     assert!(n <= agg.num_values as _);
     let total = agg.total_inputs as f64;
-    multizip((agg.values.iter(), agg.counts.iter(), agg.overcounts.iter()))
-    .take(n as _)
-    .map(move |(val, count, over)| (*val, (count-over) as f64 / total, *count as f64 / total))
+    // TODO replace filter_map() with map_while() once that's stable
+    (0..n as usize).filter_map(move |i| {
+        let val = *agg.values.slice().get(i)?;
+        let count = agg.counts.slice()[i];
+        let over = agg.overcounts.slice()[i];
+        (val, (count-over) as f64 / total, count as f64 / total).into()
+    })
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
@@ -235,9 +241,9 @@ pub fn guaranteed_topn<'input>(
         return false;
     }
 
-    let bound = agg.counts[n as usize];
+    let bound = agg.counts.slice()[n as usize];
     for i in 0..n as usize {
-        if agg.counts[i] - agg.overcounts[i] < bound {
+        if agg.counts.slice()[i] - agg.overcounts.slice()[i] < bound {
             return false;
         }
     }
@@ -250,7 +256,7 @@ pub fn max_ordered_n<'input>(
     agg: toolkit_experimental::TopN<'input>,
 ) -> int {
     for i in 1..agg.num_values as usize {
-        if agg.counts[i] > agg.counts[i-1] - agg.overcounts[i-1] {
+        if agg.counts.slice()[i] > agg.counts.slice()[i-1] - agg.overcounts.slice()[i-1] {
             return (i - 1) as _;
         }
     }
@@ -302,22 +308,22 @@ mod tests {
             assert!(!client.select("SELECT guaranteed_topn(5, agg) FROM aggs WHERE size=75", None, None).first().get_one::<bool>().unwrap());
 
             // Test top result for each size
-            let test = 
+            let test =
                 client.select("SELECT value, min_freq, max_freq FROM topn(10, (SELECT agg FROM aggs WHERE size=100))", None, None)
                     .first().get_three::<i64, f64, f64>();
             assert_eq!(test, (Some(99), Some(100./5050.), Some(100./5050.)));
 
-            let test = 
+            let test =
                 client.select("SELECT value, min_freq, max_freq FROM topn(10, (SELECT agg FROM aggs WHERE size=75))", None, None)
                     .first().get_three::<i64, f64, f64>();
             assert_eq!(test, (Some(99), Some(76./5050.), Some(105./5050.)));
 
-            let test = 
+            let test =
                 client.select("SELECT value, min_freq, max_freq FROM topn(10, (SELECT agg FROM aggs WHERE size=50))", None, None)
                     .first().get_three::<i64, f64, f64>();
             assert_eq!(test, (Some(99), Some(51./5050.), Some(126./5050.)));
 
-            let test = 
+            let test =
                 client.select("SELECT value, min_freq, max_freq FROM topn(10, (SELECT agg FROM aggs WHERE size=25))", None, None)
                     .first().get_three::<i64, f64, f64>();
             assert_eq!(test, (Some(99), Some(26./5050.), Some(214./5050.)));
@@ -326,12 +332,12 @@ mod tests {
             let test =
                 client.select("SELECT num_vals(rollup(agg)) FROM aggs", None, None)
                     .first().get_one::<i32>().unwrap();
-            assert_eq!(test, 20200);          
-            
-            let test = 
+            assert_eq!(test, 20200);
+
+            let test =
                 client.select("SELECT value, min_freq, max_freq FROM topn(10, (SELECT rollup(agg) FROM aggs))", None, None)
                     .first().get_three::<i64, f64, f64>();
-            assert_eq!(test, (Some(99), Some(253./20200.), Some(545./20200.)));  
+            assert_eq!(test, (Some(99), Some(253./20200.), Some(545./20200.)));
         });
     }
 }

@@ -153,7 +153,7 @@ varlena_type!(TDigest);
 impl<'input> TDigest<'input> {
     fn to_internal_tdigest(&self) -> InternalTDigest {
         InternalTDigest::new(
-            Vec::from(self.centroids),
+            self.centroids.iter().collect(),
             self.sum,
             self.count,
             self.max,
@@ -178,7 +178,7 @@ impl<'input> TDigest<'input> {
                     sum: digest.sum(),
                     min: digest.min(),
                     max: digest.max(),
-                    centroids: &centroids,
+                    centroids: (&*centroids).into(),
                 }
             )
         }

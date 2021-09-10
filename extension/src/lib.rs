@@ -10,6 +10,7 @@ pub mod range;
 pub mod stats_agg;
 pub mod utilities;
 pub mod time_series;
+pub mod topn;
 
 mod palloc;
 mod aggregate_utils;

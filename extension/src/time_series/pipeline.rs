@@ -4,6 +4,7 @@ mod resample_to_rate;
 mod sort;
 mod delta;
 mod map;
+mod arithmetic;
 
 use std::convert::TryInto;
 
@@ -65,6 +66,10 @@ pg_type! {
             MapSeries: 7 {
                 // FIXME serialize/deserialize as `name(type)`
                 function: PgProcId,
+            },
+            Arithmetic: 8 {
+                function: arithmetic::Function,
+                rhs: f64,
             }
         },
     }
@@ -135,6 +140,8 @@ pub fn execute_pipeline_element<'s, 'e>(
             return map::apply_to(timeseries, function.0),
         Element::MapSeries { function } =>
             return map::apply_to_series(timeseries, function.0),
+        Element::Arithmetic{ function, rhs } =>
+            return arithmetic::apply(timeseries, *function, *rhs),
     }
 }
 

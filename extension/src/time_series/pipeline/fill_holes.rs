@@ -5,10 +5,6 @@ use flat_serialize_macro::FlatSerializable;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    flatten,
-};
-
 use super::*;
 
 // TODO: there are one or two other gapfill objects in this extension, these should be unified
@@ -91,23 +87,17 @@ impl FillMethod {
 )]
 pub fn holefill_pipeline_element<'e> (
     fill_method: String,
-) -> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
-    unsafe {
-        let fill_method = match fill_method.to_lowercase().as_str() {
-            "locf" => FillMethod::LOCF,
-            "interpolate" => FillMethod::Interpolate,
-            "linear" => FillMethod::Interpolate,
-            _ => panic!("Invalid downsample method")
-        };
+) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    let fill_method = match fill_method.to_lowercase().as_str() {
+        "locf" => FillMethod::LOCF,
+        "interpolate" => FillMethod::Interpolate,
+        "linear" => FillMethod::Interpolate,
+        _ => panic!("Invalid downsample method")
+    };
 
-        flatten!(
-            UnstableTimeseriesPipelineElement {
-                element: Element::FillHoles {
-                    fill_method
-                }
-            }
-        )
-    }
+    Element::FillHoles {
+        fill_method
+    }.flatten()
 }
 
 pub fn fill_holes<'s>(

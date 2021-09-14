@@ -30,62 +30,81 @@ use sort::sort_timeseries;
 use delta::timeseries_delta;
 
 use map::{
-    map_series_pipeline_element,
+    map_series_element,
     check_user_function_type,
     apply_to_series,
 };
 
 use crate::serialization::PgProcId;
 
-// TODO once we start stabilizing elements, create a type
-//      `TimeseriesPipelineElement` and move stable variants to that.
-pg_type! {
-    #[derive(Debug)]
-    struct UnstableTimeseriesPipelineElement {
-        element: enum Element {
-            kind: u64,
-            LTTB: 1 {
-                resolution: u64,
-            },
-            ResampleToRate: 2 {
-                interval: i64,
-                resample_method: ResampleMethod,
-                snap_to_rate: i64, // padded bool
-            },
-            FillHoles: 3 {
-                fill_method: FillMethod,
-            },
-            Sort: 4 {
-            },
-            Delta: 5 {
-            },
-            MapData: 6 {
-                // FIXME serialize/deserialize as `name(type)`
-                function: PgProcId,
-            },
-            MapSeries: 7 {
-                // FIXME serialize/deserialize as `name(type)`
-                function: PgProcId,
-            },
-            Arithmetic: 8 {
-                function: arithmetic::Function,
-                rhs: f64,
-            }
-        },
-    }
-}
-
-json_inout_funcs!(UnstableTimeseriesPipelineElement);
-
 // TODO once we start stabilizing elements, create a type TimeseriesPipeline
 //      stable elements will create a stable pipeline, but adding an unstable
 //      element to a stable pipeline will create an unstable pipeline
-type USPED = UnstableTimeseriesPipelineElementData;
 pg_type! {
     #[derive(Debug)]
     struct UnstableTimeseriesPipeline<'input> {
         num_elements: u64,
-        elements: [USPED; self.num_elements],
+        elements: [Element; self.num_elements],
+    }
+}
+
+flat_serialize_macro::flat_serialize! {
+    #[derive(Debug)]
+    #[derive(serde::Serialize, serde::Deserialize)]
+    enum Element {
+        kind: u64,
+        LTTB: 1 {
+            resolution: u64,
+        },
+        ResampleToRate: 2 {
+            interval: i64,
+            resample_method: ResampleMethod,
+            snap_to_rate: i64, // padded bool
+        },
+        FillHoles: 3 {
+            fill_method: FillMethod,
+        },
+        Sort: 4 {
+        },
+        Delta: 5 {
+        },
+        MapData: 6 {
+            // FIXME serialize/deserialize as `name(type)`
+            function: PgProcId,
+        },
+        MapSeries: 7 {
+            // FIXME serialize/deserialize as `name(type)`
+            function: PgProcId,
+        },
+        Arithmetic: 8 {
+            function: arithmetic::Function,
+            rhs: f64,
+        }
+    }
+}
+
+impl Element {
+    pub fn flatten<'a>(self) -> UnstableTimeseriesPipeline<'a> {
+        let slice = &[self][..];
+        unsafe {
+            flatten! {
+                UnstableTimeseriesPipeline {
+                    num_elements: 1,
+                    elements: slice.into(),
+                }
+            }
+        }
+    }
+}
+
+impl From<Element> for UnstableTimeseriesPipeline<'_> {
+    fn from(element: Element) -> Self {
+        build! {
+            UnstableTimeseriesPipeline {
+                num_elements: 1,
+                elements: vec![element].into(),
+            }
+        }
     }
 }
 
@@ -96,7 +115,6 @@ json_inout_funcs!(UnstableTimeseriesPipeline);
 pub mod toolkit_experimental {
     pub(crate) use super::*;
     varlena_type!(UnstableTimeseriesPipeline);
-    varlena_type!(UnstableTimeseriesPipelineElement);
 }
 
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
@@ -105,19 +123,9 @@ pub fn run_pipeline<'s, 'p>(
     pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
 ) -> toolkit_experimental::TimeSeries<'static> {
     for element in pipeline.elements.iter() {
-        let element = element.element;
         timeseries = execute_pipeline_element(timeseries, &element);
     }
     timeseries.in_current_context()
-}
-
-#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
-pub fn run_pipeline_element<'s, 'p>(
-    timeseries: toolkit_experimental::TimeSeries<'s>,
-    element: toolkit_experimental::UnstableTimeseriesPipelineElement<'p>,
-) -> toolkit_experimental::TimeSeries<'static> {
-    execute_pipeline_element(timeseries, &element.element)
-        .in_current_context()
 }
 
 // TODO need cow-like for timeseries input
@@ -145,37 +153,15 @@ pub fn execute_pipeline_element<'s, 'e>(
     }
 }
 
-#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
-pub fn build_unstable_pipepine<'s, 'p>(
-    first: toolkit_experimental::UnstableTimeseriesPipelineElement<'s>,
-    second: toolkit_experimental::UnstableTimeseriesPipelineElement<'p>,
-) -> toolkit_experimental::UnstableTimeseriesPipeline<'static> {
-    unsafe {
-        let elements: Vec<_> = vec!(first.flatten().0, second.flatten().0);
-        flatten! {
-            UnstableTimeseriesPipeline {
-                num_elements: 2,
-                elements: (&*elements).into(),
-            }
-        }
-    }
-}
-
 // TODO is (immutable, parallel_safe) correct?
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
 pub fn add_unstable_element<'p, 'e>(
-    pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
-    element: toolkit_experimental::UnstableTimeseriesPipelineElement<'e>,
+    mut pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
+    element: toolkit_experimental::UnstableTimeseriesPipeline<'e>,
 ) -> toolkit_experimental::UnstableTimeseriesPipeline<'p> {
-    unsafe {
-        let elements: Vec<_> = pipeline.elements.iter().chain(Some(element.flatten().0)).collect();
-        flatten! {
-            UnstableTimeseriesPipeline {
-                num_elements: elements.len().try_into().unwrap(),
-                elements: elements.into(),
-            }
-        }
-    }
+    pipeline.elements.as_owned().extend(element.elements.iter());
+    pipeline.num_elements = pipeline.elements.len().try_into().unwrap();
+    pipeline
 }
 
 // using this instead of pg_operator since the latter doesn't support schemas yet
@@ -189,21 +175,9 @@ CREATE OPERATOR |> (
 );
 
 CREATE OPERATOR |> (
-    PROCEDURE=toolkit_experimental."run_pipeline_element",
-    LEFTARG=toolkit_experimental.TimeSeries,
-    RIGHTARG=toolkit_experimental.UnstableTimeseriesPipelineElement
-);
-
-CREATE OPERATOR |> (
-    PROCEDURE=toolkit_experimental."build_unstable_pipepine",
-    LEFTARG=toolkit_experimental.UnstableTimeseriesPipelineElement,
-    RIGHTARG=toolkit_experimental.UnstableTimeseriesPipelineElement
-);
-
-CREATE OPERATOR |> (
     PROCEDURE=toolkit_experimental."add_unstable_element",
     LEFTARG=toolkit_experimental.UnstableTimeseriesPipeline,
-    RIGHTARG=toolkit_experimental.UnstableTimeseriesPipelineElement
+    RIGHTARG=toolkit_experimental.UnstableTimeseriesPipeline
 );
 "#);
 
@@ -217,47 +191,13 @@ pub fn run_user_pipeline_element<'s, 'p>(
 }
 
 #[pg_extern(stable, parallel_safe, schema="toolkit_experimental")]
-pub fn build_unstable_pipepine_a<'s, 'p>(
-    first: toolkit_experimental::UnstableTimeseriesPipelineElement<'s>,
-    second: pg_sys::regproc,
-) -> toolkit_experimental::UnstableTimeseriesPipeline<'static> {
-    let elements: Vec<_> = vec![
-        first.0,
-        map_series_pipeline_element(second).0,
-    ];
-    build! {
-        UnstableTimeseriesPipeline {
-            num_elements: 2,
-            elements: elements.into(),
-        }
-    }
-}
-
-#[pg_extern(stable, parallel_safe, schema="toolkit_experimental")]
-pub fn build_unstable_pipepine_b<'s, 'p>(
-    first: pg_sys::regproc,
-    second: toolkit_experimental::UnstableTimeseriesPipelineElement<'s>,
-) -> toolkit_experimental::UnstableTimeseriesPipeline<'static> {
-    let elements: Vec<_> = vec![
-        map_series_pipeline_element(first).0,
-        second.0,
-    ];
-    build! {
-        UnstableTimeseriesPipeline {
-            num_elements: 2,
-            elements: elements.into(),
-        }
-    }
-}
-
-#[pg_extern(stable, parallel_safe, schema="toolkit_experimental")]
-pub fn build_unstable_pipepine_c<'s, 'p>(
+pub fn build_unstable_user_pipeline<'s, 'p>(
     first: pg_sys::regproc,
     second: pg_sys::regproc,
 ) -> toolkit_experimental::UnstableTimeseriesPipeline<'static> {
     let elements: Vec<_> = vec![
-        map_series_pipeline_element(first).0,
-        map_series_pipeline_element(second).0,
+        map_series_element(first),
+        map_series_element(second),
     ];
     build! {
         UnstableTimeseriesPipeline {
@@ -273,7 +213,7 @@ pub fn add_user_pipeline_element<'p, 'e>(
     function: pg_sys::regproc,
 ) -> toolkit_experimental::UnstableTimeseriesPipeline<'p> {
     let elements: Vec<_> = pipeline.elements.iter()
-        .chain(Some(map_series_pipeline_element(function).0))
+        .chain(Some(map_series_element(function)))
         .collect();
     build! {
         UnstableTimeseriesPipeline {
@@ -301,19 +241,7 @@ CREATE OPERATOR |>> (
 );
 
 CREATE OPERATOR |>> (
-    PROCEDURE=toolkit_experimental."build_unstable_pipepine_a",
-    LEFTARG=toolkit_experimental.UnstableTimeseriesPipelineElement,
-    RIGHTARG=regproc
-);
-
-CREATE OPERATOR |>> (
-    PROCEDURE=toolkit_experimental."build_unstable_pipepine_b",
-    LEFTARG=regproc,
-    RIGHTARG=toolkit_experimental.UnstableTimeseriesPipelineElement
-);
-
-CREATE OPERATOR |>> (
-    PROCEDURE=toolkit_experimental."build_unstable_pipepine_c",
+    PROCEDURE=toolkit_experimental."build_unstable_user_pipeline",
     LEFTARG=regproc,
     RIGHTARG=regproc
 );
@@ -334,16 +262,10 @@ CREATE OPERATOR |>> (
 )]
 pub fn lttb_pipeline_element<'p, 'e>(
     resolution: i32,
-) -> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
-    unsafe {
-        flatten!(
-            UnstableTimeseriesPipelineElement {
-                element: Element::LTTB {
-                    resolution: resolution.try_into().unwrap(),
-                }
-            }
-        )
-    }
+) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    Element::LTTB {
+        resolution: resolution.try_into().unwrap(),
+    }.flatten()
 }
 
 #[cfg(any(test, feature = "pg_test"))]

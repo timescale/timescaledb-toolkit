@@ -150,13 +150,10 @@ mod tests {
         "function timeweightsummary_out(timeweightsummary)",
         "type timeweightsummary",
         "operator |>(toolkit_experimental.timeseries,toolkit_experimental.unstabletimeseriespipeline)",
-        "operator |>(toolkit_experimental.timeseries,toolkit_experimental.unstabletimeseriespipelineelement)",
-        "operator |>(toolkit_experimental.unstabletimeseriespipeline,toolkit_experimental.unstabletimeseriespipelineelement)",
-        "operator |>(toolkit_experimental.unstabletimeseriespipelineelement,toolkit_experimental.unstabletimeseriespipelineelement)",
+        "operator |>(toolkit_experimental.unstabletimeseriespipeline,toolkit_experimental.unstabletimeseriespipeline)",
         "operator |>>(regproc,regproc)",
-        "operator |>>(regproc,toolkit_experimental.unstabletimeseriespipelineelement)",
+        "operator |>>(regproc,toolkit_experimental.unstabletimeseriespipeline)",
         "operator |>>(toolkit_experimental.timeseries,regproc)",
         "operator |>>(toolkit_experimental.unstabletimeseriespipeline,regproc)",
-        "operator |>>(toolkit_experimental.unstabletimeseriespipelineelement,regproc)",
     ];
 }

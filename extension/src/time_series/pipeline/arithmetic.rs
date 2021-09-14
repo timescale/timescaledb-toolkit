@@ -74,12 +74,8 @@ pub fn apply(
 )]
 pub fn pipeline_add<'e>(
     rhs: f64,
-) -> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
-    build!(
-        UnstableTimeseriesPipelineElement {
-            element: Arithmetic { function: Add, rhs: rhs }
-        }
-    )
+) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    Arithmetic { function: Add, rhs: rhs }.flatten()
 }
 
 #[pg_extern(
@@ -90,12 +86,8 @@ pub fn pipeline_add<'e>(
 )]
 pub fn pipeline_sub<'e>(
     rhs: f64,
-) -> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
-    build!(
-        UnstableTimeseriesPipelineElement {
-            element: Arithmetic { function: Sub, rhs: rhs }
-        }
-    )
+) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    Arithmetic { function: Sub, rhs: rhs }.flatten()
 }
 
 #[pg_extern(
@@ -106,12 +98,8 @@ pub fn pipeline_sub<'e>(
 )]
 pub fn pipeline_mul<'e>(
     rhs: f64,
-) -> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
-    build!(
-        UnstableTimeseriesPipelineElement {
-            element: Arithmetic { function: Mul, rhs: rhs }
-        }
-    )
+) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    Arithmetic { function: Mul, rhs: rhs }.flatten()
 }
 
 #[pg_extern(
@@ -122,12 +110,8 @@ pub fn pipeline_mul<'e>(
 )]
 pub fn pipeline_div<'e>(
     rhs: f64,
-) -> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
-    build!(
-        UnstableTimeseriesPipelineElement {
-            element: Arithmetic { function: Div, rhs: rhs }
-        }
-    )
+) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    Arithmetic { function: Div, rhs: rhs }.flatten()
 }
 
 #[pg_extern(
@@ -138,12 +122,8 @@ pub fn pipeline_div<'e>(
 )]
 pub fn pipeline_mod<'e>(
     rhs: f64,
-) -> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
-    build!(
-        UnstableTimeseriesPipelineElement {
-            element: Arithmetic { function: Mod, rhs: rhs }
-        }
-    )
+) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    Arithmetic { function: Mod, rhs: rhs }.flatten()
 }
 
 #[pg_extern(
@@ -154,12 +134,8 @@ pub fn pipeline_mod<'e>(
 )]
 pub fn pipeline_power<'e>(
     rhs: f64,
-) -> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
-    build!(
-        UnstableTimeseriesPipelineElement {
-            element: Arithmetic { function: Power, rhs: rhs }
-        }
-    )
+) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    Arithmetic { function: Power, rhs: rhs }.flatten()
 }
 
 // log(double) already exists as the log base 10 so we need a new name
@@ -171,12 +147,8 @@ pub fn pipeline_power<'e>(
 )]
 pub fn pipeline_log_n<'e>(
     rhs: f64,
-) -> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
-    build!(
-        UnstableTimeseriesPipelineElement {
-            element: Arithmetic { function: LogN, rhs: rhs }
-        }
-    )
+) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    Arithmetic { function: LogN, rhs: rhs }.flatten()
 }
 
 //
@@ -190,12 +162,8 @@ pub fn pipeline_log_n<'e>(
     schema="toolkit_experimental"
 )]
 pub fn pipeline_abs<'e>()
--> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
-    build!(
-        UnstableTimeseriesPipelineElement {
-            element: Arithmetic { function: Abs, rhs: 0.0 }
-        }
-    )
+-> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    Arithmetic { function: Abs, rhs: 0.0 }.flatten()
 }
 
 #[pg_extern(
@@ -205,12 +173,8 @@ pub fn pipeline_abs<'e>()
     schema="toolkit_experimental"
 )]
 pub fn pipeline_cbrt<'e>()
--> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
-    build!(
-        UnstableTimeseriesPipelineElement {
-            element: Arithmetic { function: Cbrt, rhs: 0.0 }
-        }
-    )
+-> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    Arithmetic { function: Cbrt, rhs: 0.0 }.flatten()
 }
 
 #[pg_extern(
@@ -220,12 +184,8 @@ pub fn pipeline_cbrt<'e>()
     schema="toolkit_experimental"
 )]
 pub fn pipeline_ceil<'e>()
--> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
-    build!(
-        UnstableTimeseriesPipelineElement {
-            element: Arithmetic { function: Ceil, rhs: 0.0 }
-        }
-    )
+-> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    Arithmetic { function: Ceil, rhs: 0.0 }.flatten()
 }
 
 #[pg_extern(
@@ -235,12 +195,8 @@ pub fn pipeline_ceil<'e>()
     schema="toolkit_experimental"
 )]
 pub fn pipeline_floor<'e>()
--> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
-    build!(
-        UnstableTimeseriesPipelineElement {
-            element: Arithmetic { function: Floor, rhs: 0.0 }
-        }
-    )
+-> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    Arithmetic { function: Floor, rhs: 0.0 }.flatten()
 }
 
 #[pg_extern(
@@ -250,12 +206,8 @@ pub fn pipeline_floor<'e>()
     schema="toolkit_experimental"
 )]
 pub fn pipeline_ln<'e>()
--> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
-    build!(
-        UnstableTimeseriesPipelineElement {
-            element: Arithmetic { function: Ln, rhs: 0.0 }
-        }
-    )
+-> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    Arithmetic { function: Ln, rhs: 0.0 }.flatten()
 }
 
 #[pg_extern(
@@ -265,12 +217,8 @@ pub fn pipeline_ln<'e>()
     schema="toolkit_experimental"
 )]
 pub fn pipeline_log10<'e>()
--> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
-    build!(
-        UnstableTimeseriesPipelineElement {
-            element: Arithmetic { function: Log10, rhs: 0.0 }
-        }
-    )
+-> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    Arithmetic { function: Log10, rhs: 0.0 }.flatten()
 }
 
 #[pg_extern(
@@ -280,12 +228,8 @@ pub fn pipeline_log10<'e>()
     schema="toolkit_experimental"
 )]
 pub fn pipeline_round<'e>()
--> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
-    build!(
-        UnstableTimeseriesPipelineElement {
-            element: Arithmetic { function: Round, rhs: 0.0 }
-        }
-    )
+-> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    Arithmetic { function: Round, rhs: 0.0 }.flatten()
 }
 
 
@@ -296,12 +240,8 @@ pub fn pipeline_round<'e>()
     schema="toolkit_experimental"
 )]
 pub fn pipeline_sign<'e>()
--> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
-    build!(
-        UnstableTimeseriesPipelineElement {
-            element: Arithmetic { function: Sign, rhs: 0.0 }
-        }
-    )
+-> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    Arithmetic { function: Sign, rhs: 0.0 }.flatten()
 }
 
 #[pg_extern(
@@ -311,12 +251,8 @@ pub fn pipeline_sign<'e>()
     schema="toolkit_experimental"
 )]
 pub fn pipeline_sqrt<'e>()
--> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
-    build!(
-        UnstableTimeseriesPipelineElement {
-            element: Arithmetic { function: Sqrt, rhs: 0.0 }
-        }
-    )
+-> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    Arithmetic { function: Sqrt, rhs: 0.0 }.flatten()
 }
 
 #[pg_extern(
@@ -326,12 +262,8 @@ pub fn pipeline_sqrt<'e>()
     schema="toolkit_experimental"
 )]
 pub fn pipeline_trunc<'e>()
--> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
-    build!(
-        UnstableTimeseriesPipelineElement {
-            element: Arithmetic { function: Trunc, rhs: 0.0 }
-        }
-    )
+-> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    Arithmetic { function: Trunc, rhs: 0.0 }.flatten()
 }
 
 #[cfg(any(test, feature = "pg_test"))]

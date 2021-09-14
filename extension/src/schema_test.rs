@@ -155,5 +155,7 @@ mod tests {
         "operator |>>(regproc,toolkit_experimental.unstabletimeseriespipeline)",
         "operator |>>(toolkit_experimental.timeseries,regproc)",
         "operator |>>(toolkit_experimental.unstabletimeseriespipeline,regproc)",
+        "operator |>(toolkit_experimental.timeseries,toolkit_experimental.pipelinethenstatsagg)",
+        "operator |>(toolkit_experimental.unstabletimeseriespipeline,toolkit_experimental.pipelinethenstatsagg)",
     ];
 }

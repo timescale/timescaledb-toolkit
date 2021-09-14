@@ -9,14 +9,14 @@ use flat_serialize::*;
 use crate::{
     aggregate_utils::in_aggregate_context,
     json_inout_funcs,
-    flatten,
+    build,
     palloc::Internal,
     pg_type,
 };
 
 use stats_agg::XYPair;
-use stats_agg::stats1d::StatsSummary1D as InternalStatsSummary1D;
-use stats_agg::stats2d::StatsSummary2D as InternalStatsSummary2D;
+pub use stats_agg::stats1d::StatsSummary1D as InternalStatsSummary1D;
+pub use stats_agg::stats2d::StatsSummary2D as InternalStatsSummary2D;
 
 
 
@@ -66,14 +66,14 @@ impl<'input> StatsSummary1D<'input> {
             sxx: self.sxx,
         }
     }
-    fn from_internal(st: InternalStatsSummary1D) -> Self {
-        unsafe{
-            flatten!(StatsSummary1D {
+    pub fn from_internal(st: InternalStatsSummary1D) -> Self {
+        build!(
+            StatsSummary1D {
                 n: st.n,
                 sx: st.sx,
                 sxx: st.sxx,
-            })
-        }
+            }
+        )
     }
 }
 
@@ -89,8 +89,7 @@ impl<'input> StatsSummary2D<'input> {
         }
     }
     fn from_internal(st: InternalStatsSummary2D) -> Self {
-        unsafe{
-            flatten!(
+        build!(
             StatsSummary2D {
                 n: st.n,
                 sx: st.sx,
@@ -98,8 +97,8 @@ impl<'input> StatsSummary2D<'input> {
                 sy: st.sy,
                 syy: st.syy,
                 sxy: st.sxy,
-            })
-        }
+            }
+        )
     }
 }
 
@@ -882,7 +881,7 @@ mod tests {
                 let mantissa = self.gen.gen_range((1.)..2.);
                 let sign = [-1., 1.].choose(&mut self.gen).unwrap();
                 self.x_values.push(sign * mantissa * exp.exp2());
-                
+
                 let exp = self.gen.gen_range((exp_base - 2.)..=(exp_base + 2.));
                 let mantissa = self.gen.gen_range((1.)..2.);
                 let sign = [-1., 1.].choose(&mut self.gen).unwrap();
@@ -971,8 +970,8 @@ mod tests {
                 None,
                 None
             );
-            
-            client.select(&format!("INSERT INTO test_table VALUES {}", 
+
+            client.select(&format!("INSERT INTO test_table VALUES {}",
                 state.x_values.iter().zip(state.y_values.iter()).map(
                     |(x, y)| "(".to_string() + &x.to_string() + "," + &y.to_string()+ ")" + ","
                 ).collect::<String>().trim_end_matches(",")), None, None);

@@ -5,6 +5,7 @@ mod sort;
 mod delta;
 mod map;
 mod arithmetic;
+mod aggregation;
 
 use std::convert::TryInto;
 
@@ -119,16 +120,23 @@ pub mod toolkit_experimental {
 
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
 pub fn run_pipeline<'s, 'p>(
-    mut timeseries: toolkit_experimental::TimeSeries<'s>,
+    timeseries: toolkit_experimental::TimeSeries<'s>,
     pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
 ) -> toolkit_experimental::TimeSeries<'static> {
-    for element in pipeline.elements.iter() {
-        timeseries = execute_pipeline_element(timeseries, &element);
-    }
-    timeseries.in_current_context()
+    run_pipeline_elements(timeseries, pipeline.elements.iter())
+        .in_current_context()
 }
 
-// TODO need cow-like for timeseries input
+pub fn run_pipeline_elements<'s, 'i>(
+    mut timeseries: TimeSeries<'s>,
+    pipeline: impl Iterator<Item=Element> + 'i,
+) -> TimeSeries<'s> {
+    for element in pipeline {
+        timeseries = execute_pipeline_element(timeseries, &element);
+    }
+    timeseries
+}
+
 pub fn execute_pipeline_element<'s, 'e>(
     timeseries: TimeSeries<'s>,
     element: &Element

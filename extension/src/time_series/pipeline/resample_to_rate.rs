@@ -7,10 +7,6 @@ use serde::{Deserialize, Serialize};
 
 use super::*;
 
-use crate::{
-    flatten,
-};
-
 type Interval = pg_sys::Datum;
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug, FlatSerializable)]
@@ -79,7 +75,7 @@ pub fn resample_pipeline_element<'p, 'e>(
     resample_method: String,
     interval: Interval,
     snap_to_rate: bool,
-) -> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
+) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
     unsafe {
         let interval = interval as *const pg_sys::Interval;
         if (*interval).day > 0 || (*interval).month > 0 {
@@ -95,15 +91,11 @@ pub fn resample_pipeline_element<'p, 'e>(
             _ => panic!("Invalid downsample method")
         };
 
-        flatten!(
-            UnstableTimeseriesPipelineElement {
-                element: Element::ResampleToRate {
-                    interval,
-                    resample_method,
-                    snap_to_rate: if snap_to_rate {1} else {0},
-                }
-            }
-        )
+        Element::ResampleToRate {
+            interval,
+            resample_method,
+            snap_to_rate: if snap_to_rate {1} else {0},
+        }.flatten()
     }
 }
 

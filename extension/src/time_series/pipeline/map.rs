@@ -6,7 +6,6 @@ use pgx::*;
 use super::*;
 
 use crate::{
-    flatten,
     serialization::PgProcId,
 };
 
@@ -18,15 +17,13 @@ use crate::{
 )]
 pub fn map_series_pipeline_element<'e>(
     function: pg_sys::regproc,
-) -> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
+) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    map_series_element(function).flatten()
+}
+
+pub fn map_series_element(function: pg_sys::regproc) -> Element {
     check_user_function_type(function);
-    unsafe {
-        flatten!(
-            UnstableTimeseriesPipelineElement {
-                element: Element::MapSeries { function: PgProcId(function) }
-            }
-        )
-    }
+    Element::MapSeries { function: PgProcId(function) }
 }
 
 pub fn check_user_function_type(function: pg_sys::regproc) {
@@ -79,7 +76,7 @@ pub fn apply_to_series(series: TimeSeries<'_>, func: pg_sys::RegProcedure) -> Ti
 )]
 pub fn map_data_pipeline_element<'e>(
     function: pg_sys::regproc,
-) -> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
+) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
     let mut argtypes: *mut pg_sys::Oid = ptr::null_mut();
     let mut nargs: ::std::os::raw::c_int = 0;
     let rettype = unsafe {
@@ -98,13 +95,7 @@ pub fn map_data_pipeline_element<'e>(
         error!("invalid return type, expected fn(double precision) RETURNS double precision")
     }
 
-    unsafe {
-        flatten!(
-            UnstableTimeseriesPipelineElement {
-                element: Element::MapData { function: PgProcId(function) }
-            }
-        )
-    }
+    Element::MapData { function: PgProcId(function) }.flatten()
 }
 
 pub fn apply_to(mut series: TimeSeries<'_>, func: pg_sys::RegProcedure)
@@ -406,28 +397,30 @@ mod tests {
             let one = "\
             {\
                 \"version\":1,\
-                \"element\":{\
+                \"num_elements\":1,\
+                \"elements\":[{\
                     \"MapSeries\":{\
                         \"function\":\"public.serier(toolkit_experimental.timeseries)\"\
                     }\
-                }\
+                }]\
             }";
             let two = "\
             {\
                 \"version\":1,\
-                \"element\":{\
+                \"num_elements\":1,\
+                \"elements\":[{\
                     \"MapData\":{\
                         \"function\":\"public.dater(double precision)\"\
                     }\
-                }\
+                }]\
             }";
             assert_eq!((&*a.unwrap(), &*b.unwrap()), (one, two));
 
             // FIXME this doesn't work yet
             let (a, b) = client.select(
                 &*format!("SELECT \
-                    '{}'::UnstableTimeseriesPipelineElement::Text, \
-                    '{}'::UnstableTimeseriesPipelineElement::Text",
+                    '{}'::UnstableTimeseriesPipeline::Text, \
+                    '{}'::UnstableTimeseriesPipeline::Text",
                     one, two
                 ),
                 None,

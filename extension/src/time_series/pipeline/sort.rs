@@ -3,10 +3,6 @@ use pgx::*;
 
 use super::*;
 
-use crate::{
-    flatten,
-};
-
 // TODO is (immutable, parallel_safe) correct?
 #[pg_extern(
     immutable,
@@ -15,14 +11,8 @@ use crate::{
     schema="toolkit_experimental"
 )]
 pub fn sort_pipeline_element<'p, 'e>(
-) -> toolkit_experimental::UnstableTimeseriesPipelineElement<'e> {
-    unsafe {
-        flatten!(
-            UnstableTimeseriesPipelineElement {
-                element: Element::Sort {}
-            }
-        )
-    }
+) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    Element::Sort {}.flatten()
 }
 
 pub fn sort_timeseries(

@@ -107,7 +107,6 @@ pub fn map_data_pipeline_element<'e>(
     }
 }
 
-
 pub fn apply_to(mut series: TimeSeries<'_>, func: pg_sys::RegProcedure)
 -> TimeSeries<'_> {
     let mut flinfo: pg_sys::FmgrInfo = unsafe {
@@ -154,7 +153,7 @@ pub fn apply_to(mut series: TimeSeries<'_>, func: pg_sys::RegProcedure)
     series
 }
 
-fn map_series(series: &mut TimeSeries<'_>, mut func: impl FnMut(f64) -> f64) {
+pub fn map_series(series: &mut TimeSeries<'_>, mut func: impl FnMut(f64) -> f64) {
     use SeriesType::*;
 
     match &mut series.series {

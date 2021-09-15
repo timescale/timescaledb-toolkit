@@ -56,7 +56,7 @@ jobs:
         id: image_build
         uses: docker/build-push-action@v2
         with:
-          push: ${{ startsWith(github.event_name, 'cron') }}
+          push: true
           context: .
           file: ./docker/nightly/Dockerfile
           tags: timescaledev/timescaledb-toolkit:nightly

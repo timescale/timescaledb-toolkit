@@ -48,7 +48,7 @@ jobs:
 
       - name: Run Doc Tests
         run: |
-          docker run -d --name toolkit_test -e POSTGRES_HOST_AUTH_METHOD=trust -p 5432:5432 timescaledev/timescaledb-toolkit:nightly
+          docker run -d --name toolkit_test -e POSTGRES_HOST_AUTH_METHOD=trust -p 5432:5432 timescaledev/timescale-analytics:nightly
           cargo run --manifest-path ./tools/sql-doctester/Cargo.toml -- -h localhost -s "CREATE EXTENSION timescaledb_toolkit; SET SESSION TIMEZONE TO 'UTC'" -p 5432 docs
       #TODO can/should we run our other tests also?
 

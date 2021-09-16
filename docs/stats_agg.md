@@ -6,6 +6,8 @@
 - `num_vals`
 - `stddev`(population and sample)
 - `variance` (population and sample )
+- `skewness`
+- `kurtosis`
 
 ## 2-D Statistical Regression Functions
 - `slope`
@@ -13,6 +15,8 @@
 - `x_intercept`
 - `corr` (correlation coefficient)
 - `covariance` (population  and sample)
+- `skewness`
+- `kurtosis`
 - `determination_coeff`
 
 In order to make common statistical aggregates easier to work with in window functions and continuous aggregates, Toolkit provides common statistical aggregates in a slightly different form than  otherwise available in PostgreSQL/TimescaleDB. They are re-implemented within the [two-step aggregates framework](docs/two-step_aggregation.md)which exposes a summary form to the user which can then have multiple accessors. 
@@ -76,5 +80,3 @@ Which will still return the population covariance.
 
 
 This is a minimum working version of the documentation for now, another working document can be found [here](docs/rolling_average_api_working.md), which goes into the window function usecase and some of the reasoning behind our naming decisions. Please feel free to open issues or discussions if you have questions or comments on the current API. We will further develop the documentation as we stabilize these functions over the coming releases. 
-
-

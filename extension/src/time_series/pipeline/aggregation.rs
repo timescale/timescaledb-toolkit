@@ -129,7 +129,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "{\"version\":1,\"n\":5,\"sx\":100.0,\"sxx\":250.0}");
+            assert_eq!(val.unwrap(), "{\"version\":1,\"n\":5,\"sx\":100.0,\"sx2\":250.0,\"sx3\":0.0,\"sx4\":21250.0}");
         });
     }
 }

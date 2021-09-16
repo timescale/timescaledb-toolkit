@@ -28,7 +28,9 @@ pg_type! {
     struct StatsSummary1D {
         n: u64,
         sx: f64,
-        sxx: f64,
+        sx2: f64,
+        sx3: f64,
+        sx4: f64,
     }
 }
 
@@ -37,9 +39,13 @@ pg_type! {
     struct StatsSummary2D {
         n: u64,
         sx: f64,
-        sxx: f64,
+        sx2: f64,
+        sx3: f64,
+        sx4: f64,
         sy: f64,
-        syy: f64,
+        sy2: f64,
+        sy3: f64,
+        sy4: f64,
         sxy: f64,
     }
 }
@@ -63,7 +69,9 @@ impl<'input> StatsSummary1D<'input> {
         InternalStatsSummary1D{
             n: self.n,
             sx: self.sx,
-            sxx: self.sxx,
+            sx2: self.sx2,
+            sx3: self.sx3,
+            sx4: self.sx4,
         }
     }
     pub fn from_internal(st: InternalStatsSummary1D) -> Self {
@@ -71,7 +79,9 @@ impl<'input> StatsSummary1D<'input> {
             StatsSummary1D {
                 n: st.n,
                 sx: st.sx,
-                sxx: st.sxx,
+                sx2: st.sx2,
+                sx3: st.sx3,
+                sx4: st.sx4,
             }
         )
     }
@@ -82,9 +92,13 @@ impl<'input> StatsSummary2D<'input> {
         InternalStatsSummary2D{
             n: self.n,
             sx: self.sx,
-            sxx: self.sxx,
+            sx2: self.sx2,
+            sx3: self.sx3,
+            sx4: self.sx4,
             sy: self.sy,
-            syy: self.syy,
+            sy2: self.sy2,
+            sy3: self.sy3,
+            sy4: self.sy4,
             sxy: self.sxy,
         }
     }
@@ -93,9 +107,13 @@ impl<'input> StatsSummary2D<'input> {
             StatsSummary2D {
                 n: st.n,
                 sx: st.sx,
-                sxx: st.sxx,
+                sx2: st.sx2,
+                sx3: st.sx3,
+                sx4: st.sx4,
                 sy: st.sy,
-                syy: st.syy,
+                sy2: st.sy2,
+                sy3: st.sy3,
+                sy4: st.sy4,
                 sxy: st.sxy,
             }
         )
@@ -618,6 +636,22 @@ fn stats1d_variance(
     }
 }
 
+#[pg_extern(name="skewness", schema = "toolkit_experimental", immutable, parallel_safe)]
+fn stats1d_skewness(
+    summary: toolkit_experimental::StatsSummary1D,
+    _fcinfo: pg_sys::FunctionCallInfo,
+)-> Option<f64> {
+    summary.to_internal().skewness()
+}
+
+#[pg_extern(name="kurtosis", schema = "toolkit_experimental", immutable, parallel_safe)]
+fn stats1d_kurtosis(
+    summary: toolkit_experimental::StatsSummary1D,
+    _fcinfo: pg_sys::FunctionCallInfo,
+)-> Option<f64> {
+    summary.to_internal().kurtosis()
+}
+
 #[pg_extern(name="num_vals", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats1d_num_vals(
     summary: toolkit_experimental::StatsSummary1D,
@@ -708,6 +742,38 @@ fn stats2d_variance_y(
         "sample" | "samp" => Some(summary?.to_internal().var_samp()?.y),
         _ => panic!("unknown analysis method"),
     }
+}
+
+#[pg_extern(name="skewness_x", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+fn stats2d_skewness_x(
+    summary: toolkit_experimental::StatsSummary2D,
+    _fcinfo: pg_sys::FunctionCallInfo,
+)-> Option<f64> {
+    Some(summary.to_internal().skewness()?.x)
+}
+
+#[pg_extern(name="skewness_y", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+fn stats2d_skewness_y(
+    summary: toolkit_experimental::StatsSummary2D,
+    _fcinfo: pg_sys::FunctionCallInfo,
+)-> Option<f64> {
+    Some(summary.to_internal().skewness()?.y)
+}
+
+#[pg_extern(name="kurtosis_x", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+fn stats2d_kurtosis_x(
+    summary: toolkit_experimental::StatsSummary2D,
+    _fcinfo: pg_sys::FunctionCallInfo,
+)-> Option<f64> {
+    Some(summary.to_internal().kurtosis()?.x)
+}
+
+#[pg_extern(name="kurtosis_y", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+fn stats2d_kurtosis_y(
+    summary: toolkit_experimental::StatsSummary2D,
+    _fcinfo: pg_sys::FunctionCallInfo,
+)-> Option<f64> {
+    Some(summary.to_internal().kurtosis()?.y)
 }
 
 #[pg_extern(name="num_vals", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
@@ -829,6 +895,62 @@ mod tests {
     const VALS: usize = 10000;       // Number of values to use for each run
     const SEED: Option<u64> = None;  // RNG seed, generated from entropy if None
     const PRINT_VALS: bool = false;  // Print out test values on error, this can be spammy if VALS is high
+
+    #[pg_test]
+    fn test_io() {
+        Spi::execute(|client| {
+            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
+
+            client.select(
+                "CREATE TABLE test_table (test_x DOUBLE PRECISION, test_y DOUBLE PRECISION)",
+                None,
+                None
+            );
+
+            let test = client.select(
+                "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
+                None,
+                None
+            )
+                .first()
+                .get_one::<String>();
+            assert!(test.is_none());
+
+            client.select(
+                "INSERT INTO test_table VALUES (10, 10);",
+                None,
+                None
+            );
+
+            let test = client.select(
+                "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
+                None,
+                None
+            )
+                .first()
+                .get_one::<String>().
+                unwrap();
+            assert_eq!(test, "{\"version\":1,\"n\":1,\"sx\":10.0,\"sx2\":0.0,\"sx3\":0.0,\"sx4\":0.0,\"sy\":10.0,\"sy2\":0.0,\"sy3\":0.0,\"sy4\":0.0,\"sxy\":0.0}");
+
+            client.select(
+                "INSERT INTO test_table VALUES (20, 20);",
+                None,
+                None
+            );
+            let test = client.select(
+                "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
+                None,
+                None
+            )
+                .first()
+                .get_one::<String>().
+                unwrap();
+            assert_eq!(test, "{\"version\":1,\"n\":2,\"sx\":30.0,\"sx2\":50.0,\"sx3\":0.0,\"sx4\":1250.0,\"sy\":30.0,\"sy2\":50.0,\"sy3\":0.0,\"sy4\":1250.0,\"sxy\":50.0}");
+
+        });
+    }
 
     #[pg_test]
     fn stats_agg_fuzz() {
@@ -959,6 +1081,10 @@ mod tests {
         format!("SELECT toolkit_experimental.{}(toolkit_experimental.stats_agg(test_y, test_x), '{}') FROM test_table", agg, arg)
     }
 
+    fn pg_moment_query(moment: i32, column: &str) -> String {
+        format!("select sum(({} - a.avg)^{}) / count({}) / (stddev_pop({})^{}) from test_table, (select avg({}) from test_table) a", column, moment, column, column, moment, column)
+    }
+
     fn test_aggs(state: &mut TestState) {
         Spi::execute(|client| {
             let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
@@ -979,8 +1105,9 @@ mod tests {
             // Definitions for allowed errors for different aggregates
             const NONE: f64 = 0.;                 // Exact match
             const EPS1: f64 = f64::EPSILON;       // Generally enough to handle float rounding
-            const EPS2: f64 = 2. * f64::EPSILON;  // stddev is sqrt(variance), so a bit tighter bound
+            const EPS2: f64 = 2. * f64::EPSILON;  // stddev is sqrt(variance), so a bit looser bound
             const EPS3: f64 = 3. * f64::EPSILON;  // Sum of squares in variance agg accumulates a bit more error
+            const BILLIONTH: f64 = 1e-9;          // Higher order moments exponentially compound the error
 
             check_agg_equivalence(&state, &client, &pg1d_aggx("avg"), &tk1d_agg("average"), NONE);
             check_agg_equivalence(&state, &client, &pg1d_aggx("sum"), &tk1d_agg("sum"), NONE);
@@ -1017,6 +1144,14 @@ mod tests {
             check_agg_equivalence(&state, &client, &pg2d_agg("regr_r2"), &tk2d_agg("determination_coeff"), EPS1);
             check_agg_equivalence(&state, &client, &pg2d_agg("covar_pop"), &tk2d_agg_arg("covariance", "population"), EPS1);
             check_agg_equivalence(&state, &client, &pg2d_agg("covar_samp"), &tk2d_agg_arg("covariance", "sample"), EPS1);
+
+            // Skewness and kurtosis don't have aggregate functions in postgres, but we can compute them
+            check_agg_equivalence(&state, &client, &pg_moment_query(3, "test_x"), &tk1d_agg("skewness"), BILLIONTH);
+            check_agg_equivalence(&state, &client, &pg_moment_query(3, "test_x"), &tk2d_agg("skewness_x"), BILLIONTH);
+            check_agg_equivalence(&state, &client, &pg_moment_query(3, "test_y"), &tk2d_agg("skewness_y"), BILLIONTH);
+            check_agg_equivalence(&state, &client, &pg_moment_query(4, "test_x"), &tk1d_agg("kurtosis"), BILLIONTH);
+            check_agg_equivalence(&state, &client, &pg_moment_query(4, "test_x"), &tk2d_agg("kurtosis_x"), BILLIONTH);
+            check_agg_equivalence(&state, &client, &pg_moment_query(4, "test_y"), &tk2d_agg("kurtosis_y"), BILLIONTH);
 
             client.select("DROP TABLE test_table",
                 None,

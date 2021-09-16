@@ -1,13 +1,15 @@
 
 use serde::{Deserialize, Serialize};
-use crate::{StatsError, INV_FLOATING_ERROR_THRESHOLD};
+use crate::{StatsError, INV_FLOATING_ERROR_THRESHOLD, M3, M4};
 
 #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
 #[repr(C)]
 pub struct StatsSummary1D {
     pub n: u64,
     pub sx: f64,
-    pub sxx: f64,
+    pub sx2: f64,
+    pub sx3: f64,
+    pub sx4: f64,
 }
 
 impl StatsSummary1D{
@@ -19,7 +21,9 @@ impl StatsSummary1D{
         StatsSummary1D {
             n: 0,
             sx: 0.0,
-            sxx: 0.0,
+            sx2: 0.0,
+            sx3: 0.0,
+            sx4: 0.0,
         }
     }
 
@@ -28,17 +32,16 @@ impl StatsSummary1D{
     // Note that the Youngs-Cramer method relies on the sum((x - Sx/n)^2) for which they derive a recurrence relation which is reflected in the algorithm here:
     // the recurrence relation is: sum((x - Sx/n)^2) = Sxx = Sxx_n-1 + 1/(n(n-1)) * (nx - Sx)^2 
     pub fn accum(&mut self, p: f64) -> Result<(), StatsError> {
-        let old = StatsSummary1D {
-            n: self.n,
-            sx: self.sx,
-            sxx: self.sxx,
-        };
+        let old = *self;
         self.n += 1;
         self.sx += p;
         if old.n > 0 {
             let tmpx = p * self.n64() - self.sx;
             let scale = 1.0 / (self.n64() * old.n64());
-            self.sxx += tmpx * tmpx * scale;
+            self.sx2 += tmpx * tmpx * scale;
+            self.sx3 = M3::accum(old.n64(), old.sx, old.sx2, old.sx3, p);
+            self.sx4 = M4::accum(old.n64(), old.sx, old.sx2, old.sx3, old.sx4, p);
+
             if self.has_infinite() {
                 if self.check_overflow(&old, p) {
                     return Err(StatsError::DoubleOverflow);
@@ -48,14 +51,22 @@ impl StatsSummary1D{
                 // we need to set them to NaN instead as this implies that there was an
                 // infinite input (because they necessarily involve multiplications of
                 // infinites, which are NaNs)
-                if self.sxx.is_infinite() {
-                    self.sxx = f64::NAN;
+                if self.sx2.is_infinite() {
+                    self.sx2 = f64::NAN;
+                }
+                if self.sx3.is_infinite() {
+                    self.sx3 = f64::NAN;
+                }
+                if self.sx4.is_infinite() {
+                    self.sx4 = f64::NAN;
                 }
             }
         } else {
             // first input, leave sxx alone unless we have infinite inputs
             if !p.is_finite() {
-                self.sxx = f64::NAN;
+                self.sx2 = f64::NAN;
+                self.sx3 = f64::NAN;
+                self.sx4 = f64::NAN;
             }
 
         }
@@ -64,7 +75,9 @@ impl StatsSummary1D{
 
     fn has_infinite(&self) -> bool {
         self.sx.is_infinite()
-            || self.sxx.is_infinite()
+            || self.sx2.is_infinite()
+            || self.sx3.is_infinite()
+            || self.sx4.is_infinite()
     }
 
     fn check_overflow(&self, old: &StatsSummary1D, p: f64) -> bool {
@@ -112,11 +125,17 @@ impl StatsSummary1D{
         let mut new = StatsSummary1D {
             n: self.n - 1,
             sx: self.sx - p,
-            sxx: 0.0, // initialize this for now.
+            sx2: 0.0, // initialize this for now.
+            sx3: 0.0, // initialize this for now.
+            sx4: 0.0, // initialize this for now.
         }; 
+
         let tmpx = p * self.n64() - self.sx;
         let scale = 1.0 / (self.n64() * new.n64());
-        new.sxx = self.sxx - tmpx * tmpx * scale;
+        new.sx2 = self.sx2 - tmpx * tmpx * scale;
+        new.sx3 = M3::remove(new.n64(), new.sx, new.sx2, self.sx3, p);
+        new.sx4 = M4::remove(new.n64(), new.sx, new.sx2, new.sx3, self.sx4, p);
+
         Some(new) 
     }
 
@@ -147,7 +166,9 @@ impl StatsSummary1D{
         let r = StatsSummary1D {
             n: n,
             sx: self.sx + other.sx,
-            sxx: self.sxx + other.sxx + self.n64() * other.n64() * tmp * tmp / n as f64,
+            sx2: self.sx2 + other.sx2 + self.n64() * other.n64() * tmp * tmp / n as f64,
+            sx3: M3::combine(self.n64(), other.n64(), self.sx, other.sx, self.sx2, other.sx2, self.sx3, other.sx3),
+            sx4: M4::combine(self.n64(), other.n64(), self.sx, other.sx, self.sx2, other.sx2, self.sx3, other.sx3, self.sx4, other.sx4),
         };
         if r.has_infinite() && !self.has_infinite() && !other.has_infinite() {
             return Err(StatsError::DoubleOverflow);
@@ -179,10 +200,15 @@ impl StatsSummary1D{
         let mut part = StatsSummary1D{
             n: combined.n - remove.n,
             sx: combined.sx - remove.sx,
-            sxx: 0.0, //just initialize this, for now.
+            sx2: 0.0, //just initialize this, for now.
+            sx3: 0.0, //just initialize this, for now.
+            sx4: 0.0, //just initialize this, for now.
         };
         let tmp = part.sx / part.n64() - remove.sx / remove.n64(); //gets squared so order doesn't matter
-        part.sxx = combined.sxx - remove.sxx - part.n64() * remove.n64() * tmp * tmp / combined.n64(); 
+        part.sx2 = combined.sx2 - remove.sx2 - part.n64() * remove.n64() * tmp * tmp / combined.n64();
+        part.sx3 = M3::remove_combined(part.n64(), remove.n64(), part.sx, remove.sx, part.sx2, remove.sx2, self.sx3, remove.sx3);
+        part.sx4 = M4::remove_combined(part.n64(), remove.n64(), part.sx, remove.sx, part.sx2, remove.sx2, part.sx3, remove.sx3, self.sx4, remove.sx4);
+
         Some(part)
     }
    
@@ -208,14 +234,14 @@ impl StatsSummary1D{
         if self.n == 0 {
             return None;
         }
-        Some(self.sxx / self.n64())
+        Some(self.sx2 / self.n64())
     }
 
     pub fn var_samp(&self) -> Option<f64> {
         if self.n == 0 {
             return None;
         }
-        Some(self.sxx / (self.n64() - 1.0))
+        Some(self.sx2 / (self.n64() - 1.0))
     }
 
     pub fn stddev_pop(&self) -> Option<f64> {
@@ -224,6 +250,14 @@ impl StatsSummary1D{
 
     pub fn stddev_samp(&self) -> Option<f64> {
         Some(self.var_samp()?.sqrt())
+    }
+
+    pub fn skewness(&self) -> Option<f64> {
+        Some(self.n64().sqrt() * self.sx3 / self.sx2.powf(1.5))
+    }
+
+    pub fn kurtosis(&self) -> Option<f64> {
+        Some(self.n64() * self.sx4 / self.sx2.powi(2))
     }
 }
 
@@ -236,7 +270,44 @@ mod tests {
     fn assert_close_enough(s1:&StatsSummary1D, s2:&StatsSummary1D){
         assert_eq!(s1.n, s2.n);
         assert_relative_eq!(s1.sx, s2.sx);
-        assert_relative_eq!(s1.sxx, s2.sxx);
+        assert_relative_eq!(s1.sx2, s2.sx2);
+        assert_relative_eq!(s1.sx3, s2.sx3);
+        assert_relative_eq!(s1.sx4, s2.sx4);
+    }
+
+    #[test]
+    fn test_against_known_vals() {
+        let p = StatsSummary1D::new_from_vec(vec![7.0, 18.0, -2.0, 5.0, 3.0]).unwrap();
+        
+        assert_eq!(p.n, 5);
+        assert_relative_eq!(p.sx, 31.);
+        assert_relative_eq!(p.sx2, 218.8);
+        assert_relative_eq!(p.sx3, 1057.68);
+        assert_relative_eq!(p.sx4, 24016.336);
+
+        let p = p.remove(18.0).unwrap();
+        
+        assert_eq!(p.n, 4);
+        assert_relative_eq!(p.sx, 13.);
+        assert_relative_eq!(p.sx2, 44.75);
+        assert_relative_eq!(p.sx3, -86.625);
+        assert_relative_eq!(p.sx4, 966.8281249999964);
+
+        let p = p.combine(StatsSummary1D::new_from_vec(vec![0.5, 11.0, 6.123]).unwrap()).unwrap();
+        
+        assert_eq!(p.n, 7);
+        assert_relative_eq!(p.sx, 30.623);
+        assert_relative_eq!(p.sx2, 111.77425342857143);
+        assert_relative_eq!(p.sx3, -5.324891254897949);
+        assert_relative_eq!(p.sx4, 3864.054085451184);
+
+        let p = p.remove_combined(StatsSummary1D::new_from_vec(vec![5.0, 11.0, 3.0]).unwrap()).unwrap();
+        
+        assert_eq!(p.n, 4);
+        assert_relative_eq!(p.sx, 11.623);
+        assert_relative_eq!(p.sx2, 56.96759675000001);
+        assert_relative_eq!(p.sx3, -30.055041237374915);
+        assert_relative_eq!(p.sx4, 1000.8186787745212);
     }
 
     #[test]

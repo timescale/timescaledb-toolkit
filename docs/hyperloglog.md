@@ -99,7 +99,7 @@ FROM (
 
 ---
 
-## **distinct_count** <a id="distinct_count
+## **distinct_count** <a id="distinct_count"></a>
 ```SQL ,ignore
 toolkit_experimental.distinct_count(hyperloglog Hyperloglog) RETURNS BIGINT
 ```

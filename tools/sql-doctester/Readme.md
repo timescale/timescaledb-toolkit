@@ -42,7 +42,7 @@ Delta
 ## Installation ##
 
 ```bash
-cargo install --git https://github.com/timescale/timescale-analytics.git --branch main sql-doctester
+cargo install --git https://github.com/timescale/timescaledb-toolkit.git --branch main sql-doctester
 ```
 
 ## Usage ##

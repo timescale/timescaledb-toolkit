@@ -42,7 +42,7 @@ RUN set -ex \
     && rm -rf ~/timescaledb
 
 # install doctester
-RUN cargo install --git https://github.com/timescale/timescale-analytics.git --branch main sql-doctester
+RUN cargo install --git https://github.com/timescale/timescaledb-toolkit.git --branch main sql-doctester
 
 FROM pgx_builder AS rust-pgx
 

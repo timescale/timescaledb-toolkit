@@ -59,7 +59,7 @@ jobs:
           push: true
           context: .
           file: ./docker/nightly/Dockerfile
-          tags: timescaledev/timescale-analytics:nightly
+          tags: timescaledev/timescale-analytics:nightly,timescaledev/timescaledb-toolkit:nightly
 
       - name: Image digest
         run: echo ${{ steps.image_build.outputs.digest }}

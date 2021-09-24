@@ -174,10 +174,108 @@ pub fn add_unstable_element<'p, 'e>(
     pipeline
 }
 
+type Internal = usize;
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    schema="toolkit_experimental"
+    name="toolkit_pipeline_support",
+)]
+pub unsafe fn pipeline_support(input: Internal)
+-> Internal {
+    use std::{ffi::CStr, mem::size_of, ptr};
+
+    let input: *mut pg_sys::Node = input as _;
+    if !pgx::is_a(input, pg_sys::NodeTag_T_SupportRequestSimplify) {
+        return 0
+    }
+
+    //FIXME add include/nodes/supportnodes.h to pgx headers
+    #[repr(C)]
+    struct SupportRequestSimplify {
+        ty: pg_sys::NodeTag,
+        root: *mut pg_sys::PlannerInfo,
+        fcall: *mut pg_sys::FuncExpr,
+    }
+    let req: *mut SupportRequestSimplify = input.cast();
+
+    let original_args = PgList::from_pg((*(*req).fcall).args);
+    assert_eq!(original_args.len(), 2);
+    let arg1 = original_args.head().unwrap();
+    let arg2 = original_args.tail().unwrap();
+
+    if !is_a(arg1, pg_sys::NodeTag_T_OpExpr) {
+        return ptr::null_mut::<pg_sys::Expr>() as _
+    }
+
+    let old_executor: *mut pg_sys::OpExpr = arg1.cast();
+    let executor_id = (*old_executor).opfuncid;
+
+    // check old_executor operator fn is 'run_pipeline' above
+    static RUN_PIPELINE_OID: once_cell::sync::OnceCell<pg_sys::Oid> = once_cell::sync::OnceCell::new();
+    match RUN_PIPELINE_OID.get() {
+        Some(oid) => if executor_id != *oid {
+            return ptr::null_mut::<pg_sys::Expr>() as _
+        }
+        None => {
+            let func_name = pg_sys::get_func_name(executor_id);
+            if func_name.is_null() {
+                return ptr::null_mut::<pg_sys::Expr>() as _
+            }
+            let func_name = CStr::from_ptr(func_name);
+            if func_name != CStr::from_bytes_with_nul(b"run_pipeline\0").unwrap() {
+                return ptr::null_mut::<pg_sys::Expr>() as _
+            }
+            RUN_PIPELINE_OID.get_or_init(|| executor_id);
+        },
+
+    }
+
+    let lhs_args = PgList::from_pg((*old_executor).args);
+    assert_eq!(lhs_args.len(), 2);
+    let old_series = lhs_args.head().unwrap();
+    let old_const = lhs_args.tail().unwrap();
+
+    if !is_a(old_const, pg_sys::NodeTag_T_Const) {
+        return ptr::null_mut::<pg_sys::Expr>() as _
+    }
+
+    let old_const: *mut pg_sys::Const = old_const.cast();
+
+    if !is_a(arg2, pg_sys::NodeTag_T_Const) {
+        return ptr::null_mut::<pg_sys::Expr>() as _
+    }
+
+    let new_element_const: *mut pg_sys::Const = arg2.cast();
+
+    let old_pipeline = UnstableTimeseriesPipeline::from_datum((*old_const).constvalue, false, 0).unwrap();
+    let new_element = UnstableTimeseriesPipeline::from_datum((*new_element_const).constvalue, false, 0)
+        .unwrap();
+    let new_pipeline = add_unstable_element(old_pipeline, new_element).into_datum().unwrap();
+
+    let new_const = pg_sys::palloc(size_of::<pg_sys::Const>()).cast();
+    *new_const = *new_element_const;
+    (*new_const).constvalue = new_pipeline;
+
+    // TODO if the new element is a finalizer we need to change the execution
+    //      operator to the correct (new) one
+    let new_executor = pg_sys::palloc(size_of::<pg_sys::OpExpr>()).cast();
+    *new_executor = *old_executor;
+    let mut new_executor_args = PgList::new();
+    new_executor_args.push(old_series);
+    new_executor_args.push(new_const.cast());
+    (*new_executor).args = new_executor_args.into_pg();
+
+    return new_executor as _
+}
+
 // using this instead of pg_operator since the latter doesn't support schemas yet
 // FIXME there is no CREATE OR REPLACE OPERATOR need to update post-install.rs
 //       need to ensure this works with out unstable warning
 extension_sql!(r#"
+ALTER FUNCTION toolkit_experimental."run_pipeline" SUPPORT toolkit_experimental.toolkit_pipeline_support;
+ALTER FUNCTION toolkit_experimental."add_unstable_element" SUPPORT toolkit_experimental.toolkit_pipeline_support;
+
 CREATE OPERATOR -> (
     PROCEDURE=toolkit_experimental."run_pipeline",
     LEFTARG=toolkit_experimental.TimeSeries,
@@ -389,6 +487,34 @@ mod tests {
                 (ts:\"2020-04-09 00:00:00+00\",val:5.554),\
                 (ts:\"2020-04-20 00:00:00+00\",val:10.0221)\
             ]");
+        });
+    }
+
+    #[pg_test]
+    fn test_pipeline_folding() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            // using the search path trick for this test b/c the operator is
+            // difficult to spot otherwise.
+            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
+
+            let output = client.select(
+                "EXPLAIN (verbose) SELECT timeseries('2021-01-01'::timestamptz, 0.1) -> round() -> abs();",
+                None,
+                None
+            ).skip(1)
+                .next().unwrap()
+                .by_ordinal(1).unwrap()
+                .value::<String>().unwrap();
+            // check that it's executing as if we had input `timeseries -> (round() -> abs())`
+            assert_eq!(output.trim(), "Output: \
+                (timeseries('2021-01-01 00:00:00+00'::timestamp with time zone, '0.1'::double precision) \
+                -> '(version:1,num_elements:2,elements:[\
+                    Arithmetic(function:Round,rhs:0),\
+                    Arithmetic(function:Abs,rhs:0)\
+                ])'::unstabletimeseriespipeline)");
         });
     }
 }

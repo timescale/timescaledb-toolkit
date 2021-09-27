@@ -11,7 +11,7 @@ A timeseries is an intermediate representation of a particular value over time u
 
 ## Timeseries Pipelines <a id="timeseries-pipelines"></a>
 
-In an attempt to streamline the timeseries interface and make them as easy to use as possible, we've provided a custom operator `|>` for applying common operations to timeseries and chaining such operations together.  This is much more fully documented in the [timeseries pipeline elements](timeseries_pipeline_elements.md) page.
+In an attempt to streamline the timeseries interface and make them as easy to use as possible, we've provided a custom operator `->` for applying common operations to timeseries and chaining such operations together.  This is much more fully documented in the [timeseries pipeline elements](timeseries_pipeline_elements.md) page.
 
 ## Usage Example <a id="timeseries-example"></a>
 

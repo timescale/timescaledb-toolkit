@@ -6,20 +6,20 @@
 
 ## Description <a id="timeseries-pipeline-description"></a>
 
-Timescale timeseries objects are just a convenient and efficient way of tracking a single value over time and are detailed a bit more [here](timeseries.md).  One of our primary goals with timeseries is that they should be easy and efficient to perform basic operations on, and that is where pipelines enter the picture.  At its simplest, a pipeline is just a timeseries connected to a [pipeline element](#timeseries-pipeline-elements) via the pipeline operator `|>`.  However, most pipeline operations output new timeseries, so it's possible to chain many pipeline elements together such that the output from one element become the input to the next.
+Timescale timeseries objects are just a convenient and efficient way of tracking a single value over time and are detailed a bit more [here](timeseries.md).  One of our primary goals with timeseries is that they should be easy and efficient to perform basic operations on, and that is where pipelines enter the picture.  At its simplest, a pipeline is just a timeseries connected to a [pipeline element](#timeseries-pipeline-elements) via the pipeline operator `->`.  However, most pipeline operations output new timeseries, so it's possible to chain many pipeline elements together such that the output from one element become the input to the next.
 
 ### A note on operator associativity and grouping
 
 Due to limitations in the PostgresQL parser, custom operators are required to be left associative.  The following pipeline will always result in `elementA` being applied to `timeseries` and then `elementB` being applied to the result.
 
 ```SQL ,ignore
-SELECT timeseries |> elementA |> elementB;
+SELECT timeseries -> elementA -> elementB;
 ```
 
 However, it is possible to explicitly group elements using parentheses:
 
 ```SQL ,ignore
-SELECT timeseries |> (elementA |> elementB);
+SELECT timeseries -> (elementA -> elementB);
 ```
 
 This will result in a pipeline object being created from elements A and B, which will then be applied to the timeseries.  While we don't presently take maximum advantage of this internally, these multiple element pipelines should enable optimizations moving forward.  Therefore, this second form should be preferred where possible.
@@ -37,7 +37,7 @@ In order to have some nominally interesting data to look at, let's populate this
 
 ```SQL ,non-transactional,ignore-output
 SELECT setseed(0.456);
-INSERT INTO test_data 
+INSERT INTO test_data
     SELECT
         '2020-01-01 00:00:00+00'::timestamptz + ((random() * 2592000)::int * '1 second'::interval),
         floor(random() * 10 + 1),
@@ -48,13 +48,13 @@ INSERT INTO test_data
 Now suppose we want to know how much the temperature fluctuates on a daily basis for each device.  Using timeseries and pipelines can simplify the process of finding the answer:
 ```SQL ,non-transactional,ignore-output
 SET timescaledb_toolkit_acknowledge_auto_drop TO 'true';
-CREATE VIEW daily_delta AS 
-    SELECT device, 
+CREATE VIEW daily_delta AS
+    SELECT device,
         toolkit_experimental.timeseries(time, temperature)
-            |> (toolkit_experimental.sort() 
-            |>  toolkit_experimental.resample_to_rate('trailing_average', '24 hours', true) 
-            |>  toolkit_experimental.fill_holes('interpolate') 
-            |>  toolkit_experimental.delta()) AS deltas
+            -> (toolkit_experimental.sort()
+            ->  toolkit_experimental.resample_to_rate('trailing_average', '24 hours', true)
+            ->  toolkit_experimental.fill_holes('interpolate')
+            ->  toolkit_experimental.delta()) AS deltas
     FROM test_data
     GROUP BY device;
 ```
@@ -65,7 +65,7 @@ This command creates a timeseries from the time and temperature columns (grouped
 SELECT time, value::numeric(4,2) AS delta FROM toolkit_experimental.unnest_series((SELECT deltas FROM daily_delta WHERE device = 3));
 ```
 ```output
-          time          | delta 
+          time          | delta
 ------------------------+-------
  2020-01-02 00:00:00+00 | -0.54
  2020-01-03 00:00:00+00 |  0.29
@@ -100,10 +100,10 @@ SELECT time, value::numeric(4,2) AS delta FROM toolkit_experimental.unnest_serie
 
 Or even run one of our device's deltas through lttb to get a nice graphable set of points:
 ```SQL
-SELECT (deltas |> toolkit_experimental.lttb(10))::TEXT FROM daily_delta where device = 7;
+SELECT (deltas -> toolkit_experimental.lttb(10))::TEXT FROM daily_delta where device = 7;
 ```
 ```output
-                                                                            text                                                                                                                                                                                                                                                                                               
+                                                                            text
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
  [{"ts":"2020-01-02 00:00:00+00","val":0.5555802022457712},{"ts":"2020-01-05 00:00:00+00","val":-1.4688929826077484},{"ts":"2020-01-08 00:00:00+00","val":2.416048415988122},{"ts":"2020-01-09 00:00:00+00","val":-3.0046993833401174},{"ts":"2020-01-14 00:00:00+00","val":0.22758839123397223},{"ts":"2020-01-17 00:00:00+00","val":-2.1256090660578124},{"ts":"2020-01-19 00:00:00+00","val":1.2272792346941657},{"ts":"2020-01-25 00:00:00+00","val":-3.1053238977555324},{"ts":"2020-01-26 00:00:00+00","val":1.2629388469236815},{"ts":"2020-01-30 00:00:00+00","val":-0.7042437967407409}]
 ```
@@ -146,13 +146,13 @@ This element will return a new timeseries where each point is the difference bet
 ```SQL
 SELECT time, value
 FROM toolkit_experimental.unnest_series(
-    (SELECT toolkit_experimental.timeseries('2020-01-01'::timestamptz + step * '1 day'::interval, step * step) 
-        |> toolkit_experimental.delta() 
+    (SELECT toolkit_experimental.timeseries('2020-01-01'::timestamptz + step * '1 day'::interval, step * step)
+        -> toolkit_experimental.delta()
     FROM generate_series(1, 5) step)
 );
 ```
 ```output
-          time          | value 
+          time          | value
 ------------------------+-------
  2020-01-03 00:00:00+00 |     3
  2020-01-04 00:00:00+00 |     5
@@ -194,14 +194,14 @@ Valid fill methods are:
 ```SQL
 SELECT time, value
 FROM toolkit_experimental.unnest_series(
-    (SELECT toolkit_experimental.timeseries('2020-01-01'::timestamptz + step * step * '1 hour'::interval, step * step) 
-        |> (toolkit_experimental.resample_to_rate('nearest', '1 hour', true)
-        |>  toolkit_experimental.fill_holes('locf'))
+    (SELECT toolkit_experimental.timeseries('2020-01-01'::timestamptz + step * step * '1 hour'::interval, step * step)
+        -> (toolkit_experimental.resample_to_rate('nearest', '1 hour', true)
+        ->  toolkit_experimental.fill_holes('locf'))
     FROM generate_series(1, 3) step)
 );
 ```
 ```output
-          time          | value 
+          time          | value
 ------------------------+-------
  2020-01-01 01:00:00+00 |     1
  2020-01-01 02:00:00+00 |     1
@@ -230,7 +230,7 @@ SELECT lttb(time, value, 40) FROM data;
 ```
 is equivalent to
 ```SQL ,ignore
-SELECT timeseries(time, value) |> sort() |> lttb() FROM data;
+SELECT timeseries(time, value) -> sort() -> lttb() FROM data;
 ```
 
 ### Required Arguments <a id="timeseries_pipeline_lttb-arguments"></a>
@@ -250,8 +250,8 @@ SELECT timeseries(time, value) |> sort() |> lttb() FROM data;
 ```SQL
 SELECT time, value
 FROM toolkit_experimental.unnest_series(
-    (SELECT toolkit_experimental.timeseries('2020-01-01 UTC'::TIMESTAMPTZ + make_interval(days=>(foo*10)::int), 10 + 5 * cos(foo)) 
-        |> toolkit_experimental.lttb(4) 
+    (SELECT toolkit_experimental.timeseries('2020-01-01 UTC'::TIMESTAMPTZ + make_interval(days=>(foo*10)::int), 10 + 5 * cos(foo))
+        -> toolkit_experimental.lttb(4)
     FROM generate_series(1,11,0.1) foo)
 );
 ```
@@ -305,13 +305,13 @@ In all cases, if there are no points in the input series in the interval range o
 ```SQL
 SELECT time, value::numeric(4,2)
 FROM toolkit_experimental.unnest_series(
-    (SELECT toolkit_experimental.timeseries('2020-01-01'::TIMESTAMPTZ + step *step * step * '1 minute'::interval, step) 
-        |> toolkit_experimental.resample_to_rate('weighted_average', '1 hour', true) 
+    (SELECT toolkit_experimental.timeseries('2020-01-01'::TIMESTAMPTZ + step *step * step * '1 minute'::interval, step)
+        -> toolkit_experimental.resample_to_rate('weighted_average', '1 hour', true)
     FROM generate_series(1,10) step)
 );
 ```
 ```output
-          time          | value 
+          time          | value
 ------------------------+-------
  2020-01-01 00:00:00+00 |  1.59
  2020-01-01 01:00:00+00 |  4.00
@@ -349,13 +349,13 @@ This element takes in a timeseries and returns a timeseries consisting of the sa
 ```SQL
 SELECT time, value
 FROM toolkit_experimental.unnest_series(
-    (SELECT toolkit_experimental.timeseries('2020-01-06'::timestamptz - step * '1 day'::interval, step * step) 
-        |> toolkit_experimental.sort() 
+    (SELECT toolkit_experimental.timeseries('2020-01-06'::timestamptz - step * '1 day'::interval, step * step)
+        -> toolkit_experimental.sort()
     FROM generate_series(1, 5) step)
 );
 ```
 ```output
-          time          | value 
+          time          | value
 ------------------------+-------
  2020-01-01 00:00:00+00 |    25
  2020-01-02 00:00:00+00 |    16

@@ -87,13 +87,13 @@ pub fn pipeline_stats_agg<'e>() -> toolkit_experimental::PipelineThenStatsAgg<'e
 // FIXME there is no CREATE OR REPLACE OPERATOR need to update post-install.rs
 //       need to ensure this works with out unstable warning
 extension_sql!(r#"
-CREATE OPERATOR |> (
+CREATE OPERATOR -> (
     PROCEDURE=toolkit_experimental."run_pipeline_then_stats_agg",
     LEFTARG=toolkit_experimental.TimeSeries,
     RIGHTARG=toolkit_experimental.PipelineThenStatsAgg
 );
 
-CREATE OPERATOR |> (
+CREATE OPERATOR -> (
     PROCEDURE=toolkit_experimental."finalize_with_stats_agg",
     LEFTARG=toolkit_experimental.UnstableTimeseriesPipeline,
     RIGHTARG=toolkit_experimental.PipelineThenStatsAgg
@@ -123,7 +123,7 @@ mod tests {
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)) as v(time, value)";
 
             let val = client.select(
-                &format!("SELECT (series |> stats_agg())::TEXT FROM ({}) s", create_series),
+                &format!("SELECT (series -> stats_agg())::TEXT FROM ({}) s", create_series),
                 None,
                 None
             )

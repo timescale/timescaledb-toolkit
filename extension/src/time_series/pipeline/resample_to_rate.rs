@@ -252,7 +252,7 @@ mod tests {
             );
 
             let val = client.select(
-                "SELECT (series |> resample_to_rate('average', '240 hours', true))::TEXT FROM resample_pipe",
+                "SELECT (series -> resample_to_rate('average', '240 hours', true))::TEXT FROM resample_pipe",
                 None,
                 None
             )
@@ -273,7 +273,7 @@ mod tests {
             ]");
 
             let val = client.select(
-                "SELECT (series |> resample_to_rate('trailing_average', '240 hours', false))::TEXT FROM resample_pipe",
+                "SELECT (series -> resample_to_rate('trailing_average', '240 hours', false))::TEXT FROM resample_pipe",
                 None,
                 None
             )
@@ -294,7 +294,7 @@ mod tests {
             ]");
 
             let val = client.select(
-                "SELECT (series |> resample_to_rate('trailing_average', '240 hours', true))::TEXT FROM resample_pipe",
+                "SELECT (series -> resample_to_rate('trailing_average', '240 hours', true))::TEXT FROM resample_pipe",
                 None,
                 None
             )
@@ -315,7 +315,7 @@ mod tests {
             ]");
 
             let val = client.select(
-                "SELECT (series |> resample_to_rate('weighted_average', '240 hours', true))::TEXT FROM resample_pipe",
+                "SELECT (series -> resample_to_rate('weighted_average', '240 hours', true))::TEXT FROM resample_pipe",
                 None,
                 None
             )
@@ -336,7 +336,7 @@ mod tests {
             ]");
 
             let val = client.select(
-                "SELECT (series |> resample_to_rate('NEAREST' ,'240 hours', true))::TEXT FROM resample_pipe",
+                "SELECT (series -> resample_to_rate('NEAREST' ,'240 hours', true))::TEXT FROM resample_pipe",
                 None,
                 None
             )

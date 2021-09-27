@@ -164,7 +164,7 @@ mod tests {
             );
 
             let val = client.select(
-                "SELECT (timeseries(time, value) |> resample_to_rate('average', '240 hours', true))::TEXT FROM gappy_series",
+                "SELECT (timeseries(time, value) -> resample_to_rate('average', '240 hours', true))::TEXT FROM gappy_series",
                 None,
                 None
             )
@@ -186,7 +186,7 @@ mod tests {
 
 
             let val = client.select(
-                "SELECT (timeseries(time, value) |> resample_to_rate('average', '240 hours', true) |> fill_holes('LOCF'))::TEXT FROM gappy_series",
+                "SELECT (timeseries(time, value) -> resample_to_rate('average', '240 hours', true) -> fill_holes('LOCF'))::TEXT FROM gappy_series",
                 None,
                 None
             )
@@ -209,7 +209,7 @@ mod tests {
             ]");
 
             let val = client.select(
-                "SELECT (timeseries(time, value) |> resample_to_rate('average', '240 hours', true) |> fill_holes('interpolate'))::TEXT FROM gappy_series",
+                "SELECT (timeseries(time, value) -> resample_to_rate('average', '240 hours', true) -> fill_holes('interpolate'))::TEXT FROM gappy_series",
                 None,
                 None
             )

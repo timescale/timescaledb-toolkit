@@ -239,7 +239,7 @@ mod tests {
 
 
             let val = client.select(
-                "SELECT (timeseries(time, value) |> map_data('x2'))::TEXT FROM series",
+                "SELECT (timeseries(time, value) -> map_data('x2'))::TEXT FROM series",
                 None,
                 None
             )
@@ -309,7 +309,7 @@ mod tests {
 
 
             let val = client.select(
-                "SELECT (timeseries(time, value) |> map_series('jan_3_x3'))::TEXT FROM series",
+                "SELECT (timeseries(time, value) -> map_series('jan_3_x3'))::TEXT FROM series",
                 None,
                 None
             )
@@ -318,7 +318,7 @@ mod tests {
             assert_eq!(val.unwrap(), "[{\"ts\":\"2020-01-03 00:00:00+00\",\"val\":60.0}]");
 
             let val = client.select(
-                "SELECT (timeseries(time, value) |>> 'jan_3_x3')::TEXT FROM series",
+                "SELECT (timeseries(time, value) ->> 'jan_3_x3')::TEXT FROM series",
                 None,
                 None
             )

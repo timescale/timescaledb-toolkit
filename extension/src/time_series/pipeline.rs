@@ -176,13 +176,13 @@ pub fn add_unstable_element<'p, 'e>(
 // FIXME there is no CREATE OR REPLACE OPERATOR need to update post-install.rs
 //       need to ensure this works with out unstable warning
 extension_sql!(r#"
-CREATE OPERATOR |> (
+CREATE OPERATOR -> (
     PROCEDURE=toolkit_experimental."run_pipeline",
     LEFTARG=toolkit_experimental.TimeSeries,
     RIGHTARG=toolkit_experimental.UnstableTimeseriesPipeline
 );
 
-CREATE OPERATOR |> (
+CREATE OPERATOR -> (
     PROCEDURE=toolkit_experimental."add_unstable_element",
     LEFTARG=toolkit_experimental.UnstableTimeseriesPipeline,
     RIGHTARG=toolkit_experimental.UnstableTimeseriesPipeline
@@ -232,9 +232,9 @@ pub fn add_user_pipeline_element<'p, 'e>(
 }
 
 // using this instead of pg_operator since the latter doesn't support schemas yet
-// if we use `|>` for both this and and the regular timeseries elements trying
-// to do `series |> 'custom_element'` gets an ambiguous operator error
-// `timeseries |> unknown` is not unique. For now we just use a different
+// if we use `->` for both this and and the regular timeseries elements trying
+// to do `series -> 'custom_element'` gets an ambiguous operator error
+// `timeseries -> unknown` is not unique. For now we just use a different
 // operator for user-defined pipeline elements. In the future we could consider
 // changing the element input function to fallback to checking if the input is
 // a regproc if it doesn't recognize it; the formats should be different enough
@@ -242,19 +242,19 @@ pub fn add_user_pipeline_element<'p, 'e>(
 // FIXME there is no CREATE OR REPLACE OPERATOR need to update post-install.rs
 //       need to ensure this works with out unstable warning
 extension_sql!(r#"
-CREATE OPERATOR |>> (
+CREATE OPERATOR ->> (
     PROCEDURE=toolkit_experimental."run_user_pipeline_element",
     LEFTARG=toolkit_experimental.TimeSeries,
     RIGHTARG=regproc
 );
 
-CREATE OPERATOR |>> (
+CREATE OPERATOR ->> (
     PROCEDURE=toolkit_experimental."build_unstable_user_pipeline",
     LEFTARG=regproc,
     RIGHTARG=regproc
 );
 
-CREATE OPERATOR |>> (
+CREATE OPERATOR ->> (
     PROCEDURE=toolkit_experimental."add_user_pipeline_element",
     LEFTARG=toolkit_experimental.UnstableTimeseriesPipeline,
     RIGHTARG=regproc
@@ -308,7 +308,7 @@ mod tests {
             );
 
             let val = client.select(
-                "SELECT (series |> lttb(17))::TEXT FROM lttb_pipe",
+                "SELECT (series -> lttb(17))::TEXT FROM lttb_pipe",
                 None,
                 None
             )
@@ -335,7 +335,7 @@ mod tests {
             ]");
 
             let val = client.select(
-                "SELECT (series |> lttb(8))::TEXT FROM lttb_pipe",
+                "SELECT (series -> lttb(8))::TEXT FROM lttb_pipe",
                 None,
                 None
             )
@@ -353,7 +353,7 @@ mod tests {
             ]");
 
             let val = client.select(
-                "SELECT (series |> lttb(8) |> lttb(8))::TEXT FROM lttb_pipe",
+                "SELECT (series -> lttb(8) -> lttb(8))::TEXT FROM lttb_pipe",
                 None,
                 None
             )
@@ -371,7 +371,7 @@ mod tests {
             ]");
 
             let val = client.select(
-                "SELECT (series |> (lttb(8) |> lttb(8) |> lttb(8)))::TEXT FROM lttb_pipe",
+                "SELECT (series -> (lttb(8) -> lttb(8) -> lttb(8)))::TEXT FROM lttb_pipe",
                 None,
                 None
             )

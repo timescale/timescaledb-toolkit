@@ -289,7 +289,7 @@ mod tests {
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)) as v(time, value)";
 
             let val = client.select(
-                &format!("SELECT (series |> add(1.0))::TEXT FROM ({}) s", create_series),
+                &format!("SELECT (series -> add(1.0))::TEXT FROM ({}) s", create_series),
                 None,
                 None
             )
@@ -304,7 +304,7 @@ mod tests {
             ]");
 
             let val = client.select(
-                &format!("SELECT (series |> sub(3.0))::TEXT FROM ({}) s", create_series),
+                &format!("SELECT (series -> sub(3.0))::TEXT FROM ({}) s", create_series),
                 None,
                 None
             )
@@ -319,7 +319,7 @@ mod tests {
             ]");
 
             let val = client.select(
-                &format!("SELECT (series |> mul(2.0))::TEXT FROM ({}) s", create_series),
+                &format!("SELECT (series -> mul(2.0))::TEXT FROM ({}) s", create_series),
                 None,
                 None
             )
@@ -334,7 +334,7 @@ mod tests {
             ]");
 
             let val = client.select(
-                &format!("SELECT (series |> div(5.0))::TEXT FROM ({}) s", create_series),
+                &format!("SELECT (series -> div(5.0))::TEXT FROM ({}) s", create_series),
                 None,
                 None
             )
@@ -349,7 +349,7 @@ mod tests {
             ]");
 
             let val = client.select(
-                &format!("SELECT (series |> mod(5.0))::TEXT FROM ({}) s", create_series),
+                &format!("SELECT (series -> mod(5.0))::TEXT FROM ({}) s", create_series),
                 None,
                 None
             )
@@ -364,7 +364,7 @@ mod tests {
             ]");
 
             let val = client.select(
-                &format!("SELECT (series |> power(2.0))::TEXT FROM ({}) s", create_series),
+                &format!("SELECT (series -> power(2.0))::TEXT FROM ({}) s", create_series),
                 None,
                 None
             )
@@ -380,7 +380,7 @@ mod tests {
 
 
             let val = client.select(
-                &format!("SELECT (series |> logN(10.0))::TEXT FROM ({}) s", create_series),
+                &format!("SELECT (series -> logN(10.0))::TEXT FROM ({}) s", create_series),
                 None,
                 None
             )
@@ -415,7 +415,7 @@ mod tests {
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.3)) as v(time, value)";
 
             let val = client.select(
-                &format!("SELECT (series |> abs())::TEXT FROM ({}) s", create_series),
+                &format!("SELECT (series -> abs())::TEXT FROM ({}) s", create_series),
                 None,
                 None
             )
@@ -431,7 +431,7 @@ mod tests {
 
             // TODO re-enable once made stable
             // let val = client.select(
-            //     &format!("SELECT (series |> cbrt())::TEXT FROM ({}) s", create_series),
+            //     &format!("SELECT (series -> cbrt())::TEXT FROM ({}) s", create_series),
             //     None,
             //     None
             // )
@@ -446,7 +446,7 @@ mod tests {
             // ]");
 
             let val = client.select(
-                &format!("SELECT (series |> ceil())::TEXT FROM ({}) s", create_series),
+                &format!("SELECT (series -> ceil())::TEXT FROM ({}) s", create_series),
                 None,
                 None
             )
@@ -461,7 +461,7 @@ mod tests {
             ]");
 
             let val = client.select(
-                &format!("SELECT (series |> floor())::TEXT FROM ({}) s", create_series),
+                &format!("SELECT (series -> floor())::TEXT FROM ({}) s", create_series),
                 None,
                 None
             )
@@ -479,7 +479,7 @@ mod tests {
             // Josh - likely JSON can't represent nans correctly...
             // TODO re-enable once made stable
             // let val = client.select(
-            //     &format!("SELECT (series |> ln())::TEXT FROM ({}) s", create_series),
+            //     &format!("SELECT (series -> ln())::TEXT FROM ({}) s", create_series),
             //     None,
             //     None
             // )
@@ -495,7 +495,7 @@ mod tests {
 
             // TODO re-enable once made stable
             // let val = client.select(
-            //     &format!("SELECT (series |> log10())::TEXT FROM ({}) s", create_series),
+            //     &format!("SELECT (series -> log10())::TEXT FROM ({}) s", create_series),
             //     None,
             //     None
             // )
@@ -510,7 +510,7 @@ mod tests {
             // ]");
 
             let val = client.select(
-                &format!("SELECT (series |> round())::TEXT FROM ({}) s", create_series),
+                &format!("SELECT (series -> round())::TEXT FROM ({}) s", create_series),
                 None,
                 None
             )
@@ -525,7 +525,7 @@ mod tests {
             ]");
 
             let val = client.select(
-                &format!("SELECT (series |> sign())::TEXT FROM ({}) s", create_series),
+                &format!("SELECT (series -> sign())::TEXT FROM ({}) s", create_series),
                 None,
                 None
             )
@@ -541,7 +541,7 @@ mod tests {
 
             // TODO re-enable once made stable
             // let val = client.select(
-            //     &format!("SELECT (series |> sqrt())::TEXT FROM ({}) s", create_series),
+            //     &format!("SELECT (series -> sqrt())::TEXT FROM ({}) s", create_series),
             //     None,
             //     None
             // )
@@ -556,7 +556,7 @@ mod tests {
             // ]");
 
             let val = client.select(
-                &format!("SELECT (series |> trunc())::TEXT FROM ({}) s", create_series),
+                &format!("SELECT (series -> trunc())::TEXT FROM ({}) s", create_series),
                 None,
                 None
             )

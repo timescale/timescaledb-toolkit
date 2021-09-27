@@ -85,7 +85,7 @@ mod tests {
 
 
             let val = client.select(
-                "SELECT (timeseries(time, value) |> sort())::TEXT FROM series",
+                "SELECT (timeseries(time, value) -> sort())::TEXT FROM series",
                 None,
                 None
             )

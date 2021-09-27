@@ -77,7 +77,7 @@ mod tests {
             );
 
             let val = client.select(
-                "SELECT (timeseries(time, value) |> delta())::TEXT FROM series",
+                "SELECT (timeseries(time, value) -> delta())::TEXT FROM series",
                 None,
                 None
             )

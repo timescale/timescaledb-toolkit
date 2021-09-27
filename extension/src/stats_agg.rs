@@ -8,7 +8,7 @@ use flat_serialize::*;
 
 use crate::{
     aggregate_utils::in_aggregate_context,
-    json_inout_funcs,
+    ron_inout_funcs,
     build,
     palloc::Internal,
     pg_type,
@@ -50,8 +50,8 @@ pg_type! {
     }
 }
 
-json_inout_funcs!(StatsSummary1D);
-json_inout_funcs!(StatsSummary2D);
+ron_inout_funcs!(StatsSummary1D);
+ron_inout_funcs!(StatsSummary2D);
 
 
 // hack to allow us to qualify names with "toolkit_experimental"
@@ -932,7 +932,7 @@ mod tests {
                 .first()
                 .get_one::<String>().
                 unwrap();
-            assert_eq!(test, "{\"version\":1,\"n\":1,\"sx\":10.0,\"sx2\":0.0,\"sx3\":0.0,\"sx4\":0.0,\"sy\":10.0,\"sy2\":0.0,\"sy3\":0.0,\"sy4\":0.0,\"sxy\":0.0}");
+            assert_eq!(test, "(version:1,n:1,sx:10,sx2:0,sx3:0,sx4:0,sy:10,sy2:0,sy3:0,sy4:0,sxy:0)");
 
             client.select(
                 "INSERT INTO test_table VALUES (20, 20);",
@@ -947,8 +947,37 @@ mod tests {
                 .first()
                 .get_one::<String>().
                 unwrap();
-            assert_eq!(test, "{\"version\":1,\"n\":2,\"sx\":30.0,\"sx2\":50.0,\"sx3\":0.0,\"sx4\":1250.0,\"sy\":30.0,\"sy2\":50.0,\"sy3\":0.0,\"sy4\":1250.0,\"sxy\":50.0}");
+            assert_eq!(test, "(version:1,n:2,sx:30,sx2:50,sx3:0,sx4:1250,sy:30,sy2:50,sy3:0,sy4:1250,sxy:50)");
 
+            client.select(
+                "INSERT INTO test_table VALUES ('NaN', 30);",
+                None,
+                None
+            );
+            let test = client.select(
+                "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
+                None,
+                None
+            )
+                .first()
+                .get_one::<String>().
+                unwrap();
+            assert_eq!(test, "(version:1,n:3,sx:NaN,sx2:NaN,sx3:NaN,sx4:NaN,sy:60,sy2:200,sy3:0,sy4:20000,sxy:NaN)");
+
+            client.select(
+                "INSERT INTO test_table VALUES (40, 'Inf');",
+                None,
+                None
+            );
+            let test = client.select(
+                "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
+                None,
+                None
+            )
+                .first()
+                .get_one::<String>().
+                unwrap();
+            assert_eq!(test, "(version:1,n:4,sx:NaN,sx2:NaN,sx3:NaN,sx4:NaN,sy:inf,sy2:NaN,sy3:NaN,sy4:NaN,sxy:NaN)");
         });
     }
 

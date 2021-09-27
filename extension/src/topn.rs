@@ -7,7 +7,7 @@ use flat_serialize::*;
 
 use crate::{
     aggregate_utils::in_aggregate_context,
-    json_inout_funcs,
+    ron_inout_funcs,
     build,
     palloc::Internal, pg_type
 };
@@ -49,7 +49,7 @@ pg_type! {
     }
 }
 
-json_inout_funcs!(TopN);
+ron_inout_funcs!(TopN);
 
 // hack to allow us to qualify names with "toolkit_experimental"
 // so that pgx generates the correct SQL

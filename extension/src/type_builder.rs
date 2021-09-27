@@ -199,13 +199,13 @@ macro_rules! pg_type_impl {
 }
 
 #[macro_export]
-macro_rules! json_inout_funcs {
+macro_rules! ron_inout_funcs {
     ($name:ident) => {
         impl<'input> InOutFuncs for $name<'input> {
             fn output(&self, buffer: &mut StringInfo) {
                 use $crate::serialization::{EncodedStr::*, str_to_db_encoding};
 
-                let stringified = serde_json::to_string(&**self).unwrap();
+                let stringified = ron::to_string(&**self).unwrap();
                 match str_to_db_encoding(&stringified) {
                     Utf8(s) => buffer.push_str(s),
                     Other(s) => buffer.push_bytes(s.to_bytes()),
@@ -226,7 +226,7 @@ macro_rules! json_inout_funcs {
                         std::mem::transmute(s)
                     }
                     let input = extend_lifetime(str_from_db_encoding(input));
-                    serde_json::from_str(input).unwrap()
+                    ron::from_str(input).unwrap()
                 };
                 unsafe { Self(val, None).flatten() }
             }

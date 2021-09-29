@@ -314,10 +314,10 @@ mod tests {
     }
 
     #[pg_test]
-    fn test_pg_type_id_serialize_char_type_json() {
-        let serialized = serde_json::to_string(&PgTypId(CHAROID)).unwrap();
-        assert_eq!(&*serialized, "[\"pg_catalog\",\"char\"]",);
-        let deserialized: PgTypId = serde_json::from_str(&serialized).unwrap();
+    fn test_pg_type_id_serialize_char_type_ron() {
+        let serialized = ron::to_string(&PgTypId(CHAROID)).unwrap();
+        assert_eq!(&*serialized, "(\"pg_catalog\",\"char\")",);
+        let deserialized: PgTypId = ron::from_str(&serialized).unwrap();
         assert_eq!(deserialized.0, CHAROID);
     }
 
@@ -335,10 +335,10 @@ mod tests {
         assert_eq!(deserialized.0, BOOLOID);
     }
     #[pg_test]
-    fn test_pg_type_id_serialize_bool_type_json() {
-        let serialized = serde_json::to_string(&PgTypId(BOOLOID)).unwrap();
-        assert_eq!(&*serialized, "[\"pg_catalog\",\"bool\"]",);
-        let deserialized: PgTypId = serde_json::from_str(&serialized).unwrap();
+    fn test_pg_type_id_serialize_bool_type_ron() {
+        let serialized = ron::to_string(&PgTypId(BOOLOID)).unwrap();
+        assert_eq!(&*serialized, "(\"pg_catalog\",\"bool\")",);
+        let deserialized: PgTypId = ron::from_str(&serialized).unwrap();
         assert_eq!(deserialized.0, BOOLOID);
     }
 
@@ -351,10 +351,10 @@ mod tests {
     }
 
     #[pg_test]
-    fn test_short_type_id_serialize_char_type_json() {
-        let serialized = serde_json::to_string(&ShortTypeId(CHAROID)).unwrap();
-        assert_eq!(&*serialized, "\"CHAR\"",);
-        let deserialized: ShortTypeId = serde_json::from_str(&serialized).unwrap();
+    fn test_short_type_id_serialize_char_type_ron() {
+        let serialized = ron::to_string(&ShortTypeId(CHAROID)).unwrap();
+        assert_eq!(&*serialized, "CHAR",);
+        let deserialized: ShortTypeId = ron::from_str(&serialized).unwrap();
         assert_eq!(deserialized.0, CHAROID);
     }
 
@@ -367,10 +367,10 @@ mod tests {
     }
 
     #[pg_test]
-    fn test_short_type_id_serialize_bool_type_json() {
-        let serialized = serde_json::to_string(&ShortTypeId(BOOLOID)).unwrap();
-        assert_eq!(&*serialized, "\"BOOL\"",);
-        let deserialized: ShortTypeId = serde_json::from_str(&serialized).unwrap();
+    fn test_short_type_id_serialize_bool_type_ron() {
+        let serialized = ron::to_string(&ShortTypeId(BOOLOID)).unwrap();
+        assert_eq!(&*serialized, "BOOL",);
+        let deserialized: ShortTypeId = ron::from_str(&serialized).unwrap();
         assert_eq!(deserialized.0, BOOLOID);
     }
 
@@ -383,10 +383,10 @@ mod tests {
     }
 
     #[pg_test]
-    fn test_short_type_id_serialize_circle_type_json() {
-        let serialized = serde_json::to_string(&ShortTypeId(CIRCLEOID)).unwrap();
-        assert_eq!(&*serialized, "{\"Type\":[\"pg_catalog\",\"circle\"]}");
-        let deserialized: ShortTypeId = serde_json::from_str(&serialized).unwrap();
+    fn test_short_type_id_serialize_circle_type_ron() {
+        let serialized = ron::to_string(&ShortTypeId(CIRCLEOID)).unwrap();
+        assert_eq!(&*serialized, "Type((\"pg_catalog\",\"circle\"))");
+        let deserialized: ShortTypeId = ron::from_str(&serialized).unwrap();
         assert_eq!(deserialized.0, CIRCLEOID);
     }
 }

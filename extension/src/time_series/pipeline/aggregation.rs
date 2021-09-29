@@ -6,7 +6,7 @@ use pgx::*;
 use super::*;
 
 use crate::{
-    json_inout_funcs, pg_type, build,
+    ron_inout_funcs, pg_type, build,
     stats_agg::{InternalStatsSummary1D, StatsSummary1D},
 };
 
@@ -19,7 +19,7 @@ pg_type! {
     }
 }
 
-json_inout_funcs!(PipelineThenStatsAgg);
+ron_inout_funcs!(PipelineThenStatsAgg);
 
 // hack to allow us to qualify names with "toolkit_experimental"
 // so that pgx generates the correct SQL
@@ -129,7 +129,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "{\"version\":1,\"n\":5,\"sx\":100.0,\"sxx\":250.0}");
+            assert_eq!(val.unwrap(), "(version:1,n:5,sx:100,sx2:250,sx3:0,sx4:21250)");
         });
     }
 }

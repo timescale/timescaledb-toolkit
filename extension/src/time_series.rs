@@ -61,7 +61,8 @@ impl<'input> InOutFuncs for TimeSeries<'input> {
         // FIXME print timestamps as times, not integers
         let serializer: Vec<_> = self.iter().collect();
 
-        let stringified = serde_json::to_string(&*serializer).unwrap();
+        // Extra & in the to_string call due to ron not supporting ?Sized, shouldn't affect output
+        let stringified = ron::to_string(&&*serializer).unwrap();
         match str_to_db_encoding(&stringified) {
             Utf8(s) => buffer.push_str(s),
             Other(s) => buffer.push_bytes(s.to_bytes()),
@@ -83,7 +84,7 @@ impl<'input> InOutFuncs for TimeSeries<'input> {
                 std::mem::transmute(s)
             }
             let input = extend_lifetime(str_from_db_encoding(input));
-            serde_json::from_str(input).unwrap()
+            ron::from_str(input).unwrap()
         };
         unsafe {
             flatten! {

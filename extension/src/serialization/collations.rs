@@ -237,12 +237,12 @@ mod tests {
 
     // TODO is there a way we can test more of this without making it flaky?
     #[pg_test]
-    fn test_pg_collation_id_serialize_default_collation_json() {
-        let serialized = serde_json::to_string(&PgCollationId(100)).unwrap();
-        let deserialized: PgCollationId = serde_json::from_str(&serialized).unwrap();
+    fn test_pg_collation_id_serialize_default_collation_ron() {
+        let serialized = ron::to_string(&PgCollationId(100)).unwrap();
+        let deserialized: PgCollationId = ron::from_str(&serialized).unwrap();
         assert_ne!(deserialized.0, 0);
-        let serialized = serde_json::to_string(&PgCollationId(100)).unwrap();
-        let deserialized2: PgCollationId = serde_json::from_str(&serialized).unwrap();
+        let serialized = ron::to_string(&PgCollationId(100)).unwrap();
+        let deserialized2: PgCollationId = ron::from_str(&serialized).unwrap();
         assert_eq!(deserialized2.0, deserialized.0);
     }
 
@@ -259,10 +259,10 @@ mod tests {
 
     // TODO this test may be too flaky depending on what the default collation actually is
     #[pg_test]
-    fn test_pg_collation_id_serialize_c_collation_json() {
-        let serialized = serde_json::to_string(&PgCollationId(950)).unwrap();
-        assert_eq!(&*serialized, "[\"pg_catalog\",\"C\"]",);
-        let deserialized: PgCollationId = serde_json::from_str(&serialized).unwrap();
+    fn test_pg_collation_id_serialize_c_collation_ron() {
+        let serialized = ron::to_string(&PgCollationId(950)).unwrap();
+        assert_eq!(&*serialized, "Some((\"pg_catalog\",\"C\"))",);
+        let deserialized: PgCollationId = ron::from_str(&serialized).unwrap();
         assert_eq!(deserialized.0, 950);
     }
 
@@ -279,10 +279,10 @@ mod tests {
 
     // TODO this test may be too flaky depending on what the default collation actually is
     #[pg_test]
-    fn test_pg_collation_id_serialize_posix_collation_json() {
-        let serialized = serde_json::to_string(&PgCollationId(951)).unwrap();
-        assert_eq!(&*serialized, "[\"pg_catalog\",\"POSIX\"]",);
-        let deserialized: PgCollationId = serde_json::from_str(&serialized).unwrap();
+    fn test_pg_collation_id_serialize_posix_collation_ron() {
+        let serialized = ron::to_string(&PgCollationId(951)).unwrap();
+        assert_eq!(&*serialized, "Some((\"pg_catalog\",\"POSIX\"))",);
+        let deserialized: PgCollationId = ron::from_str(&serialized).unwrap();
         assert_eq!(deserialized.0, 951);
     }
 }

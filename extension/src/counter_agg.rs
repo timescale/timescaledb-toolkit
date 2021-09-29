@@ -11,7 +11,7 @@ use flat_serialize::*;
 
 use crate::{
     aggregate_utils::in_aggregate_context,
-    json_inout_funcs,
+    ron_inout_funcs,
     flatten,
     palloc::Internal,
     pg_type,
@@ -50,7 +50,7 @@ pg_type! {
     }
 }
 
-json_inout_funcs!(CounterSummary);
+ron_inout_funcs!(CounterSummary);
 
 // hack to allow us to qualify names with "toolkit_experimental"
 // so that pgx generates the correct SQL
@@ -514,9 +514,9 @@ mod tests {
         assert_eq!(p1.num_resets, p2.num_resets, "num_resets");
         assert_eq!(p1.stats.n, p2.stats.n, "n");
         assert_relative_eq!(p1.stats.sx, p2.stats.sx);
-        assert_relative_eq!(p1.stats.sxx, p2.stats.sxx);
+        assert_relative_eq!(p1.stats.sx2, p2.stats.sx2);
         assert_relative_eq!(p1.stats.sy, p2.stats.sy);
-        assert_relative_eq!(p1.stats.syy, p2.stats.syy);
+        assert_relative_eq!(p1.stats.sy2, p2.stats.sy2);
         assert_relative_eq!(p1.stats.sxy, p2.stats.sxy);
     }
 

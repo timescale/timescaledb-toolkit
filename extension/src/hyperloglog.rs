@@ -14,7 +14,7 @@ use flat_serialize::*;
 
 use crate::{
     aggregate_utils::{get_collation, in_aggregate_context},
-    flatten, json_inout_funcs,
+    flatten, ron_inout_funcs,
     palloc::Internal,
     pg_type,
     serialization::{PgCollationId, ShortTypeId},
@@ -146,7 +146,7 @@ mod toolkit_experimental {
     varlena_type!(Hyperloglog);
 }
 
-json_inout_funcs!(HyperLogLog);
+ron_inout_funcs!(HyperLogLog);
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 fn hyperloglog_final(
@@ -476,20 +476,18 @@ mod tests {
                 .first()
                 .get_one::<String>();
 
-            let expected = "{\
-                \"version\":1,\
-                \"log\":{\
-                    \"Dense\":{\
-                        \"element_type\":\"FLOAT8\",\
-                        \"collation\":null,\
-                        \"precision\":5,\
-                        \"registers\":[\
-                            20,64,132,12,81,1,8,64,133,4,64,136,4,82,3,12,17,\
-                            65,24,32,197,16,32,132,255\
-                        ]\
-                    }\
-                }\
-            }";
+            let expected = "(\
+                version:1,\
+                log:Dense(\
+                    element_type:FLOAT8,\
+                    collation:None,\
+                    precision:5,\
+                    registers:[\
+                        20,64,132,12,81,1,8,64,133,4,64,136,4,82,3,12,17,\
+                        65,24,32,197,16,32,132,255\
+                    ]\
+                )\
+            )";
             assert_eq!(text.unwrap(), expected);
 
             let count = client
@@ -527,20 +525,18 @@ mod tests {
                 .first()
                 .get_one::<String>();
 
-            let expected = "{\
-                \"version\":1,\
-                \"log\":{\
-                    \"Dense\":{\
-                        \"element_type\":\"INT4\",\
-                        \"collation\":null,\
-                        \"precision\":5,\
-                        \"registers\":[\
-                            8,49,0,12,32,129,24,32,195,16,33,2,12,1,68,4,16,\
-                            196,20,64,133,8,17,67,255\
-                        ]\
-                    }\
-                }\
-            }";
+            let expected = "(\
+                version:1,\
+                log:Dense(\
+                    element_type:INT4,\
+                    collation:None,\
+                    precision:5,\
+                    registers:[\
+                        8,49,0,12,32,129,24,32,195,16,33,2,12,1,68,4,16,\
+                        196,20,64,133,8,17,67,255\
+                    ]\
+                )\
+            )";
             assert_eq!(text.unwrap(), expected);
 
             let count = client
@@ -580,20 +576,19 @@ mod tests {
                 .first()
                 .get_one::<String>();
 
-            let default_collation = serde_json::to_string(&PgCollationId(100)).unwrap();
-            let expected = format!("{{\
-                \"version\":1,\
-                \"log\":{{\
-                        \"Dense\":{{\
-                            \"element_type\":\"TEXT\",\
-                            \"collation\":{},\
-                            \"precision\":5,\
-                            \"registers\":[\
-                                12,33,3,8,33,4,20,50,3,12,32,133,4,32,67,8,48,\
-                                128,8,33,4,8,32,197,255\
-                        ]}}\
-                    }}\
-                }}", default_collation);
+            let default_collation = ron::to_string(&PgCollationId(100)).unwrap();
+            let expected = format!("(\
+                version:1,\
+                log:Dense(\
+                    element_type:TEXT,\
+                    collation:{},\
+                    precision:5,\
+                    registers:[\
+                        12,33,3,8,33,4,20,50,3,12,32,133,4,32,67,8,48,\
+                        128,8,33,4,8,32,197,255\
+                    ]\
+                )\
+            )", default_collation);
             assert_eq!(text.unwrap(), expected);
 
             let count = client

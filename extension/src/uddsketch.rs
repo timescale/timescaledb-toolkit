@@ -235,7 +235,7 @@ impl<'input> InOutFuncs for UddSketch<'input> {
     fn output(&self, buffer: &mut StringInfo) {
         use crate::serialization::{EncodedStr::*, str_to_db_encoding};
 
-        let stringified = serde_json::to_string(&ReadableUddSketch::from(self)).unwrap();
+        let stringified = ron::to_string(&ReadableUddSketch::from(self)).unwrap();
         match str_to_db_encoding(&stringified) {
             Utf8(s) => buffer.push_str(s),
             Other(s) => buffer.push_bytes(s.to_bytes()),
@@ -249,7 +249,7 @@ impl<'input> InOutFuncs for UddSketch<'input> {
         use crate::serialization::str_from_db_encoding;
 
         let utf8_str = str_from_db_encoding(input);
-        let val: ReadableUddSketch = serde_json::from_str(utf8_str).unwrap();
+        let val: ReadableUddSketch = ron::from_str(utf8_str).unwrap();
         UddSketch::from(&val)
     }
 }
@@ -696,26 +696,26 @@ mod tests {
 
             let sketch = client.select("SELECT uddsketch(10, 0.01, value)::text FROM io_test", None, None).first().get_one::<String>();
 
-            let expected = "{\
-                \"version\":1,\
-                \"alpha\":0.9881209712069546,\
-                \"max_buckets\":10,\
-                \"num_buckets\":9,\
-                \"compactions\":8,\
-                \"count\":15,\
-                \"sum\":0.0,\
-                \"buckets\":[\
-                    [{\"Negative\":2},1],\
-                    [{\"Negative\":1},2],\
-                    [{\"Negative\":0},3],\
-                    [{\"Negative\":-1},1],\
-                    [\"Zero\",1],\
-                    [{\"Positive\":-1},1],\
-                    [{\"Positive\":0},3],\
-                    [{\"Positive\":1},2],\
-                    [{\"Positive\":2},1]\
+            let expected = "(\
+                version:1,\
+                alpha:0.9881209712069546,\
+                max_buckets:10,\
+                num_buckets:9,\
+                compactions:8,\
+                count:15,\
+                sum:0,\
+                buckets:[\
+                    (Negative(2),1),\
+                    (Negative(1),2),\
+                    (Negative(0),3),\
+                    (Negative(-1),1),\
+                    (Zero,1),\
+                    (Positive(-1),1),\
+                    (Positive(0),3),\
+                    (Positive(1),2),\
+                    (Positive(2),1)\
                     ]\
-                }";
+                )";
 
             assert_eq!(sketch, Some(expected.into()));
 

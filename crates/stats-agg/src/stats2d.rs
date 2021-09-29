@@ -1,7 +1,7 @@
 // 2D stats are based on the Youngs-Cramer implementation in PG here:
 // https://github.com/postgres/postgres/blob/472e518a44eacd9caac7d618f1b6451672ca4481/src/backend/utils/adt/float.c#L3260
 use serde::{Deserialize, Serialize};
-use crate::{StatsError, XYPair, INV_FLOATING_ERROR_THRESHOLD};
+use crate::{StatsError, XYPair, INV_FLOATING_ERROR_THRESHOLD, M3, M4};
 use flat_serialize_macro::FlatSerializable;
 
 #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize, FlatSerializable)]
@@ -9,9 +9,13 @@ use flat_serialize_macro::FlatSerializable;
 pub struct StatsSummary2D {
     pub n: u64,   // count
     pub sx: f64,  // sum(x)
-    pub sxx: f64, // sum((x-sx/n)^2) (sum of squares)
+    pub sx2: f64, // sum((x-sx/n)^2) (sum of squares)
+    pub sx3: f64, // sum((x-sx/n)^3)
+    pub sx4: f64, // sum((x-sx/n)^4)
     pub sy: f64,  // sum(y)
-    pub syy: f64, // sum((y-sy/n)^2) (sum of squares)
+    pub sy2: f64, // sum((y-sy/n)^2) (sum of squares)
+    pub sy3: f64, // sum((y-sy/n)^3)
+    pub sy4: f64, // sum((y-sy/n)^4)
     pub sxy: f64, // sum((x-sx/n)*(y-sy/n)) (sum of products)
 }
 
@@ -21,9 +25,13 @@ impl StatsSummary2D {
         StatsSummary2D {
             n: 0,
             sx: 0.0,
-            sxx: 0.0,
+            sx2: 0.0,
+            sx3: 0.0,
+            sx4: 0.0,
             sy: 0.0,
-            syy: 0.0,
+            sy2: 0.0,
+            sy3: 0.0,
+            sy4: 0.0,
             sxy: 0.0,
         }
     }
@@ -47,14 +55,7 @@ impl StatsSummary2D {
     ///
     ///```
     pub fn accum(&mut self, p: XYPair) -> Result<(), StatsError> {
-        let old = StatsSummary2D {
-            n: self.n,
-            sx: self.sx,
-            sxx: self.sxx,
-            sy: self.sy,
-            syy: self.syy,
-            sxy: self.sxy,
-        };
+        let old = *self;
         self.n += 1;
         self.sx += p.x;
         self.sy += p.y;
@@ -62,8 +63,12 @@ impl StatsSummary2D {
             let tmpx = p.x * self.n64() - self.sx;
             let tmpy = p.y * self.n64() - self.sy;
             let scale = 1.0 / (self.n64() * old.n64());
-            self.sxx += tmpx * tmpx * scale;
-            self.syy += tmpy * tmpy * scale;
+            self.sx2 += tmpx * tmpx * scale;
+            self.sx3 = M3::accum(old.n64(), old.sx, old.sx2, old.sx3, p.x);
+            self.sx4 = M4::accum(old.n64(), old.sx, old.sx2, old.sx3, old.sx4, p.x);
+            self.sy2 += tmpy * tmpy * scale;
+            self.sy3 = M3::accum(old.n64(), old.sy, old.sy2, old.sy3, p.y);
+            self.sy4 = M4::accum(old.n64(), old.sy, old.sy2, old.sy3, old.sy4, p.y);
             self.sxy += tmpx * tmpy * scale;
             if self.has_infinite() {
                 if self.check_overflow(&old, p) {
@@ -74,11 +79,23 @@ impl StatsSummary2D {
                 // we need to set them to NaN instead as this implies that there was an
                 // infinite input (because they necessarily involve multiplications of
                 // infinites, which are NaNs)
-                if self.sxx.is_infinite() {
-                    self.sxx = f64::NAN;
+                if self.sx2.is_infinite() {
+                    self.sx2 = f64::NAN;
                 }
-                if self.syy.is_infinite() {
-                    self.syy = f64::NAN;
+                if self.sx3.is_infinite() {
+                    self.sx3 = f64::NAN;
+                }
+                if self.sx4.is_infinite() {
+                    self.sx4 = f64::NAN;
+                }
+                if self.sy2.is_infinite() {
+                    self.sy2 = f64::NAN;
+                }
+                if self.sy3.is_infinite() {
+                    self.sy3 = f64::NAN;
+                }
+                if self.sy4.is_infinite() {
+                    self.sy4 = f64::NAN;
                 }
                 if self.sxy.is_infinite() {
                     self.sxy = f64::NAN;
@@ -87,11 +104,15 @@ impl StatsSummary2D {
         } else {
             // first input, leave sxx/syy/sxy alone unless we have infinite inputs
             if !p.x.is_finite() {
-                self.sxx = f64::NAN;
+                self.sx2 = f64::NAN;
+                self.sx3 = f64::NAN;
+                self.sx4 = f64::NAN;
                 self.sxy = f64::NAN;
             }
             if !p.y.is_finite() {
-                self.syy = f64::NAN;
+                self.sy2 = f64::NAN;
+                self.sy3 = f64::NAN;
+                self.sy4 = f64::NAN;
                 self.sxy = f64::NAN;
             }
         }
@@ -99,15 +120,19 @@ impl StatsSummary2D {
     }
     fn has_infinite(&self) -> bool {
         self.sx.is_infinite()
-            || self.sxx.is_infinite()
+            || self.sx2.is_infinite()
+            || self.sx3.is_infinite()
+            || self.sx4.is_infinite()
             || self.sy.is_infinite()
-            || self.syy.is_infinite()
+            || self.sy2.is_infinite()
+            || self.sy3.is_infinite()
+            || self.sy4.is_infinite()
             || self.sxy.is_infinite()
     }
     fn check_overflow(&self, old: &StatsSummary2D, p: XYPair) -> bool {
         //Only report overflow if we have finite inputs that lead to infinite results.
-        ((self.sx.is_infinite() || self.sxx.is_infinite()) && old.sx.is_finite() && p.x.is_finite())
-            || ((self.sy.is_infinite() || self.syy.is_infinite())
+        ((self.sx.is_infinite() || self.sx2.is_infinite() || self.sx3.is_infinite() || self.sx4.is_infinite()) && old.sx.is_finite() && p.x.is_finite())
+            || ((self.sy.is_infinite() || self.sy2.is_infinite() || self.sy3.is_infinite() || self.sy4.is_infinite())
                 && old.sy.is_finite()
                 && p.y.is_finite())
             || (self.sxy.is_infinite()
@@ -160,15 +185,23 @@ impl StatsSummary2D {
             n: self.n - 1,
             sx: self.sx - p.x,
             sy: self.sy - p.y,
-            sxx: 0.0, // initialize these for now.
-            syy: 0.0,
+            sx2: 0.0, // initialize these for now.
+            sx3: 0.0,
+            sx4: 0.0,
+            sy2: 0.0,
+            sy3: 0.0,
+            sy4: 0.0,
             sxy: 0.0,
         };
         let tmpx = p.x * self.n64() - self.sx;
         let tmpy = p.y * self.n64() - self.sy;
         let scale = 1.0 / (self.n64() * new.n64());
-        new.sxx = self.sxx - tmpx * tmpx * scale;
-        new.syy = self.syy - tmpy * tmpy * scale;
+        new.sx2 = self.sx2 - tmpx * tmpx * scale;
+        new.sx3 = M3::remove(new.n64(), new.sx, new.sx2, self.sx3, p.x);
+        new.sx4 = M4::remove(new.n64(), new.sx, new.sx2, new.sx3, self.sx4, p.x);
+        new.sy2 = self.sy2 - tmpy * tmpy * scale;
+        new.sy3 = M3::remove(new.n64(), new.sy, new.sy2, self.sy3, p.y);
+        new.sy4 = M4::remove(new.n64(), new.sy, new.sy2, new.sy3, self.sy4, p.y);
         new.sxy = self.sxy - tmpx * tmpy * scale;
         Some(new)
     }
@@ -226,9 +259,13 @@ impl StatsSummary2D {
         let r = StatsSummary2D {
             n: n,
             sx: self.sx + other.sx,
-            sxx: self.sxx + other.sxx + self.n64() * other.n64() * tmpx * tmpx / n as f64,
+            sx2: self.sx2 + other.sx2 + self.n64() * other.n64() * tmpx * tmpx / n as f64,
+            sx3: M3::combine(self.n64(), other.n64(), self.sx, other.sx, self.sx2, other.sx2, self.sx3, other.sx3),
+            sx4: M4::combine(self.n64(), other.n64(), self.sx, other.sx, self.sx2, other.sx2, self.sx3, other.sx3, self.sx4, other.sx4),
             sy: self.sy + other.sy,
-            syy: self.syy + other.syy + self.n64() * other.n64() * tmpy * tmpy / n as f64,
+            sy2: self.sy2 + other.sy2 + self.n64() * other.n64() * tmpy * tmpy / n as f64,
+            sy3: M3::combine(self.n64(), other.n64(), self.sy, other.sy, self.sy2, other.sy2, self.sy3, other.sy3),
+            sy4: M4::combine(self.n64(), other.n64(), self.sy, other.sy, self.sy2, other.sy2, self.sy3, other.sy3, self.sy4, other.sy4),
             sxy: self.sxy + other.sxy + self.n64() * other.n64() * tmpx * tmpy / n as f64,
         };
         if r.has_infinite() && !self.has_infinite() && !other.has_infinite() {
@@ -262,14 +299,22 @@ impl StatsSummary2D {
             n: combined.n - remove.n,
             sx: combined.sx - remove.sx,
             sy: combined.sy - remove.sy,
-            sxx: 0.0, //just initialize these, for now.
-            syy: 0.0,
+            sx2: 0.0, //just initialize these, for now.
+            sx3: 0.0,
+            sx4: 0.0,
+            sy2: 0.0,
+            sy3: 0.0,
+            sy4: 0.0,
             sxy: 0.0,
         };
         let tmpx = part.sx / part.n64() - remove.sx / remove.n64(); //gets squared so order doesn't matter
         let tmpy = part.sy / part.n64() - remove.sy / remove.n64();
-        part.sxx = combined.sxx - remove.sxx - part.n64() * remove.n64() * tmpx * tmpx / combined.n64();
-        part.syy = combined.syy - remove.syy - part.n64() * remove.n64() * tmpy * tmpy / combined.n64();
+        part.sx2 = combined.sx2 - remove.sx2 - part.n64() * remove.n64() * tmpx * tmpx / combined.n64();
+        part.sx3 = M3::remove_combined(part.n64(), remove.n64(), part.sx, remove.sx, part.sx2, remove.sx2, self.sx3, remove.sx3);
+        part.sx4 = M4::remove_combined(part.n64(), remove.n64(), part.sx, remove.sx, part.sx2, remove.sx2, part.sx3, remove.sx3, self.sx4, remove.sx4);
+        part.sy2 = combined.sy2 - remove.sy2 - part.n64() * remove.n64() * tmpy * tmpy / combined.n64();
+        part.sy3 = M3::remove_combined(part.n64(), remove.n64(), part.sy, remove.sy, part.sy2, remove.sy2, self.sy3, remove.sy3);
+        part.sy4 = M4::remove_combined(part.n64(), remove.n64(), part.sy, remove.sy, part.sy2, remove.sy2, part.sy3, remove.sy3, self.sy4, remove.sy4);
         part.sxy = combined.sxy - remove.sxy - part.n64() * remove.n64() * tmpx * tmpy / combined.n64();
         Some(part)
     }
@@ -320,8 +365,8 @@ impl StatsSummary2D {
             return None;
         }
         Some(XYPair {
-            x: self.sxx,
-            y: self.syy,
+            x: self.sx2,
+            y: self.sy2,
         })
     }
     ///returns the "sum of products" of the dependent * independent variables sum(x * y) - sum(x) * sum(y) / n
@@ -404,8 +449,8 @@ impl StatsSummary2D {
             return None;
         }
         Some(XYPair {
-            x: self.sxx / self.n64(),
-            y: self.syy / self.n64(),
+            x: self.sx2 / self.n64(),
+            y: self.sy2 / self.n64(),
         })
     }
 
@@ -414,8 +459,8 @@ impl StatsSummary2D {
             return None;
         }
         Some(XYPair {
-            x: self.sxx / (self.n64() - 1.0),
-            y: self.syy / (self.n64() - 1.0),
+            x: self.sx2 / (self.n64() - 1.0),
+            y: self.sy2 / (self.n64() - 1.0),
         })
     }
 
@@ -437,34 +482,48 @@ impl StatsSummary2D {
         })
     }
 
+    pub fn skewness(&self) -> Option<XYPair> {
+        Some(XYPair {
+            x: self.n64().sqrt() * self.sx3 / self.sx2.powf(1.5),
+            y: self.n64().sqrt() * self.sy3 / self.sy2.powf(1.5),
+        })
+    }
+
+    pub fn kurtosis(&self) -> Option<XYPair> {
+        Some(XYPair {
+            x: self.n64() * self.sx4 / self.sx2.powi(2),
+            y: self.n64() * self.sy4 / self.sy2.powi(2),
+        })
+    }
+
     /// returns the correlation coefficient, which is the covariance / (stddev(x) * stddev(y))
     /// Note that it makes no difference whether we choose the sample or
     /// population covariance and stddev, because we end up with a canceling n or n-1 term. This
     /// also allows us to reduce our calculation to the sumxy / sqrt(sum_squares(x)*sum_squares(y))
     pub fn corr(&self) -> Option<f64> {
         // empty StatsSummary2Ds, horizontal or vertical lines should return None
-        if self.n == 0 || self.sxx == 0.0 || self.syy == 0.0 {
+        if self.n == 0 || self.sx2 == 0.0 || self.sy2 == 0.0 {
             return None;
         }
-        Some(self.sxy / (self.sxx * self.syy).sqrt())
+        Some(self.sxy / (self.sx2 * self.sy2).sqrt())
     }
 
     /// returns the slope of the least squares fit line
     pub fn slope(&self) -> Option<f64> {
         // the case of a single point will usually be triggered by the the second branch of this (which is also a test for a vertical line)
         //however, in cases where we had an infinite input, we will end up with NaN which is the expected behavior.
-        if self.n == 0 || self.sxx == 0.0 {
+        if self.n == 0 || self.sx2 == 0.0 {
             return None;
         }
-        Some(self.sxy / self.sxx)
+        Some(self.sxy / self.sx2)
     }
 
     /// returns the intercept of the least squares fit line
     pub fn intercept(&self) -> Option<f64> {
-        if self.n == 0 || self.sxx == 0.0 {
+        if self.n == 0 || self.sx2 == 0.0 {
             return None;
         }
-        Some((self.sy - self.sx * self.sxy / self.sxx) / self.n64())
+        Some((self.sy - self.sx * self.sxy / self.sx2) / self.n64())
     }
 
     /// returns the x intercept of the least squares fit line
@@ -473,11 +532,11 @@ impl StatsSummary2D {
     // x = -b / m
     pub fn x_intercept(&self) -> Option<f64> {
         // vertical line does have an x intercept
-        if self.n > 1 && self.sxx == 0.0 {
+        if self.n > 1 && self.sx2 == 0.0 {
             return Some(self.sx / self.n64())
         }
         // horizontal lines have no x intercepts
-        if self.syy == 0.0 {
+        if self.sy2 == 0.0 {
             return None;
         }
         Some(-1.0 * self.intercept()? / self.slope()?)
@@ -485,14 +544,14 @@ impl StatsSummary2D {
 
     /// returns the square of the correlation coefficent (aka the coefficient of determination)
     pub fn determination_coeff(&self) -> Option<f64> {
-        if self.n == 0 || self.sxx == 0.0 {
+        if self.n == 0 || self.sx2 == 0.0 {
             return None;
         }
         //horizontal lines return 1.0 error
-        if self.syy == 0.0 {
+        if self.sy2 == 0.0 {
             return Some(1.0);
         }
-        Some(self.sxy * self.sxy / (self.sxx * self.syy))
+        Some(self.sxy * self.sxy / (self.sx2 * self.sy2))
     }
 
     ///returns the sample covariance: (sumxy()/n-1)

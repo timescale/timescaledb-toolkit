@@ -1404,6 +1404,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f497285884f3fcff424ffc933e56d7cbca511def0c9831a7f9b5f6153e3cc89b"
 
 [[package]]
+name = "ron"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45005aa836116903a49cf3461474da697cfe66221762c6e95871092009ec86d6"
+dependencies = [
+ "base64 0.13.0",
+ "bitflags",
+ "serde",
+]
+
+[[package]]
 name = "rttp_client"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1902,8 +1913,8 @@ dependencies = [
  "rand 0.8.3",
  "rand_chacha 0.3.0",
  "rand_distr",
+ "ron",
  "serde",
- "serde_json",
  "spacesaving",
  "stats_agg",
  "tdigest",

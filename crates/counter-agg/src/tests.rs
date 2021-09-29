@@ -17,9 +17,9 @@ pub mod tests {
         assert_eq!(p1.num_resets, p2.num_resets, "num_resets");
         assert_eq!(p1.stats.n, p2.stats.n, "n");
         assert_relative_eq!(p1.stats.sx, p2.stats.sx);
-        assert_relative_eq!(p1.stats.sxx, p2.stats.sxx);
+        assert_relative_eq!(p1.stats.sx2, p2.stats.sx2);
         assert_relative_eq!(p1.stats.sy, p2.stats.sy);
-        assert_relative_eq!(p1.stats.syy, p2.stats.syy);
+        assert_relative_eq!(p1.stats.sy2, p2.stats.sy2);
         assert_relative_eq!(p1.stats.sxy, p2.stats.sxy);
     }
     #[test]
@@ -383,6 +383,3 @@ pub mod tests {
     }   
 
 }
-
-
-

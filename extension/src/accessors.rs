@@ -45,6 +45,9 @@ pub mod toolkit_experimental {
     varlena_type!(AccessorXIntercept);
     varlena_type!(AccessorDeterminationCoeff);
     varlena_type!(AccessorCovar);
+
+    varlena_type!(AccessorDistinctCount);
+    varlena_type!(AccessorStdError);
 }
 
 pg_type! {
@@ -661,6 +664,42 @@ pub fn accessor_covar(
                 len: method.len().try_into().unwrap(),
                 bytes: method.as_bytes().into(),
             }
+        }
+    }
+}
+
+
+pg_type! {
+    #[derive(Debug)]
+    struct AccessorDistinctCount {
+    }
+}
+
+ron_inout_funcs!(AccessorDistinctCount);
+
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="distinct_count")]
+pub fn accessor_distinct_count(
+) -> toolkit_experimental::AccessorDistinctCount<'static> {
+    build!{
+        AccessorDistinctCount {
+        }
+    }
+}
+
+
+pg_type! {
+    #[derive(Debug)]
+    struct AccessorStdError {
+    }
+}
+
+ron_inout_funcs!(AccessorStdError);
+
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="stderror")]
+pub fn accessor_stderror(
+) -> toolkit_experimental::AccessorStdError<'static> {
+    build!{
+        AccessorStdError {
         }
     }
 }

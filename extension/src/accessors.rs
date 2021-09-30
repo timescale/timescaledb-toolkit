@@ -18,6 +18,7 @@ pub mod toolkit_experimental {
     varlena_type!(AccessorError);
     varlena_type!(AccessorMin);
     varlena_type!(AccessorMax);
+    varlena_type!(AccessorAverage);
 }
 
 pg_type! {
@@ -141,6 +142,23 @@ pub fn accessor_max(
 ) -> toolkit_experimental::AccessorMax<'static> {
     build!{
         AccessorMax {
+        }
+    }
+}
+
+pg_type! {
+    #[derive(Debug)]
+    struct AccessorAverage {
+    }
+}
+
+ron_inout_funcs!(AccessorAverage);
+
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="average")]
+pub fn accessor_average(
+) -> toolkit_experimental::AccessorAverage<'static> {
+    build!{
+        AccessorAverage {
         }
     }
 }

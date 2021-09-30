@@ -58,6 +58,7 @@ ron_inout_funcs!(StatsSummary2D);
 // so that pgx generates the correct SQL
 mod toolkit_experimental {
     pub(crate) use super::*;
+    pub(crate) use crate::accessors::toolkit_experimental::*;
 
     varlena_type!(StatsSummary1D);
     varlena_type!(StatsSummary2D);
@@ -593,28 +594,57 @@ CREATE AGGREGATE toolkit_experimental.rolling(ss toolkit_experimental.statssumma
 "#);
 
 
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats1d_average(
+    sketch: toolkit_experimental::StatsSummary1D,
+    accessor: toolkit_experimental::AccessorAverage,
+) -> Option<f64> {
+    let _ = accessor;
+    stats1d_average(sketch)
+}
 
 #[pg_extern(name="average", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats1d_average(
     summary: toolkit_experimental::StatsSummary1D,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal().avg()
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats1d_sum(
+    sketch: toolkit_experimental::StatsSummary1D,
+    accessor: toolkit_experimental::AccessorSum,
+) -> Option<f64> {
+    let _ = accessor;
+    stats1d_sum(sketch)
 }
 
 #[pg_extern(name="sum", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats1d_sum(
     summary: toolkit_experimental::StatsSummary1D,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal().sum()
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats1d_stddev(
+    sketch: Option<toolkit_experimental::StatsSummary1D>,
+    accessor: toolkit_experimental::AccessorStdDev,
+) -> Option<f64> {
+    let _ = accessor;
+    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
+    stats1d_stddev(sketch, &*method)
 }
 
 #[pg_extern(name="stddev", schema = "toolkit_experimental", immutable, parallel_safe)]
 fn stats1d_stddev(
     summary: Option<toolkit_experimental::StatsSummary1D>,
-    method: default!(String, "sample"),
-    _fcinfo: pg_sys::FunctionCallInfo,
+    method: default!(&str, "sample"),
 )-> Option<f64> {
     match method.trim().to_lowercase().as_str() {
         "population" | "pop" => summary?.to_internal().stddev_pop(),
@@ -623,11 +653,22 @@ fn stats1d_stddev(
     }
 }
 
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats1d_variance(
+    sketch: Option<toolkit_experimental::StatsSummary1D>,
+    accessor: toolkit_experimental::AccessorVariance,
+) -> Option<f64> {
+    let _ = accessor;
+    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
+    stats1d_variance(sketch, &*method)
+}
+
 #[pg_extern(name="variance", schema = "toolkit_experimental", immutable, parallel_safe)]
 fn stats1d_variance(
     summary: Option<toolkit_experimental::StatsSummary1D>,
-    method: default!(String, "sample"),
-    _fcinfo: pg_sys::FunctionCallInfo,
+    method: default!(&str, "sample"),
 )-> Option<f64> {
     match method.trim().to_lowercase().as_str() {
         "population" | "pop" => summary?.to_internal().var_pop(),
@@ -636,67 +677,149 @@ fn stats1d_variance(
     }
 }
 
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats1d_skewness(
+    sketch: toolkit_experimental::StatsSummary1D,
+    accessor: toolkit_experimental::AccessorSkewness,
+) -> Option<f64> {
+    let _ = accessor;
+    stats1d_skewness(sketch)
+}
+
 #[pg_extern(name="skewness", schema = "toolkit_experimental", immutable, parallel_safe)]
 fn stats1d_skewness(
     summary: toolkit_experimental::StatsSummary1D,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal().skewness()
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats1d_kurtosis(
+    sketch: toolkit_experimental::StatsSummary1D,
+    accessor: toolkit_experimental::AccessorKurtosis,
+) -> Option<f64> {
+    let _ = accessor;
+    stats1d_kurtosis(sketch)
 }
 
 #[pg_extern(name="kurtosis", schema = "toolkit_experimental", immutable, parallel_safe)]
 fn stats1d_kurtosis(
     summary: toolkit_experimental::StatsSummary1D,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal().kurtosis()
+}
+
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats1d_num_vals(
+    sketch: toolkit_experimental::StatsSummary1D,
+    accessor: toolkit_experimental::AccessorNumVals,
+) -> i64 {
+    let _ = accessor;
+    stats1d_num_vals(sketch)
 }
 
 #[pg_extern(name="num_vals", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats1d_num_vals(
     summary: toolkit_experimental::StatsSummary1D,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> i64 {
     summary.to_internal().count()
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats2d_average_x(
+    sketch: toolkit_experimental::StatsSummary2D,
+    accessor: toolkit_experimental::AccessorAverageX,
+) -> Option<f64> {
+    let _ = accessor;
+    stats2d_average_x(sketch)
 }
 
 #[pg_extern(name="average_x", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_average_x(
     summary: toolkit_experimental::StatsSummary2D,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     Some(summary.to_internal().avg()?.x)
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats2d_average_y(
+    sketch: toolkit_experimental::StatsSummary2D,
+    accessor: toolkit_experimental::AccessorAverageY,
+) -> Option<f64> {
+    let _ = accessor;
+    stats2d_average_y(sketch)
 }
 
 #[pg_extern(name="average_y", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_average_y(
     summary: toolkit_experimental::StatsSummary2D,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     Some(summary.to_internal().avg()?.y)
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats2d_sum_x(
+    sketch: toolkit_experimental::StatsSummary2D,
+    accessor: toolkit_experimental::AccessorSumX,
+) -> Option<f64> {
+    let _ = accessor;
+    stats2d_sum_x(sketch)
 }
 
 #[pg_extern(name="sum_x", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_sum_x(
     summary: toolkit_experimental::StatsSummary2D,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     Some(summary.to_internal().sum()?.x)
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats2d_sum_y(
+    sketch: toolkit_experimental::StatsSummary2D,
+    accessor: toolkit_experimental::AccessorSumY,
+) -> Option<f64> {
+    let _ = accessor;
+    stats2d_sum_y(sketch)
 }
 
 #[pg_extern(name="sum_y", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_sum_y(
     summary: toolkit_experimental::StatsSummary2D,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     Some(summary.to_internal().sum()?.y)
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats2d_stdddev_x(
+    sketch: Option<toolkit_experimental::StatsSummary2D>,
+    accessor: toolkit_experimental::AccessorStdDevX,
+) -> Option<f64> {
+    let _ = accessor;
+    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
+    stats2d_stddev_x(sketch, &*method)
 }
 
 #[pg_extern(name="stddev_x", schema = "toolkit_experimental", immutable, parallel_safe)]
 fn stats2d_stddev_x(
     summary: Option<toolkit_experimental::StatsSummary2D>,
-    method: default!(String, "sample"),
-    _fcinfo: pg_sys::FunctionCallInfo,
+    method: default!(&str, "sample"),
 )-> Option<f64> {
     match method.trim().to_lowercase().as_str() {
         "population" | "pop" => Some(summary?.to_internal().stddev_pop()?.x),
@@ -705,11 +828,22 @@ fn stats2d_stddev_x(
     }
 }
 
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats2d_stdddev_y(
+    sketch: Option<toolkit_experimental::StatsSummary2D>,
+    accessor: toolkit_experimental::AccessorStdDevY,
+) -> Option<f64> {
+    let _ = accessor;
+    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
+    stats2d_stddev_y(sketch, &*method)
+}
+
 #[pg_extern(name="stddev_y", schema = "toolkit_experimental", immutable, parallel_safe)]
 fn stats2d_stddev_y(
     summary: Option<toolkit_experimental::StatsSummary2D>,
-    method: default!(String, "sample"),
-    _fcinfo: pg_sys::FunctionCallInfo,
+    method: default!(&str, "sample"),
 )-> Option<f64> {
     match method.trim().to_lowercase().as_str() {
         "population" | "pop" => Some(summary?.to_internal().stddev_pop()?.y),
@@ -718,11 +852,22 @@ fn stats2d_stddev_y(
     }
 }
 
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats2d_variance_x(
+    sketch: Option<toolkit_experimental::StatsSummary2D>,
+    accessor: toolkit_experimental::AccessorVarianceX,
+) -> Option<f64> {
+    let _ = accessor;
+    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
+    stats2d_variance_x(sketch, &*method)
+}
+
 #[pg_extern(name="variance_x", schema = "toolkit_experimental", immutable, parallel_safe)]
 fn stats2d_variance_x(
     summary: Option<toolkit_experimental::StatsSummary2D>,
-    method: default!(String, "sample"),
-    _fcinfo: pg_sys::FunctionCallInfo,
+    method: default!(&str, "sample"),
 )-> Option<f64> {
     match method.trim().to_lowercase().as_str() {
         "population" | "pop" => Some(summary?.to_internal().var_pop()?.x),
@@ -731,11 +876,22 @@ fn stats2d_variance_x(
     }
 }
 
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats2d_variance_y(
+    sketch: Option<toolkit_experimental::StatsSummary2D>,
+    accessor: toolkit_experimental::AccessorVarianceY,
+) -> Option<f64> {
+    let _ = accessor;
+    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
+    stats2d_variance_y(sketch, &*method)
+}
+
 #[pg_extern(name="variance_y", schema = "toolkit_experimental", immutable, parallel_safe)]
 fn stats2d_variance_y(
     summary: Option<toolkit_experimental::StatsSummary2D>,
-    method: default!(String, "sample"),
-    _fcinfo: pg_sys::FunctionCallInfo,
+    method: default!(&str, "sample"),
 )-> Option<f64> {
     match method.trim().to_lowercase().as_str() {
         "population" | "pop" => Some(summary?.to_internal().var_pop()?.y),
@@ -744,91 +900,202 @@ fn stats2d_variance_y(
     }
 }
 
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats2d_skewness_x(
+    sketch: toolkit_experimental::StatsSummary2D,
+    accessor: toolkit_experimental::AccessorSkewnessX,
+) -> Option<f64> {
+    let _ = accessor;
+    stats2d_skewness_x(sketch)
+}
+
 #[pg_extern(name="skewness_x", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_skewness_x(
     summary: toolkit_experimental::StatsSummary2D,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     Some(summary.to_internal().skewness()?.x)
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats2d_skewness_y(
+    sketch: toolkit_experimental::StatsSummary2D,
+    accessor: toolkit_experimental::AccessorSkewnessY,
+) -> Option<f64> {
+    let _ = accessor;
+    stats2d_skewness_y(sketch)
 }
 
 #[pg_extern(name="skewness_y", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_skewness_y(
     summary: toolkit_experimental::StatsSummary2D,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     Some(summary.to_internal().skewness()?.y)
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats2d_kurtosis_x(
+    sketch: toolkit_experimental::StatsSummary2D,
+    accessor: toolkit_experimental::AccessorKurtosisX,
+) -> Option<f64> {
+    let _ = accessor;
+    stats2d_kurtosis_x(sketch)
 }
 
 #[pg_extern(name="kurtosis_x", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_kurtosis_x(
     summary: toolkit_experimental::StatsSummary2D,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     Some(summary.to_internal().kurtosis()?.x)
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats2d_kurtosis_y(
+    sketch: toolkit_experimental::StatsSummary2D,
+    accessor: toolkit_experimental::AccessorKurtosisY,
+) -> Option<f64> {
+    let _ = accessor;
+    stats2d_kurtosis_y(sketch)
 }
 
 #[pg_extern(name="kurtosis_y", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_kurtosis_y(
     summary: toolkit_experimental::StatsSummary2D,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     Some(summary.to_internal().kurtosis()?.y)
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats2d_num_vals(
+    sketch: toolkit_experimental::StatsSummary2D,
+    accessor: toolkit_experimental::AccessorNumVals,
+) -> i64 {
+    let _ = accessor;
+    stats2d_num_vals(sketch)
 }
 
 #[pg_extern(name="num_vals", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_num_vals(
     summary: toolkit_experimental::StatsSummary2D,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> i64 {
     summary.to_internal().count()
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats2d_slope(
+    sketch: toolkit_experimental::StatsSummary2D,
+    accessor: toolkit_experimental::AccessorSlope,
+) -> Option<f64> {
+    let _ = accessor;
+    stats2d_slope(sketch)
 }
 
 #[pg_extern(name="slope", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_slope(
     summary: toolkit_experimental::StatsSummary2D,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal().slope()
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats2d_corr(
+    sketch: toolkit_experimental::StatsSummary2D,
+    accessor: toolkit_experimental::AccessorCorr,
+) -> Option<f64> {
+    let _ = accessor;
+    stats2d_corr(sketch)
 }
 
 #[pg_extern(name="corr", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_corr(
     summary: toolkit_experimental::StatsSummary2D,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal().corr()
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats2d_intercept(
+    sketch: toolkit_experimental::StatsSummary2D,
+    accessor: toolkit_experimental::AccessorIntercept,
+) -> Option<f64> {
+    let _ = accessor;
+    stats2d_intercept(sketch)
 }
 
 #[pg_extern(name="intercept", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_intercept(
     summary: toolkit_experimental::StatsSummary2D,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal().intercept()
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats2d_x_intercept(
+    sketch: toolkit_experimental::StatsSummary2D,
+    accessor: toolkit_experimental::AccessorXIntercept,
+) -> Option<f64> {
+    let _ = accessor;
+    stats2d_x_intercept(sketch)
 }
 
 #[pg_extern(name="x_intercept", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_x_intercept(
     summary: toolkit_experimental::StatsSummary2D,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal().x_intercept()
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats2d_determination_coeff(
+    sketch: toolkit_experimental::StatsSummary2D,
+    accessor: toolkit_experimental::AccessorDeterminationCoeff,
+) -> Option<f64> {
+    let _ = accessor;
+    stats2d_determination_coeff(sketch)
 }
 
 #[pg_extern(name="determination_coeff", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_determination_coeff(
     summary: toolkit_experimental::StatsSummary2D,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal().determination_coeff()
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_stats2d_covar(
+    sketch: Option<toolkit_experimental::StatsSummary2D>,
+    accessor: toolkit_experimental::AccessorCovar,
+) -> Option<f64> {
+    let _ = accessor;
+    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
+    stats2d_covar(sketch, &*method)
 }
 
 #[pg_extern(name="covariance", schema = "toolkit_experimental", immutable, parallel_safe)]
 fn stats2d_covar(
     summary: Option<toolkit_experimental::StatsSummary2D>,
-    method: default!(String, "sample"),
-    _fcinfo: pg_sys::FunctionCallInfo,
+    method: default!(&str, "sample"),
 )-> Option<f64> {
     match method.trim().to_lowercase().as_str() {
         "population" | "pop" => summary?.to_internal().covar_pop(),
@@ -1069,10 +1336,11 @@ mod tests {
             .get_one::<f64>()
             .unwrap();
 
-        let tk_result = client.select(&tk_cmd, None, None)
+        let (tk_result, arrow_result) = client.select(&tk_cmd, None, None)
             .first()
-            .get_one::<f64>()
-            .unwrap();
+            .get_two::<f64, f64>();
+        let (tk_result, arrow_result) = (tk_result.unwrap(), arrow_result.unwrap());
+        assert_eq!(tk_result, arrow_result, "Arrow didn't match in {}", tk_cmd);
 
         let result = if allowed_diff == 0.0 {
             pg_result == tk_result
@@ -1107,19 +1375,31 @@ mod tests {
     }
 
     fn tk1d_agg(agg: &str) -> String {
-        format!("SELECT toolkit_experimental.{}(toolkit_experimental.stats_agg(test_x)) FROM test_table", agg)
+        format!("SELECT \
+            toolkit_experimental.{agg}(toolkit_experimental.stats_agg(test_x)), \
+            toolkit_experimental.stats_agg(test_x)->toolkit_experimental.{agg}() \
+        FROM test_table", agg=agg)
     }
 
     fn tk1d_agg_arg(agg: &str, arg: &str) -> String {
-        format!("SELECT toolkit_experimental.{}(toolkit_experimental.stats_agg(test_x), '{}') FROM test_table", agg, arg)
+        format!("SELECT \
+            toolkit_experimental.{agg}(toolkit_experimental.stats_agg(test_x), '{arg}'), \
+            toolkit_experimental.stats_agg(test_x)->toolkit_experimental.{agg}('{arg}') \
+        FROM test_table", agg=agg, arg=arg)
     }
 
     fn tk2d_agg(agg: &str) -> String {
-        format!("SELECT toolkit_experimental.{}(toolkit_experimental.stats_agg(test_y, test_x)) FROM test_table", agg)
+        format!("SELECT \
+            toolkit_experimental.{agg}(toolkit_experimental.stats_agg(test_y, test_x)), \
+            toolkit_experimental.stats_agg(test_y, test_x)->toolkit_experimental.{agg}() \
+        FROM test_table", agg=agg)
     }
 
     fn tk2d_agg_arg(agg: &str, arg: &str) -> String {
-        format!("SELECT toolkit_experimental.{}(toolkit_experimental.stats_agg(test_y, test_x), '{}') FROM test_table", agg, arg)
+        format!("SELECT \
+            toolkit_experimental.{agg}(toolkit_experimental.stats_agg(test_y, test_x), '{arg}'), \
+            toolkit_experimental.stats_agg(test_y, test_x)->toolkit_experimental.{agg}('{arg}') \
+        FROM test_table", agg=agg, arg=arg)
     }
 
     fn pg_moment_query(moment: i32, column: &str) -> String {

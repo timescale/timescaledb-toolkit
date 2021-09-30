@@ -11,16 +11,21 @@ use xshell::cmd;
 mod update_script;
 
 macro_rules! path {
-    ($start:ident $(/ $segment: expr)*) => {
+    ($start:ident $(/ $segment: literal)*) => {
         {
             let root: &Path = $start.as_ref();
             root $(.join($segment))*
         }
     };
+    ($start:ident / $segment: expr) => {
+        {
+            let root: &Path = $start.as_ref();
+            root.join($segment)
+        }
+    }
 }
 
 fn main() {
-    // let this_binary = env::args().next().unwrap();
     if let Err(err) = try_main() {
         eprintln!("{}", err);
         process::exit(1);
@@ -29,8 +34,15 @@ fn main() {
 
 fn try_main() -> xshell::Result<()> {
     let pg_config = env::args().skip(1).next().expect("missing /path/to/pg_config");
+    let extension_info =
+        if pg_config == "--dir" {
+            let package_dir = env::args().skip(2).next().expect("missing /path/to/package_dir");
+            get_extension_info_from_dir(&package_dir)?
+        } else {
+            get_extension_info_from_pg_config(&pg_config)?
+        };
 
-    let extension_info = get_extension_info(&pg_config)?;
+
 
     // remove `module_path = '$libdir/timescaledb_toolkit'`
     // from timescaledb_toolkit.control.
@@ -57,10 +69,41 @@ struct ExtensionInfo {
     extension_dir: PathBuf,
 }
 
-fn get_extension_info(pg_config: &str) -> xshell::Result<ExtensionInfo> {
+fn get_extension_info_from_pg_config(pg_config: &str) -> xshell::Result<ExtensionInfo> {
     let bin_dir = cmd!("{pg_config} --pkglibdir").read()?;
 
     let share_dir = cmd!("{pg_config} --sharedir").read()?;
+    let extension_dir = path!(share_dir/"extension");
+
+    let control_file = path!(extension_dir/"timescaledb_toolkit.control");
+
+    let control_contents = fs::read_to_string(&control_file).unwrap_or_else(|e| panic!(
+        "cannot read control file {} due to {}",
+        control_file.to_string_lossy(),
+        e,
+    ));
+
+    let current_version = get_current_version(&control_contents);
+    eprintln!("{} {}", "Generating Version", current_version);
+
+    let upgradeable_from = get_upgradeable_from(&control_contents);
+    eprintln!("{} {:?}", "Upgradable From", upgradeable_from);
+
+    let extension_info = ExtensionInfo {
+        control_file,
+        current_version,
+        upgradeable_from,
+        bin_dir: bin_dir.into(),
+        extension_dir,
+    };
+    Ok(extension_info)
+}
+
+fn get_extension_info_from_dir(package_dir: &str) -> xshell::Result<ExtensionInfo> {
+    let bin_dir = path!(package_dir/"lib"/"postgresql");
+
+    let share_dir = path!(package_dir/"share"/"postgresql");
+
     let extension_dir = path!(share_dir/"extension");
 
     let control_file = path!(extension_dir/"timescaledb_toolkit.control");

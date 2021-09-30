@@ -115,6 +115,7 @@ ron_inout_funcs!(UnstableTimeseriesPipeline);
 // so that pgx generates the correct SQL
 pub mod toolkit_experimental {
     pub(crate) use super::*;
+    pub(crate) use crate::accessors::AccessorDelta;
     varlena_type!(UnstableTimeseriesPipeline);
 }
 

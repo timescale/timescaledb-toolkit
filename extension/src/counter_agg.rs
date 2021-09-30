@@ -56,6 +56,7 @@ ron_inout_funcs!(CounterSummary);
 // so that pgx generates the correct SQL
 mod toolkit_experimental {
     pub(crate) use super::*;
+    pub(crate) use crate::accessors::toolkit_experimental::*;
 
     varlena_type!(CounterSummary);
 }
@@ -328,68 +329,149 @@ CREATE AGGREGATE toolkit_experimental.rollup(cs toolkit_experimental.CounterSumm
 );
 "#);
 
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_agg_delta(
+    sketch: toolkit_experimental::CounterSummary,
+    accessor: toolkit_experimental::AccessorDelta,
+) -> f64 {
+    let _ = accessor;
+    counter_agg_delta(sketch)
+}
+
 #[pg_extern(name="delta", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_delta(
     summary: toolkit_experimental::CounterSummary,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> f64 {
     summary.to_internal_counter_summary().delta()
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_agg_rate(
+    sketch: toolkit_experimental::CounterSummary,
+    accessor: toolkit_experimental::AccessorRate,
+) -> Option<f64> {
+    let _ = accessor;
+    counter_agg_rate(sketch)
 }
 
 #[pg_extern(name="rate", schema = "toolkit_experimental", strict, immutable, parallel_safe )]
 fn counter_agg_rate(
     summary: toolkit_experimental::CounterSummary,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal_counter_summary().rate()
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_agg_time_delta(
+    sketch: toolkit_experimental::CounterSummary,
+    accessor: toolkit_experimental::AccessorTimeDelta,
+) -> f64 {
+    let _ = accessor;
+    counter_agg_time_delta(sketch)
 }
 
 #[pg_extern(name="time_delta", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_time_delta(
     summary: toolkit_experimental::CounterSummary,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> f64 {
     summary.to_internal_counter_summary().time_delta()
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_agg_irate_left(
+    sketch: toolkit_experimental::CounterSummary,
+    accessor: toolkit_experimental::AccessorIRateLeft,
+) -> Option<f64> {
+    let _ = accessor;
+    counter_agg_irate_left(sketch)
 }
 
 #[pg_extern(name="irate_left", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_irate_left(
     summary: toolkit_experimental::CounterSummary,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal_counter_summary().irate_left()
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_agg_irate_right(
+    sketch: toolkit_experimental::CounterSummary,
+    accessor: toolkit_experimental::AccessorIRateRight,
+) -> Option<f64> {
+    let _ = accessor;
+    counter_agg_irate_right(sketch)
 }
 
 #[pg_extern(name="irate_right", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_irate_right(
     summary: toolkit_experimental::CounterSummary,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal_counter_summary().irate_right()
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_agg_idelta_left(
+    sketch: toolkit_experimental::CounterSummary,
+    accessor: toolkit_experimental::AccessorIDeltaLeft,
+) -> f64 {
+    let _ = accessor;
+    counter_agg_idelta_left(sketch)
 }
 
 #[pg_extern(name="idelta_left", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_idelta_left(
     summary: toolkit_experimental::CounterSummary,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> f64 {
     summary.to_internal_counter_summary().idelta_left()
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_agg_idelta_right(
+    sketch: toolkit_experimental::CounterSummary,
+    accessor: toolkit_experimental::AccessorIDeltaRight,
+) -> f64 {
+    let _ = accessor;
+    counter_agg_idelta_right(sketch)
 }
 
 #[pg_extern(name="idelta_right", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_idelta_right(
     summary: toolkit_experimental::CounterSummary,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> f64 {
     summary.to_internal_counter_summary().idelta_right()
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_agg_with_bounds(
+    sketch: toolkit_experimental::CounterSummary,
+    accessor: toolkit_experimental::AccessorWithBounds,
+) -> toolkit_experimental::CounterSummary<'static> {
+    let _ = accessor;
+    let mut summary = sketch.to_internal_counter_summary();
+    summary.bounds = accessor.bounds();
+    CounterSummary::from_internal_counter_summary(summary)
 }
 
 #[pg_extern(name="with_bounds", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_with_bounds(
     summary: toolkit_experimental::CounterSummary,
     bounds: tstzrange,
-    _fcinfo: pg_sys::FunctionCallInfo,
-) -> toolkit_experimental::CounterSummary{
+) -> toolkit_experimental::CounterSummary {
     unsafe{
         let ptr = bounds as *mut pg_sys::varlena;
         let mut summary = summary.to_internal_counter_summary();
@@ -398,11 +480,22 @@ fn counter_agg_with_bounds(
     }
 }
 
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_agg_extrapolated_delta(
+    sketch: toolkit_experimental::CounterSummary,
+    accessor: toolkit_experimental::AccessorExtrapolatedDelta,
+) -> Option<f64> {
+    let _ = accessor;
+    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
+    counter_agg_extrapolated_delta(sketch, &*method)
+}
+
 #[pg_extern(name="extrapolated_delta", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_extrapolated_delta(
     summary: toolkit_experimental::CounterSummary,
-    method: String,
-    _fcinfo: pg_sys::FunctionCallInfo,
+    method: &str,
 )-> Option<f64> {
     match method.to_lowercase().as_str() {
         "prometheus" => {
@@ -412,11 +505,22 @@ fn counter_agg_extrapolated_delta(
     }
 }
 
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_agg_extrapolated_rate(
+    sketch: toolkit_experimental::CounterSummary,
+    accessor: toolkit_experimental::AccessorExtrapolatedRate,
+) -> Option<f64> {
+    let _ = accessor;
+    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
+    counter_agg_extrapolated_rate(sketch, &*method)
+}
+
 #[pg_extern(name="extrapolated_rate", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_extrapolated_rate(
     summary: toolkit_experimental::CounterSummary,
-    method: String,
-    _fcinfo: pg_sys::FunctionCallInfo,
+    method: &str,
 )-> Option<f64> {
     match method.to_lowercase().as_str() {
         "prometheus" => {
@@ -426,58 +530,127 @@ fn counter_agg_extrapolated_rate(
     }
 }
 
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_agg_num_elements(
+    sketch: toolkit_experimental::CounterSummary,
+    accessor: toolkit_experimental::AccessorNumElements,
+) -> i64 {
+    let _ = accessor;
+    counter_agg_num_elements(sketch)
+}
+
 #[pg_extern(name="num_elements", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_num_elements(
     summary: toolkit_experimental::CounterSummary,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> i64 {
     summary.to_internal_counter_summary().stats.n as i64
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_agg_num_changes(
+    sketch: toolkit_experimental::CounterSummary,
+    accessor: toolkit_experimental::AccessorNumChanges,
+) -> i64 {
+    let _ = accessor;
+    counter_agg_num_changes(sketch)
 }
 
 #[pg_extern(name="num_changes", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_num_changes(
     summary: toolkit_experimental::CounterSummary,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> i64 {
     summary.to_internal_counter_summary().num_changes as i64
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_agg_num_resets(
+    sketch: toolkit_experimental::CounterSummary,
+    accessor: toolkit_experimental::AccessorNumResets,
+) -> i64 {
+    let _ = accessor;
+    counter_agg_num_resets(sketch)
 }
 
 #[pg_extern(name="num_resets", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_num_resets(
     summary: toolkit_experimental::CounterSummary,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> i64 {
     summary.to_internal_counter_summary().num_resets as i64
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_agg_slope(
+    sketch: toolkit_experimental::CounterSummary,
+    accessor: toolkit_experimental::AccessorSlope,
+) -> Option<f64> {
+    let _ = accessor;
+    counter_agg_slope(sketch)
 }
 
 #[pg_extern(name="slope", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_slope(
     summary: toolkit_experimental::CounterSummary,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal_counter_summary().stats.slope()
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_agg_intercept(
+    sketch: toolkit_experimental::CounterSummary,
+    accessor: toolkit_experimental::AccessorIntercept,
+) -> Option<f64> {
+    let _ = accessor;
+    counter_agg_intercept(sketch)
 }
 
 #[pg_extern(name="intercept", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_intercept(
     summary: toolkit_experimental::CounterSummary,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal_counter_summary().stats.intercept()
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_agg_corr(
+    sketch: toolkit_experimental::CounterSummary,
+    accessor: toolkit_experimental::AccessorCorr,
+) -> Option<f64> {
+    let _ = accessor;
+    counter_agg_corr(sketch)
 }
 
 #[pg_extern(name="corr", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_corr(
     summary: toolkit_experimental::CounterSummary,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<f64> {
     summary.to_internal_counter_summary().stats.corr()
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_agg_zero_time(
+    sketch: toolkit_experimental::CounterSummary,
+    accessor: toolkit_experimental::AccessorZeroTime,
+) -> Option<pg_sys::TimestampTz> {
+    let _ = accessor;
+    counter_agg_counter_zero_time(sketch)
 }
 
 #[pg_extern(name="counter_zero_time", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn counter_agg_counter_zero_time(
     summary: toolkit_experimental::CounterSummary,
-    _fcinfo: pg_sys::FunctionCallInfo,
 )-> Option<pg_sys::TimestampTz> {
     Some((summary.to_internal_counter_summary().stats.x_intercept()? * 1_000_000.0) as i64)
 }
@@ -499,6 +672,19 @@ mod tests {
                 .first()
                 .get_one::<$type>()
                 .unwrap()
+        };
+    }
+
+    macro_rules! select_and_check_one {
+        ($client:expr, $stmt:expr, $type:ty) => {
+            {
+                let (a, b) = $client
+                    .select($stmt, None, None)
+                    .first()
+                    .get_two::<$type, $type>();
+                assert_eq!(a, b);
+                a.unwrap()
+            }
         };
     }
 
@@ -538,50 +724,86 @@ mod tests {
             let b = select_one!(client,stmt, toolkit_experimental::CounterSummary);
             assert_close_enough(&a.to_internal_counter_summary(), &b.to_internal_counter_summary());
 
-            let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
-            assert_relative_eq!(select_one!(client, stmt, f64), 10.0);
+            let stmt = "SELECT \
+                delta(counter_agg(ts, val)), \
+                counter_agg(ts, val)->delta() \
+            FROM test";
+            assert_relative_eq!(select_and_check_one!(client, stmt, f64), 10.0);
 
-            let stmt = "SELECT time_delta(counter_agg(ts, val)) FROM test";
-            assert_relative_eq!(select_one!(client, stmt, f64), 60.0);
-            
+            let stmt = "SELECT \
+                time_delta(counter_agg(ts, val)), \
+                counter_agg(ts, val)->time_delta() \
+            FROM test";
+            assert_relative_eq!(select_and_check_one!(client, stmt, f64), 60.0);
+
             // have to add 1 ms to right bounds to get full range and simple values because prometheus subtracts a ms
-            let stmt = "SELECT extrapolated_delta(counter_agg(ts, val, '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00.001+00)'), 'prometheus') FROM test";
-            assert_relative_eq!(select_one!(client, stmt, f64), 20.0);
+            let stmt = "SELECT \
+                extrapolated_delta(counter_agg(ts, val, '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00.001+00)'), 'prometheus'), \
+                counter_agg(ts, val, '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00.001+00)') -> extrapolated_delta('prometheus')  \
+            FROM test";
+            assert_relative_eq!(select_and_check_one!(client, stmt, f64), 20.0);
             // doesn't matter if we set the bounds before or after
-            let stmt = "SELECT extrapolated_delta(with_bounds(counter_agg(ts, val), '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00.001+00)'), 'prometheus') FROM test";
-            assert_relative_eq!(select_one!(client, stmt, f64), 20.0);
+            let stmt = "SELECT \
+                extrapolated_delta(with_bounds(counter_agg(ts, val), '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00.001+00)'), 'prometheus'), \
+                counter_agg(ts, val)->with_bounds('[2020-01-01 00:00:00+00, 2020-01-01 00:02:00.001+00)')-> extrapolated_delta('prometheus') \
+            FROM test";
+            assert_relative_eq!(select_and_check_one!(client, stmt, f64), 20.0);
 
-            let stmt = "SELECT extrapolated_rate(counter_agg(ts, val, '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00.001+00)'), 'prometheus') FROM test";
-            assert_relative_eq!(select_one!(client, stmt, f64), 20.0 / 120.0);
+            let stmt = "SELECT \
+                extrapolated_rate(counter_agg(ts, val, '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00.001+00)'), 'prometheus'), \
+                counter_agg(ts, val, '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00.001+00)')->extrapolated_rate('prometheus') \
+            FROM test";
+            assert_relative_eq!(select_and_check_one!(client, stmt, f64), 20.0 / 120.0);
 
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)";
             client.select(stmt, None, None);
 
-            let stmt = "SELECT slope(counter_agg(ts, val)) FROM test";
-            assert_relative_eq!(select_one!(client, stmt, f64), 10.0 / 60.0);
+            let stmt = "SELECT \
+                slope(counter_agg(ts, val)), \
+                counter_agg(ts, val)->slope() \
+            FROM test";
+            assert_relative_eq!(select_and_check_one!(client, stmt, f64), 10.0 / 60.0);
 
-            let stmt = "SELECT intercept(counter_agg(ts, val)) FROM test";
-            assert_relative_eq!(select_one!(client, stmt, f64), -105191990.0);
+            let stmt = "SELECT \
+                intercept(counter_agg(ts, val)), \
+                counter_agg(ts, val)->intercept() \
+            FROM test";
+            assert_relative_eq!(select_and_check_one!(client, stmt, f64), -105191990.0);
 
-            let stmt = "SELECT corr(counter_agg(ts, val)) FROM test";
-            assert_relative_eq!(select_one!(client, stmt, f64), 1.0);
+            let stmt = "SELECT \
+                corr(counter_agg(ts, val)), \
+                counter_agg(ts, val)->corr() \
+            FROM test";
+            assert_relative_eq!(select_and_check_one!(client, stmt, f64), 1.0);
 
-            let stmt = "SELECT counter_zero_time(counter_agg(ts, val)) FROM test";
-            let zp = select_one!(client, stmt, i64);
+            let stmt = "SELECT \
+                counter_zero_time(counter_agg(ts, val)), \
+                counter_agg(ts, val)->counter_zero_time() \
+            FROM test";
+            let zp = select_and_check_one!(client, stmt, i64);
             let real_zp = select_one!(client, "SELECT '2019-12-31 23:59:00+00'::timestamptz", i64);
             assert_eq!(zp, real_zp);
 
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:08:00+00', 30.0), ('2020-01-01 00:10:00+00', 30.0), ('2020-01-01 00:10:30+00', 10.0), ('2020-01-01 00:20:00+00', 40.0)";
             client.select(stmt, None, None);
 
-            let stmt = "SELECT num_elements(counter_agg(ts, val)) FROM test";
-            assert_eq!(select_one!(client, stmt, i64), 9);
+            let stmt = "SELECT \
+                num_elements(counter_agg(ts, val)), \
+                counter_agg(ts, val)->num_elements() \
+            FROM test";
+            assert_eq!(select_and_check_one!(client, stmt, i64), 9);
 
-            let stmt = "SELECT num_resets(counter_agg(ts, val)) FROM test";
-            assert_eq!(select_one!(client, stmt, i64), 3);
+            let stmt = "SELECT \
+                num_resets(counter_agg(ts, val)), \
+                counter_agg(ts, val)->num_resets() \
+            FROM test";
+            assert_eq!(select_and_check_one!(client, stmt, i64), 3);
 
-            let stmt = "SELECT num_changes(counter_agg(ts, val)) FROM test";
-            assert_eq!(select_one!(client, stmt, i64), 7);
+            let stmt = "SELECT \
+                num_changes(counter_agg(ts, val)), \
+                counter_agg(ts, val)->num_changes() \
+            FROM test";
+            assert_eq!(select_and_check_one!(client, stmt, i64), 7);
 
             //combine function works as expected
             let stmt = "SELECT counter_agg(ts, val) FROM test";

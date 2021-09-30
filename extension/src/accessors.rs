@@ -1,4 +1,5 @@
 
+use counter_agg::range::I64Range;
 use pgx::*;
 
 use flat_serialize::*;
@@ -48,6 +49,21 @@ pub mod toolkit_experimental {
 
     varlena_type!(AccessorDistinctCount);
     varlena_type!(AccessorStdError);
+
+    varlena_type!(AccessorDelta);
+    varlena_type!(AccessorTimeDelta);
+    varlena_type!(AccessorRate);
+    varlena_type!(AccessorIRateLeft);
+    varlena_type!(AccessorIRateRight);
+    varlena_type!(AccessorIDeltaLeft);
+    varlena_type!(AccessorIDeltaRight);
+    varlena_type!(AccessorNumElements);
+    varlena_type!(AccessorNumChanges);
+    varlena_type!(AccessorNumResets);
+    varlena_type!(AccessorZeroTime);
+    varlena_type!(AccessorExtrapolatedDelta);
+    varlena_type!(AccessorExtrapolatedRate);
+    varlena_type!(AccessorWithBounds);
 }
 
 pg_type! {
@@ -701,5 +717,317 @@ pub fn accessor_stderror(
     build!{
         AccessorStdError {
         }
+    }
+}
+
+
+pg_type! {
+    #[derive(Debug)]
+    struct AccessorDelta {
+    }
+}
+
+ron_inout_funcs!(AccessorDelta);
+
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="delta")]
+pub fn accessor_delta(
+) -> toolkit_experimental::AccessorDelta<'static> {
+    build!{
+        AccessorDelta {
+        }
+    }
+}
+
+
+pg_type! {
+    #[derive(Debug)]
+    struct AccessorTimeDelta {
+    }
+}
+
+ron_inout_funcs!(AccessorTimeDelta);
+
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="time_delta")]
+pub fn accessor_time_delta(
+) -> toolkit_experimental::AccessorTimeDelta<'static> {
+    build!{
+        AccessorTimeDelta {
+        }
+    }
+}
+
+
+pg_type! {
+    #[derive(Debug)]
+    struct AccessorRate {
+    }
+}
+
+ron_inout_funcs!(AccessorRate);
+
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="rate")]
+pub fn accessor_rate(
+) -> toolkit_experimental::AccessorRate<'static> {
+    build!{
+        AccessorRate {
+        }
+    }
+}
+
+
+pg_type! {
+    #[derive(Debug)]
+    struct AccessorIRateLeft {
+    }
+}
+
+ron_inout_funcs!(AccessorIRateLeft);
+
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="irate_left")]
+pub fn accessor_irate_left(
+) -> toolkit_experimental::AccessorIRateLeft<'static> {
+    build!{
+        AccessorIRateLeft {
+        }
+    }
+}
+
+
+pg_type! {
+    #[derive(Debug)]
+    struct AccessorIRateRight {
+    }
+}
+
+ron_inout_funcs!(AccessorIRateRight);
+
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="irate_right")]
+pub fn accessor_irate_right(
+) -> toolkit_experimental::AccessorIRateRight<'static> {
+    build!{
+        AccessorIRateRight {
+        }
+    }
+}
+
+
+pg_type! {
+    #[derive(Debug)]
+    struct AccessorIDeltaLeft {
+    }
+}
+
+ron_inout_funcs!(AccessorIDeltaLeft);
+
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="idelta_left")]
+pub fn accessor_idelta_left(
+) -> toolkit_experimental::AccessorIDeltaLeft<'static> {
+    build!{
+        AccessorIDeltaLeft {
+        }
+    }
+}
+
+
+pg_type! {
+    #[derive(Debug)]
+    struct AccessorIDeltaRight {
+    }
+}
+
+ron_inout_funcs!(AccessorIDeltaRight);
+
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="idelta_right")]
+pub fn accessor_idelta_right(
+) -> toolkit_experimental::AccessorIDeltaRight<'static> {
+    build!{
+        AccessorIDeltaRight {
+        }
+    }
+}
+
+
+pg_type! {
+    #[derive(Debug)]
+    struct AccessorNumElements {
+    }
+}
+
+ron_inout_funcs!(AccessorNumElements);
+
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="num_elements")]
+pub fn accessor_num_elements(
+) -> toolkit_experimental::AccessorNumElements<'static> {
+    build!{
+        AccessorNumElements {
+        }
+    }
+}
+
+
+pg_type! {
+    #[derive(Debug)]
+    struct AccessorNumChanges {
+    }
+}
+
+ron_inout_funcs!(AccessorNumChanges);
+
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="num_changes")]
+pub fn accessor_num_changes(
+) -> toolkit_experimental::AccessorNumChanges<'static> {
+    build!{
+        AccessorNumChanges {
+        }
+    }
+}
+
+
+pg_type! {
+    #[derive(Debug)]
+    struct AccessorNumResets {
+    }
+}
+
+ron_inout_funcs!(AccessorNumResets);
+
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="num_resets")]
+pub fn accessor_num_resets(
+) -> toolkit_experimental::AccessorNumResets<'static> {
+    build!{
+        AccessorNumResets {
+        }
+    }
+}
+
+
+pg_type! {
+    #[derive(Debug)]
+    struct AccessorZeroTime {
+    }
+}
+
+ron_inout_funcs!(AccessorZeroTime);
+
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="counter_zero_time")]
+pub fn accessor_zero_time(
+) -> toolkit_experimental::AccessorZeroTime<'static> {
+    build!{
+        AccessorZeroTime {
+        }
+    }
+}
+
+
+pg_type! {
+    #[derive(Debug)]
+    struct AccessorExtrapolatedDelta<'input> {
+        len: u32,
+        bytes: [u8; self.len],
+    }
+}
+
+//FIXME string IO
+ron_inout_funcs!(AccessorExtrapolatedDelta);
+
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="extrapolated_delta")]
+pub fn accessor_extrapolated_delta(
+    method: &str,
+) -> toolkit_experimental::AccessorExtrapolatedDelta<'static> {
+    //TODO validate `method`?
+    unsafe {
+        flatten!{
+            AccessorExtrapolatedDelta {
+                len: method.len().try_into().unwrap(),
+                bytes: method.as_bytes().into(),
+            }
+        }
+    }
+}
+
+
+pg_type! {
+    #[derive(Debug)]
+    struct AccessorExtrapolatedRate<'input> {
+        len: u32,
+        bytes: [u8; self.len],
+    }
+}
+
+//FIXME string IO
+ron_inout_funcs!(AccessorExtrapolatedRate);
+
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="extrapolated_rate")]
+pub fn accessor_extrapolated_rate(
+    method: &str,
+) -> toolkit_experimental::AccessorExtrapolatedRate<'static> {
+    //TODO validate `method`?
+    unsafe {
+        flatten!{
+            AccessorExtrapolatedRate {
+                len: method.len().try_into().unwrap(),
+                bytes: method.as_bytes().into(),
+            }
+        }
+    }
+}
+
+
+pg_type! {
+    #[derive(Debug)]
+    struct AccessorWithBounds {
+        lower: i64,
+        upper: i64,
+        range_null: u8,
+        lower_present: u8,
+        upper_present: u8,
+    }
+}
+
+ron_inout_funcs!(AccessorWithBounds);
+
+#[allow(non_camel_case_types)]
+type tstzrange = pg_sys::Datum;
+
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="with_bounds")]
+pub fn accessor_with_bounds(
+    bounds: tstzrange,
+) -> toolkit_experimental::AccessorWithBounds<'static> {
+    let range = unsafe { crate::range::get_range(bounds as *mut pg_sys::varlena) };
+    let mut accessor = build!{
+        AccessorWithBounds {
+            lower: 0,
+            upper: 0,
+            range_null: 0,
+            lower_present: 0,
+            upper_present: 0,
+        }
+    };
+    match range {
+        None => accessor.range_null = 1,
+        Some(range) => {
+            if let Some(left) = range.left {
+                accessor.lower_present = 1;
+                accessor.lower = left;
+            }
+            if let Some(right) = range.right {
+                accessor.upper_present = 1;
+                accessor.upper = right;
+            }
+        },
+    }
+    return accessor
+}
+
+impl<'i> AccessorWithBounds<'i> {
+    pub fn bounds(&self) -> Option<I64Range> {
+        if self.range_null != 0{
+            return None
+        }
+
+        I64Range {
+            left: (self.lower_present != 0).then(|| self.lower),
+            right: (self.upper_present != 0).then(|| self.upper),
+        }.into()
     }
 }

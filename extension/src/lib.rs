@@ -21,7 +21,7 @@ mod schema_test;
 
 // This should be last so we don't run our warning trigger on when
 // installing this extension
-pub mod triggers;
+pub mod zz_triggers;
 
 use pgx::*;
 

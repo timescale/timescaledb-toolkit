@@ -11,7 +11,8 @@ use crate::{
     aggregate_utils::in_aggregate_context,
     ron_inout_funcs,
     flatten,
-    palloc::Internal, pg_type
+    palloc::Internal, pg_type,
+    accessors::toolkit_experimental,
 };
 
 use tdigest::{
@@ -306,14 +307,32 @@ CREATE AGGREGATE rollup(
 
 //---- Available PG operations on the digest
 
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_tdigest_approx_percentile(
+    sketch: TDigest,
+    accessor: toolkit_experimental::AccessorApproxPercentile,
+) -> f64 {
+    tdigest_quantile(accessor.percentile, sketch)
+}
+
 // Approximate the value at the given quantile (0.0-1.0)
 #[pg_extern(immutable, parallel_safe, name="approx_percentile")]
 pub fn tdigest_quantile(
     quantile: f64,
     digest: TDigest,
-    _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
     digest.to_internal_tdigest().estimate_quantile(quantile)
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_tdigest_approx_rank(
+    sketch: TDigest,
+    accessor: toolkit_experimental::AccessorApproxRank,
+) -> f64 {
+    tdigest_quantile_at_value(accessor.value, sketch)
 }
 
 // Approximate the quantile at the given value
@@ -321,36 +340,73 @@ pub fn tdigest_quantile(
 pub fn tdigest_quantile_at_value(
     value: f64,
     digest: TDigest,
-    _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
     digest.to_internal_tdigest().estimate_quantile_at_value(value)
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_tdigest_num_vals(
+    sketch: TDigest,
+    accessor: toolkit_experimental::AccessorNumVals,
+) -> f64 {
+    let _ = accessor;
+    tdigest_count(sketch)
 }
 
 // Number of elements from which the digest was built.
 #[pg_extern(immutable, parallel_safe, name="num_vals")]
 pub fn tdigest_count(
     digest: TDigest,
-    _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
     digest.count as f64
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_tdigest_min(
+    sketch: TDigest,
+    accessor: toolkit_experimental::AccessorMin,
+) -> f64 {
+    let _ = accessor;
+    tdigest_min(sketch)
 }
 
 // Minimum value entered in the digest.
 #[pg_extern(immutable, parallel_safe, name="min_val")]
 pub fn tdigest_min(
     digest: TDigest,
-    _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
     digest.min
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_tdigest_max(
+    sketch: TDigest,
+    accessor: toolkit_experimental::AccessorMax,
+) -> f64 {
+    let _ = accessor;
+    tdigest_max(sketch)
 }
 
 // Maximum value entered in the digest.
 #[pg_extern(immutable, parallel_safe, name="max_val")]
 pub fn tdigest_max(
     digest: TDigest,
-    _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
     digest.max
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_tdigest_mean(
+    sketch: TDigest,
+    accessor: toolkit_experimental::AccessorMean,
+) -> f64 {
+    let _ = accessor;
+    tdigest_mean(sketch)
 }
 
 // Average of all the values entered in the digest.
@@ -358,7 +414,6 @@ pub fn tdigest_max(
 #[pg_extern(immutable, parallel_safe, name="mean")]
 pub fn tdigest_mean(
     digest: TDigest,
-    _fcinfo: pg_sys::FunctionCallInfo,
 ) -> f64 {
     if digest.count > 0 {
         digest.sum / digest.count as f64
@@ -415,17 +470,35 @@ mod tests {
             apx_eql(max.unwrap(), 100.0, 0.000001);
             apx_eql(count.unwrap(), 10000.0, 0.000001);
 
-            let mean = client
+            let (min2, max2, count2) = client
                 .select("SELECT \
-                    mean(tdigest) \
+                    tdigest->toolkit_experimental.min_val(), \
+                    tdigest->toolkit_experimental.max_val(), \
+                    tdigest->toolkit_experimental.num_vals() \
                     FROM digest",
                     None,
                     None
                 )
                 .first()
-                .get_one::<f64>();
+                .get_three::<f64, f64, f64>();
+
+            assert_eq!(min2, min);
+            assert_eq!(max2, max);
+            assert_eq!(count2, count);
+
+            let (mean, mean2) = client
+                .select("SELECT \
+                    mean(tdigest), \
+                    tdigest -> toolkit_experimental.mean()
+                    FROM digest",
+                    None,
+                    None
+                )
+                .first()
+                .get_two::<f64, f64>();
 
             apx_eql(mean.unwrap(), 50.005, 0.0001);
+            assert_eq!(mean, mean2);
 
             for i in 0..=100 {
                 let value = i as f64;
@@ -451,6 +524,21 @@ mod tests {
                     pct_eql(est_val.unwrap(), value, 1.0);
                     pct_eql(est_quant.unwrap(), quantile, 1.0);
                 }
+
+                let (est_val2, est_quant2) = client
+                    .select(
+                        &format!("SELECT
+                            tdigest->toolkit_experimental.approx_percentile({}), \
+                            tdigest->toolkit_experimental.approx_percentile_rank({}) \
+                            FROM digest",
+                            quantile,
+                            value),
+                        None,
+                        None)
+                    .first()
+                    .get_two::<f64, f64>();
+                assert_eq!(est_val2, est_val);
+                assert_eq!(est_quant2, est_quant);
             }
         });
     }

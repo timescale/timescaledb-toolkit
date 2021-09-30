@@ -1,4 +1,5 @@
 range.generated.sql
+accessors.generated.sql
 tdigest.generated.sql
 hyperloglog.generated.sql
 uddsketch.generated.sql

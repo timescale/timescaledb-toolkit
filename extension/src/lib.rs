@@ -1,4 +1,5 @@
 
+pub mod accessors;
 pub mod tdigest;
 pub mod hyperloglog;
 pub mod uddsketch;

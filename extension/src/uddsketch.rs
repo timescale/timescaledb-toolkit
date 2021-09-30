@@ -9,11 +9,11 @@ use encodings::{delta, prefix_varint};
 
 use uddsketch::{SketchHashKey, UDDSketch as UddSketchInternal};
 
-
 use crate::{
     aggregate_utils::in_aggregate_context,
-    build, flatten,
-    palloc::Internal, pg_type
+    flatten,
+    palloc::Internal, pg_type,
+    accessors::toolkit_experimental,
 };
 
 
@@ -458,40 +458,11 @@ CREATE AGGREGATE rollup(
 
 //---- Available PG operations on the sketch
 
-mod toolkit_experimental {
-    pub use super::*;
-    varlena_type!(UddSketchApproxRank);
-    varlena_type!(UddSketchApproxPercentile);
-    varlena_type!(UddsketchNumVals);
-    varlena_type!(UddSketchMean);
-    varlena_type!(UddSketchError);
-}
-
-pg_type! {
-    #[derive(Debug)]
-    struct UddSketchApproxPercentile {
-        percentile: f64,
-    }
-}
-
-crate::ron_inout_funcs!(UddSketchApproxPercentile);
-
-#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="approx_percentile")]
-pub fn accessor_uddsketch_approx_percentile(
-    percentile: f64,
-) -> toolkit_experimental::UddSketchApproxPercentile<'static> {
-    build!{
-        UddSketchApproxPercentile {
-            percentile: percentile,
-        }
-    }
-}
-
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_uddsketch_approx_percentile(
     sketch: UddSketch,
-    accessor: toolkit_experimental::UddSketchApproxPercentile,
+    accessor: toolkit_experimental::AccessorApproxPercentile,
 ) -> f64 {
     uddsketch_approx_percentile(accessor.percentile, sketch)
 }
@@ -511,32 +482,11 @@ pub fn uddsketch_approx_percentile(
     )
 }
 
-
-pg_type! {
-    #[derive(Debug)]
-    struct UddSketchApproxRank {
-        value: f64,
-    }
-}
-
-crate::ron_inout_funcs!(UddSketchApproxRank);
-
-#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="approx_percentile_rank")]
-pub fn accessor_uddsketch_approx_rank(
-    value: f64,
-) -> toolkit_experimental::UddSketchApproxRank<'static> {
-    build!{
-        UddSketchApproxRank {
-            value: value,
-        }
-    }
-}
-
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_uddsketch_approx_rank(
     sketch: UddSketch,
-    accessor: toolkit_experimental::UddSketchApproxRank,
+    accessor: toolkit_experimental::AccessorApproxRank,
 ) -> f64 {
     uddsketch_approx_percentile_rank(accessor.value, sketch)
 }
@@ -555,28 +505,11 @@ pub fn uddsketch_approx_percentile_rank(
     )
 }
 
-pg_type! {
-    #[derive(Debug)]
-    struct UddsketchNumVals {
-    }
-}
-
-crate::ron_inout_funcs!(UddsketchNumVals);
-
-#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="num_vals")]
-pub fn accessor_uddsketch_num_vals(
-) -> toolkit_experimental::UddsketchNumVals<'static> {
-    build!{
-        UddsketchNumVals {
-        }
-    }
-}
-
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_uddsketch_num_vals(
     sketch: UddSketch,
-    accessor: toolkit_experimental::UddsketchNumVals,
+    accessor: toolkit_experimental::AccessorNumVals,
 ) -> f64 {
     let _ = accessor;
     uddsketch_num_vals(sketch)
@@ -591,28 +524,11 @@ pub fn uddsketch_num_vals(
 }
 
 
-pg_type! {
-    #[derive(Debug)]
-    struct UddSketchMean {
-    }
-}
-
-crate::ron_inout_funcs!(UddSketchMean);
-
-#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="mean")]
-pub fn accessor_uddsketch_mean(
-) -> toolkit_experimental::UddSketchMean<'static> {
-    build!{
-        UddSketchMean {
-        }
-    }
-}
-
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_uddsketch_mean(
     sketch: UddSketch,
-    accessor: toolkit_experimental::UddSketchMean,
+    accessor: toolkit_experimental::AccessorMean,
 ) -> f64 {
     let _ = accessor;
     uddsketch_mean(sketch)
@@ -631,28 +547,12 @@ pub fn uddsketch_mean(
     }
 }
 
-pg_type! {
-    #[derive(Debug)]
-    struct UddSketchError {
-    }
-}
-
-crate::ron_inout_funcs!(UddSketchError);
-
-#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="error")]
-pub fn accessor_uddsketch_error(
-) -> toolkit_experimental::UddSketchError<'static> {
-    build!{
-        UddSketchError {
-        }
-    }
-}
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_uddsketch_error(
     sketch: UddSketch,
-    accessor: toolkit_experimental::UddSketchError,
+    accessor: toolkit_experimental::AccessorError,
 ) -> f64 {
     let _ = accessor;
     uddsketch_error(sketch)

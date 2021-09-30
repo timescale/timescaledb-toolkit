@@ -592,6 +592,83 @@ mod tests {
         });
     }
 
+    #[pg_test]
+    fn test_counter_io() {
+        Spi::execute(|client| {
+            client.select("CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)", None, None);
+            // set search_path after defining our table so we don't pollute the wrong schema
+            let stmt = "SELECT format('toolkit_experimental, %s',current_setting('search_path'))";
+            client.select("SET TIME ZONE 'UTC'", None, None);
+            let search_path = select_one!(client, stmt, String);
+            client.select(&format!("SET LOCAL search_path TO {}", search_path), None, None);
+            let stmt = "INSERT INTO test VALUES\
+                ('2020-01-01 00:00:00+00', 10.0),\
+                ('2020-01-01 00:01:00+00', 20.0),\
+                ('2020-01-01 00:02:00+00', 30.0),\
+                ('2020-01-01 00:03:00+00', 20.0),\
+                ('2020-01-01 00:04:00+00', 10.0),\
+                ('2020-01-01 00:05:00+00', 20.0),\
+                ('2020-01-01 00:06:00+00', 10.0),\
+                ('2020-01-01 00:07:00+00', 30.0),\
+                ('2020-01-01 00:08:00+00', 10.0)";
+            client.select(stmt, None, None);
+
+            let expected = "(\
+                version:1,\
+                stats:(\
+                    n:9,\
+                    sx:5680370160,\
+                    sx2:216000,\
+                    sx3:0,\
+                    sx4:9175680000,\
+                    sy:530,\
+                    sy2:9688.888888888889,\
+                    sy3:13308.641975308623,\
+                    sy4:18597366.255144034,\
+                    sxy:45600\
+                ),\
+                first:(ts:\"2020-01-01 00:00:00+00\",val:10),\
+                second:(ts:\"2020-01-01 00:01:00+00\",val:20),\
+                penultimate:(ts:\"2020-01-01 00:07:00+00\",val:30),\
+                last:(ts:\"2020-01-01 00:08:00+00\",val:10),\
+                reset_sum:100,\
+                num_resets:4,\
+                num_changes:8,\
+                bounds:(\
+                    is_present:0,\
+                    has_left:0,\
+                    has_right:0,\
+                    padding:(0,0,0,0,0),\
+                    left:None,\
+                    right:None\
+                )\
+            )";
+
+            let stmt = "SELECT counter_agg(ts, val)::TEXT FROM test";
+            let test = select_one!(client, stmt, String);
+            assert_eq!(test, expected);
+
+            let stmt = format!("SELECT '{}'::CounterSummary::TEXT", expected);
+            let round_trip = select_one!(client, &stmt, String);
+            assert_eq!(expected, round_trip);
+
+            let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
+            let delta = select_one!(client, stmt, f64);
+            assert_eq!(delta, 100.);
+            let stmt = format!("SELECT delta('{}')", expected);
+            let delta_test = select_one!(client, &stmt, f64);
+            assert_eq!(delta, delta_test);
+
+            let stmt = "SELECT num_resets(counter_agg(ts, val)) FROM test";
+            let resets = select_one!(client, stmt, i64);
+            assert_eq!(resets, 4);
+            let stmt = format!("SELECT num_resets('{}')", expected);
+            let resets_test = select_one!(client, &stmt, i64);
+            assert_eq!(resets, resets_test);
+        });
+    }
+
+
     // #[pg_test]
     // fn test_combine_aggregate(){
     //     Spi::execute(|client| {

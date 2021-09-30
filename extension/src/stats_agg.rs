@@ -947,7 +947,19 @@ mod tests {
                 .first()
                 .get_one::<String>().
                 unwrap();
-            assert_eq!(test, "(version:1,n:2,sx:30,sx2:50,sx3:0,sx4:1250,sy:30,sy2:50,sy3:0,sy4:1250,sxy:50)");
+            let expected = "(version:1,n:2,sx:30,sx2:50,sx3:0,sx4:1250,sy:30,sy2:50,sy3:0,sy4:1250,sxy:50)";
+            assert_eq!(test, expected);
+
+            // Test a few functions to see that the text serialized object behave the same as the constructed one
+            assert_eq!(client.select("SELECT skewness_x(stats_agg(test_y, test_x)) FROM test_table", None, None).first().get_one::<f64>(),
+                       client.select(&format!("SELECT skewness_x('{}')", expected), None, None).first().get_one::<f64>());
+            assert_eq!(client.select("SELECT kurtosis_y(stats_agg(test_y, test_x)) FROM test_table", None, None).first().get_one::<f64>(),
+                       client.select(&format!("SELECT kurtosis_y('{}')", expected), None, None).first().get_one::<f64>());
+            assert_eq!(client.select("SELECT covariance(stats_agg(test_y, test_x)) FROM test_table", None, None).first().get_one::<f64>(),
+                       client.select(&format!("SELECT covariance('{}')", expected), None, None).first().get_one::<f64>());
+
+            // Test text round trip
+            assert_eq!(client.select(&format!("SELECT '{}'::StatsSummary2D::TEXT", expected), None, None).first().get_one::<String>().unwrap(), expected);
 
             client.select(
                 "INSERT INTO test_table VALUES ('NaN', 30);",

@@ -81,6 +81,22 @@ pub fn arrow_run_pipeline_then_unnest<'s, 'p>(
 }
 
 
+
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name="series",
+    schema="toolkit_experimental"
+)]
+pub fn pipeline_series<'e>() -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    build! {
+        UnstableTimeseriesPipeline {
+            num_elements: 0,
+            elements: vec![].into(),
+        }
+    }
+}
+
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {
     use pgx::*;
@@ -112,6 +128,36 @@ mod tests {
                 .first()
                 .get_one::<String>();
             assert_eq!(val.unwrap(), "{\"(\\\"2020-01-04 00:00:00+00\\\",25)\",\"(\\\"2020-01-01 00:00:00+00\\\",10)\",\"(\\\"2020-01-03 00:00:00+00\\\",20)\",\"(\\\"2020-01-02 00:00:00+00\\\",15)\",\"(\\\"2020-01-05 00:00:00+00\\\",30)\"}");
+        });
+    }
+
+
+    #[pg_test]
+    fn test_series_finalizer() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            // using the search path trick for this test b/c the operator is
+            // difficult to spot otherwise.
+            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
+
+            // we use a subselect to guarantee order
+            let create_series = "SELECT timeseries(time, value) as series FROM \
+                (VALUES ('2020-01-04 UTC'::TIMESTAMPTZ, 25.0), \
+                    ('2020-01-01 UTC'::TIMESTAMPTZ, 11.0), \
+                    ('2020-01-03 UTC'::TIMESTAMPTZ, 21.0), \
+                    ('2020-01-02 UTC'::TIMESTAMPTZ, 15.0), \
+                    ('2020-01-05 UTC'::TIMESTAMPTZ, 31.0)) as v(time, value)";
+
+            let val = client.select(
+                &format!("SELECT (series -> series())::TEXT FROM ({}) s", create_series),
+                None,
+                None
+            )
+                .first()
+                .get_one::<String>();
+            assert_eq!(val.unwrap(), "[(ts:\"2020-01-04 00:00:00+00\",val:25),(ts:\"2020-01-01 00:00:00+00\",val:11),(ts:\"2020-01-03 00:00:00+00\",val:21),(ts:\"2020-01-02 00:00:00+00\",val:15),(ts:\"2020-01-05 00:00:00+00\",val:31)]");
         });
     }
 }

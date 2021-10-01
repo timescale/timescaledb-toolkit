@@ -34,7 +34,7 @@ pub mod toolkit_experimental {
 pub fn run_pipeline_then_stats_agg<'s, 'p>(
     mut timeseries: toolkit_experimental::TimeSeries<'s>,
     pipeline: toolkit_experimental::PipelineThenStatsAgg<'p>,
-) -> toolkit_experimental::StatsSummary1D<'static> {
+) -> StatsSummary1D<'static> {
     timeseries = run_pipeline_elements(timeseries, pipeline.elements.iter());
     let mut stats = InternalStatsSummary1D::new();
     for TSPoint{ val, ..} in timeseries.iter() {

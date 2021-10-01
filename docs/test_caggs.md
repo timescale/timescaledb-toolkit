@@ -3,12 +3,6 @@
 This document serves as a driver for allowing our doctester to verify the behavior of some of our features on continuous aggregates.  It is not intended to serve as documentation, though it does present an example of using continuous aggregates with some toolkit code.
 
 ## Setup table
-Remove this first section once these features are stabilized.
-```SQL ,non-transactional,ignore-output
-SET search_path TO "$user", public, toolkit_experimental;
-SET timescaledb_toolkit_acknowledge_auto_drop TO 'true';
-```
-
 ```SQL ,non-transactional,ignore-output
 SET TIME ZONE 'UTC';
 CREATE TABLE test(time TIMESTAMPTZ, value1 DOUBLE PRECISION, value2 DOUBLE PRECISION);

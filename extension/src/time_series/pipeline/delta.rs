@@ -7,13 +7,21 @@ use super::*;
 #[pg_extern(
     immutable,
     parallel_safe,
-    name="delta",
+    name="delta_cast",
     schema="toolkit_experimental"
 )]
 pub fn delta_pipeline_element<'p, 'e>(
+    accessor: toolkit_experimental::AccessorDelta<'p>,
 ) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+    let _ = accessor;
     Element::Delta {}.flatten()
 }
+
+extension_sql!(r#"
+    CREATE CAST (toolkit_experimental.AccessorDelta AS toolkit_experimental.UnstableTimeseriesPipeline)
+        WITH FUNCTION toolkit_experimental.delta_cast
+        AS IMPLICIT;
+"#);
 
 pub fn timeseries_delta<'s>(
     series: &toolkit_experimental::TimeSeries<'s>,

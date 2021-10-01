@@ -142,6 +142,7 @@ flat_serialize_macro::flat_serialize! {
 // so that pgx generates the correct SQL
 mod toolkit_experimental {
     pub(crate) use super::*;
+    pub(crate) use crate::accessors::toolkit_experimental::*;
 
     varlena_type!(Hyperloglog);
 }
@@ -174,7 +175,7 @@ CREATE AGGREGATE toolkit_experimental.hyperloglog(size int, value AnyElement)
     finalfunc = toolkit_experimental.hyperloglog_final,
     combinefunc = toolkit_experimental.hyperloglog_combine,
     serialfunc = toolkit_experimental.hyperloglog_serialize,
-    deserialfunc = toolkit_experimental.hyperloglog_deserialize, 
+    deserialfunc = toolkit_experimental.hyperloglog_deserialize,
     parallel = safe
 );
 "#
@@ -217,13 +218,23 @@ CREATE AGGREGATE toolkit_experimental.rollup(hyperloglog toolkit_experimental.Hy
     finalfunc = toolkit_experimental.hyperloglog_final,
     combinefunc = toolkit_experimental.hyperloglog_combine,
     serialfunc = toolkit_experimental.hyperloglog_serialize,
-    deserialfunc = toolkit_experimental.hyperloglog_deserialize, 
+    deserialfunc = toolkit_experimental.hyperloglog_deserialize,
     parallel = safe
 );
 "#
 );
 
 
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_hyperloglog_count<'input>(
+    sketch: toolkit_experimental::HyperLogLog<'input>,
+    accessor: toolkit_experimental::AccessorDistinctCount,
+) -> i64 {
+    let _ = accessor;
+    hyperloglog_count(sketch)
+}
 
 #[pg_extern(name="distinct_count", schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn hyperloglog_count<'input>(
@@ -237,6 +248,17 @@ pub fn hyperloglog_count<'input>(
         HLL::<Datum, ()>::from_dense_parts(registers.slice(), *precision, ()),
     };
     log.immutable_estimate_count() as i64
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_hyperloglog_error<'input>(
+    sketch: toolkit_experimental::HyperLogLog<'input>,
+    accessor: toolkit_experimental::AccessorStdError,
+) -> f64 {
+    let _ = accessor;
+    hyperloglog_error(sketch)
 }
 
 #[pg_extern(name="stderror" schema = "toolkit_experimental", immutable, parallel_safe)]
@@ -490,19 +512,24 @@ mod tests {
             )";
             assert_eq!(text.unwrap(), expected);
 
-            let count = client
+            let (count, arrow_count) = client
                 .select("SELECT \
                     toolkit_experimental.distinct_count(\
                         toolkit_experimental.hyperloglog(32, v::float)\
-                    ) \
+                    ), \
+                    toolkit_experimental.hyperloglog(32, v::float)->toolkit_experimental.distinct_count() \
                     FROM generate_series(1, 100) v", None, None)
                 .first()
-                .get_one::<i32>();
+                .get_two::<i32, i32>();
             assert_eq!(count, Some(132));
+            assert_eq!(count, arrow_count);
 
             let count2 = client
                 .select(
-                    &format!("SELECT toolkit_experimental.distinct_count('{}')", expected),
+                    &format!(
+                        "SELECT toolkit_experimental.distinct_count('{}')",
+                        expected
+                    ),
                     None,
                     None,
                 )

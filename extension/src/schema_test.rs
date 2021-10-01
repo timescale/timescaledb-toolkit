@@ -69,6 +69,20 @@ mod tests {
                             return None
                     }
 
+                    // Allow all `->` operators for now; it's the accessor that
+                    // will be unstable.
+                    if val.starts_with("operator ->(") {
+                        return None
+                    }
+                    if val.starts_with("function arrow_") {
+                        return None
+                    }
+
+                    // Allow all casts now, it's the types that'll be unstable
+                    if val.starts_with("cast from toolkit_experimental.") {
+                        return None
+                    }
+
                     // ignore the pgx test schema
                     let test_prefix = "function tests.";
                     if val.starts_with(test_prefix)

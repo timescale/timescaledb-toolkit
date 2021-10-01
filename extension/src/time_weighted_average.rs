@@ -5,6 +5,7 @@ use std::slice;
 
 use crate::{
     aggregate_utils::in_aggregate_context, flatten, ron_inout_funcs, palloc::Internal, pg_type,
+    accessors::toolkit_experimental,
 };
 use flat_serialize::*;
 use pgx::*;
@@ -259,10 +260,20 @@ CREATE AGGREGATE rollup(tws TimeWeightSummary)
 "#
 );
 
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_time_weighted_average_average(
+    sketch: Option<TimeWeightSummary>,
+    accessor: toolkit_experimental::AccessorAverage,
+) -> Option<f64> {
+    let _ = accessor;
+    time_weighted_average_average(sketch)
+}
+
+
 #[pg_extern(immutable, parallel_safe, name = "average")]
 pub fn time_weighted_average_average(
     tws: Option<TimeWeightSummary>,
-    _fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<f64> {
     match tws {
         None => None,
@@ -324,6 +335,12 @@ mod tests {
             let stmt = "SELECT average(time_weight('Linear', ts, val)) FROM test";
             // expected =(15 +15 +15 +15 + 20*4 + 20*2 +15*.5 + 25*9.5) / 20 = 21.25 just taking the midpoints between each point and multiplying by minutes and dividing by total
             assert_eq!(select_one!(client, stmt, f64), 21.25);
+            let stmt = "SELECT time_weight('Linear', ts, val) \
+                ->toolkit_experimental.average() \
+            FROM test";
+            // arrow syntax should be the same
+            assert_eq!(select_one!(client, stmt, f64), 21.25);
+
             let stmt = "SELECT average(time_weight('LOCF', ts, val)) FROM test";
             // expected = (10 + 20 + 10 + 20 + 10*4 + 30*2 +10*.5 + 20*9.5) / 20 = 17.75 using last value and carrying for each point
             assert_eq!(select_one!(client, stmt, f64), 17.75);

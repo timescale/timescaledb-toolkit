@@ -9,11 +9,11 @@ use encodings::{delta, prefix_varint};
 
 use uddsketch::{SketchHashKey, UDDSketch as UddSketchInternal};
 
-
 use crate::{
     aggregate_utils::in_aggregate_context,
     flatten,
-    palloc::Internal, pg_type
+    palloc::Internal, pg_type,
+    accessors::toolkit_experimental,
 };
 
 
@@ -458,6 +458,15 @@ CREATE AGGREGATE rollup(
 
 //---- Available PG operations on the sketch
 
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_uddsketch_approx_percentile(
+    sketch: UddSketch,
+    accessor: toolkit_experimental::AccessorApproxPercentile,
+) -> f64 {
+    uddsketch_approx_percentile(accessor.percentile, sketch)
+}
+
 // Approximate the value at the given approx_percentile (0.0-1.0)
 #[pg_extern(immutable, parallel_safe, name="approx_percentile")]
 pub fn uddsketch_approx_percentile(
@@ -471,6 +480,15 @@ pub fn uddsketch_approx_percentile(
         sketch.count,
         sketch.keys().zip(sketch.counts()),
     )
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_uddsketch_approx_rank(
+    sketch: UddSketch,
+    accessor: toolkit_experimental::AccessorApproxRank,
+) -> f64 {
+    uddsketch_approx_percentile_rank(accessor.value, sketch)
 }
 
 // Approximate the approx_percentile at the given value
@@ -487,12 +505,33 @@ pub fn uddsketch_approx_percentile_rank(
     )
 }
 
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_uddsketch_num_vals(
+    sketch: UddSketch,
+    accessor: toolkit_experimental::AccessorNumVals,
+) -> f64 {
+    let _ = accessor;
+    uddsketch_num_vals(sketch)
+}
+
 // Number of elements from which the sketch was built.
 #[pg_extern(immutable, parallel_safe, name="num_vals")]
 pub fn uddsketch_num_vals(
     sketch: UddSketch,
 ) -> f64 {
     sketch.count as f64
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_uddsketch_mean(
+    sketch: UddSketch,
+    accessor: toolkit_experimental::AccessorMean,
+) -> f64 {
+    let _ = accessor;
+    uddsketch_mean(sketch)
 }
 
 // Average of all the values entered in the sketch.
@@ -506,6 +545,17 @@ pub fn uddsketch_mean(
     } else {
         0.0
     }
+}
+
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_uddsketch_error(
+    sketch: UddSketch,
+    accessor: toolkit_experimental::AccessorError,
+) -> f64 {
+    let _ = accessor;
+    uddsketch_error(sketch)
 }
 
 // The maximum error (relative to the true value) for any approx_percentile estimate.
@@ -563,14 +613,26 @@ mod tests {
             apx_eql(mean.unwrap(), 50.005, 0.0001);
             apx_eql(count.unwrap(), 10000.0, 0.000001);
 
-            let error = client
+            let (mean2, count2) = client
                 .select("SELECT \
-                    error(uddsketch) \
+                    uddsketch -> toolkit_experimental.mean(), \
+                    uddsketch -> toolkit_experimental.num_vals() \
                     FROM sketch", None, None)
                 .first()
-                .get_one::<f64>();
+                .get_two::<f64, f64>();
+            assert_eq!(mean, mean2);
+            assert_eq!(count, count2);
+
+            let (error, error2) = client
+                .select("SELECT \
+                    error(uddsketch), \
+                    uddsketch -> toolkit_experimental.error() \
+                    FROM sketch", None, None)
+                .first()
+                .get_two::<f64, f64>();
 
             apx_eql(error.unwrap(), 0.05, 0.0001);
+            assert_eq!(error, error2);
 
             for i in 0..=100 {
                 let value = i as f64;
@@ -592,6 +654,17 @@ mod tests {
                     pct_eql(est_val.unwrap(), value, 1.0);
                     pct_eql(est_quant.unwrap(), approx_percentile, 1.0);
                 }
+
+                let (est_val2, est_quant2) = client
+                    .select(
+                        &format!("SELECT \
+                                uddsketch->toolkit_experimental.approx_percentile({}), \
+                                uddsketch->toolkit_experimental.approx_percentile_rank({}) \
+                            FROM sketch", approx_percentile, value), None, None)
+                    .first()
+                    .get_two::<f64, f64>();
+                assert_eq!(est_val, est_val2);
+                assert_eq!(est_quant, est_quant2);
             }
         });
     }

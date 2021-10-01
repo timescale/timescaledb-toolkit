@@ -300,7 +300,7 @@ mod tests {
             client.select(
                 "CREATE FUNCTION jan_3_x3(timeseries) RETURNS timeseries AS $$\
                     SELECT timeseries(time, value * 3) \
-                    FROM (SELECT (unnest_series($1)).*) a \
+                    FROM (SELECT (unnest($1)).*) a \
                     WHERE time='2020-01-03 00:00:00+00';\
                 $$ LANGUAGE SQL",
                 None,

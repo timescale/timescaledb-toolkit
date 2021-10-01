@@ -13,7 +13,7 @@ The [ASAP smoothing alogrithm](https://arxiv.org/pdf/1703.00983.pdf) is designed
 
 Timescale's ASAP smoothing is implemented as a PostgresQL aggregate over a series of timestamps and values, with an additional target resolution used to control the output size.  The implementation will take the incoming data and attempt to bucket the points into even sized buckets such the number of buckets approximates the target resolution and each bucket contains a similar number of points (if necessary, gaps will be filled by interpolating the buckets on either side at this point).  It will then attempt to identify good candidate intervals for smoothing the data (using the Wiener-Khinchin theorem to find periods of high autocorrelation), and then choose the candidate that produces the smoothest graph while having the same degree of outlier values.
 
-The output of the postgres aggregate is a timescale timeseries object describing the start and step interval times and listing the values.  This can be passed to our `unnest_series` API to produce a table of time, value points.  The aggreates are also currently not partializeable or combinable.
+The output of the postgres aggregate is a timescale timeseries object describing the start and step interval times and listing the values.  This can be passed to our `unnest` API to produce a table of time, value points.  The aggreates are also currently not partializeable or combinable.
 
 ## Usage Example <a id="asap-example"></a>
 
@@ -48,7 +48,7 @@ It is hard to look at this data and make much sense of how the temperature has c
 We can use ASAP smoothing here to get a much clearer picture of the behavior over this interval.
 
 ```SQL ,ignore
-SELECT * FROM toolkit_experimental.unnest_series((SELECT toolkit_experimental.asap_smooth(month, value, 800) FROM temperatures));
+SELECT * FROM toolkit_experimental.unnest((SELECT toolkit_experimental.asap_smooth(month, value, 800) FROM temperatures));
 ```
 ```
                 time                 |       value
@@ -70,7 +70,7 @@ SELECT * FROM toolkit_experimental.unnest_series((SELECT toolkit_experimental.as
 ...
 ```
 
-Note the use of the `unnest_series` here to unpack the results of the `asap_smooth` command.  The output of this command is ~800 points of smoothed data (in this case it ended up being 888 points each representing a rolling moving average of about 21.5 years).  We can view of graph of these values to get a much clearer picture of how the temperature has fluctuated over this time:
+Note the use of the `unnest` here to unpack the results of the `asap_smooth` command.  The output of this command is ~800 points of smoothed data (in this case it ended up being 888 points each representing a rolling moving average of about 21.5 years).  We can view of graph of these values to get a much clearer picture of how the temperature has fluctuated over this time:
 
 ![Smoothed data](images/ASAP_smoothed.png)
 
@@ -102,7 +102,7 @@ This normalize time, value pairs over a given interval and return a smoothed rep
 
 |Column|Type|Description|
 |---|---|---|
-| `normalizedtimeseries` | `NormalizedTimeSeries` | A object representing a series of values occurring at set intervals from a starting time.  It can be unpacked via `unnest_series` |
+| `normalizedtimeseries` | `NormalizedTimeSeries` | A object representing a series of values occurring at set intervals from a starting time.  It can be unpacked via `unnest` |
 <br>
 
 ### Sample Usages <a id="asap-examples"></a>
@@ -124,7 +124,7 @@ SELECT
 </div>
 
 ```SQL
-SELECT * FROM toolkit_experimental.unnest_series(
+SELECT * FROM toolkit_experimental.unnest(
     (SELECT toolkit_experimental.asap_smooth(date, reading, 8)
      FROM metrics));
 ```

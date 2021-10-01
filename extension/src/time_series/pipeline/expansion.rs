@@ -77,7 +77,7 @@ pub fn arrow_run_pipeline_then_unnest<'s, 'p>(
 {
     let series = run_pipeline_elements(timeseries, pipeline.elements.iter())
         .0.into_owned();
-    crate::time_series::unnest_series(series.into())
+    crate::time_series::unnest(series.into())
 }
 
 

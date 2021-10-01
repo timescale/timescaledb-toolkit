@@ -283,7 +283,7 @@ mod tests {
             client.select(
                 "INSERT INTO results1
                 SELECT time, value
-                FROM toolkit_experimental.unnest_series(
+                FROM toolkit_experimental.unnest(
                     (SELECT toolkit_experimental.lttb(time, value, 100) FROM test)
                 );", None, None);
 
@@ -291,7 +291,7 @@ mod tests {
             client.select(
                 "INSERT INTO results2
                 SELECT time, value
-                FROM toolkit_experimental.unnest_series(
+                FROM toolkit_experimental.unnest(
                     (SELECT toolkit_experimental.lttb(
                         (SELECT toolkit_experimental.timeseries(time, value) FROM test), 100)
                     )

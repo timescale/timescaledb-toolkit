@@ -62,7 +62,7 @@ CREATE VIEW daily_delta AS
 This command creates a timeseries from the time and temperature columns (grouped by device), sorts them in increasing time, aggregates them as a daily average, interpolates the values for any missing days, and computes the deltas between days.  Now we can look at the deltas for a specific device:
 
 ```SQL
-SELECT time, value::numeric(4,2) AS delta FROM toolkit_experimental.unnest_series((SELECT deltas FROM daily_delta WHERE device = 3));
+SELECT time, value::numeric(4,2) AS delta FROM toolkit_experimental.unnest((SELECT deltas FROM daily_delta WHERE device = 3));
 ```
 ```output
           time          | delta
@@ -145,7 +145,7 @@ This element will return a new timeseries where each point is the difference bet
 ### Sample Usage <a id="timeseries_pipeline_delta-examples"></a>
 ```SQL
 SELECT time, value
-FROM toolkit_experimental.unnest_series(
+FROM toolkit_experimental.unnest(
     (SELECT toolkit_experimental.timeseries('2020-01-01'::timestamptz + step * '1 day'::interval, step * step)
         -> toolkit_experimental.delta()
     FROM generate_series(1, 5) step)
@@ -193,7 +193,7 @@ Valid fill methods are:
 ### Sample Usage <a id="timeseries_pipeline_fill_holes-examples"></a>
 ```SQL
 SELECT time, value
-FROM toolkit_experimental.unnest_series(
+FROM toolkit_experimental.unnest(
     (SELECT toolkit_experimental.timeseries('2020-01-01'::timestamptz + step * step * '1 hour'::interval, step * step)
         -> (toolkit_experimental.resample_to_rate('nearest', '1 hour', true)
         ->  toolkit_experimental.fill_holes('locf'))
@@ -249,7 +249,7 @@ SELECT timeseries(time, value) -> sort() -> lttb() FROM data;
 ### Sample Usage <a id="timeseries_pipeline_lttb-examples"></a>
 ```SQL
 SELECT time, value
-FROM toolkit_experimental.unnest_series(
+FROM toolkit_experimental.unnest(
     (SELECT toolkit_experimental.timeseries('2020-01-01 UTC'::TIMESTAMPTZ + make_interval(days=>(foo*10)::int), 10 + 5 * cos(foo))
         -> toolkit_experimental.lttb(4)
     FROM generate_series(1,11,0.1) foo)
@@ -304,7 +304,7 @@ In all cases, if there are no points in the input series in the interval range o
 ### Sample Usage <a id="timeseries_pipeline_resample_to_rate-examples"></a>
 ```SQL
 SELECT time, value::numeric(4,2)
-FROM toolkit_experimental.unnest_series(
+FROM toolkit_experimental.unnest(
     (SELECT toolkit_experimental.timeseries('2020-01-01'::TIMESTAMPTZ + step *step * step * '1 minute'::interval, step)
         -> toolkit_experimental.resample_to_rate('weighted_average', '1 hour', true)
     FROM generate_series(1,10) step)
@@ -348,7 +348,7 @@ This element takes in a timeseries and returns a timeseries consisting of the sa
 ### Sample Usage <a id="timeseries_pipeline_sort-examples"></a>
 ```SQL
 SELECT time, value
-FROM toolkit_experimental.unnest_series(
+FROM toolkit_experimental.unnest(
     (SELECT toolkit_experimental.timeseries('2020-01-06'::timestamptz - step * '1 day'::interval, step * step)
         -> toolkit_experimental.sort()
     FROM generate_series(1, 5) step)

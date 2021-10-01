@@ -46,7 +46,7 @@ We can now use this timeseries to efficiently move the data around to other func
 
 ```SQL
 SELECT time, value::numeric(10,2) FROM
-toolkit_experimental.unnest_series((SELECT toolkit_experimental.lttb(timeseries, 20) FROM series));
+toolkit_experimental.unnest((SELECT toolkit_experimental.lttb(timeseries, 20) FROM series));
 ```
 ```output
           time          |       value
@@ -80,7 +80,7 @@ Aggregate Functions
 > - [rollup (summary form)](#timeseries-summary)
 
 Accessor Functions
-> - [unnest_series](#timeseries_unnest)
+> - [unnest](#timeseries_unnest)
 
 
 ---
@@ -161,10 +161,10 @@ FROM series;
 
 ---
 
-## **unnest_series** <a id="timeseries_unnest"></a>
+## **unnest** <a id="timeseries_unnest"></a>
 
 ```SQL ,ignore
-unnest_series(
+unnest(
     series timeseries
 ) RETURNS TABLE("time" timestamp with time zone, value double precision)
 ```
@@ -180,13 +180,13 @@ The unnest function is used to get the (time, value) pairs back out of a timeser
 ### Returns
 |Column|Type|Description|
 |---|---|---|
-| `unnest_series` | `TABLE` | The (time,value) records contained in the timeseries. |
+| `unnest` | `TABLE` | The (time,value) records contained in the timeseries. |
 <br>
 
 ### Sample Usage <a id="timeseries_unnest-examples"></a>
 
 ```SQL
-SELECT toolkit_experimental.unnest_series(
+SELECT toolkit_experimental.unnest(
     (SELECT toolkit_experimental.timeseries(a.time, a.value)
     FROM
         (SELECT time, value
@@ -196,7 +196,7 @@ SELECT toolkit_experimental.unnest_series(
 LIMIT 10;
 ```
 ```output
-                 unnest_series
+                 unnest
 -----------------------------------------------
  ("2020-01-01 00:00:00+00",1009.8399687963981)
  ("2020-01-01 00:10:00+00",873.6326953620166)

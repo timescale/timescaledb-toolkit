@@ -23,3 +23,4 @@ zz_triggers.generated.sql
 schema_test.generated.sql
 serialization_collations.generated.sql
 serialization_types.generated.sql
+time_series_pipeline_expansion.generated.sql

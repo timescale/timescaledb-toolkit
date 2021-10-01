@@ -199,7 +199,7 @@ pub static TIMESERIES_OID: once_cell::sync::Lazy<pg_sys::Oid> = once_cell::sync:
 });
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn unnest_series(
+pub fn unnest(
     series: toolkit_experimental::TimeSeries<'_>,
 ) -> impl std::iter::Iterator<Item = (name!(time,pg_sys::TimestampTz),name!(value,f64))> + '_ {
     series.into_iter().map(|points| (points.ts, points.val))

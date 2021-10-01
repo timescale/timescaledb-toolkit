@@ -282,7 +282,7 @@ mod tests {
             // and our decreased values should be around 64-72.  However, since the output is
             // rolling averages, expect these values to impact the results around these ranges as well.
 
-            client.select("create table asap_vals as SELECT * FROM toolkit_experimental.unnest_series((SELECT toolkit_experimental.asap_smooth(date, value, 100) FROM asap_test ))", None, None);
+            client.select("create table asap_vals as SELECT * FROM toolkit_experimental.unnest((SELECT toolkit_experimental.asap_smooth(date, value, 100) FROM asap_test ))", None, None);
 
             let sanity = client.select("SELECT COUNT(*) FROM asap_vals", None, None).first()
                 .get_one::<i32>().unwrap();
@@ -338,7 +338,7 @@ mod tests {
             client.select(
                 "create table asap_vals2 as
                 SELECT *
-                FROM toolkit_experimental.unnest_series(
+                FROM toolkit_experimental.unnest(
                     (SELECT toolkit_experimental.asap_smooth(
                         (SELECT toolkit_experimental.timeseries(date, value) FROM asap_test),
                         100)

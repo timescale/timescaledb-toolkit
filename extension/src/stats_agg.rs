@@ -57,13 +57,11 @@ ron_inout_funcs!(StatsSummary2D);
 // hack to allow us to qualify names with "toolkit_experimental"
 // so that pgx generates the correct SQL
 mod toolkit_experimental {
-    pub(crate) use super::*;
     pub(crate) use crate::accessors::toolkit_experimental::*;
-
-    varlena_type!(StatsSummary1D);
-    varlena_type!(StatsSummary2D);
-
 }
+
+varlena_type!(StatsSummary1D);
+varlena_type!(StatsSummary2D);
 
 impl<'input> StatsSummary1D<'input> {
     fn to_internal(&self) -> InternalStatsSummary1D {
@@ -123,7 +121,7 @@ impl<'input> StatsSummary2D<'input> {
 
 
 
-#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe, strict)]
+#[pg_extern(immutable, parallel_safe, strict)]
 pub fn stats1d_trans_serialize<'s>(
     state: Internal<StatsSummary1D<'s>>,
 ) -> bytea {
@@ -131,7 +129,7 @@ pub fn stats1d_trans_serialize<'s>(
     crate::do_serialize!(ser)
 }
 
-#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe, strict)]
+#[pg_extern(immutable, parallel_safe, strict)]
 pub fn stats1d_trans_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
@@ -140,7 +138,7 @@ pub fn stats1d_trans_deserialize(
     de.into()
 }
 
-#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe, strict)]
+#[pg_extern(immutable, parallel_safe, strict)]
 pub fn stats2d_trans_serialize<'s>(
     state: Internal<StatsSummary2D<'s>>,
 ) -> bytea {
@@ -148,7 +146,7 @@ pub fn stats2d_trans_serialize<'s>(
     crate::do_serialize!(ser)
 }
 
-#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe, strict)]
+#[pg_extern(immutable, parallel_safe, strict)]
 pub fn stats2d_trans_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
@@ -157,7 +155,7 @@ pub fn stats2d_trans_deserialize(
     de.into()
 }
 
-#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn stats1d_trans<'s>(
     state: Option<Internal<StatsSummary1D<'s>>>,
     val: Option<f64>,
@@ -185,7 +183,7 @@ pub fn stats1d_trans<'s>(
 }
 // Note that in general, for all stats2d cases, if either the y or x value is missing, we disregard the entire point as the n is shared between them
 // if the user wants us to treat nulls as a particular value (ie zero), they can use COALESCE to do so
-#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn stats2d_trans<'s>(
     state: Option<Internal<StatsSummary2D<'s>>>,
     y: Option<f64>,
@@ -219,7 +217,7 @@ pub fn stats2d_trans<'s>(
 }
 
 
-#[pg_extern(schema = "toolkit_experimental",immutable)]
+#[pg_extern(immutable)]
 pub fn stats1d_inv_trans<'s>(
     state: Option<Internal<StatsSummary1D<'s>>>,
     val: Option<f64>,
@@ -243,7 +241,7 @@ pub fn stats1d_inv_trans<'s>(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental",immutable)]
+#[pg_extern(immutable)]
 pub fn stats2d_inv_trans<'s>(
     state: Option<Internal<StatsSummary2D<'s>>>,
     y: Option<f64>,
@@ -274,10 +272,10 @@ pub fn stats2d_inv_trans<'s>(
 }
 
 
-#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn stats1d_summary_trans<'s, 'v>(
     state: Option<Internal<StatsSummary1D<'s>>>,
-    value: Option<toolkit_experimental::StatsSummary1D<'v>>,
+    value: Option<StatsSummary1D<'v>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal<StatsSummary1D<'s>>> {
     unsafe {
@@ -299,10 +297,10 @@ pub fn stats1d_summary_trans<'s, 'v>(
 
 
 
-#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn stats2d_summary_trans<'s, 'v>(
     state: Option<Internal<StatsSummary2D<'s>>>,
-    value: Option<toolkit_experimental::StatsSummary2D<'v>>,
+    value: Option<StatsSummary2D<'v>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal<StatsSummary2D<'s>>> {
     unsafe {
@@ -322,10 +320,10 @@ pub fn stats2d_summary_trans<'s, 'v>(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn stats1d_summary_inv_trans<'s, 'v>(
     state: Option<Internal<StatsSummary1D<'s>>>,
-    value: Option<toolkit_experimental::StatsSummary1D<'v>>,
+    value: Option<StatsSummary1D<'v>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal<StatsSummary1D<'s>>> {
     unsafe {
@@ -347,10 +345,10 @@ pub fn stats1d_summary_inv_trans<'s, 'v>(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn stats2d_summary_inv_trans<'s, 'v>(
     state: Option<Internal<StatsSummary2D<'s>>>,
-    value: Option<toolkit_experimental::StatsSummary2D<'v>>,
+    value: Option<StatsSummary2D<'v>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal<StatsSummary2D<'s>>> {
     unsafe {
@@ -372,7 +370,7 @@ pub fn stats2d_summary_inv_trans<'s, 'v>(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn stats1d_combine<'s, 'v>(
     state1: Option<Internal<StatsSummary1D<'s>>>,
     state2: Option<Internal<StatsSummary1D<'v>>>,
@@ -401,7 +399,7 @@ pub fn stats1d_combine<'s, 'v>(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn stats2d_combine<'s, 'v>(
     state1: Option<Internal<StatsSummary2D<'s>>>,
     state2: Option<Internal<StatsSummary2D<'v>>>,
@@ -430,11 +428,11 @@ pub fn stats2d_combine<'s, 'v>(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 fn stats1d_final<'s>(
     state: Option<Internal<StatsSummary1D<'s>>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<toolkit_experimental::StatsSummary1D<'s>> {
+) -> Option<StatsSummary1D<'s>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match state {
@@ -445,11 +443,11 @@ fn stats1d_final<'s>(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental",immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 fn stats2d_final<'s>(
     state: Option<Internal<StatsSummary2D<'s>>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<toolkit_experimental::StatsSummary2D<'s>> {
+) -> Option<StatsSummary2D<'s>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match state {
@@ -463,64 +461,64 @@ fn stats2d_final<'s>(
 
 
 extension_sql!(r#"
-CREATE AGGREGATE toolkit_experimental.stats_agg( value DOUBLE PRECISION )
+CREATE AGGREGATE stats_agg( value DOUBLE PRECISION )
 (
-    sfunc = toolkit_experimental.stats1d_trans,
+    sfunc = stats1d_trans,
     stype = internal,
-    finalfunc = toolkit_experimental.stats1d_final,
-    combinefunc = toolkit_experimental.stats1d_combine,
-    serialfunc = toolkit_experimental.stats1d_trans_serialize,
-    deserialfunc = toolkit_experimental.stats1d_trans_deserialize,
-    msfunc = toolkit_experimental.stats1d_trans,
-    minvfunc = toolkit_experimental.stats1d_inv_trans,
+    finalfunc = stats1d_final,
+    combinefunc = stats1d_combine,
+    serialfunc = stats1d_trans_serialize,
+    deserialfunc = stats1d_trans_deserialize,
+    msfunc = stats1d_trans,
+    minvfunc = stats1d_inv_trans,
     mstype = internal,
-    mfinalfunc = toolkit_experimental.stats1d_final,
+    mfinalfunc = stats1d_final,
     parallel = safe
 );
 "#);
 
 // mostly for testing/debugging, in case we want one without the inverse functions defined.
 extension_sql!(r#"
-CREATE AGGREGATE toolkit_experimental.stats_agg_no_inv( value DOUBLE PRECISION )
+CREATE AGGREGATE stats_agg_no_inv( value DOUBLE PRECISION )
 (
-    sfunc = toolkit_experimental.stats1d_trans,
+    sfunc = stats1d_trans,
     stype = internal,
-    finalfunc = toolkit_experimental.stats1d_final,
-    combinefunc = toolkit_experimental.stats1d_combine,
-    serialfunc = toolkit_experimental.stats1d_trans_serialize,
-    deserialfunc = toolkit_experimental.stats1d_trans_deserialize,
+    finalfunc = stats1d_final,
+    combinefunc = stats1d_combine,
+    serialfunc = stats1d_trans_serialize,
+    deserialfunc = stats1d_trans_deserialize,
     parallel = safe
 );
 "#);
 
 // same things for the 2d case
 extension_sql!(r#"
-CREATE AGGREGATE toolkit_experimental.stats_agg( y DOUBLE PRECISION, x DOUBLE PRECISION )
+CREATE AGGREGATE stats_agg( y DOUBLE PRECISION, x DOUBLE PRECISION )
 (
-    sfunc = toolkit_experimental.stats2d_trans,
+    sfunc = stats2d_trans,
     stype = internal,
-    finalfunc = toolkit_experimental.stats2d_final,
-    combinefunc = toolkit_experimental.stats2d_combine,
-    serialfunc = toolkit_experimental.stats2d_trans_serialize,
-    deserialfunc = toolkit_experimental.stats2d_trans_deserialize,
-    msfunc = toolkit_experimental.stats2d_trans,
-    minvfunc = toolkit_experimental.stats2d_inv_trans,
+    finalfunc = stats2d_final,
+    combinefunc = stats2d_combine,
+    serialfunc = stats2d_trans_serialize,
+    deserialfunc = stats2d_trans_deserialize,
+    msfunc = stats2d_trans,
+    minvfunc = stats2d_inv_trans,
     mstype = internal,
-    mfinalfunc = toolkit_experimental.stats2d_final,
+    mfinalfunc = stats2d_final,
     parallel = safe
 );
 "#);
 
 // mostly for testing/debugging, in case we want one without the inverse functions defined.
 extension_sql!(r#"
-CREATE AGGREGATE toolkit_experimental.stats_agg_no_inv( y DOUBLE PRECISION, x DOUBLE PRECISION )
+CREATE AGGREGATE stats_agg_no_inv( y DOUBLE PRECISION, x DOUBLE PRECISION )
 (
-    sfunc = toolkit_experimental.stats2d_trans,
+    sfunc = stats2d_trans,
     stype = internal,
-    finalfunc = toolkit_experimental.stats2d_final,
-    combinefunc = toolkit_experimental.stats2d_combine,
-    serialfunc = toolkit_experimental.stats2d_trans_serialize,
-    deserialfunc = toolkit_experimental.stats2d_trans_deserialize,
+    finalfunc = stats2d_final,
+    combinefunc = stats2d_combine,
+    serialfunc = stats2d_trans_serialize,
+    deserialfunc = stats2d_trans_deserialize,
     parallel = safe
 );
 "#);
@@ -529,32 +527,32 @@ CREATE AGGREGATE toolkit_experimental.stats_agg_no_inv( y DOUBLE PRECISION, x DO
 // you can use it in your window functions (useful for our own perf testing as well)
 
 extension_sql!(r#"
-CREATE AGGREGATE toolkit_experimental.rollup(ss toolkit_experimental.statssummary1d)
+CREATE AGGREGATE rollup(ss statssummary1d)
 (
-    sfunc = toolkit_experimental.stats1d_summary_trans,
+    sfunc = stats1d_summary_trans,
     stype = internal,
-    finalfunc = toolkit_experimental.stats1d_final,
-    combinefunc = toolkit_experimental.stats1d_combine,
-    serialfunc = toolkit_experimental.stats1d_trans_serialize,
-    deserialfunc = toolkit_experimental.stats1d_trans_deserialize,
+    finalfunc = stats1d_final,
+    combinefunc = stats1d_combine,
+    serialfunc = stats1d_trans_serialize,
+    deserialfunc = stats1d_trans_deserialize,
     parallel = safe
 );
 "#);
 
 //  For UI, we decided to have slightly differently named functions for the windowed context and not, so that it reads better, as well as using the inverse function only in the window context
 extension_sql!(r#"
-CREATE AGGREGATE toolkit_experimental.rolling(ss toolkit_experimental.statssummary1d)
+CREATE AGGREGATE rolling(ss statssummary1d)
 (
-    sfunc = toolkit_experimental.stats1d_summary_trans,
+    sfunc = stats1d_summary_trans,
     stype = internal,
-    finalfunc = toolkit_experimental.stats1d_final,
-    combinefunc = toolkit_experimental.stats1d_combine,
-    serialfunc = toolkit_experimental.stats1d_trans_serialize,
-    deserialfunc = toolkit_experimental.stats1d_trans_deserialize,
-    msfunc = toolkit_experimental.stats1d_summary_trans,
-    minvfunc = toolkit_experimental.stats1d_summary_inv_trans,
+    finalfunc = stats1d_final,
+    combinefunc = stats1d_combine,
+    serialfunc = stats1d_trans_serialize,
+    deserialfunc = stats1d_trans_deserialize,
+    msfunc = stats1d_summary_trans,
+    minvfunc = stats1d_summary_inv_trans,
     mstype = internal,
-    mfinalfunc = toolkit_experimental.stats1d_final,
+    mfinalfunc = stats1d_final,
     parallel = safe
 );
 "#);
@@ -563,32 +561,32 @@ CREATE AGGREGATE toolkit_experimental.rolling(ss toolkit_experimental.statssumma
 // Same as for the 1D case, but for the 2D
 
 extension_sql!(r#"
-CREATE AGGREGATE toolkit_experimental.rollup(ss toolkit_experimental.statssummary2d)
+CREATE AGGREGATE rollup(ss statssummary2d)
 (
-    sfunc = toolkit_experimental.stats2d_summary_trans,
+    sfunc = stats2d_summary_trans,
     stype = internal,
-    finalfunc = toolkit_experimental.stats2d_final,
-    combinefunc = toolkit_experimental.stats2d_combine,
-    serialfunc = toolkit_experimental.stats2d_trans_serialize,
-    deserialfunc = toolkit_experimental.stats2d_trans_deserialize,
+    finalfunc = stats2d_final,
+    combinefunc = stats2d_combine,
+    serialfunc = stats2d_trans_serialize,
+    deserialfunc = stats2d_trans_deserialize,
     parallel = safe
 );
 "#);
 
 //  For UI, we decided to have slightly differently named functions for the windowed context and not, so that it reads better, as well as using the inverse function only in the window context
 extension_sql!(r#"
-CREATE AGGREGATE toolkit_experimental.rolling(ss toolkit_experimental.statssummary2d)
+CREATE AGGREGATE rolling(ss statssummary2d)
 (
-    sfunc = toolkit_experimental.stats2d_summary_trans,
+    sfunc = stats2d_summary_trans,
     stype = internal,
-    finalfunc = toolkit_experimental.stats2d_final,
-    combinefunc = toolkit_experimental.stats2d_combine,
-    serialfunc = toolkit_experimental.stats2d_trans_serialize,
-    deserialfunc = toolkit_experimental.stats2d_trans_deserialize,
-    msfunc = toolkit_experimental.stats2d_summary_trans,
-    minvfunc = toolkit_experimental.stats2d_summary_inv_trans,
+    finalfunc = stats2d_final,
+    combinefunc = stats2d_combine,
+    serialfunc = stats2d_trans_serialize,
+    deserialfunc = stats2d_trans_deserialize,
+    msfunc = stats2d_summary_trans,
+    minvfunc = stats2d_summary_inv_trans,
     mstype = internal,
-    mfinalfunc = toolkit_experimental.stats2d_final,
+    mfinalfunc = stats2d_final,
     parallel = safe
 );
 "#);
@@ -597,16 +595,16 @@ CREATE AGGREGATE toolkit_experimental.rolling(ss toolkit_experimental.statssumma
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats1d_average(
-    sketch: toolkit_experimental::StatsSummary1D,
+    sketch: StatsSummary1D,
     accessor: toolkit_experimental::AccessorAverage,
 ) -> Option<f64> {
     let _ = accessor;
     stats1d_average(sketch)
 }
 
-#[pg_extern(name="average", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+#[pg_extern(name="average",  strict, immutable, parallel_safe)]
 fn stats1d_average(
-    summary: toolkit_experimental::StatsSummary1D,
+    summary: StatsSummary1D,
 )-> Option<f64> {
     summary.to_internal().avg()
 }
@@ -615,16 +613,16 @@ fn stats1d_average(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats1d_sum(
-    sketch: toolkit_experimental::StatsSummary1D,
+    sketch: StatsSummary1D,
     accessor: toolkit_experimental::AccessorSum,
 ) -> Option<f64> {
     let _ = accessor;
     stats1d_sum(sketch)
 }
 
-#[pg_extern(name="sum", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+#[pg_extern(name="sum",  strict, immutable, parallel_safe)]
 fn stats1d_sum(
-    summary: toolkit_experimental::StatsSummary1D,
+    summary: StatsSummary1D,
 )-> Option<f64> {
     summary.to_internal().sum()
 }
@@ -633,7 +631,7 @@ fn stats1d_sum(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats1d_stddev(
-    sketch: Option<toolkit_experimental::StatsSummary1D>,
+    sketch: Option<StatsSummary1D>,
     accessor: toolkit_experimental::AccessorStdDev,
 ) -> Option<f64> {
     let _ = accessor;
@@ -641,9 +639,9 @@ pub fn arrow_stats1d_stddev(
     stats1d_stddev(sketch, &*method)
 }
 
-#[pg_extern(name="stddev", schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(name="stddev",  immutable, parallel_safe)]
 fn stats1d_stddev(
-    summary: Option<toolkit_experimental::StatsSummary1D>,
+    summary: Option<StatsSummary1D>,
     method: default!(&str, "sample"),
 )-> Option<f64> {
     match method_kind(method) {
@@ -656,7 +654,7 @@ fn stats1d_stddev(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats1d_variance(
-    sketch: Option<toolkit_experimental::StatsSummary1D>,
+    sketch: Option<StatsSummary1D>,
     accessor: toolkit_experimental::AccessorVariance,
 ) -> Option<f64> {
     let _ = accessor;
@@ -664,9 +662,9 @@ pub fn arrow_stats1d_variance(
     stats1d_variance(sketch, &*method)
 }
 
-#[pg_extern(name="variance", schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(name="variance",  immutable, parallel_safe)]
 fn stats1d_variance(
-    summary: Option<toolkit_experimental::StatsSummary1D>,
+    summary: Option<StatsSummary1D>,
     method: default!(&str, "sample"),
 )-> Option<f64> {
     match method_kind(method) {
@@ -679,16 +677,16 @@ fn stats1d_variance(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats1d_skewness(
-    sketch: toolkit_experimental::StatsSummary1D,
+    sketch: StatsSummary1D,
     accessor: toolkit_experimental::AccessorSkewness,
 ) -> Option<f64> {
     let _ = accessor;
     stats1d_skewness(sketch)
 }
 
-#[pg_extern(name="skewness", schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(name="skewness",  immutable, parallel_safe)]
 fn stats1d_skewness(
-    summary: toolkit_experimental::StatsSummary1D,
+    summary: StatsSummary1D,
 )-> Option<f64> {
     summary.to_internal().skewness()
 }
@@ -697,16 +695,16 @@ fn stats1d_skewness(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats1d_kurtosis(
-    sketch: toolkit_experimental::StatsSummary1D,
+    sketch: StatsSummary1D,
     accessor: toolkit_experimental::AccessorKurtosis,
 ) -> Option<f64> {
     let _ = accessor;
     stats1d_kurtosis(sketch)
 }
 
-#[pg_extern(name="kurtosis", schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(name="kurtosis",  immutable, parallel_safe)]
 fn stats1d_kurtosis(
-    summary: toolkit_experimental::StatsSummary1D,
+    summary: StatsSummary1D,
 )-> Option<f64> {
     summary.to_internal().kurtosis()
 }
@@ -716,16 +714,16 @@ fn stats1d_kurtosis(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats1d_num_vals(
-    sketch: toolkit_experimental::StatsSummary1D,
+    sketch: StatsSummary1D,
     accessor: toolkit_experimental::AccessorNumVals,
 ) -> i64 {
     let _ = accessor;
     stats1d_num_vals(sketch)
 }
 
-#[pg_extern(name="num_vals", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+#[pg_extern(name="num_vals",  strict, immutable, parallel_safe)]
 fn stats1d_num_vals(
-    summary: toolkit_experimental::StatsSummary1D,
+    summary: StatsSummary1D,
 )-> i64 {
     summary.to_internal().count()
 }
@@ -734,16 +732,16 @@ fn stats1d_num_vals(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats2d_average_x(
-    sketch: toolkit_experimental::StatsSummary2D,
+    sketch: StatsSummary2D,
     accessor: toolkit_experimental::AccessorAverageX,
 ) -> Option<f64> {
     let _ = accessor;
     stats2d_average_x(sketch)
 }
 
-#[pg_extern(name="average_x", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+#[pg_extern(name="average_x",  strict, immutable, parallel_safe)]
 fn stats2d_average_x(
-    summary: toolkit_experimental::StatsSummary2D,
+    summary: StatsSummary2D,
 )-> Option<f64> {
     Some(summary.to_internal().avg()?.x)
 }
@@ -752,16 +750,16 @@ fn stats2d_average_x(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats2d_average_y(
-    sketch: toolkit_experimental::StatsSummary2D,
+    sketch: StatsSummary2D,
     accessor: toolkit_experimental::AccessorAverageY,
 ) -> Option<f64> {
     let _ = accessor;
     stats2d_average_y(sketch)
 }
 
-#[pg_extern(name="average_y", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+#[pg_extern(name="average_y",  strict, immutable, parallel_safe)]
 fn stats2d_average_y(
-    summary: toolkit_experimental::StatsSummary2D,
+    summary: StatsSummary2D,
 )-> Option<f64> {
     Some(summary.to_internal().avg()?.y)
 }
@@ -770,16 +768,16 @@ fn stats2d_average_y(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats2d_sum_x(
-    sketch: toolkit_experimental::StatsSummary2D,
+    sketch: StatsSummary2D,
     accessor: toolkit_experimental::AccessorSumX,
 ) -> Option<f64> {
     let _ = accessor;
     stats2d_sum_x(sketch)
 }
 
-#[pg_extern(name="sum_x", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+#[pg_extern(name="sum_x",  strict, immutable, parallel_safe)]
 fn stats2d_sum_x(
-    summary: toolkit_experimental::StatsSummary2D,
+    summary: StatsSummary2D,
 )-> Option<f64> {
     Some(summary.to_internal().sum()?.x)
 }
@@ -788,16 +786,16 @@ fn stats2d_sum_x(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats2d_sum_y(
-    sketch: toolkit_experimental::StatsSummary2D,
+    sketch: StatsSummary2D,
     accessor: toolkit_experimental::AccessorSumY,
 ) -> Option<f64> {
     let _ = accessor;
     stats2d_sum_y(sketch)
 }
 
-#[pg_extern(name="sum_y", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+#[pg_extern(name="sum_y",  strict, immutable, parallel_safe)]
 fn stats2d_sum_y(
-    summary: toolkit_experimental::StatsSummary2D,
+    summary: StatsSummary2D,
 )-> Option<f64> {
     Some(summary.to_internal().sum()?.y)
 }
@@ -806,7 +804,7 @@ fn stats2d_sum_y(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats2d_stdddev_x(
-    sketch: Option<toolkit_experimental::StatsSummary2D>,
+    sketch: Option<StatsSummary2D>,
     accessor: toolkit_experimental::AccessorStdDevX,
 ) -> Option<f64> {
     let _ = accessor;
@@ -814,9 +812,9 @@ pub fn arrow_stats2d_stdddev_x(
     stats2d_stddev_x(sketch, &*method)
 }
 
-#[pg_extern(name="stddev_x", schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(name="stddev_x",  immutable, parallel_safe)]
 fn stats2d_stddev_x(
-    summary: Option<toolkit_experimental::StatsSummary2D>,
+    summary: Option<StatsSummary2D>,
     method: default!(&str, "sample"),
 )-> Option<f64> {
     match method_kind(method) {
@@ -829,7 +827,7 @@ fn stats2d_stddev_x(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats2d_stdddev_y(
-    sketch: Option<toolkit_experimental::StatsSummary2D>,
+    sketch: Option<StatsSummary2D>,
     accessor: toolkit_experimental::AccessorStdDevY,
 ) -> Option<f64> {
     let _ = accessor;
@@ -837,9 +835,9 @@ pub fn arrow_stats2d_stdddev_y(
     stats2d_stddev_y(sketch, &*method)
 }
 
-#[pg_extern(name="stddev_y", schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(name="stddev_y",  immutable, parallel_safe)]
 fn stats2d_stddev_y(
-    summary: Option<toolkit_experimental::StatsSummary2D>,
+    summary: Option<StatsSummary2D>,
     method: default!(&str, "sample"),
 )-> Option<f64> {
     match method_kind(method) {
@@ -852,7 +850,7 @@ fn stats2d_stddev_y(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats2d_variance_x(
-    sketch: Option<toolkit_experimental::StatsSummary2D>,
+    sketch: Option<StatsSummary2D>,
     accessor: toolkit_experimental::AccessorVarianceX,
 ) -> Option<f64> {
     let _ = accessor;
@@ -860,9 +858,9 @@ pub fn arrow_stats2d_variance_x(
     stats2d_variance_x(sketch, &*method)
 }
 
-#[pg_extern(name="variance_x", schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(name="variance_x",  immutable, parallel_safe)]
 fn stats2d_variance_x(
-    summary: Option<toolkit_experimental::StatsSummary2D>,
+    summary: Option<StatsSummary2D>,
     method: default!(&str, "sample"),
 )-> Option<f64> {
     match method_kind(method) {
@@ -875,7 +873,7 @@ fn stats2d_variance_x(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats2d_variance_y(
-    sketch: Option<toolkit_experimental::StatsSummary2D>,
+    sketch: Option<StatsSummary2D>,
     accessor: toolkit_experimental::AccessorVarianceY,
 ) -> Option<f64> {
     let _ = accessor;
@@ -883,9 +881,9 @@ pub fn arrow_stats2d_variance_y(
     stats2d_variance_y(sketch, &*method)
 }
 
-#[pg_extern(name="variance_y", schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(name="variance_y",  immutable, parallel_safe)]
 fn stats2d_variance_y(
-    summary: Option<toolkit_experimental::StatsSummary2D>,
+    summary: Option<StatsSummary2D>,
     method: default!(&str, "sample"),
 )-> Option<f64> {
     match method_kind(method) {
@@ -898,16 +896,16 @@ fn stats2d_variance_y(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats2d_skewness_x(
-    sketch: toolkit_experimental::StatsSummary2D,
+    sketch: StatsSummary2D,
     accessor: toolkit_experimental::AccessorSkewnessX,
 ) -> Option<f64> {
     let _ = accessor;
     stats2d_skewness_x(sketch)
 }
 
-#[pg_extern(name="skewness_x", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+#[pg_extern(name="skewness_x",  strict, immutable, parallel_safe)]
 fn stats2d_skewness_x(
-    summary: toolkit_experimental::StatsSummary2D,
+    summary: StatsSummary2D,
 )-> Option<f64> {
     Some(summary.to_internal().skewness()?.x)
 }
@@ -916,16 +914,16 @@ fn stats2d_skewness_x(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats2d_skewness_y(
-    sketch: toolkit_experimental::StatsSummary2D,
+    sketch: StatsSummary2D,
     accessor: toolkit_experimental::AccessorSkewnessY,
 ) -> Option<f64> {
     let _ = accessor;
     stats2d_skewness_y(sketch)
 }
 
-#[pg_extern(name="skewness_y", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+#[pg_extern(name="skewness_y",  strict, immutable, parallel_safe)]
 fn stats2d_skewness_y(
-    summary: toolkit_experimental::StatsSummary2D,
+    summary: StatsSummary2D,
 )-> Option<f64> {
     Some(summary.to_internal().skewness()?.y)
 }
@@ -934,16 +932,16 @@ fn stats2d_skewness_y(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats2d_kurtosis_x(
-    sketch: toolkit_experimental::StatsSummary2D,
+    sketch: StatsSummary2D,
     accessor: toolkit_experimental::AccessorKurtosisX,
 ) -> Option<f64> {
     let _ = accessor;
     stats2d_kurtosis_x(sketch)
 }
 
-#[pg_extern(name="kurtosis_x", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+#[pg_extern(name="kurtosis_x",  strict, immutable, parallel_safe)]
 fn stats2d_kurtosis_x(
-    summary: toolkit_experimental::StatsSummary2D,
+    summary: StatsSummary2D,
 )-> Option<f64> {
     Some(summary.to_internal().kurtosis()?.x)
 }
@@ -952,16 +950,16 @@ fn stats2d_kurtosis_x(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats2d_kurtosis_y(
-    sketch: toolkit_experimental::StatsSummary2D,
+    sketch: StatsSummary2D,
     accessor: toolkit_experimental::AccessorKurtosisY,
 ) -> Option<f64> {
     let _ = accessor;
     stats2d_kurtosis_y(sketch)
 }
 
-#[pg_extern(name="kurtosis_y", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+#[pg_extern(name="kurtosis_y",  strict, immutable, parallel_safe)]
 fn stats2d_kurtosis_y(
-    summary: toolkit_experimental::StatsSummary2D,
+    summary: StatsSummary2D,
 )-> Option<f64> {
     Some(summary.to_internal().kurtosis()?.y)
 }
@@ -970,16 +968,16 @@ fn stats2d_kurtosis_y(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats2d_num_vals(
-    sketch: toolkit_experimental::StatsSummary2D,
+    sketch: StatsSummary2D,
     accessor: toolkit_experimental::AccessorNumVals,
 ) -> i64 {
     let _ = accessor;
     stats2d_num_vals(sketch)
 }
 
-#[pg_extern(name="num_vals", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+#[pg_extern(name="num_vals",  strict, immutable, parallel_safe)]
 fn stats2d_num_vals(
-    summary: toolkit_experimental::StatsSummary2D,
+    summary: StatsSummary2D,
 )-> i64 {
     summary.to_internal().count()
 }
@@ -988,16 +986,16 @@ fn stats2d_num_vals(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats2d_slope(
-    sketch: toolkit_experimental::StatsSummary2D,
+    sketch: StatsSummary2D,
     accessor: toolkit_experimental::AccessorSlope,
 ) -> Option<f64> {
     let _ = accessor;
     stats2d_slope(sketch)
 }
 
-#[pg_extern(name="slope", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+#[pg_extern(name="slope",  strict, immutable, parallel_safe)]
 fn stats2d_slope(
-    summary: toolkit_experimental::StatsSummary2D,
+    summary: StatsSummary2D,
 )-> Option<f64> {
     summary.to_internal().slope()
 }
@@ -1006,16 +1004,16 @@ fn stats2d_slope(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats2d_corr(
-    sketch: toolkit_experimental::StatsSummary2D,
+    sketch: StatsSummary2D,
     accessor: toolkit_experimental::AccessorCorr,
 ) -> Option<f64> {
     let _ = accessor;
     stats2d_corr(sketch)
 }
 
-#[pg_extern(name="corr", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+#[pg_extern(name="corr",  strict, immutable, parallel_safe)]
 fn stats2d_corr(
-    summary: toolkit_experimental::StatsSummary2D,
+    summary: StatsSummary2D,
 )-> Option<f64> {
     summary.to_internal().corr()
 }
@@ -1024,16 +1022,16 @@ fn stats2d_corr(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats2d_intercept(
-    sketch: toolkit_experimental::StatsSummary2D,
+    sketch: StatsSummary2D,
     accessor: toolkit_experimental::AccessorIntercept,
 ) -> Option<f64> {
     let _ = accessor;
     stats2d_intercept(sketch)
 }
 
-#[pg_extern(name="intercept", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+#[pg_extern(name="intercept",  strict, immutable, parallel_safe)]
 fn stats2d_intercept(
-    summary: toolkit_experimental::StatsSummary2D,
+    summary: StatsSummary2D,
 )-> Option<f64> {
     summary.to_internal().intercept()
 }
@@ -1042,16 +1040,16 @@ fn stats2d_intercept(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats2d_x_intercept(
-    sketch: toolkit_experimental::StatsSummary2D,
+    sketch: StatsSummary2D,
     accessor: toolkit_experimental::AccessorXIntercept,
 ) -> Option<f64> {
     let _ = accessor;
     stats2d_x_intercept(sketch)
 }
 
-#[pg_extern(name="x_intercept", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+#[pg_extern(name="x_intercept",  strict, immutable, parallel_safe)]
 fn stats2d_x_intercept(
-    summary: toolkit_experimental::StatsSummary2D,
+    summary: StatsSummary2D,
 )-> Option<f64> {
     summary.to_internal().x_intercept()
 }
@@ -1060,16 +1058,16 @@ fn stats2d_x_intercept(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats2d_determination_coeff(
-    sketch: toolkit_experimental::StatsSummary2D,
+    sketch: StatsSummary2D,
     accessor: toolkit_experimental::AccessorDeterminationCoeff,
 ) -> Option<f64> {
     let _ = accessor;
     stats2d_determination_coeff(sketch)
 }
 
-#[pg_extern(name="determination_coeff", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+#[pg_extern(name="determination_coeff",  strict, immutable, parallel_safe)]
 fn stats2d_determination_coeff(
-    summary: toolkit_experimental::StatsSummary2D,
+    summary: StatsSummary2D,
 )-> Option<f64> {
     summary.to_internal().determination_coeff()
 }
@@ -1078,7 +1076,7 @@ fn stats2d_determination_coeff(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_stats2d_covar(
-    sketch: Option<toolkit_experimental::StatsSummary2D>,
+    sketch: Option<StatsSummary2D>,
     accessor: toolkit_experimental::AccessorCovar,
 ) -> Option<f64> {
     let _ = accessor;
@@ -1086,9 +1084,9 @@ pub fn arrow_stats2d_covar(
     stats2d_covar(sketch, &*method)
 }
 
-#[pg_extern(name="covariance", schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(name="covariance",  immutable, parallel_safe)]
 fn stats2d_covar(
-    summary: Option<toolkit_experimental::StatsSummary2D>,
+    summary: Option<StatsSummary2D>,
     method: default!(&str, "sample"),
 )-> Option<f64> {
     match method_kind(method) {
@@ -1180,11 +1178,7 @@ mod tests {
     #[pg_test]
     fn test_io() {
         Spi::execute(|client| {
-            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
-
-            client.select(
+           client.select(
                 "CREATE TABLE test_table (test_x DOUBLE PRECISION, test_y DOUBLE PRECISION)",
                 None,
                 None
@@ -1390,29 +1384,29 @@ mod tests {
 
     fn tk1d_agg(agg: &str) -> String {
         format!("SELECT \
-            toolkit_experimental.{agg}(toolkit_experimental.stats_agg(test_x)), \
-            toolkit_experimental.stats_agg(test_x)->toolkit_experimental.{agg}() \
+            {agg}(stats_agg(test_x)), \
+            stats_agg(test_x)->toolkit_experimental.{agg}() \
         FROM test_table", agg=agg)
     }
 
     fn tk1d_agg_arg(agg: &str, arg: &str) -> String {
         format!("SELECT \
-            toolkit_experimental.{agg}(toolkit_experimental.stats_agg(test_x), '{arg}'), \
-            toolkit_experimental.stats_agg(test_x)->toolkit_experimental.{agg}('{arg}') \
+            {agg}(stats_agg(test_x), '{arg}'), \
+            stats_agg(test_x)->toolkit_experimental.{agg}('{arg}') \
         FROM test_table", agg=agg, arg=arg)
     }
 
     fn tk2d_agg(agg: &str) -> String {
         format!("SELECT \
-            toolkit_experimental.{agg}(toolkit_experimental.stats_agg(test_y, test_x)), \
-            toolkit_experimental.stats_agg(test_y, test_x)->toolkit_experimental.{agg}() \
+            {agg}(stats_agg(test_y, test_x)), \
+            stats_agg(test_y, test_x)->toolkit_experimental.{agg}() \
         FROM test_table", agg=agg)
     }
 
     fn tk2d_agg_arg(agg: &str, arg: &str) -> String {
         format!("SELECT \
-            toolkit_experimental.{agg}(toolkit_experimental.stats_agg(test_y, test_x), '{arg}'), \
-            toolkit_experimental.stats_agg(test_y, test_x)->toolkit_experimental.{agg}('{arg}') \
+            {agg}(stats_agg(test_y, test_x), '{arg}'), \
+            stats_agg(test_y, test_x)->toolkit_experimental.{agg}('{arg}') \
         FROM test_table", agg=agg, arg=arg)
     }
 
@@ -1422,10 +1416,6 @@ mod tests {
 
     fn test_aggs(state: &mut TestState) {
         Spi::execute(|client| {
-            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
-
             client.select(
                 "CREATE TABLE test_table (test_x DOUBLE PRECISION, test_y DOUBLE PRECISION)",
                 None,

@@ -6,6 +6,7 @@ mod delta;
 mod map;
 mod arithmetic;
 mod aggregation;
+mod expansion;
 
 use std::convert::TryInto;
 

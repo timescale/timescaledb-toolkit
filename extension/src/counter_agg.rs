@@ -28,6 +28,8 @@ use counter_agg::{
 };
 use stats_agg::stats2d::StatsSummary2D;
 
+use self::Method::*;
+
 #[allow(non_camel_case_types)]
 type tstzrange = Datum;
 
@@ -497,11 +499,10 @@ fn counter_agg_extrapolated_delta(
     summary: toolkit_experimental::CounterSummary,
     method: &str,
 )-> Option<f64> {
-    match method.to_lowercase().as_str() {
-        "prometheus" => {
+    match method_kind(method) {
+        Prometheus => {
             summary.to_internal_counter_summary().prometheus_delta().unwrap()
         },
-        _ => panic!("unknown method"),
     }
 }
 
@@ -522,11 +523,10 @@ fn counter_agg_extrapolated_rate(
     summary: toolkit_experimental::CounterSummary,
     method: &str,
 )-> Option<f64> {
-    match method.to_lowercase().as_str() {
-        "prometheus" => {
+    match method_kind(method) {
+        Prometheus => {
             summary.to_internal_counter_summary().prometheus_rate().unwrap()
         },
-        _ => panic!("unknown method"),
     }
 }
 
@@ -655,7 +655,25 @@ fn counter_agg_counter_zero_time(
     Some((summary.to_internal_counter_summary().stats.x_intercept()? * 1_000_000.0) as i64)
 }
 
+#[derive(Clone, Copy)]
+pub enum Method {
+    Prometheus,
+}
 
+#[track_caller]
+pub fn method_kind(method: &str)  -> Method {
+    match as_method(method) {
+        Some(method) => method,
+        None => pgx::error!("unknown analysis method. Valid methods are 'prometheus'"),
+    }
+}
+
+pub fn as_method(method: &str) -> Option<Method> {
+    match method.trim().to_lowercase().as_str() {
+        "prometheus" => Some(Method::Prometheus),
+        _ => None,
+    }
+}
 
 
 #[cfg(any(test, feature = "pg_test"))]

@@ -18,7 +18,7 @@ use stats_agg::XYPair;
 pub use stats_agg::stats1d::StatsSummary1D as InternalStatsSummary1D;
 pub use stats_agg::stats2d::StatsSummary2D as InternalStatsSummary2D;
 
-
+use self::Method::*;
 
 #[allow(non_camel_case_types)]
 type bytea = pg_sys::Datum;
@@ -646,10 +646,9 @@ fn stats1d_stddev(
     summary: Option<toolkit_experimental::StatsSummary1D>,
     method: default!(&str, "sample"),
 )-> Option<f64> {
-    match method.trim().to_lowercase().as_str() {
-        "population" | "pop" => summary?.to_internal().stddev_pop(),
-        "sample" | "samp" => summary?.to_internal().stddev_samp(),
-        _ => panic!("unknown analysis method"),
+    match method_kind(method) {
+        Population => summary?.to_internal().stddev_pop(),
+        Sample => summary?.to_internal().stddev_samp(),
     }
 }
 
@@ -670,10 +669,9 @@ fn stats1d_variance(
     summary: Option<toolkit_experimental::StatsSummary1D>,
     method: default!(&str, "sample"),
 )-> Option<f64> {
-    match method.trim().to_lowercase().as_str() {
-        "population" | "pop" => summary?.to_internal().var_pop(),
-        "sample" | "samp" => summary?.to_internal().var_samp(),
-        _ => panic!("unknown analysis method"),
+    match method_kind(method) {
+        Population => summary?.to_internal().var_pop(),
+        Sample => summary?.to_internal().var_samp(),
     }
 }
 
@@ -821,10 +819,9 @@ fn stats2d_stddev_x(
     summary: Option<toolkit_experimental::StatsSummary2D>,
     method: default!(&str, "sample"),
 )-> Option<f64> {
-    match method.trim().to_lowercase().as_str() {
-        "population" | "pop" => Some(summary?.to_internal().stddev_pop()?.x),
-        "sample" | "samp" => Some(summary?.to_internal().stddev_samp()?.x),
-        _ => panic!("unknown analysis method"),
+    match method_kind(method) {
+        Population => Some(summary?.to_internal().stddev_pop()?.x),
+        Sample => Some(summary?.to_internal().stddev_samp()?.x),
     }
 }
 
@@ -845,10 +842,9 @@ fn stats2d_stddev_y(
     summary: Option<toolkit_experimental::StatsSummary2D>,
     method: default!(&str, "sample"),
 )-> Option<f64> {
-    match method.trim().to_lowercase().as_str() {
-        "population" | "pop" => Some(summary?.to_internal().stddev_pop()?.y),
-        "sample" | "samp" => Some(summary?.to_internal().stddev_samp()?.y),
-        _ => panic!("unknown analysis method"),
+    match method_kind(method) {
+        Population => Some(summary?.to_internal().stddev_pop()?.y),
+        Sample => Some(summary?.to_internal().stddev_samp()?.y),
     }
 }
 
@@ -869,10 +865,9 @@ fn stats2d_variance_x(
     summary: Option<toolkit_experimental::StatsSummary2D>,
     method: default!(&str, "sample"),
 )-> Option<f64> {
-    match method.trim().to_lowercase().as_str() {
-        "population" | "pop" => Some(summary?.to_internal().var_pop()?.x),
-        "sample" | "samp" => Some(summary?.to_internal().var_samp()?.x),
-        _ => panic!("unknown analysis method"),
+    match method_kind(method) {
+        Population => Some(summary?.to_internal().var_pop()?.x),
+        Sample => Some(summary?.to_internal().var_samp()?.x),
     }
 }
 
@@ -893,10 +888,9 @@ fn stats2d_variance_y(
     summary: Option<toolkit_experimental::StatsSummary2D>,
     method: default!(&str, "sample"),
 )-> Option<f64> {
-    match method.trim().to_lowercase().as_str() {
-        "population" | "pop" => Some(summary?.to_internal().var_pop()?.y),
-        "sample" | "samp" => Some(summary?.to_internal().var_samp()?.y),
-        _ => panic!("unknown analysis method"),
+    match method_kind(method) {
+        Population => Some(summary?.to_internal().var_pop()?.y),
+        Sample => Some(summary?.to_internal().var_samp()?.y),
     }
 }
 
@@ -1097,13 +1091,33 @@ fn stats2d_covar(
     summary: Option<toolkit_experimental::StatsSummary2D>,
     method: default!(&str, "sample"),
 )-> Option<f64> {
-    match method.trim().to_lowercase().as_str() {
-        "population" | "pop" => summary?.to_internal().covar_pop(),
-        "sample" | "samp" => summary?.to_internal().covar_samp(),
-        _ => panic!("unknown analysis method"),
+    match method_kind(method) {
+        Population => summary?.to_internal().covar_pop(),
+        Sample => summary?.to_internal().covar_samp(),
     }
 }
 
+#[derive(Clone, Copy)]
+pub enum Method {
+    Population,
+    Sample,
+}
+
+#[track_caller]
+pub fn method_kind(method: &str)  -> Method {
+    match as_method(method) {
+        Some(method) => method,
+        None => pgx::error!("unknown analysis method. Valid methods are 'population' and 'sample'"),
+    }
+}
+
+pub fn as_method(method: &str) -> Option<Method> {
+    match method.trim().to_lowercase().as_str() {
+        "population" | "pop" => Some(Population),
+        "sample" | "samp" => Some(Sample),
+        _ => None,
+    }
+}
 
 // TODO: Add testing - probably want to do some fuzz testing against the Postgres implementations of the same. Possibly translate the Postgres tests as well?
 // #[cfg(any(test, feature = "pg_test"))]
@@ -1223,7 +1237,7 @@ mod tests {
             assert_eq!(client.select("SELECT kurtosis_y(stats_agg(test_y, test_x)) FROM test_table", None, None).first().get_one::<f64>(),
                        client.select(&format!("SELECT kurtosis_y('{}')", expected), None, None).first().get_one::<f64>());
             assert_eq!(client.select("SELECT covariance(stats_agg(test_y, test_x)) FROM test_table", None, None).first().get_one::<f64>(),
-                       client.select(&format!("SELECT covariance('{}')", expected), None, None).first().get_one::<f64>());
+                       client.select(&format!("SELECT covariance('{}'::StatsSummary2D)", expected), None, None).first().get_one::<f64>());
 
             // Test text round trip
             assert_eq!(client.select(&format!("SELECT '{}'::StatsSummary2D::TEXT", expected), None, None).first().get_one::<String>().unwrap(), expected);

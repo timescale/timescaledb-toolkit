@@ -71,7 +71,7 @@ impl CounterSummary {
         //TODO: test this
         if incoming.ts == self.last.ts {
             // if two points are equal we only use the first we see
-            // see discussion at https://github.com/timescale/timescale-analytics/discussions/65
+            // see discussion at https://github.com/timescale/timescaledb-toolkit/discussions/65
             return Ok(());
         }
         if incoming.val < self.last.val {

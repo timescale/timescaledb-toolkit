@@ -6,19 +6,19 @@
 This repository is the home of the TimescaleDB Toolkit team. Our mission is to
 ease all things analytics when using TimescaleDB, with a particular focus on
 developer ergonomics and performance. Our issue tracker contains more
-on [the features we're planning to work on](https://github.com/timescale/timescale-analytics/labels/proposed-feature)
-and [the problems we're trying to solve](https://github.com/timescale/timescale-analytics/labels/feature-request),
-and our [Discussions forum](https://github.com/timescale/timescale-analytics/discussions) contains ongoing conversation.
+on [the features we're planning to work on](https://github.com/timescale/timescaledb-toolkit/labels/proposed-feature)
+and [the problems we're trying to solve](https://github.com/timescale/timescaledb-toolkit/labels/feature-request),
+and our [Discussions forum](https://github.com/timescale/timescaledb-toolkit/discussions) contains ongoing conversation.
 
 Documentation for this version of the TimescaleDB Toolkit extension can be found
-in this repository at [`docs`](https://github.com/timescale/timescale-analytics/tree/main/docs).
+in this repository at [`docs`](https://github.com/timescale/timescaledb-toolkit/tree/main/docs).
 
 
 ## 🖥 Try It Out ##
 
 The extension comes pre-installed on all [Timescale Forge](https://console.forge.timescale.com/) instances, and also on our full-featured [`timescale/timescaledb-ha` docker image](https://hub.docker.com/r/timescale/timescaledb-ha).
 
-We also provide nightly builds as a docker images in `timescaledev/timescale-analytics:nightly`.
+We also provide nightly builds as a docker images in `timescaledev/timescaledb-toolkit:nightly`.
 
 All versions of the extension contain experimental features in the `toolkit_experimental`, schema see [our docs section on experimental features](/docs/README.md#tag-notes) for
 more details.
@@ -48,8 +48,8 @@ cargo pgx init --pg13 pg_config
 
 Download or clone this repository, and switch to the `extension` subdirectory, e.g.
 ```bash
-git clone https://github.com/timescale/timescale-analytics && \
-cd timescale-analytics/extension
+git clone https://github.com/timescale/timescaledb-toolkit && \
+cd timescaledb-toolkit/extension
 ```
 Then run
 ```
@@ -62,9 +62,9 @@ cargo run --manifest-path ../tools/post-install/Cargo.toml -- pg_config
 The TimescaleDB Toolkit project is still in the initial planning stage as we
 decide our priorities and what to implement first. As such, now is a great time
 to help shape the project's direction! Have a look at the
-[list of features we're thinking of working on](https://github.com/timescale/timescale-analytics/labels/proposed-feature)
+[list of features we're thinking of working on](https://github.com/timescale/timescaledb-toolkit/labels/proposed-feature)
 and feel free to comment on the features, expand the list, or
-hop on the [Discussions forum](https://github.com/timescale/timescale-analytics/discussions) for more in-depth discussions.
+hop on the [Discussions forum](https://github.com/timescale/timescaledb-toolkit/discussions) for more in-depth discussions.
 
 ### 🔨 Building ###
 

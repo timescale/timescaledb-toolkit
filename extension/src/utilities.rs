@@ -109,6 +109,24 @@ mod tests {
                 .get_one::<f64>().unwrap();
             let now =  SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
             assert!((now.as_secs_f64() - test_val).abs() < 0.05);
+
+            let test_val = client
+                .select("SELECT toolkit_experimental.to_epoch('2021-01-01 00:00:00+03'::timestamptz)", None, None)
+                .first()
+                .get_one::<f64>().unwrap();
+            assert_eq!(test_val, 1609448400f64);
+
+            let test_val = client
+                .select("SELECT toolkit_experimental.to_epoch('epoch'::timestamptz)", None, None)
+                .first()
+                .get_one::<f64>().unwrap();
+            assert_eq!(test_val, 0f64);
+
+            let test_val = client
+                .select("SELECT toolkit_experimental.to_epoch('epoch'::timestamptz - interval '42 seconds')", None, None)
+                .first()
+                .get_one::<f64>().unwrap();
+            assert_eq!(test_val, -42f64);
         });
     }
 }

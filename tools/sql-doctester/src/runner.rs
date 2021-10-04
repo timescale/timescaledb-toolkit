@@ -241,6 +241,11 @@ fn stringify_table(table: &Vec<Vec<String>>) -> String {
     }
     let mut width = vec![0; table[0].len()];
     for row in table {
+        // Ensure that we have width for every column
+        // TODO this shouldn't be needed, but somtimes is?
+        if width.len() < row.len() {
+            width.extend((0..row.len()-width.len()).map(|_| 0));
+        }
         for (i, value) in row.iter().enumerate() {
             width[i] = max(width[i], value.len())
         }

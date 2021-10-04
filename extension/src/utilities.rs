@@ -97,19 +97,11 @@ $$;
 
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {
-    use std::time::{SystemTime, UNIX_EPOCH};
     use pgx::*;
 
     #[pg_test]
     fn test_to_epoch() {
         Spi::execute(|client| {
-            let test_val = client
-                .select("SELECT toolkit_experimental.to_epoch(now())", None, None)
-                .first()
-                .get_one::<f64>().unwrap();
-            let now =  SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-            assert!((now.as_secs_f64() - test_val).abs() < 0.05);
-
             let test_val = client
                 .select("SELECT toolkit_experimental.to_epoch('2021-01-01 00:00:00+03'::timestamptz)", None, None)
                 .first()

@@ -32,14 +32,14 @@ CREATE TABLE foo (
 In order to run any of these statistical functions you must first perform the `stats_agg` aggregate with either one or two variables, following the general SQL framework for these things, when being used for statistical regression with two dimensions, the dependent variable comes first and the independent variable second, ie:
 
 ```SQL, ignore-output
-SELECT toolkit_experimental.stats_agg(y, x) FROM foo;
+SELECT stats_agg(y, x) FROM foo;
 ```
 
 As with other aggregates in the Toolkit, you can use any of the accessors on the results of the aggregation, so: 
 
 ```SQL, ignore-output
-SELECT toolkit_experimental.average(
-    toolkit_experimental.stats_agg(x)
+SELECT average(
+    stats_agg(x)
 ) FROM foo;
 ```
 will give you the average of column `x`. While this is slightly more complex for the simple case, many of the results of these aggregates are not combinable in their final forms, the output of the `stats_agg` aggregate is combinable, which means we can do tumbling window aggregates with them and re-combine them when they are used in continuous aggregates. 
@@ -47,23 +47,23 @@ will give you the average of column `x`. While this is slightly more complex for
 In the 2-D case, you can access single variable statistics by calling the function with `_x` or `_y` like so:
 
 ```SQL, ignore-output
-SELECT toolkit_experimental.average_x(
-    toolkit_experimental.stats_agg(y, x)
+SELECT average_x(
+    stats_agg(y, x)
 ) FROM foo;
 ```
 
 Statistics involving both variables (the ones only available in the 2-D case) are called normally:
 ```SQL, ignore-output
-SELECT toolkit_experimental.slope(
-    toolkit_experimental.stats_agg(y, x)
+SELECT slope(
+    stats_agg(y, x)
 ) FROM foo;
 ```
 
 For those statistics which have variants for either the sample or population we have made these accessible via a separate variable ie:
 
 ```SQL, ignore-output
-SELECT toolkit_experimental.covariance(
-    toolkit_experimental.stats_agg(y, x),
+SELECT covariance(
+    stats_agg(y, x),
     'population'
 ) FROM foo;
 ```
@@ -71,8 +71,8 @@ SELECT toolkit_experimental.covariance(
 The default for all of these is 'population' (the abbreviations 'pop' and 'samp' are also acceptable). The default means the function may also be called without the second argument, like so:
 
 ```SQL, ignore-output
-SELECT toolkit_experimental.covariance(
-    toolkit_experimental.stats_agg(y, x)
+SELECT covariance(
+    stats_agg(y, x)
 ) FROM foo;
 ```
 

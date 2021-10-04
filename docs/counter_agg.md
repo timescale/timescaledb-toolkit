@@ -33,8 +33,8 @@ We'll start by showing a typical usage of a counter aggregate as well as the `de
 
 ```SQL ,ignore
 SELECT measure_id,
-    toolkit_experimental.delta(
-        toolkit_experimental.counter_agg(ts, val)
+    delta(
+        counter_agg(ts, val)
     )
 FROM foo
 GROUP BY measure_id;
@@ -44,8 +44,8 @@ We can also use the [`time_bucket` function](https://docs.timescale.com/latest/a
 ```SQL ,ignore
 SELECT measure_id,
     time_bucket('15 min'::interval, ts) as bucket,
-    toolkit_experimental.delta(
-        toolkit_experimental.counter_agg(ts, val)
+    delta(
+        counter_agg(ts, val)
     )
 FROM foo
 GROUP BY measure_id, time_bucket('15 min'::interval, ts);
@@ -59,11 +59,11 @@ If series are less regular and so the deltas are affected by the number of sampl
 with t as (
     SELECT measure_id,
         time_bucket('15 min'::interval, ts) as bucket,
-        toolkit_experimental.counter_agg(ts, val, bounds => toolkit_experimental.time_bucket_range('15 min'::interval, ts))
+        counter_agg(ts, val, bounds => time_bucket_range('15 min'::interval, ts))
     FROM foo
     GROUP BY measure_id, time_bucket('15 min'::interval, ts))
 SELECT time_bucket,
-    toolkit_experimental.extrapolated_delta(counter_agg, method => 'prometheus')
+    extrapolated_delta(counter_agg, method => 'prometheus')
 FROM t ;
 ```
 
@@ -82,7 +82,7 @@ CREATE MATERIALIZED VIEW foo_15
 WITH (timescaledb.continuous)
 AS SELECT measure_id,
     time_bucket('15 min'::interval, ts) as bucket,
-    toolkit_experimental.counter_agg(ts, val, bounds => time_bucket_range('15 min'::interval, ts))
+    counter_agg(ts, val, bounds => time_bucket_range('15 min'::interval, ts))
 FROM foo
 GROUP BY measure_id, time_bucket('15 min'::interval, ts);
 ```
@@ -92,10 +92,10 @@ Note that here, we just use the [`counter_agg`](#counter-agg-point) function. It
 SELECT
     measure_id,
     bucket,
-    toolkit_experimental.delta(counter_agg),
-    toolkit_experimental.rate(counter_agg),
-    toolkit_experimental.extrapolated_rate(counter_agg, method => 'prometheus'),
-    toolkit_experimental.slope(counter_agg)
+    delta(counter_agg),
+    rate(counter_agg),
+    extrapolated_rate(counter_agg, method => 'prometheus'),
+    slope(counter_agg)
 FROM foo_15
 ```
 
@@ -107,8 +107,8 @@ We can also re-aggregate from the continuous aggregate into a larger bucket size
 SELECT
     measure_id,
     time_bucket('1 day'::interval, bucket),
-    toolkit_experimental.delta(
-        toolkit_experimental.rollup(counter_agg)
+    delta(
+        rollup(counter_agg)
     )
 FROM foo_15
 GROUP BY measure_id, time_bucket('1 day'::interval, bucket);
@@ -151,7 +151,7 @@ Aggregating a counter to produce a `CounterSummary` is the first step in perform
 ---
 ## **counter_agg() (point form)** <a id="counter-agg-point"></a>
 ```SQL ,ignore
-toolkit_experimental.counter_agg(
+counter_agg(
     ts TIMESTAMPTZ,
     value DOUBLE PRECISION¹,
     bounds TSTZRANGE DEFAULT NULL
@@ -190,21 +190,21 @@ An aggregate that produces a `CounterSummary` from timestamps and associated val
 WITH t as (
     SELECT
         time_bucket('1 day'::interval, ts) as dt,
-        toolkit_experimental.counter_agg(ts, val) AS cs -- get a CounterSummary
+        counter_agg(ts, val) AS cs -- get a CounterSummary
     FROM foo
     WHERE id = 'bar'
     GROUP BY time_bucket('1 day'::interval, ts)
 )
 SELECT
     dt,
-    toolkit_experimental.irate_right(cs) -- extract instantaneous rate from the CounterSummary
+    irate_right(cs) -- extract instantaneous rate from the CounterSummary
 FROM t;
 ```
 
 ---
 ## **rollup() (summary form)**<a id="counter-agg-summary"></a>
 ```SQL ,ignore
-toolkit_experimental.rollup(
+rollup(
     cs CounterSummary
 ) RETURNS CounterSummary
 ```
@@ -229,18 +229,18 @@ An aggregate to compute a combined `CounterSummary` from a series of non-overlap
 WITH t as (
     SELECT
         date_trunc('day', ts) as dt,
-        toolkit_experimental.counter_agg(ts, val) AS counter_summary -- get a time weight summary
+        counter_agg(ts, val) AS counter_summary -- get a time weight summary
     FROM foo
     WHERE id = 'bar'
     GROUP BY date_trunc('day')
 ), q as (
-    SELECT toolkit_experimental.rollup(counter_summary) AS full_cs -- do a second level of aggregation to get the full CounterSummary
+    SELECT rollup(counter_summary) AS full_cs -- do a second level of aggregation to get the full CounterSummary
     FROM t
 )
 SELECT
     dt,
-    toolkit_experimental.delta(counter_summary),  -- extract the delta from the  CounterSummary
-    toolkit_experimental.delta(counter_summary) / (SELECT toolkit_experimental.delta(full_cs) FROM q LIMIT 1)  as normalized -- get the fraction of the delta that happened each day compared to the full change of the counter
+    delta(counter_summary),  -- extract the delta from the  CounterSummary
+    delta(counter_summary) / (SELECT delta(full_cs) FROM q LIMIT 1)  as normalized -- get the fraction of the delta that happened each day compared to the full change of the counter
 FROM t;
 ```
 # Accessor Functions <a id="counter-agg-api-accessors"></a>
@@ -279,7 +279,7 @@ Functions in the delta family are dedicated to finding the change in a value (or
 ---
 ## **delta()** <a id="counter-agg-delta"></a>
 ```SQL ,ignore
-toolkit_experimental.delta(
+delta(
     summary CounterSummary
 ) RETURNS DOUBLE PRECISION
 ```
@@ -303,11 +303,11 @@ The change in the counter over the time period. This is the raw or simple delta 
 ```SQL ,ignore
 SELECT
     id,
-    toolkit_experimental.delta(summary)
+    delta(summary)
 FROM (
     SELECT
         id,
-        toolkit_experimental.counter_agg(ts, val) AS summary
+        counter_agg(ts, val) AS summary
     FROM foo
     GROUP BY id
 ) t
@@ -316,7 +316,7 @@ FROM (
 ---
 ## **extrapolated_delta()** <a id="counter-agg-extrapolated-delta"></a>
 ```SQL ,ignore
-toolkit_experimental.extrapolated_delta(
+extrapolated_delta(
     summary CounterSummary,
     method TEXT¹
 ) RETURNS DOUBLE PRECISION
@@ -346,17 +346,17 @@ The `bounds` must be specified for the `extrapolated_delta` function to work, th
 SELECT
     id,
     bucket,
-    toolkit_experimental.extrapolated_delta(
-        toolkit_experimental.with_bounds(
+    extrapolated_delta(
+        with_bounds(
             summary,
-            toolkit_experimental.time_bucket_range('15 min'::interval, bucket)
+            time_bucket_range('15 min'::interval, bucket)
         )
     )
 FROM (
     SELECT
         id,
         time_bucket('15 min'::interval, ts) AS bucket,
-        toolkit_experimental.counter_agg(ts, val) AS summary
+        counter_agg(ts, val) AS summary
     FROM foo
     GROUP BY id, time_bucket('15 min'::interval, ts)
 ) t
@@ -365,7 +365,7 @@ FROM (
 ---
 ## **idelta_left()** <a id="counter-agg-idelta-left"></a>
 ```SQL ,ignore
-toolkit_experimental.idelta_left(
+idelta_left(
     summary CounterSummary
 ) RETURNS DOUBLE PRECISION
 ```
@@ -391,12 +391,12 @@ The instantaneous change in the counter at the left (earlier) side of the time r
 SELECT
     id,
     bucket,
-    toolkit_experimental.idelta_left(summary)
+    idelta_left(summary)
 FROM (
     SELECT
         id,
         time_bucket('15 min'::interval, ts) AS bucket,
-        toolkit_experimental.counter_agg(ts, val) AS summary
+        counter_agg(ts, val) AS summary
     FROM foo
     GROUP BY id, time_bucket('15 min'::interval, ts)
 ) t
@@ -405,7 +405,7 @@ FROM (
 ---
 ## **idelta_right()** <a id="counter-agg-idelta-right"></a>
 ```SQL ,ignore
-toolkit_experimental.idelta_right(
+idelta_right(
     summary CounterSummary
 ) RETURNS DOUBLE PRECISION
 ```
@@ -431,12 +431,12 @@ The instantaneous change in the counter at the right (later) side of the time ra
 SELECT
     id,
     bucket,
-    toolkit_experimental.idelta_right(summary)
+    idelta_right(summary)
 FROM (
     SELECT
         id,
         time_bucket('15 min'::interval, ts) AS bucket,
-        toolkit_experimental.counter_agg(ts, val) AS summary
+        counter_agg(ts, val) AS summary
     FROM foo
     GROUP BY id, time_bucket('15 min'::interval, ts)
 ) t
@@ -445,7 +445,7 @@ FROM (
 ---
 ## **time_delta()** <a id="counter-agg-time-delta"></a>
 ```SQL ,ignore
-toolkit_experimental.time_delta(
+time_delta(
     summary CounterSummary
 ) RETURNS DOUBLE PRECISION
 ```
@@ -471,12 +471,12 @@ The observed change in time (`last time - first time`) over the period aggregate
 SELECT
     id,
     bucket,
-    toolkit_experimental.time_delta(summary)
+    time_delta(summary)
 FROM (
     SELECT
         id,
         time_bucket('15 min'::interval, ts) AS bucket,
-        toolkit_experimental.counter_agg(ts, val) AS summary
+        counter_agg(ts, val) AS summary
     FROM foo
     GROUP BY id, time_bucket('15 min'::interval, ts)
 ) t
@@ -489,7 +489,7 @@ The rate family of functions find the reset-adjusted rate of change (`delta(valu
 ---
 ## **rate()** <a id="counter-agg-rate"></a>
 ```SQL ,ignore
-toolkit_experimental.rate(
+rate(
     summary CounterSummary
 ) RETURNS DOUBLE PRECISION
 ```
@@ -513,11 +513,11 @@ The rate of change of the counter over the observed time period.  This is the ra
 ```SQL ,ignore
 SELECT
     id,
-    toolkit_experimental.rate(summary)
+    rate(summary)
 FROM (
     SELECT
         id,
-        toolkit_experimental.counter_agg(ts, val) AS summary
+        counter_agg(ts, val) AS summary
     FROM foo
     GROUP BY id
 ) t
@@ -526,7 +526,7 @@ FROM (
 ---
 ## **extrapolated_rate()** <a id="counter-agg-extrapolated-rate"></a>
 ```SQL ,ignore
-toolkit_experimental.extrapolated_rate(
+extrapolated_rate(
     summary CounterSummary,
     method TEXT¹
 ) RETURNS DOUBLE PRECISION
@@ -556,17 +556,17 @@ The `bounds` must be specified for the `extrapolated_rate` function to work, the
 SELECT
     id,
     bucket,
-    toolkit_experimental.extrapolated_rate(
-        toolkit_experimental.with_bounds(
+    extrapolated_rate(
+        with_bounds(
             summary,
-            toolkit_experimental.time_bucket_range('15 min'::interval, bucket)
+            time_bucket_range('15 min'::interval, bucket)
         )
     )
 FROM (
     SELECT
         id,
         time_bucket('15 min'::interval, ts) AS bucket,
-        toolkit_experimental.counter_agg(ts, val) AS summary
+        counter_agg(ts, val) AS summary
     FROM foo
     GROUP BY id, time_bucket('15 min'::interval, ts)
 ) t
@@ -575,7 +575,7 @@ FROM (
 ---
 ## **irate_left()** <a id="counter-agg-irate-left"></a>
 ```SQL ,ignore
-toolkit_experimental.irate_left(
+irate_left(
     summary CounterSummary
 ) RETURNS DOUBLE PRECISION
 ```
@@ -601,12 +601,12 @@ The instantaneous rate of change of the counter at the left (earlier) side of th
 SELECT
     id,
     bucket,
-    toolkit_experimental.irate_left(summary)
+    irate_left(summary)
 FROM (
     SELECT
         id,
         time_bucket('15 min'::interval, ts) AS bucket,
-        toolkit_experimental.counter_agg(ts, val) AS summary
+        counter_agg(ts, val) AS summary
     FROM foo
     GROUP BY id, time_bucket('15 min'::interval, ts)
 ) t
@@ -616,7 +616,7 @@ FROM (
 ## **irate_right()** <a id="counter-agg-irate-right"></a>
 
 ```SQL ,ignore
-toolkit_experimental.irate_right(
+irate_right(
     summary CounterSummary
 ) RETURNS DOUBLE PRECISION
 ```
@@ -642,12 +642,12 @@ The instantaneous rate of change of the counter at the right (later) side of the
 SELECT
     id,
     bucket,
-    toolkit_experimental.irate_right(summary)
+    irate_right(summary)
 FROM (
     SELECT
         id,
         time_bucket('15 min'::interval, ts) AS bucket,
-        toolkit_experimental.counter_agg(ts, val) AS summary
+        counter_agg(ts, val) AS summary
     FROM foo
     GROUP BY id, time_bucket('15 min'::interval, ts)
 ) t
@@ -660,7 +660,7 @@ The counting functions comprise several accessor functions that calculate the nu
 ## **num_changes()** <a id="counter-agg-num-changes"></a>
 
 ```SQL ,ignore
-toolkit_experimental.num_changes(
+num_changes(
     summary CounterSummary
 ) RETURNS BIGINT
 ```
@@ -685,12 +685,12 @@ The number of times the value changed within the period over which the `CounterS
 SELECT
     id,
     bucket,
-    toolkit_experimental.num_changes(summary)
+    num_changes(summary)
 FROM (
     SELECT
         id,
         time_bucket('15 min'::interval, ts) AS bucket,
-        toolkit_experimental.counter_agg(ts, val) AS summary
+        counter_agg(ts, val) AS summary
     FROM foo
     GROUP BY id, time_bucket('15 min'::interval, ts)
 ) t
@@ -700,7 +700,7 @@ FROM (
 ## **num_elements()** <a id="counter-agg-num-elements"></a>
 
 ```SQL ,ignore
-toolkit_experimental.num_elements(
+num_elements(
     summary CounterSummary
 ) RETURNS BIGINT
 ```
@@ -725,12 +725,12 @@ The total number of points we saw in calculating the `CounterSummary`. Only poin
 SELECT
     id,
     bucket,
-    toolkit_experimental.num_elements(summary)
+    num_elements(summary)
 FROM (
     SELECT
         id,
         time_bucket('15 min'::interval, ts) AS bucket,
-        toolkit_experimental.counter_agg(ts, val) AS summary
+        counter_agg(ts, val) AS summary
     FROM foo
     GROUP BY id, time_bucket('15 min'::interval, ts)
 ) t
@@ -740,7 +740,7 @@ FROM (
 ## **num_elements()** <a id="counter-agg-num-resets"></a>
 
 ```SQL ,ignore
-toolkit_experimental.num_resets(
+num_resets(
     summary CounterSummary
 ) RETURNS BIGINT
 ```
@@ -765,12 +765,12 @@ The total number of times we detected a counter reset while calculating the `Cou
 SELECT
     id,
     bucket,
-    toolkit_experimental.num_resets(summary)
+    num_resets(summary)
 FROM (
     SELECT
         id,
         time_bucket('15 min'::interval, ts) AS bucket,
-        toolkit_experimental.counter_agg(ts, val) AS summary
+        counter_agg(ts, val) AS summary
     FROM foo
     GROUP BY id, time_bucket('15 min'::interval, ts)
 ) t
@@ -785,7 +785,7 @@ The statistical regression family of functions contains several functions derive
 ## **slope()** <a id="counter-agg-slope"></a>
 
 ```SQL ,ignore
-toolkit_experimental.slope(
+slope(
     summary CounterSummary
 ) RETURNS DOUBLE PRECISION
 ```
@@ -811,12 +811,12 @@ The slope of the least squares fit line computed from the adjusted counter value
 SELECT
     id,
     bucket,
-    toolkit_experimental.slope(summary)
+    slope(summary)
 FROM (
     SELECT
         id,
         time_bucket('15 min'::interval, ts) AS bucket,
-        toolkit_experimental.counter_agg(ts, val) AS summary
+        counter_agg(ts, val) AS summary
     FROM foo
     GROUP BY id, time_bucket('15 min'::interval, ts)
 ) t
@@ -825,7 +825,7 @@ FROM (
 ## **intercept()** <a id="counter-agg-intercept"></a>
 
 ```SQL ,ignore
-toolkit_experimental.intercept(
+intercept(
     summary CounterSummary
 ) RETURNS DOUBLE PRECISION
 ```
@@ -851,12 +851,12 @@ The intercept of the least squares fit line computed from the adjusted counter v
 SELECT
     id,
     bucket,
-    toolkit_experimental.intercept(summary)
+    intercept(summary)
 FROM (
     SELECT
         id,
         time_bucket('15 min'::interval, ts) AS bucket,
-        toolkit_experimental.counter_agg(ts, val) AS summary
+        counter_agg(ts, val) AS summary
     FROM foo
     GROUP BY id, time_bucket('15 min'::interval, ts)
 ) t
@@ -865,7 +865,7 @@ FROM (
 ## **counter_zero_time()** <a id="counter-agg-counter-zero-time"></a>
 
 ```SQL ,ignore
-toolkit_experimental.counter_zero_time(
+counter_zero_time(
     summary CounterSummary
 ) RETURNS TIMESTAMPTZ
 ```
@@ -891,12 +891,12 @@ The time at which the counter value is predicted to have been zero based on the 
 SELECT
     id,
     bucket,
-    toolkit_experimental.counter_zero_time(summary)
+    counter_zero_time(summary)
 FROM (
     SELECT
         id,
         time_bucket('15 min'::interval, ts) AS bucket,
-        toolkit_experimental.counter_agg(ts, val) AS summary
+        counter_agg(ts, val) AS summary
     FROM foo
     GROUP BY id, time_bucket('15 min'::interval, ts)
 ) t
@@ -906,7 +906,7 @@ FROM (
 ## **corr())** <a id="counter-agg-corr"></a>
 
 ```SQL ,ignore
-toolkit_experimental.corr(
+corr(
     summary CounterSummary
 ) RETURNS DOUBLE PRECISION
 ```
@@ -932,12 +932,12 @@ The correlation coefficient of the least squares fit line of the adjusted counte
 SELECT
     id,
     bucket,
-    toolkit_experimental.corr(summary)
+    corr(summary)
 FROM (
     SELECT
         id,
         time_bucket('15 min'::interval, ts) AS bucket,
-        toolkit_experimental.counter_agg(ts, val) AS summary
+        counter_agg(ts, val) AS summary
     FROM foo
     GROUP BY id, time_bucket('15 min'::interval, ts)
 ) t
@@ -947,7 +947,7 @@ FROM (
 ---
 ## **with_bounds() **<a id="counter-agg-with-bounds"></a>
 ```SQL ,ignore
-toolkit_experimental.with_bounds(
+with_bounds(
     summary CounterSummary,
     bounds TSTZRANGE,
 ) RETURNS CounterSummary
@@ -972,17 +972,17 @@ A utility function to add bounds to an already-computed `CounterSummary`. The bo
 SELECT
     id,
     bucket,
-    toolkit_experimental.extrapolated_rate(
-        toolkit_experimental.with_bounds(
+    extrapolated_rate(
+        with_bounds(
             summary,
-            toolkit_experimental.time_bucket_range('15 min'::interval, bucket)
+            time_bucket_range('15 min'::interval, bucket)
         )
     )
 FROM (
     SELECT
         id,
         time_bucket('15 min'::interval, ts) AS bucket,
-        toolkit_experimental.counter_agg(ts, val) AS summary
+        counter_agg(ts, val) AS summary
     FROM foo
     GROUP BY id, time_bucket('15 min'::interval, ts)
 ) t
@@ -1000,8 +1000,8 @@ As an example, let's consider that we might want to find which of my counters ha
 ```SQL ,ignore
 WITH t as (SELECT measure_id,
         time_bucket('15 min'::interval, ts) AS bucket,
-        toolkit_experimental.rate(
-            toolkit_experimental.counter_agg(ts, val)
+        rate(
+            counter_agg(ts, val)
         ) as rate
     FROM foo
     GROUP BY measure_id),
@@ -1028,8 +1028,8 @@ So where I might run into OOM issues if I computed the values over all time like
 
 ```SQL ,ignore
 SELECT measure_id,
-    toolkit_experimental.rate(
-        toolkit_experimental.counter_agg(ts, val)
+    rate(
+        counter_agg(ts, val)
     ) as rate
 FROM foo
 GROUP BY measure_id;
@@ -1039,12 +1039,12 @@ If I were to instead, compute the [`counter_agg`](#counter-agg-point) over, say 
 ```SQL ,ignore
 WITH t as (SELECT measure_id,
         time_bucket('1 day'::interval, ts) AS bucket,
-        toolkit_experimental.counter_agg(ts, val)
+        counter_agg(ts, val)
     FROM foo
     GROUP BY measure_id),
 SELECT measure_id, \
-    toolkit_experimental.rate(
-        toolkit_experimental.rollup(counter_agg) --combine the daily `CounterSummaries` to make a full one over all time, accounting for all the resets, then apply the rate function
+    rate(
+        rollup(counter_agg) --combine the daily `CounterSummaries` to make a full one over all time, accounting for all the resets, then apply the rate function
     )
 FROM t;
 ```

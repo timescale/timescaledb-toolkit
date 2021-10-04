@@ -20,7 +20,7 @@ Timescale's HyperLogLog is implemented as an aggregate function in PostgreSQL.  
 ---
 ## **hyperloglog** <a id="hyperloglog"></a>
 ```SQL,ignore
-toolkit_experimental.hyperloglog(
+hyperloglog(
     size INTEGER,
     value AnyElement¹
 ) RETURNS Hyperloglog
@@ -47,13 +47,13 @@ This will construct and return a Hyperloglog with at least the specified number 
 For this examples assume we have a table 'samples' with a column 'weights' holding `DOUBLE PRECISION` values.  The following will simply return a digest over that column
 
 ```SQL ,ignore
-SELECT toolkit_experimental.hyperloglog(64, weights) FROM samples;
+SELECT hyperloglog(64, weights) FROM samples;
 ```
 
 It may be more useful to build a view from the aggregate that we can later pass to other tdigest functions.
 
 ```SQL ,ignore
-CREATE VIEW digest AS SELECT toolkit_experimental.hyperloglog(64, data) FROM samples;
+CREATE VIEW digest AS SELECT hyperloglog(64, data) FROM samples;
 ```
 
 ---
@@ -84,11 +84,11 @@ Returns a Hyperloglog by aggregating over the union of the input elements.
 ### Sample Usages <a id="summary-form-examples"></a>
 
 ```SQL
-SELECT toolkit_experimental.distinct_count(toolkit_experimental.rollup(logs))
+SELECT distinct_count(rollup(logs))
 FROM (
-    (SELECT toolkit_experimental.hyperloglog(32, v::text) logs FROM generate_series(1, 100) v)
+    (SELECT hyperloglog(32, v::text) logs FROM generate_series(1, 100) v)
     UNION ALL
-    (SELECT toolkit_experimental.hyperloglog(32, v::text) FROM generate_series(50, 150) v)
+    (SELECT hyperloglog(32, v::text) FROM generate_series(50, 150) v)
 ) hll;
 ```
 ```output
@@ -101,7 +101,7 @@ FROM (
 
 ## **distinct_count** <a id="distinct_count"></a>
 ```SQL ,ignore
-toolkit_experimental.distinct_count(hyperloglog Hyperloglog) RETURNS BIGINT
+distinct_count(hyperloglog Hyperloglog) RETURNS BIGINT
 ```
 
 Get the number of distinct values from a hyperloglog.
@@ -122,7 +122,7 @@ Get the number of distinct values from a hyperloglog.
 ### Sample Usages <a id="distinct_count-examples"></a>
 
 ```SQL
-SELECT toolkit_experimental.distinct_count(toolkit_experimental.hyperloglog(64, data))
+SELECT distinct_count(hyperloglog(64, data))
 FROM generate_series(1, 100) data
 ```
 ```output
@@ -134,7 +134,7 @@ FROM generate_series(1, 100) data
 ## **stderror** <a id="hyperloglog_stderror"></a>
 
 ```SQL ,ignore
-toolkit_experimental.stderror(hyperloglog Hyperloglog) RETURNS DOUBLE PRECISION
+stderror(hyperloglog Hyperloglog) RETURNS DOUBLE PRECISION
 ```
 
 Returns an estimate of the relative stderror of the hyperloglog based on the
@@ -175,7 +175,7 @@ hyperloglog error formula. Approximate result are:
 ### Sample Usages <a id="hyperloglog_stderror-examples"></a>
 
 ```SQL
-SELECT toolkit_experimental.stderror(toolkit_experimental.hyperloglog(64, data))
+SELECT stderror(hyperloglog(64, data))
 FROM generate_series(1, 100) data
 ```
 ```output

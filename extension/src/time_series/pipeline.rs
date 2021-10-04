@@ -183,7 +183,7 @@ type Internal = usize;
 )]
 pub unsafe fn pipeline_support(input: Internal)
 -> Internal {
-    use std::{ffi::CStr, mem::size_of, ptr};
+    use std::{mem::{size_of, MaybeUninit}, ptr};
 
     let input: *mut pg_sys::Node = input as _;
     if !pgx::is_a(input, pg_sys::NodeTag_T_SupportRequestSimplify) {
@@ -218,15 +218,26 @@ pub unsafe fn pipeline_support(input: Internal)
             return ptr::null_mut::<pg_sys::Expr>() as _
         }
         None => {
-            let func_name = pg_sys::get_func_name(executor_id);
-            if func_name.is_null() {
-                return ptr::null_mut::<pg_sys::Expr>() as _
-            }
-            let func_name = CStr::from_ptr(func_name);
-            if func_name != CStr::from_bytes_with_nul(b"run_pipeline\0").unwrap() {
-                return ptr::null_mut::<pg_sys::Expr>() as _
-            }
-            RUN_PIPELINE_OID.get_or_init(|| executor_id);
+            let executor_fn = {
+                let mut flinfo: pg_sys::FmgrInfo = MaybeUninit::zeroed().assume_init();
+                pg_sys::fmgr_info(executor_id, &mut flinfo);
+                flinfo.fn_addr
+            };
+            // FIXME this cast should not be necessary; pgx is defining the
+            //       wrapper functions as
+            //       `unsafe fn(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum`
+            //       instead of
+            //       `unsafe extern "C" fn(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum`
+            //       we'll fix this upstream
+            let expected_executor =
+                run_pipeline_wrapper as usize;
+            match executor_fn {
+                None => return ptr::null_mut::<pg_sys::Expr>() as _,
+                // FIXME the direct comparison should work
+                Some(func) if func as usize != expected_executor =>
+                    return ptr::null_mut::<pg_sys::Expr>() as _,
+                Some(_) => RUN_PIPELINE_OID.get_or_init(|| executor_id)
+            };
         },
 
     }

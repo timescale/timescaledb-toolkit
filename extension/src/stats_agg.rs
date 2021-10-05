@@ -683,14 +683,19 @@ pub fn arrow_stats1d_skewness(
     accessor: toolkit_experimental::AccessorSkewness,
 ) -> Option<f64> {
     let _ = accessor;
-    stats1d_skewness(sketch)
+    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
+    stats1d_skewness(sketch, &*method)
 }
 
 #[pg_extern(name="skewness", schema = "toolkit_experimental", immutable, parallel_safe)]
 fn stats1d_skewness(
     summary: toolkit_experimental::StatsSummary1D,
+    method: default!(&str, "sample"),
 )-> Option<f64> {
-    summary.to_internal().skewness()
+    match method_kind(method) {
+        Population => summary.to_internal().skewness_pop(),
+        Sample => summary.to_internal().skewness_samp(),
+    }
 }
 
 
@@ -701,14 +706,19 @@ pub fn arrow_stats1d_kurtosis(
     accessor: toolkit_experimental::AccessorKurtosis,
 ) -> Option<f64> {
     let _ = accessor;
-    stats1d_kurtosis(sketch)
+    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
+    stats1d_kurtosis(sketch, &*method)
 }
 
 #[pg_extern(name="kurtosis", schema = "toolkit_experimental", immutable, parallel_safe)]
 fn stats1d_kurtosis(
     summary: toolkit_experimental::StatsSummary1D,
+    method: default!(&str, "sample"),
 )-> Option<f64> {
-    summary.to_internal().kurtosis()
+    match method_kind(method) {
+        Population => summary.to_internal().kurtosis_pop(),
+        Sample => summary.to_internal().kurtosis_samp(),
+    }
 }
 
 
@@ -902,14 +912,19 @@ pub fn arrow_stats2d_skewness_x(
     accessor: toolkit_experimental::AccessorSkewnessX,
 ) -> Option<f64> {
     let _ = accessor;
-    stats2d_skewness_x(sketch)
+    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
+    stats2d_skewness_x(sketch, &*method)
 }
 
 #[pg_extern(name="skewness_x", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_skewness_x(
     summary: toolkit_experimental::StatsSummary2D,
+    method: default!(&str, "sample"),
 )-> Option<f64> {
-    Some(summary.to_internal().skewness()?.x)
+    match method_kind(method) {
+        Population => Some(summary.to_internal().skewness_pop()?.x),
+        Sample => Some(summary.to_internal().skewness_samp()?.x),
+    }
 }
 
 
@@ -920,14 +935,19 @@ pub fn arrow_stats2d_skewness_y(
     accessor: toolkit_experimental::AccessorSkewnessY,
 ) -> Option<f64> {
     let _ = accessor;
-    stats2d_skewness_y(sketch)
+    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
+    stats2d_skewness_y(sketch, &*method)
 }
 
 #[pg_extern(name="skewness_y", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_skewness_y(
     summary: toolkit_experimental::StatsSummary2D,
+    method: default!(&str, "sample"),
 )-> Option<f64> {
-    Some(summary.to_internal().skewness()?.y)
+    match method_kind(method) {
+        Population => Some(summary.to_internal().skewness_pop()?.y),
+        Sample => Some(summary.to_internal().skewness_samp()?.y),
+    }
 }
 
 
@@ -938,14 +958,19 @@ pub fn arrow_stats2d_kurtosis_x(
     accessor: toolkit_experimental::AccessorKurtosisX,
 ) -> Option<f64> {
     let _ = accessor;
-    stats2d_kurtosis_x(sketch)
+    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
+    stats2d_kurtosis_x(sketch, &*method)
 }
 
 #[pg_extern(name="kurtosis_x", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_kurtosis_x(
     summary: toolkit_experimental::StatsSummary2D,
+    method: default!(&str, "sample"),
 )-> Option<f64> {
-    Some(summary.to_internal().kurtosis()?.x)
+    match method_kind(method) {
+        Population => Some(summary.to_internal().kurtosis_pop()?.x),
+        Sample => Some(summary.to_internal().kurtosis_samp()?.x),
+    }
 }
 
 
@@ -956,14 +981,19 @@ pub fn arrow_stats2d_kurtosis_y(
     accessor: toolkit_experimental::AccessorKurtosisY,
 ) -> Option<f64> {
     let _ = accessor;
-    stats2d_kurtosis_y(sketch)
+    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
+    stats2d_kurtosis_y(sketch, &*method)
 }
 
 #[pg_extern(name="kurtosis_y", schema = "toolkit_experimental", strict, immutable, parallel_safe)]
 fn stats2d_kurtosis_y(
     summary: toolkit_experimental::StatsSummary2D,
+    method: default!(&str, "sample"),
 )-> Option<f64> {
-    Some(summary.to_internal().kurtosis()?.y)
+    match method_kind(method) {
+        Population => Some(summary.to_internal().kurtosis_pop()?.y),
+        Sample => Some(summary.to_internal().kurtosis_samp()?.y),
+    }
 }
 
 
@@ -1233,9 +1263,9 @@ mod tests {
 
             // Test a few functions to see that the text serialized object behave the same as the constructed one
             assert_eq!(client.select("SELECT skewness_x(stats_agg(test_y, test_x)) FROM test_table", None, None).first().get_one::<f64>(),
-                       client.select(&format!("SELECT skewness_x('{}')", expected), None, None).first().get_one::<f64>());
+                       client.select(&format!("SELECT skewness_x('{}'::StatsSummary2D)", expected), None, None).first().get_one::<f64>());
             assert_eq!(client.select("SELECT kurtosis_y(stats_agg(test_y, test_x)) FROM test_table", None, None).first().get_one::<f64>(),
-                       client.select(&format!("SELECT kurtosis_y('{}')", expected), None, None).first().get_one::<f64>());
+                       client.select(&format!("SELECT kurtosis_y('{}'::StatsSummary2D)", expected), None, None).first().get_one::<f64>());
             assert_eq!(client.select("SELECT covariance(stats_agg(test_y, test_x)) FROM test_table", None, None).first().get_one::<f64>(),
                        client.select(&format!("SELECT covariance('{}'::StatsSummary2D)", expected), None, None).first().get_one::<f64>());
 
@@ -1416,8 +1446,12 @@ mod tests {
         FROM test_table", agg=agg, arg=arg)
     }
 
-    fn pg_moment_query(moment: i32, column: &str) -> String {
+    fn pg_moment_pop_query(moment: i32, column: &str) -> String {
         format!("select sum(({} - a.avg)^{}) / count({}) / (stddev_pop({})^{}) from test_table, (select avg({}) from test_table) a", column, moment, column, column, moment, column)
+    }
+
+    fn pg_moment_samp_query(moment: i32, column: &str) -> String {
+        format!("select sum(({} - a.avg)^{}) / (count({}) - 1) / (stddev_samp({})^{}) from test_table, (select avg({}) from test_table) a", column, moment, column, column, moment, column)
     }
 
     fn test_aggs(state: &mut TestState) {
@@ -1481,12 +1515,19 @@ mod tests {
             check_agg_equivalence(&state, &client, &pg2d_agg("covar_samp"), &tk2d_agg_arg("covariance", "sample"), EPS1);
 
             // Skewness and kurtosis don't have aggregate functions in postgres, but we can compute them
-            check_agg_equivalence(&state, &client, &pg_moment_query(3, "test_x"), &tk1d_agg("skewness"), BILLIONTH);
-            check_agg_equivalence(&state, &client, &pg_moment_query(3, "test_x"), &tk2d_agg("skewness_x"), BILLIONTH);
-            check_agg_equivalence(&state, &client, &pg_moment_query(3, "test_y"), &tk2d_agg("skewness_y"), BILLIONTH);
-            check_agg_equivalence(&state, &client, &pg_moment_query(4, "test_x"), &tk1d_agg("kurtosis"), BILLIONTH);
-            check_agg_equivalence(&state, &client, &pg_moment_query(4, "test_x"), &tk2d_agg("kurtosis_x"), BILLIONTH);
-            check_agg_equivalence(&state, &client, &pg_moment_query(4, "test_y"), &tk2d_agg("kurtosis_y"), BILLIONTH);
+            check_agg_equivalence(&state, &client, &pg_moment_pop_query(3, "test_x"), &tk1d_agg_arg("skewness", "population"), BILLIONTH);
+            check_agg_equivalence(&state, &client, &pg_moment_pop_query(3, "test_x"), &tk2d_agg_arg("skewness_x", "population"), BILLIONTH);
+            check_agg_equivalence(&state, &client, &pg_moment_pop_query(3, "test_y"), &tk2d_agg_arg("skewness_y", "population"), BILLIONTH);
+            check_agg_equivalence(&state, &client, &pg_moment_pop_query(4, "test_x"), &tk1d_agg_arg("kurtosis", "population"), BILLIONTH);
+            check_agg_equivalence(&state, &client, &pg_moment_pop_query(4, "test_x"), &tk2d_agg_arg("kurtosis_x", "population"), BILLIONTH);
+            check_agg_equivalence(&state, &client, &pg_moment_pop_query(4, "test_y"), &tk2d_agg_arg("kurtosis_y", "population"), BILLIONTH);
+
+            check_agg_equivalence(&state, &client, &pg_moment_samp_query(3, "test_x"), &tk1d_agg_arg("skewness", "sample"), BILLIONTH);
+            check_agg_equivalence(&state, &client, &pg_moment_samp_query(3, "test_x"), &tk2d_agg_arg("skewness_x", "sample"), BILLIONTH);
+            check_agg_equivalence(&state, &client, &pg_moment_samp_query(3, "test_y"), &tk2d_agg_arg("skewness_y", "sample"), BILLIONTH);
+            check_agg_equivalence(&state, &client, &pg_moment_samp_query(4, "test_x"), &tk1d_agg_arg("kurtosis", "sample"), BILLIONTH);
+            check_agg_equivalence(&state, &client, &pg_moment_samp_query(4, "test_x"), &tk2d_agg_arg("kurtosis_x", "sample"), BILLIONTH);
+            check_agg_equivalence(&state, &client, &pg_moment_samp_query(4, "test_y"), &tk2d_agg_arg("kurtosis_y", "sample"), BILLIONTH);
 
             client.select("DROP TABLE test_table",
                 None,

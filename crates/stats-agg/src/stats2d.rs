@@ -482,17 +482,35 @@ impl StatsSummary2D {
         })
     }
 
-    pub fn skewness(&self) -> Option<XYPair> {
+    pub fn skewness_pop(&self) -> Option<XYPair> {
+        let stddev = self.stddev_pop()?;
         Some(XYPair {
-            x: self.n64().sqrt() * self.sx3 / self.sx2.powf(1.5),
-            y: self.n64().sqrt() * self.sy3 / self.sy2.powf(1.5),
+            x: self.sx3 / self.n64() / stddev.x.powi(3),
+            y: self.sy3 / self.n64() / stddev.y.powi(3),
         })
     }
 
-    pub fn kurtosis(&self) -> Option<XYPair> {
+    pub fn skewness_samp(&self) -> Option<XYPair> {
+        let stddev = self.stddev_samp()?;
         Some(XYPair {
-            x: self.n64() * self.sx4 / self.sx2.powi(2),
-            y: self.n64() * self.sy4 / self.sy2.powi(2),
+            x: self.sx3 / (self.n64() - 1.0) / stddev.x.powi(3),
+            y: self.sy3 / (self.n64() - 1.0) / stddev.y.powi(3),
+        })
+    }
+
+    pub fn kurtosis_pop(&self) -> Option<XYPair> {
+        let stddev = self.stddev_pop()?;
+        Some(XYPair {
+            x: self.sx4 / self.n64() / stddev.x.powi(4),
+            y: self.sy4 / self.n64() / stddev.y.powi(4),
+        })
+    }
+
+    pub fn kurtosis_samp(&self) -> Option<XYPair> {
+        let stddev = self.stddev_samp()?;
+        Some(XYPair {
+            x: self.sx4 / (self.n64() - 1.0) / stddev.x.powi(4),
+            y: self.sy4 / (self.n64() - 1.0) / stddev.y.powi(4),
         })
     }
 

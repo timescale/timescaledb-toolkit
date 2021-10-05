@@ -17,7 +17,7 @@ pg_type! {
     #[derive(Debug)]
     struct PipelineThenStatsAgg<'input> {
         num_elements: u64,
-        elements: [Element; self.num_elements],
+        elements: [Element<'input>; self.num_elements],
     }
 }
 
@@ -50,8 +50,8 @@ pub fn run_pipeline_then_stats_agg<'s, 'p>(
 }
 
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
-pub fn finalize_with_stats_agg<'p, 'e>(
-    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
+pub fn finalize_with_stats_agg<'e>(
+    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'e>,
     then_stats_agg: toolkit_experimental::PipelineThenStatsAgg<'e>,
 ) -> toolkit_experimental::PipelineThenStatsAgg<'e> {
     if then_stats_agg.num_elements == 0 {
@@ -130,7 +130,7 @@ pg_type! {
     #[derive(Debug)]
     struct PipelineThenSum<'input> {
         num_elements: u64,
-        elements: [Element; self.num_elements],
+        elements: [Element<'input>; self.num_elements],
     }
 }
 
@@ -179,8 +179,8 @@ pub fn arrow_pipeline_then_sum<'s, 'p>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn finalize_with_sum<'p, 'e>(
-    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
+pub fn finalize_with_sum<'e>(
+    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'e>,
     then_stats_agg: toolkit_experimental::PipelineThenSum<'e>,
 ) -> toolkit_experimental::PipelineThenSum<'e> {
     if then_stats_agg.num_elements == 0 {
@@ -229,7 +229,7 @@ pg_type! {
     #[derive(Debug)]
     struct PipelineThenAverage<'input> {
         num_elements: u64,
-        elements: [Element; self.num_elements],
+        elements: [Element<'input>; self.num_elements],
     }
 }
 
@@ -278,8 +278,8 @@ pub fn arrow_pipeline_then_average<'s, 'p>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn finalize_with_average<'p, 'e>(
-    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
+pub fn finalize_with_average<'e>(
+    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'e>,
     then_stats_agg: toolkit_experimental::PipelineThenAverage<'e>,
 ) -> toolkit_experimental::PipelineThenAverage<'e> {
     if then_stats_agg.num_elements == 0 {
@@ -328,7 +328,7 @@ pg_type! {
     #[derive(Debug)]
     struct PipelineThenNumVals<'input> {
         num_elements: u64,
-        elements: [Element; self.num_elements],
+        elements: [Element<'input>; self.num_elements],
     }
 }
 
@@ -370,8 +370,8 @@ pub fn arrow_pipeline_then_num_vals<'s, 'p>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn finalize_with_num_vals<'p, 'e>(
-    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
+pub fn finalize_with_num_vals<'e>(
+    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'e>,
     then_stats_agg: toolkit_experimental::PipelineThenNumVals<'e>,
 ) -> toolkit_experimental::PipelineThenNumVals<'e> {
     if then_stats_agg.num_elements == 0 {
@@ -416,7 +416,7 @@ pg_type! {
     #[derive(Debug)]
     struct PipelineThenCounterAgg<'input> {
         num_elements: u64,
-        elements: [Element; self.num_elements],
+        elements: [Element<'input>; self.num_elements],
     }
 }
 
@@ -440,8 +440,8 @@ pub fn run_pipeline_then_counter_agg<'s, 'p>(
 }
 
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
-pub fn finalize_with_counter_agg<'p, 'e>(
-    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
+pub fn finalize_with_counter_agg<'e>(
+    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'e>,
     then_counter_agg: toolkit_experimental::PipelineThenCounterAgg<'e>,
 ) -> toolkit_experimental::PipelineThenCounterAgg<'e> {
     if then_counter_agg.num_elements == 0 {
@@ -517,7 +517,7 @@ pg_type! {
     struct PipelineThenHyperLogLog<'input> {
         hll_size: u64,
         num_elements: u64,
-        elements: [Element; self.num_elements],
+        elements: [Element<'input>; self.num_elements],
     }
 }
 
@@ -539,8 +539,8 @@ pub fn run_pipeline_then_hyperloglog<'s, 'p>(
 }
 
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
-pub fn finalize_with_hyperloglog<'p, 'e>(
-    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
+pub fn finalize_with_hyperloglog<'e>(
+    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'e>,
     then_hyperloglog: toolkit_experimental::PipelineThenHyperLogLog<'e>,
 ) -> toolkit_experimental::PipelineThenHyperLogLog<'e> {
     if then_hyperloglog.num_elements == 0 {

@@ -1,0 +1,47 @@
+calculation = _{ SOI ~ let_expr ~ EOI }
+let_expr = { ("let" ~ var ~ "=" ~ tuple ~ ";")* ~ tuple }
+tuple = { binops ~ ("," ~ binops)* }
+binops = { unary ~ (operation ~ unary)* }
+unary = _{ neg | not | term }
+neg = { "-" ~ unary }
+not = { ^"not" ~ unary }
+term = _{
+    val_var | time_var | var
+    | time | interval | num | function
+    | "(" ~ let_expr ~ ")"
+}
+function = { function_name ~ "(" ~ (binops ~ ("," ~ binops)*  ~ ","?)? ~ ")" }
+
+operation = _{
+    add | subtract | multiply | divide | power
+    | eq | neq | le | ge | lt | gt
+    | and | or
+}
+    add      = { "+" }
+    subtract = { "-" }
+    multiply = { "*" }
+    divide   = { "/" }
+    power    = { "^" }
+    eq       = { "=" }
+    neq      = { "!=" | "<>" }
+    lt       = { "<" }
+    le       = { "<=" }
+    gt       = { ">" }
+    ge       = { ">=" }
+    and      = { ^"and" }
+    or       = { ^"or" }
+
+num = @{ int ~ ("." ~ ASCII_DIGIT*)? ~ (^"e" ~ int)? }
+    int = { ("+" | "-")? ~ ASCII_DIGIT+ }
+
+time_var = @{ ^"$time" }
+val_var = @{ ^"$value" }
+
+time = @{ string ~ "t" }
+interval = @{ string ~ "i" }
+string = _{ "'" ~ (!"'" ~ ANY)* ~ "'" }
+
+var = @{ "$" ~ (ASCII_ALPHANUMERIC | "_")+ }
+function_name = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC* }
+
+WHITESPACE = _{ " " | "\t" }

@@ -9,6 +9,120 @@ use crate::{
     serialization::PgProcId,
 };
 
+// TODO is (stable, parallel_safe) correct?
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name="map",
+    schema="toolkit_experimental"
+)]
+pub fn map_lambda_pipeline_element<'l, 'e>(
+    lambda: toolkit_experimental::Lambda<'l>,
+) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+    let expression = lambda.parse();
+    if expression.ty() != &lambda::Type::Double && !expression.ty_is_ts_point() {
+        panic!("invalid lambda type: the lambda must return a DOUBLE PRECISION or (TimestampTZ, DOUBLE PRECISION)")
+    }
+
+    Element::MapLambda { lambda: lambda.into_data() }.flatten()
+}
+
+pub fn apply_lambda_to<'a>(mut series: Timevector<'a>, lambda: &lambda::LambdaData<'_>)
+-> Timevector<'a> {
+    let expression = lambda.parse();
+    let only_val = expression.ty() == &lambda::Type::Double;
+    if !only_val && !expression.ty_is_ts_point() {
+        panic!("invalid lambda type: the lambda must return a DOUBLE PRECISION or (TimestampTZ, DOUBLE PRECISION)")
+    }
+
+    let mut executor = lambda::ExpressionExecutor::new(&expression);
+
+
+    let invoke = |time: i64, value: f64| {
+        use lambda::Value::*;
+        executor.reset();
+        let result = executor.exec(value, time);
+        match result {
+            Double(f) => (None, Some(f)),
+            Time(t) => (Some(t), None),
+            Tuple(cols) =>
+                match &*cols {
+                    [Time(t), Double(f)] => (Some(*t), Some(*f)),
+                    _ => unreachable!(),
+                },
+
+            _ => unreachable!(),
+        }
+    };
+
+    map_lambda_over_series(&mut series, only_val, invoke);
+    series
+}
+
+pub fn map_lambda_over_series(
+    series: &mut Timevector<'_>,
+    only_val: bool,
+    mut func: impl FnMut(i64, f64) -> (Option<i64>, Option<f64>),
+) {
+    use SeriesType::*;
+
+    match &mut series.series {
+        SortedSeries { points, .. } => if only_val {
+            let points = points.as_owned();
+            for point in points {
+                let (_, new_val) = func(point.ts, point.val);
+                *point = TSPoint {
+                    ts: point.ts,
+                    val: new_val.unwrap_or(point.val),
+                }
+            }
+        },
+        // NormalSeries { values, .. } => if only_val {
+        //     // TODO
+        //     let values = values.as_owned();
+        //     for value in values {
+        //         *value = func(*value)
+        //     }
+        // },
+        ExplicitSeries { points, .. } => {
+            let points = points.as_owned();
+            // FIXME ensure sorted
+            for point in points {
+                let (new_time, new_val) = func(point.ts, point.val);
+                *point = TSPoint {
+                    ts: new_time.unwrap_or(point.ts),
+                    val: new_val.unwrap_or(point.val),
+                }
+            }
+        },
+        // GappyNormalSeries { values, .. } => if only_val {
+        //     // TODO
+        //     let values = values.as_owned();
+        //     //FIXME add setjmp guard around loop
+        //     for value in values {
+        //         *value = func(*value)
+        //     }
+        // },
+        _ => {
+            let new_points: Vec<_> = series.iter().map(|point| {
+                let (new_time, new_val) = func(point.ts, point.val);
+                TSPoint {
+                    ts: new_time.unwrap_or(point.ts),
+                    val: new_val.unwrap_or(point.val),
+                }
+            }).collect();
+            *series = build! {
+                Timevector {
+                    series: ExplicitSeries {
+                        num_points: new_points.len() as _,
+                        points: new_points.into(),
+                    },
+                }
+            }
+        }
+    }
+}
+
 #[pg_extern(
     stable,
     parallel_safe,
@@ -21,7 +135,7 @@ pub fn map_series_pipeline_element<'e>(
     map_series_element(function).flatten()
 }
 
-pub fn map_series_element(function: pg_sys::regproc) -> Element {
+pub fn map_series_element<'a>(function: pg_sys::regproc) -> Element<'a> {
     check_user_function_type(function);
     Element::MapSeries { function: PgProcId(function) }
 }
@@ -191,6 +305,65 @@ pub fn map_series(series: &mut Timevector<'_>, mut func: impl FnMut(f64) -> f64)
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {
     use pgx::*;
+
+    #[pg_test]
+    fn test_pipeline_map_lambda() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            // using the search path trick for this test b/c the operator is
+            // difficult to spot otherwise.
+            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
+
+            client.select(
+                "CREATE TABLE series(time timestamptz, value double precision)",
+                None,
+                None
+            );
+            client.select(
+                "INSERT INTO series \
+                    VALUES \
+                    ('2020-01-04 UTC'::TIMESTAMPTZ, 25.0), \
+                    ('2020-01-01 UTC'::TIMESTAMPTZ, 10.0), \
+                    ('2020-01-03 UTC'::TIMESTAMPTZ, 20.0), \
+                    ('2020-01-02 UTC'::TIMESTAMPTZ, 15.0), \
+                    ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)",
+                None,
+                None
+            );
+
+            let val = client.select(
+                "SELECT (timevector(time, value))::TEXT FROM series",
+                None,
+                None
+            )
+                .first()
+                .get_one::<String>();
+            assert_eq!(val.unwrap(), "[\
+                (ts:\"2020-01-04 00:00:00+00\",val:25),\
+                (ts:\"2020-01-01 00:00:00+00\",val:10),\
+                (ts:\"2020-01-03 00:00:00+00\",val:20),\
+                (ts:\"2020-01-02 00:00:00+00\",val:15),\
+                (ts:\"2020-01-05 00:00:00+00\",val:30)\
+            ]");
+
+            let val = client.select(
+                "SELECT (timevector(time, value) -> map($$ ($time + '1 day'i, $value * 2) $$))::TEXT FROM series",
+                None,
+                None
+            )
+                .first()
+                .get_one::<String>();
+            assert_eq!(val.unwrap(), "[\
+                (ts:\"2020-01-05 00:00:00+00\",val:50),\
+                (ts:\"2020-01-02 00:00:00+00\",val:20),\
+                (ts:\"2020-01-04 00:00:00+00\",val:40),\
+                (ts:\"2020-01-03 00:00:00+00\",val:30),\
+                (ts:\"2020-01-06 00:00:00+00\",val:60)\
+            ]");
+        });
+    }
 
     #[pg_test]
     fn test_pipeline_map_data() {

@@ -1,0 +1,691 @@
+
+use pgx::*;
+
+use super::*;
+
+pub use executor::ExpressionExecutor;
+
+mod parser;
+mod executor;
+
+mod toolkit_experimental {
+    pub(crate) use super::*;
+
+    varlena_type!(Lambda);
+}
+
+
+//
+// lambda type
+//
+
+pg_type! {
+    #[derive(Debug)]
+    struct Lambda<'input> {
+        len: u32,
+        string: [u8; self.len],
+    }
+}
+
+
+impl<'input> InOutFuncs for Lambda<'input> {
+    fn output(&self, buffer: &mut StringInfo) {
+        use crate::serialization::{EncodedStr::*, str_to_db_encoding};
+
+        let stringified = std::str::from_utf8(self.string.as_slice()).unwrap();
+        match str_to_db_encoding(&stringified) {
+            Utf8(s) => buffer.push_str(s),
+            Other(s) => buffer.push_bytes(s.to_bytes()),
+        }
+    }
+
+    fn input(input: &std::ffi::CStr) -> Self
+    where
+        Self: Sized,
+    {
+        use crate::serialization::str_from_db_encoding;
+
+        let s = str_from_db_encoding(input);
+        // validate the string
+        let _ = parser::parse_expression(s);
+        unsafe {
+            flatten! {
+                Lambda {
+                    len: s.as_bytes().len() as _,
+                    string: s.as_bytes().into(),
+                }
+            }
+        }
+    }
+}
+
+impl<'a> LambdaData<'a> {
+    pub fn parse(&self) -> Expression {
+        parser::parse_expression(std::str::from_utf8(self.string.as_slice()).unwrap())
+    }
+}
+
+
+//
+// Direct lambda execution functions for testing
+//
+
+#[pg_extern(
+    stable,
+    parallel_safe,
+    schema="toolkit_experimental"
+)]
+pub fn bool_lambda<'s>(
+    lambda: toolkit_experimental::Lambda<'s>,
+    time: pg_sys::TimestampTz,
+    value: f64
+) -> bool {
+    let expression = lambda.parse();
+    if expression.expr.ty() != &Type::Bool {
+        panic!("invalid return type, must return a BOOLEAN for {:?}", expression)
+    }
+    let mut executor = ExpressionExecutor::new(&expression);
+    executor.exec(value, time).bool()
+}
+
+#[pg_extern(
+    stable,
+    parallel_safe,
+    schema="toolkit_experimental"
+)]
+pub fn f64_lambda<'s>(
+    lambda: toolkit_experimental::Lambda<'s>,
+    time: pg_sys::TimestampTz,
+    value: f64
+) -> f64 {
+    let expression = lambda.parse();
+    if expression.expr.ty() != &Type::Double {
+        panic!("invalid return type, must return a DOUBLE PRECISION")
+    }
+    let mut executor = ExpressionExecutor::new(&expression);
+    executor.exec(value, time).float()
+}
+
+#[pg_extern(
+    stable,
+    parallel_safe,
+    schema="toolkit_experimental"
+)]
+pub fn ttz_lambda<'s>(
+    lambda: toolkit_experimental::Lambda<'s>,
+    time: pg_sys::TimestampTz,
+    value: f64
+) -> pg_sys::TimestampTz {
+    let expression = lambda.parse();
+    if expression.expr.ty() != &Type::Time {
+        panic!("invalid return type, must return a TimestampTZ")
+    }
+    let mut executor = ExpressionExecutor::new(&expression);
+    executor.exec(value, time).time()
+}
+
+pub type Interval = pg_sys::Datum;
+#[pg_extern(
+    stable,
+    parallel_safe,
+    schema="toolkit_experimental"
+)]
+pub fn interval_lambda<'s>(
+    lambda: toolkit_experimental::Lambda<'s>,
+    time: pg_sys::TimestampTz,
+    value: f64
+) -> Interval {
+    let expression = lambda.parse();
+    if expression.expr.ty() != &Type::Interval {
+        panic!("invalid return type, must return a INTERVAL")
+    }
+    let mut executor = ExpressionExecutor::new(&expression);
+    executor.exec(value, time).interval() as _
+}
+
+#[pg_extern(
+    stable,
+    parallel_safe,
+    schema="toolkit_experimental"
+)]
+pub fn point_lambda<'s>(
+    lambda: toolkit_experimental::Lambda<'s>,
+    time: pg_sys::TimestampTz,
+    value: f64
+) -> impl std::iter::Iterator<Item = (name!(time,pg_sys::TimestampTz),name!(value,f64))> {
+    let expression = lambda.parse();
+    if !expression.expr.ty_is_ts_point() {
+        panic!("invalid return type, must return a (TimestampTZ, DOUBLE PRECISION)")
+    }
+
+    let mut executor = ExpressionExecutor::new(&expression);
+    let columns = match executor.exec(value, time) {
+        Value::Tuple(columns) => columns,
+        _ => unreachable!(),
+    };
+    Some((columns[0].time(), columns[1].float())).into_iter()
+}
+
+
+//
+// Common types across the parser and executor
+//
+
+// expressions
+#[derive(Debug)]
+pub struct Expression {
+    variables: Vec<ExpressionSegment>,
+    expr: ExpressionSegment,
+}
+
+#[derive(Clone, Debug)]
+enum ExpressionSegment {
+    ValueVar,
+    TimeVar,
+    DoubleConstant(f64),
+    TimeConstant(i64),
+    IntervalConstant(*mut pg_sys::Interval),
+    UserVar(usize, Type),
+    Unary(UnaryOp, Box<Self>, Type),
+    Binary(BinOp, Box<Self>, Box<Self>, Type),
+    FunctionCall(Function, Vec<Self>),
+    BuildTuple(Vec<Self>, Type),
+}
+
+#[derive(Clone, Copy, Debug)]
+enum UnaryOp {
+    Not,
+    Negative,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum BinOp {
+    Plus,
+    Minus,
+    Mul,
+    Div,
+    Pow,
+    Eq,
+    Lt,
+    Le,
+    Gt,
+    Ge,
+    Neq,
+    And,
+    Or,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub enum Function {
+    Abs,
+    Cbrt,
+    Ceil,
+    Floor,
+    Ln,
+    Log10,
+    Log,
+    Pi,
+    Round,
+    Sign,
+    Sqrt,
+    Trunc,
+    Acos,
+    Asin,
+    Atan,
+    Atan2,
+    Cos,
+    Sin,
+    Tan,
+    Sinh,
+    Cosh,
+    Tanh,
+    Asinh,
+    Acosh,
+    Atanh,
+}
+
+// types
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Type {
+    Time,
+    Double,
+    Bool,
+    Interval,
+    Tuple(Vec<Self>),
+}
+
+// values
+#[derive(Clone, Debug)]
+pub enum Value {
+    Bool(bool),
+    Double(f64),
+    Time(i64),
+    Interval(*mut pg_sys::Interval),
+    Tuple(Vec<Self>),
+}
+
+impl Expression {
+    pub fn ty(&self) -> &Type {
+        self.expr.ty()
+    }
+
+    pub fn ty_is_ts_point(&self) -> bool {
+        self.expr.ty_is_ts_point()
+    }
+}
+
+impl ExpressionSegment {
+    pub fn ty(&self) -> &Type {
+        use Type::*;
+        use ExpressionSegment::*;
+        match self {
+            ValueVar => &Double,
+            TimeVar => &Time,
+            DoubleConstant(_) => &Double,
+            TimeConstant(_) => &Time,
+            IntervalConstant(_) => &Interval,
+            UserVar(_, ty) => ty,
+            FunctionCall(_, _) => &Double,
+            Unary(_, _, ty) => ty,
+            Binary(_, _, _, ty) => ty,
+            BuildTuple(_, ty) => ty,
+        }
+    }
+
+    pub fn ty_is_ts_point(&self) -> bool {
+        let columns = match self {
+            ExpressionSegment::BuildTuple(_, Type::Tuple(ty)) => ty,
+            _ => return false,
+        };
+
+        matches!(&**columns, [Type::Time, Type::Double])
+    }
+}
+
+impl Value {
+    pub(crate) fn bool(&self) -> bool {
+        match self {
+            Value::Bool(b) => *b,
+            _ => unreachable!(),
+        }
+    }
+
+    pub(crate) fn float(&self) -> f64 {
+        match self {
+            Value::Double(f) => *f,
+            _ => unreachable!(),
+        }
+    }
+
+    pub(crate) fn time(&self) -> i64 {
+        match self {
+            Value::Time(t) => *t,
+            _ => unreachable!(),
+        }
+    }
+
+    pub(crate) fn interval(&self) -> *mut pg_sys::Interval {
+        match self {
+            Value::Interval(i) => *i,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl PartialOrd for Value {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        use std::mem::discriminant;
+        use Value::*;
+
+        extern "C" {
+            fn interval_cmp(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
+        }
+
+        if discriminant(self) != discriminant(other) {
+            return None
+        }
+        match (self, other) {
+            (Bool(l0), Bool(r0)) => l0.partial_cmp(r0),
+            (Double(l0), Double(r0)) => l0.partial_cmp(r0),
+            (Time(l0), Time(r0)) => l0.partial_cmp(r0),
+            (Tuple(l0), Tuple(r0)) => l0.partial_cmp(r0),
+            (Interval(l0), Interval(r0)) => unsafe {
+                let res = pg_sys::DirectFunctionCall2Coll(
+                    Some(interval_cmp),
+                    pg_sys::InvalidOid,
+                    *l0 as _,
+                    *r0 as _,
+                ) as i32;
+                if res < 0 {
+                    std::cmp::Ordering::Less
+                } else if res == 0 {
+                    std::cmp::Ordering::Equal
+                } else {
+                    std::cmp::Ordering::Greater
+                }.into()
+            },
+            (_, _) => None,
+        }
+    }
+}
+
+impl PartialEq for Value {
+    fn eq(&self, other: &Self) -> bool {
+        use std::mem::discriminant;
+        use Value::*;
+        extern "C" {
+            fn interval_eq(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
+        }
+
+        if discriminant(self) != discriminant(other) {
+            return false
+        }
+        match (self, other) {
+            (Bool(l0), Bool(r0)) => l0 == r0,
+            (Double(l0), Double(r0)) => l0 == r0,
+            (Time(l0), Time(r0)) => l0 == r0,
+            (Tuple(l0), Tuple(r0)) => l0 == r0,
+            (Interval(l0), Interval(r0)) => unsafe {
+                let res = pg_sys::DirectFunctionCall2Coll(
+                    Some(interval_eq),
+                    pg_sys::InvalidOid,
+                    *l0 as _,
+                    *r0 as _,
+                );
+                res != 0
+            },
+            (_, _) => false,
+        }
+    }
+}
+
+impl From<bool> for Value {
+    fn from(b: bool) -> Self {
+        Self::Bool(b)
+    }
+}
+
+impl From<f64> for Value {
+    fn from(f: f64) -> Self {
+        Self::Double(f)
+    }
+}
+
+impl<'a> Lambda<'a> {
+    pub fn into_data(self) -> LambdaData<'a> {
+        self.0
+    }
+}
+
+#[cfg(any(test, feature = "pg_test"))]
+mod tests {
+    use pgx::*;
+
+    macro_rules! interval_lambda {
+        ($client: expr, $expr:literal) => {
+            $client.select(
+                concat!("SELECT interval_lambda($$ ", $expr ," $$, now(), 2.0)::text"),
+                None,
+                None,
+            ).first().get_one::<String>().unwrap()
+        };
+    }
+
+    macro_rules! f64_lambda {
+        ($client: expr, $expr:literal) => {
+            $client.select(
+                concat!("SELECT f64_lambda($$ ", $expr ," $$, now(), 2.0)"),
+                None,
+                None,
+            ).first().get_one::<f64>().unwrap()
+        };
+    }
+
+    macro_rules! bool_lambda {
+        ($client: expr, $expr:literal) => {
+            $client.select(
+                concat!("SELECT bool_lambda($$ ", $expr ," $$, now(), 2.0)::text"),
+                None,
+                None,
+            ).first().get_one::<String>().unwrap()
+        };
+    }
+
+    macro_rules! interval_lambda_eq {
+        ($client: expr, $expr:literal, $expects:literal) => {
+            assert_eq!(
+                interval_lambda!($client, $expr),
+                $expects,
+            )
+        };
+    }
+
+    macro_rules! f64_lambda_eq {
+        ($client: expr, $expr:literal, $expects:expr) => {
+            assert_eq!(
+                f64_lambda!($client, $expr),
+                $expects,
+            )
+        };
+    }
+
+    macro_rules! bool_lambda_eq {
+        ($client: expr, $expr:literal, $expects:literal) => {
+            assert_eq!(
+                bool_lambda!($client, $expr),
+                $expects,
+            )
+        };
+    }
+
+    #[pg_test]
+    fn test_lambda_general() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            // using the search path trick for this test b/c the operator is
+            // difficult to spot otherwise.
+            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
+            client.select("SELECT $$ let $1 = 1.0; 2.0, $1 $$::toolkit_experimental.lambda", None, None);
+            // client.select("SELECT $$ '1 day'i $$::toolkit_experimental.lambda", None, None);
+            // client.select("SELECT $$ '2020-01-01't $$::toolkit_experimental.lambda", None, None);
+
+            let res = client.select("SELECT f64_lambda($$ 1.0 $$, now(), 0.0)::text", None, None)
+                .first().get_one::<String>();
+            assert_eq!(&*res.unwrap(), "1");
+
+            let res = client.select("SELECT f64_lambda($$ 1.0 + 1.0 $$, now(), 0.0)::text", None, None)
+                .first().get_one::<String>();
+            assert_eq!(&*res.unwrap(), "2");
+
+            let res = client.select("SELECT f64_lambda($$ 1.0 - 1.0 $$, now(), 0.0)::text", None, None)
+                .first().get_one::<String>();
+            assert_eq!(&*res.unwrap(), "0");
+
+            let res = client.select("SELECT f64_lambda($$ 2.0 * 3.0 $$, now(), 0.0)::text", None, None)
+                .first().get_one::<String>();
+            assert_eq!(&*res.unwrap(), "6");
+
+            let res = client.select("SELECT f64_lambda($$ $value + 3.0 $$, now(), 2.0)::text", None, None)
+                .first().get_one::<String>();
+            assert_eq!(&*res.unwrap(), "5");
+
+            let res = client.select("SELECT f64_lambda($$ 3.0 - 1.0 * 3.0 $$, now(), 2.0)::text", None, None)
+                .first().get_one::<String>();
+            assert_eq!(&*res.unwrap(), "0");
+
+            bool_lambda_eq!(client, "3.0 = 3.0", "true");
+            bool_lambda_eq!(client, "3.0 != 3.0", "false");
+            bool_lambda_eq!(client, "2.0 != 3.0", "true");
+            bool_lambda_eq!(client, "2.0 != 3.0 and 1 = 1", "true");
+            bool_lambda_eq!(client, "2.0 != 3.0 and (1 = 1)", "true");
+
+            let res = client.select("SELECT ttz_lambda($$ '2020-11-22 13:00:01't $$, now(), 2.0)::text", None, None)
+                .first().get_one::<String>();
+            assert_eq!(&*res.unwrap(), "2020-11-22 13:00:01+00");
+
+            let res = client.select("SELECT ttz_lambda($$ $time $$, '1930-01-12 14:20:21', 2.0)::text", None, None)
+                .first().get_one::<String>();
+            assert_eq!(&*res.unwrap(), "1930-01-12 14:20:21+00");
+
+            let res = client.select("SELECT ttz_lambda($$ '2020-11-22 13:00:01't - '1 day'i $$, now(), 2.0)::text", None, None)
+                .first().get_one::<String>();
+            assert_eq!(&*res.unwrap(), "2020-11-21 13:00:01+00");
+
+            let res = client.select("SELECT ttz_lambda($$ '2020-11-22 13:00:01't + '1 day'i $$, now(), 2.0)::text", None, None)
+                .first().get_one::<String>();
+            assert_eq!(&*res.unwrap(), "2020-11-23 13:00:01+00");
+
+
+            let res = client.select("SELECT point_lambda($$ '2020-11-22 13:00:01't + '1 day'i, 2.0 * 3.0 $$, now(), 2.0)::text", None, None)
+                .first().get_one::<String>();
+            assert_eq!(&*res.unwrap(), "(\"2020-11-23 13:00:01+00\",6)");
+        });
+    }
+
+    #[pg_test]
+    fn test_lambda_comparison() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            // using the search path trick for this test b/c the operator is
+            // difficult to spot otherwise.
+            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
+
+            bool_lambda_eq!(client, "2.0 <  3.0", "true");
+            bool_lambda_eq!(client, "2.0 <= 3.0", "true");
+            bool_lambda_eq!(client, "2.0 >  3.0", "false");
+            bool_lambda_eq!(client, "2.0 >= 3.0", "false");
+            bool_lambda_eq!(client, "4.0 >  3.0", "true");
+            bool_lambda_eq!(client, "4.0 >= 3.0", "true");
+            bool_lambda_eq!(client, "4.0 >  4.0", "false");
+            bool_lambda_eq!(client, "4.0 >= 4.0", "true");
+
+            bool_lambda_eq!(client, "'2020-01-01't <  '2021-01-01't", "true");
+            bool_lambda_eq!(client, "'2020-01-01't <= '2021-01-01't", "true");
+            bool_lambda_eq!(client, "'2020-01-01't >  '2021-01-01't", "false");
+            bool_lambda_eq!(client, "'2020-01-01't >= '2021-01-01't", "false");
+            bool_lambda_eq!(client, "'2022-01-01't <  '2021-01-01't", "false");
+            bool_lambda_eq!(client, "'2022-01-01't <= '2021-01-01't", "false");
+            bool_lambda_eq!(client, "'2022-01-01't >  '2021-01-01't", "true");
+            bool_lambda_eq!(client, "'2022-01-01't >= '2021-01-01't", "true");
+            bool_lambda_eq!(client, "'2022-01-01't >  '2021-01-01't", "true");
+            bool_lambda_eq!(client, "'2022-01-01't >= '2021-01-01't", "true");
+
+            bool_lambda_eq!(client, "'1 day'i  <  '1 week'i", "true");
+            bool_lambda_eq!(client, "'1 day'i  <= '1 week'i", "true");
+            bool_lambda_eq!(client, "'1 day'i  >  '1 week'i", "false");
+            bool_lambda_eq!(client, "'1 day'i  >= '1 week'i ", "false");
+            bool_lambda_eq!(client, "'1 year'i >  '1 week'i", "true");
+            bool_lambda_eq!(client, "'1 year'i >= '1 week'i", "true");
+            bool_lambda_eq!(client, "'1 year'i >  '1 year'i", "false");
+            bool_lambda_eq!(client, "'1 year'i >= '1 year'i", "true");
+        });
+    }
+
+    #[pg_test]
+    fn test_lambda_function() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            // using the search path trick for this test b/c the operator is
+            // difficult to spot otherwise.
+            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
+
+            f64_lambda_eq!(client, "pi()",    std::f64::consts::PI);
+
+            f64_lambda_eq!(client, "abs(-2.0)",   (-2.0f64).abs());
+            f64_lambda_eq!(client, "cbrt(-2.0)",  (-2.0f64).cbrt());
+            f64_lambda_eq!(client, "ceil(-2.1)",  (-2.1f64).ceil());
+            f64_lambda_eq!(client, "floor(-2.1)", (-2.1f64).floor());
+            f64_lambda_eq!(client, "ln(2.0)",     ( 2.0f64).ln());
+            f64_lambda_eq!(client, "log10(2.0)",  ( 2.0f64).log10());
+            f64_lambda_eq!(client, "round(-2.1)", (-2.1f64).round());
+            f64_lambda_eq!(client, "sign(-2.0)",  (-2.0f64).signum());
+            f64_lambda_eq!(client, "sqrt(2.0)",   ( 2.0f64).sqrt());
+            f64_lambda_eq!(client, "trunc(-2.0)", (-2.0f64).trunc());
+            f64_lambda_eq!(client, "acos(0.2)",   ( 0.2f64).acos());
+            f64_lambda_eq!(client, "asin(0.2)",   ( 0.2f64).asin());
+            f64_lambda_eq!(client, "atan(0.2)",   ( 0.2f64).atan());
+            f64_lambda_eq!(client, "cos(2.0)",    ( 2.0f64).cos());
+            f64_lambda_eq!(client, "sin(2.0)",    ( 2.0f64).sin());
+            f64_lambda_eq!(client, "tan(2.0)",    ( 2.0f64).tan());
+            f64_lambda_eq!(client, "sinh(2.0)",   ( 2.0f64).sinh());
+            f64_lambda_eq!(client, "cosh(2.0)",   ( 2.0f64).cosh());
+            f64_lambda_eq!(client, "tanh(2.0)",   ( 2.0f64).tanh());
+            f64_lambda_eq!(client, "asinh(1.0)",  ( 1.0f64).asinh());
+            f64_lambda_eq!(client, "acosh(1.0)",  ( 1.0f64).acosh());
+            f64_lambda_eq!(client, "atanh(1.0)",  ( 1.0f64).atanh());
+
+            f64_lambda_eq!(client, "log(2.0, 10)",   2.0f64.log(10.0));
+            f64_lambda_eq!(client, "atan2(2.0, 10)", 2.0f64.atan2(10.0));
+
+        });
+    }
+
+    #[pg_test]
+    fn test_lambda_unary() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            // using the search path trick for this test b/c the operator is
+            // difficult to spot otherwise.
+            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
+
+            f64_lambda_eq!(client, "-(2.0)", -2.0f64);
+            f64_lambda_eq!(client, "-(-2.0)", 2.0f64);
+
+            bool_lambda_eq!(client, "not (1 = 1)",  "false");
+            bool_lambda_eq!(client, "not (1 = 2)",  "true");
+            bool_lambda_eq!(client, "not not (1 = 1)",  "true");
+            bool_lambda_eq!(client, "not not (1 = 2)",  "false");
+            bool_lambda_eq!(client, "not (1 <> 1)",  "true");
+            bool_lambda_eq!(client, "not (1 <> 2)",  "false");
+        });
+    }
+
+    #[pg_test]
+    fn test_lambda_interval_ops() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            // using the search path trick for this test b/c the operator is
+            // difficult to spot otherwise.
+            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
+
+            interval_lambda_eq!(client, "'1 day'i + '1 day'i", "2 days");
+            interval_lambda_eq!(client, "'1 day'i + '1 week'i", "8 days");
+            interval_lambda_eq!(client, "'1 week'i - '1 day'i", "6 days");
+
+            interval_lambda_eq!(client, "'1 day'i * 3", "3 days");
+            interval_lambda_eq!(client, "4 * '1 day'i", "4 days");
+            interval_lambda_eq!(client, "'4 day'i / 4", "1 day");
+        });
+    }
+
+    #[pg_test]
+    fn test_lambda_variable() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            // using the search path trick for this test b/c the operator is
+            // difficult to spot otherwise.
+            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
+
+            f64_lambda_eq!(client, "let $foo = 2.0; $foo", 2.0);
+            f64_lambda_eq!(client, "let $foo = -2.0; $foo", -2.0);
+            f64_lambda_eq!(client, "let $foo = abs(-2.0); $foo", 2.0);
+            f64_lambda_eq!(client, "let $foo = abs(-2.0); $foo * $foo", 4.0);
+
+            bool_lambda_eq!(client, "let $foo = 1 = 1; $foo", "true");
+            bool_lambda_eq!(client, "let $foo = 1 = 1; $foo and $foo", "true");
+            bool_lambda_eq!(client, "let $foo = 1 = 1; $foo or $foo", "true");
+        });
+    }
+}

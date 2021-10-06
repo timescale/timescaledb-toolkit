@@ -14,6 +14,7 @@ use crate::{
 pub mod toolkit_experimental {
     pub(crate) use super::*;
     varlena_type!(PipelineThenUnnest);
+    varlena_type!(PipelineForceMaterialize);
 }
 
 pg_type! {
@@ -80,7 +81,15 @@ pub fn arrow_run_pipeline_then_unnest<'s, 'p>(
     crate::time_series::unnest(series.into())
 }
 
+pg_type! {
+    #[derive(Debug)]
+    struct PipelineForceMaterialize<'input> {
+        num_elements: u64,
+        elements: [Element; self.num_elements],
+    }
+}
 
+ron_inout_funcs!(PipelineForceMaterialize);
 
 #[pg_extern(
     immutable,
@@ -88,13 +97,50 @@ pub fn arrow_run_pipeline_then_unnest<'s, 'p>(
     name="series",
     schema="toolkit_experimental"
 )]
-pub fn pipeline_series<'e>() -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+pub fn pipeline_series<'e>() -> toolkit_experimental::PipelineForceMaterialize<'e> {
     build! {
-        UnstableTimeseriesPipeline {
+        PipelineForceMaterialize {
             num_elements: 0,
             elements: vec![].into(),
         }
     }
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_force_materialize<'p, 'e>(
+    mut pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
+    then_stats_agg: toolkit_experimental::PipelineForceMaterialize<'e>,
+) -> toolkit_experimental::PipelineForceMaterialize<'e> {
+    if then_stats_agg.num_elements == 0 {
+        // flatten immediately so we don't need a temporary allocation for elements
+        return unsafe {flatten! {
+            PipelineForceMaterialize {
+                num_elements: pipeline.0.num_elements,
+                elements: pipeline.0.elements,
+            }
+        }}
+    }
+
+    let mut elements = replace(pipeline.elements.as_owned(), vec![]);
+    elements.extend(then_stats_agg.elements.iter());
+    build! {
+        PipelineForceMaterialize {
+            num_elements: elements.len().try_into().unwrap(),
+            elements: elements.into(),
+        }
+    }
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_run_pipeline_then_materialize<'s, 'p>(
+    timeseries: toolkit_experimental::TimeSeries<'s>,
+    pipeline: toolkit_experimental::PipelineForceMaterialize<'p>,
+) -> toolkit_experimental::TimeSeries<'static>
+{
+    run_pipeline_elements(timeseries, pipeline.elements.iter())
+        .in_current_context()
 }
 
 #[cfg(any(test, feature = "pg_test"))]

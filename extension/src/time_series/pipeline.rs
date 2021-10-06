@@ -526,6 +526,33 @@ mod tests {
                     Arithmetic(function:Round,rhs:0),\
                     Arithmetic(function:Abs,rhs:0)\
                 ])'::unstabletimeseriespipeline)");
+
+            // `-> series()` should force materialization
+            let output = client.select(
+                "EXPLAIN (verbose) SELECT \
+                timeseries('2021-01-01'::timestamptz, 0.1) \
+                -> round() -> abs() \
+                -> series() \
+                -> abs() -> round();",
+                None,
+                None
+            ).skip(1)
+                .next().unwrap()
+                .by_ordinal(1).unwrap()
+                .value::<String>().unwrap();
+            // check that it's executing as if we had input `timeseries -> (round() -> abs())`
+            assert_eq!(output.trim(), "Output: \
+                (((\
+                    timeseries('2021-01-01 00:00:00+00'::timestamp with time zone, '0.1'::double precision) \
+                    -> '(version:1,num_elements:2,elements:[\
+                        Arithmetic(function:Round,rhs:0),\
+                        Arithmetic(function:Abs,rhs:0)\
+                        ])'::unstabletimeseriespipeline) \
+                    -> '(version:1,num_elements:0,elements:[])'::pipelineforcematerialize) \
+                    -> '(version:1,num_elements:2,elements:[\
+                        Arithmetic(function:Abs,rhs:0),\
+                        Arithmetic(function:Round,rhs:0)\
+                        ])'::unstabletimeseriespipeline)");
         });
     }
 }

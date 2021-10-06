@@ -480,7 +480,9 @@ pub fn accessor_variance_y(
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorSkewness {
+    struct AccessorSkewness<'input>  {
+        len: u32,
+        bytes: [u8; self.len],
     }
 }
 
@@ -488,9 +490,15 @@ ron_inout_funcs!(AccessorSkewness);
 
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="skewness")]
 pub fn accessor_skewness(
+    method: default!(&str, "sample"),
 ) -> toolkit_experimental::AccessorSkewness<'static> {
-    build!{
-        AccessorSkewness {
+    let _ = crate::stats_agg::method_kind(method);
+    unsafe {
+        flatten!{
+            AccessorSkewness {
+                len: method.len().try_into().unwrap(),
+                bytes: method.as_bytes().into(),
+            }
         }
     }
 }
@@ -498,7 +506,9 @@ pub fn accessor_skewness(
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorSkewnessX {
+    struct AccessorSkewnessX<'input>  {
+        len: u32,
+        bytes: [u8; self.len],
     }
 }
 
@@ -506,9 +516,15 @@ ron_inout_funcs!(AccessorSkewnessX);
 
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="skewness_x")]
 pub fn accessor_skewness_x(
+    method: default!(&str, "sample"),
 ) -> toolkit_experimental::AccessorSkewnessX<'static> {
-    build!{
-        AccessorSkewnessX {
+    let _ = crate::stats_agg::method_kind(method);
+    unsafe {
+        flatten!{
+            AccessorSkewnessX {
+                len: method.len().try_into().unwrap(),
+                bytes: method.as_bytes().into(),
+            }
         }
     }
 }
@@ -516,7 +532,9 @@ pub fn accessor_skewness_x(
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorSkewnessY {
+    struct AccessorSkewnessY<'input>  {
+        len: u32,
+        bytes: [u8; self.len],
     }
 }
 
@@ -524,9 +542,15 @@ ron_inout_funcs!(AccessorSkewnessY);
 
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="skewness_y")]
 pub fn accessor_skewness_y(
+    method: default!(&str, "sample"),
 ) -> toolkit_experimental::AccessorSkewnessY<'static> {
-    build!{
-        AccessorSkewnessY {
+    let _ = crate::stats_agg::method_kind(method);
+    unsafe {
+        flatten!{
+            AccessorSkewnessY {
+                len: method.len().try_into().unwrap(),
+                bytes: method.as_bytes().into(),
+            }
         }
     }
 }
@@ -534,7 +558,9 @@ pub fn accessor_skewness_y(
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorKurtosis {
+    struct AccessorKurtosis<'input>  {
+        len: u32,
+        bytes: [u8; self.len],
     }
 }
 
@@ -542,9 +568,15 @@ ron_inout_funcs!(AccessorKurtosis);
 
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="kurtosis")]
 pub fn accessor_kurtosis(
+    method: default!(&str, "sample"),
 ) -> toolkit_experimental::AccessorKurtosis<'static> {
-    build!{
-        AccessorKurtosis {
+    let _ = crate::stats_agg::method_kind(method);
+    unsafe {
+        flatten!{
+            AccessorKurtosis {
+                len: method.len().try_into().unwrap(),
+                bytes: method.as_bytes().into(),
+            }
         }
     }
 }
@@ -552,7 +584,9 @@ pub fn accessor_kurtosis(
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorKurtosisX {
+    struct AccessorKurtosisX<'input>  {
+        len: u32,
+        bytes: [u8; self.len],
     }
 }
 
@@ -560,9 +594,15 @@ ron_inout_funcs!(AccessorKurtosisX);
 
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="kurtosis_x")]
 pub fn accessor_kurtosis_x(
+    method: default!(&str, "sample"),
 ) -> toolkit_experimental::AccessorKurtosisX<'static> {
-    build!{
-        AccessorKurtosisX {
+    let _ = crate::stats_agg::method_kind(method);
+    unsafe {
+        flatten!{
+            AccessorKurtosisX {
+                len: method.len().try_into().unwrap(),
+                bytes: method.as_bytes().into(),
+            }
         }
     }
 }
@@ -570,7 +610,9 @@ pub fn accessor_kurtosis_x(
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorKurtosisY {
+    struct AccessorKurtosisY<'input>  {
+        len: u32,
+        bytes: [u8; self.len],
     }
 }
 
@@ -578,9 +620,15 @@ ron_inout_funcs!(AccessorKurtosisY);
 
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental" name="kurtosis_y")]
 pub fn accessor_kurtosis_y(
+    method: default!(&str, "sample"),
 ) -> toolkit_experimental::AccessorKurtosisY<'static> {
-    build!{
-        AccessorKurtosisY {
+    let _ = crate::stats_agg::method_kind(method);
+    unsafe {
+        flatten!{
+            AccessorKurtosisY {
+                len: method.len().try_into().unwrap(),
+                bytes: method.as_bytes().into(),
+            }
         }
     }
 }

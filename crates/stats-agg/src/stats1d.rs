@@ -252,12 +252,20 @@ impl StatsSummary1D{
         Some(self.var_samp()?.sqrt())
     }
 
-    pub fn skewness(&self) -> Option<f64> {
-        Some(self.n64().sqrt() * self.sx3 / self.sx2.powf(1.5))
+    pub fn skewness_pop(&self) -> Option<f64> {
+        Some(self.sx3 / self.n64() / self.stddev_pop()?.powi(3))
     }
 
-    pub fn kurtosis(&self) -> Option<f64> {
-        Some(self.n64() * self.sx4 / self.sx2.powi(2))
+    pub fn skewness_samp(&self) -> Option<f64> {
+        Some(self.sx3 / (self.n64() - 1.0) / self.stddev_samp()?.powi(3))
+    }
+
+    pub fn kurtosis_pop(&self) -> Option<f64> {
+        Some(self.sx4 / self.n64() / self.stddev_pop()?.powi(4))
+    }
+
+    pub fn kurtosis_samp(&self) -> Option<f64> {
+        Some(self.sx4 / (self.n64() - 1.0) / self.stddev_samp()?.powi(4))
     }
 }
 

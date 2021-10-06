@@ -87,3 +87,38 @@ pub fn generate_periodic_normal_series(
         (time, base + error)
     })
 }
+
+// Convert a timestamp to a double precision unix epoch
+extension_sql!(r#"
+CREATE OR REPLACE FUNCTION toolkit_experimental.to_epoch(timestamptz) RETURNS DOUBLE PRECISION LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS $$
+SELECT EXTRACT(EPOCH FROM $1);
+$$;
+"#);
+
+#[cfg(any(test, feature = "pg_test"))]
+mod tests {
+    use pgx::*;
+
+    #[pg_test]
+    fn test_to_epoch() {
+        Spi::execute(|client| {
+            let test_val = client
+                .select("SELECT toolkit_experimental.to_epoch('2021-01-01 00:00:00+03'::timestamptz)", None, None)
+                .first()
+                .get_one::<f64>().unwrap();
+            assert_eq!(test_val, 1609448400f64);
+
+            let test_val = client
+                .select("SELECT toolkit_experimental.to_epoch('epoch'::timestamptz)", None, None)
+                .first()
+                .get_one::<f64>().unwrap();
+            assert_eq!(test_val, 0f64);
+
+            let test_val = client
+                .select("SELECT toolkit_experimental.to_epoch('epoch'::timestamptz - interval '42 seconds')", None, None)
+                .first()
+                .get_one::<f64>().unwrap();
+            assert_eq!(test_val, -42f64);
+        });
+    }
+}

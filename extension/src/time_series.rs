@@ -158,7 +158,7 @@ impl<'input> TimeSeries<'input> {
 }
 
 impl<'a> TimeSeries<'a> {
-    fn iter(&self) -> Iter<'_> {
+    pub fn iter(&self) -> Iter<'_> {
         match &self.series {
             SeriesType::SortedSeries{points, ..} =>
                 Iter::Slice{iter: points.iter()},
@@ -171,7 +171,7 @@ impl<'a> TimeSeries<'a> {
         }
     }
 
-    fn into_iter(self) -> Iter<'a> {
+    pub fn into_iter(self) -> Iter<'a> {
         match self.0.series {
             SeriesType::SortedSeries{points, ..} =>
                 Iter::Slice{iter: points.into_iter()},
@@ -184,7 +184,7 @@ impl<'a> TimeSeries<'a> {
         }
     }
 
-    fn num_vals(&self) -> usize {
+    pub fn num_vals(&self) -> usize {
         match &self.series {
             SeriesType::SortedSeries { num_points, .. } => *num_points as _,
             SeriesType::NormalSeries { num_vals, .. } => *num_vals as _,

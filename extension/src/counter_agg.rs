@@ -22,7 +22,7 @@ use time_series::{
     TSPoint,
 };
 
-use counter_agg::{
+pub use counter_agg::{
     CounterSummary as InternalCounterSummary,
     range::I64Range,
 };
@@ -64,7 +64,7 @@ mod toolkit_experimental {
 }
 
 impl<'input> CounterSummary<'input> {
-    fn to_internal_counter_summary(&self) -> InternalCounterSummary {
+    pub fn to_internal_counter_summary(&self) -> InternalCounterSummary {
         InternalCounterSummary{
             first: self.first,
             second: self.second,
@@ -77,7 +77,7 @@ impl<'input> CounterSummary<'input> {
             bounds: self.bounds.to_i64range(),
         }
     }
-    fn from_internal_counter_summary(st: InternalCounterSummary) -> Self {
+    pub fn from_internal_counter_summary(st: InternalCounterSummary) -> Self {
         unsafe{
             flatten!(
             CounterSummary {

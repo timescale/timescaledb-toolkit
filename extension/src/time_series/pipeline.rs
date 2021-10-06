@@ -183,6 +183,17 @@ type Internal = usize;
 )]
 pub unsafe fn pipeline_support(input: Internal)
 -> Internal {
+    pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
+        let new_element = UnstableTimeseriesPipeline::from_datum(new_element, false, 0)
+            .unwrap();
+        add_unstable_element(old_pipeline, new_element).into_datum().unwrap()
+    })
+}
+
+pub(crate) unsafe fn pipeline_support_helper(
+    input: Internal,
+    make_new_pipeline: impl FnOnce(UnstableTimeseriesPipeline, pg_sys::Datum) -> pg_sys::Datum,
+) -> Internal {
     use std::{mem::{size_of, MaybeUninit}, ptr};
 
     let input: *mut pg_sys::Node = input as _;
@@ -199,17 +210,22 @@ pub unsafe fn pipeline_support(input: Internal)
     }
     let req: *mut SupportRequestSimplify = input.cast();
 
-    let original_args = PgList::from_pg((*(*req).fcall).args);
+    let final_executor = (*req).fcall;
+    let original_args = PgList::from_pg((*final_executor).args);
     assert_eq!(original_args.len(), 2);
     let arg1 = original_args.head().unwrap();
     let arg2 = original_args.tail().unwrap();
 
-    if !is_a(arg1, pg_sys::NodeTag_T_OpExpr) {
-        return ptr::null_mut::<pg_sys::Expr>() as _
-    }
-
-    let old_executor: *mut pg_sys::OpExpr = arg1.cast();
-    let executor_id = (*old_executor).opfuncid;
+    let (executor_id, lhs_args) =
+        if is_a(arg1, pg_sys::NodeTag_T_OpExpr) {
+            let old_executor: *mut pg_sys::OpExpr = arg1.cast();
+            ((*old_executor).opfuncid, (*old_executor).args)
+        } else if is_a(arg1, pg_sys::NodeTag_T_FuncExpr) {
+            let old_executor: *mut pg_sys::FuncExpr = arg1.cast();
+            ((*old_executor).funcid, (*old_executor).args)
+        } else {
+            return ptr::null_mut::<pg_sys::Expr>() as _
+        };
 
     // check old_executor operator fn is 'run_pipeline' above
     static RUN_PIPELINE_OID: once_cell::sync::OnceCell<pg_sys::Oid> = once_cell::sync::OnceCell::new();
@@ -242,7 +258,7 @@ pub unsafe fn pipeline_support(input: Internal)
 
     }
 
-    let lhs_args = PgList::from_pg((*old_executor).args);
+    let lhs_args = PgList::from_pg(lhs_args);
     assert_eq!(lhs_args.len(), 2);
     let old_series = lhs_args.head().unwrap();
     let old_const = lhs_args.tail().unwrap();
@@ -260,18 +276,14 @@ pub unsafe fn pipeline_support(input: Internal)
     let new_element_const: *mut pg_sys::Const = arg2.cast();
 
     let old_pipeline = UnstableTimeseriesPipeline::from_datum((*old_const).constvalue, false, 0).unwrap();
-    let new_element = UnstableTimeseriesPipeline::from_datum((*new_element_const).constvalue, false, 0)
-        .unwrap();
-    let new_pipeline = add_unstable_element(old_pipeline, new_element).into_datum().unwrap();
+    let new_pipeline = make_new_pipeline(old_pipeline, (*new_element_const).constvalue);
 
     let new_const = pg_sys::palloc(size_of::<pg_sys::Const>()).cast();
     *new_const = *new_element_const;
     (*new_const).constvalue = new_pipeline;
 
-    // TODO if the new element is a finalizer we need to change the execution
-    //      operator to the correct (new) one
-    let new_executor = pg_sys::palloc(size_of::<pg_sys::OpExpr>()).cast();
-    *new_executor = *old_executor;
+    let new_executor = pg_sys::palloc(size_of::<pg_sys::FuncExpr>()).cast();
+    *new_executor = *final_executor;
     let mut new_executor_args = PgList::new();
     new_executor_args.push(old_series);
     new_executor_args.push(new_const.cast());
@@ -512,7 +524,7 @@ mod tests {
             client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             let output = client.select(
-                "EXPLAIN (verbose) SELECT timeseries('2021-01-01'::timestamptz, 0.1) -> round() -> abs();",
+                "EXPLAIN (verbose) SELECT timeseries('2021-01-01'::timestamptz, 0.1) -> round() -> abs() -> round();",
                 None,
                 None
             ).skip(1)
@@ -521,38 +533,14 @@ mod tests {
                 .value::<String>().unwrap();
             // check that it's executing as if we had input `timeseries -> (round() -> abs())`
             assert_eq!(output.trim(), "Output: \
-                (timeseries('2021-01-01 00:00:00+00'::timestamp with time zone, '0.1'::double precision) \
-                -> '(version:1,num_elements:2,elements:[\
-                    Arithmetic(function:Round,rhs:0),\
-                    Arithmetic(function:Abs,rhs:0)\
-                ])'::unstabletimeseriespipeline)");
-
-            // `-> series()` should force materialization
-            let output = client.select(
-                "EXPLAIN (verbose) SELECT \
-                timeseries('2021-01-01'::timestamptz, 0.1) \
-                -> round() -> abs() \
-                -> series() \
-                -> abs() -> round();",
-                None,
-                None
-            ).skip(1)
-                .next().unwrap()
-                .by_ordinal(1).unwrap()
-                .value::<String>().unwrap();
-            // check that it's executing as if we had input `timeseries -> (round() -> abs())`
-            assert_eq!(output.trim(), "Output: \
-                (((\
-                    timeseries('2021-01-01 00:00:00+00'::timestamp with time zone, '0.1'::double precision) \
-                    -> '(version:1,num_elements:2,elements:[\
+                run_pipeline(\
+                    timeseries('2021-01-01 00:00:00+00'::timestamp with time zone, '0.1'::double precision), \
+                   '(version:1,num_elements:3,elements:[\
                         Arithmetic(function:Round,rhs:0),\
-                        Arithmetic(function:Abs,rhs:0)\
-                        ])'::unstabletimeseriespipeline) \
-                    -> '(version:1,num_elements:0,elements:[])'::pipelineforcematerialize) \
-                    -> '(version:1,num_elements:2,elements:[\
                         Arithmetic(function:Abs,rhs:0),\
                         Arithmetic(function:Round,rhs:0)\
-                        ])'::unstabletimeseriespipeline)");
+                    ])'::unstabletimeseriespipeline\
+                )");
         });
     }
 }

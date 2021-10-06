@@ -83,10 +83,27 @@ pub fn pipeline_stats_agg<'e>() -> toolkit_experimental::PipelineThenStatsAgg<'e
     }
 }
 
+type Internal = usize;
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    schema="toolkit_experimental"
+)]
+pub unsafe fn pipeline_stats_agg_support(input: Internal)
+-> Internal {
+    pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
+        let new_element = PipelineThenStatsAgg::from_datum(new_element, false, 0)
+            .unwrap();
+        finalize_with_stats_agg(old_pipeline, new_element).into_datum().unwrap()
+    })
+}
+
 // using this instead of pg_operator since the latter doesn't support schemas yet
 // FIXME there is no CREATE OR REPLACE OPERATOR need to update post-install.rs
 //       need to ensure this works with out unstable warning
 extension_sql!(r#"
+ALTER FUNCTION toolkit_experimental."run_pipeline_then_stats_agg" SUPPORT toolkit_experimental.pipeline_stats_agg_support;
+
 CREATE OPERATOR -> (
     PROCEDURE=toolkit_experimental."run_pipeline_then_stats_agg",
     LEFTARG=toolkit_experimental.TimeSeries,
@@ -130,6 +147,41 @@ mod tests {
                 .first()
                 .get_one::<String>();
             assert_eq!(val.unwrap(), "(version:1,n:5,sx:100,sx2:250,sx3:0,sx4:21250)");
+        });
+    }
+
+    #[pg_test]
+    fn test_stats_agg_pipeline_folding() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            // using the search path trick for this test b/c the operator is
+            // difficult to spot otherwise.
+            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
+
+            // `-> series()` should force materialization, but otherwise the
+            // pipeline-folding optimization should proceed
+            let output = client.select(
+                "EXPLAIN (verbose) SELECT \
+                timeseries('1930-04-05'::timestamptz, 123.0) \
+                -> ceil() -> abs() -> floor() \
+                -> stats_agg() -> average();",
+                None,
+                None
+            ).skip(1)
+                .next().unwrap()
+                .by_ordinal(1).unwrap()
+                .value::<String>().unwrap();
+            assert_eq!(output.trim(), "Output: (\
+                run_pipeline_then_stats_agg(\
+                    timeseries('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
+                    '(version:1,num_elements:3,elements:[\
+                        Arithmetic(function:Ceil,rhs:0),\
+                        Arithmetic(function:Abs,rhs:0),\
+                        Arithmetic(function:Floor,rhs:0)\
+                    ])'::pipelinethenstatsagg\
+                ) -> '(version:1)'::accessoraverage)");
         });
     }
 }

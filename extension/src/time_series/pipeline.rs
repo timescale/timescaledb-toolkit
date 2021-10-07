@@ -81,7 +81,7 @@ flat_serialize_macro::flat_serialize! {
         Arithmetic: 8 {
             function: arithmetic::Function,
             rhs: f64,
-        }
+        },
     }
 }
 

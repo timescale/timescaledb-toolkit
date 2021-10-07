@@ -28,6 +28,7 @@ pub mod toolkit_experimental {
     pub(crate) use crate::accessors::*;
     varlena_type!(PipelineThenStatsAgg);
     varlena_type!(PipelineThenSum);
+    varlena_type!(PipelineThenAverage);
 }
 
 
@@ -119,6 +120,9 @@ CREATE OPERATOR -> (
 );
 "#);
 
+//
+// SUM
+//
 pg_type! {
     #[derive(Debug)]
     struct PipelineThenSum<'input> {
@@ -212,6 +216,105 @@ pub unsafe fn pipeline_sum_support(input: Internal)
 
 extension_sql!(r#"
 ALTER FUNCTION "arrow_pipeline_then_sum" SUPPORT toolkit_experimental.pipeline_sum_support;
+"#);
+
+
+//
+// AVERAGE
+//
+pg_type! {
+    #[derive(Debug)]
+    struct PipelineThenAverage<'input> {
+        num_elements: u64,
+        elements: [Element; self.num_elements],
+    }
+}
+
+ron_inout_funcs!(PipelineThenAverage);
+
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name="average_cast",
+    schema="toolkit_experimental"
+)]
+pub fn average_pipeline_element<'p, 'e>(
+    accessor: toolkit_experimental::AccessorAverage<'p>,
+) -> toolkit_experimental::PipelineThenAverage<'e> {
+    let _ = accessor;
+    build ! {
+        PipelineThenAverage {
+            num_elements: 0,
+            elements: vec![].into(),
+        }
+    }
+}
+
+extension_sql!(r#"
+    CREATE CAST (toolkit_experimental.AccessorAverage AS toolkit_experimental.PipelineThenAverage)
+        WITH FUNCTION toolkit_experimental.average_cast
+        AS IMPLICIT;
+"#);
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_pipeline_then_average<'s, 'p>(
+    timeseries: toolkit_experimental::TimeSeries<'s>,
+    pipeline: toolkit_experimental::PipelineThenAverage<'p>,
+) -> Option<f64> {
+    let pipeline = pipeline.0;
+    let pipeline = build! {
+        PipelineThenStatsAgg {
+            num_elements: pipeline.num_elements,
+            elements: pipeline.elements,
+        }
+    };
+    let stats_agg = run_pipeline_then_stats_agg(timeseries, pipeline);
+    stats_agg::stats1d_average(stats_agg)
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn finalize_with_average<'p, 'e>(
+    mut pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
+    then_stats_agg: toolkit_experimental::PipelineThenAverage<'e>,
+) -> toolkit_experimental::PipelineThenAverage<'e> {
+    if then_stats_agg.num_elements == 0 {
+        // flatten immediately so we don't need a temporary allocation for elements
+        return unsafe {flatten! {
+            PipelineThenAverage {
+                num_elements: pipeline.0.num_elements,
+                elements: pipeline.0.elements,
+            }
+        }}
+    }
+
+    let mut elements = replace(pipeline.elements.as_owned(), vec![]);
+    elements.extend(then_stats_agg.elements.iter());
+    build! {
+        PipelineThenAverage {
+            num_elements: elements.len().try_into().unwrap(),
+            elements: elements.into(),
+        }
+    }
+}
+
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    schema="toolkit_experimental"
+)]
+pub unsafe fn pipeline_average_support(input: Internal)
+-> Internal {
+    pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
+        let new_element = PipelineThenAverage::from_datum(new_element, false, 0)
+            .unwrap();
+        finalize_with_average(old_pipeline, new_element).into_datum().unwrap()
+    })
+}
+
+extension_sql!(r#"
+ALTER FUNCTION "arrow_pipeline_then_average" SUPPORT toolkit_experimental.pipeline_average_support;
 "#);
 
 #[cfg(any(test, feature = "pg_test"))]
@@ -343,6 +446,70 @@ mod tests {
                         Arithmetic(function:Abs,rhs:0),\
                         Arithmetic(function:Floor,rhs:0)\
                     ])'::pipelinethensum\
+                )");
+        });
+    }
+
+    #[pg_test]
+    fn test_average_finalizer() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            // using the search path trick for this test b/c the operator is
+            // difficult to spot otherwise.
+            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
+
+            // we use a subselect to guarantee order
+            let create_series = "SELECT timeseries(time, value) as series FROM \
+                (VALUES ('2020-01-04 UTC'::TIMESTAMPTZ, 25.0), \
+                    ('2020-01-01 UTC'::TIMESTAMPTZ, 10.0), \
+                    ('2020-01-03 UTC'::TIMESTAMPTZ, 20.0), \
+                    ('2020-01-02 UTC'::TIMESTAMPTZ, 15.0), \
+                    ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)) as v(time, value)";
+
+            let val = client.select(
+                &format!("SELECT (series -> average())::TEXT FROM ({}) s", create_series),
+                None,
+                None
+            )
+                .first()
+                .get_one::<String>();
+            assert_eq!(val.unwrap(), "20");
+        });
+    }
+
+    #[pg_test]
+    fn test_average_pipeline_folding() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            // using the search path trick for this test b/c the operator is
+            // difficult to spot otherwise.
+            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
+
+            // `-> series()` should force materialization, but otherwise the
+            // pipeline-folding optimization should proceed
+            let output = client.select(
+                "EXPLAIN (verbose) SELECT \
+                timeseries('1930-04-05'::timestamptz, 123.0) \
+                -> ceil() -> abs() -> floor() \
+                -> average();",
+                None,
+                None
+            ).skip(1)
+                .next().unwrap()
+                .by_ordinal(1).unwrap()
+                .value::<String>().unwrap();
+            assert_eq!(output.trim(), "Output: \
+                arrow_pipeline_then_average(\
+                    timeseries('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
+                    '(version:1,num_elements:3,elements:[\
+                        Arithmetic(function:Ceil,rhs:0),\
+                        Arithmetic(function:Abs,rhs:0),\
+                        Arithmetic(function:Floor,rhs:0)\
+                    ])'::pipelinethenaverage\
                 )");
         });
     }

@@ -621,7 +621,7 @@ pub fn arrow_stats1d_sum(
 }
 
 #[pg_extern(name="sum",  strict, immutable, parallel_safe)]
-fn stats1d_sum(
+pub (crate) fn stats1d_sum(
     summary: StatsSummary1D,
 )-> Option<f64> {
     summary.to_internal().sum()

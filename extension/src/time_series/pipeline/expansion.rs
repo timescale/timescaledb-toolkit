@@ -14,6 +14,7 @@ use crate::{
 pub mod toolkit_experimental {
     pub(crate) use super::*;
     varlena_type!(PipelineThenUnnest);
+    varlena_type!(PipelineForceMaterialize);
 }
 
 pg_type! {
@@ -80,7 +81,15 @@ pub fn arrow_run_pipeline_then_unnest<'s, 'p>(
     crate::time_series::unnest(series.into())
 }
 
+pg_type! {
+    #[derive(Debug)]
+    struct PipelineForceMaterialize<'input> {
+        num_elements: u64,
+        elements: [Element; self.num_elements],
+    }
+}
 
+ron_inout_funcs!(PipelineForceMaterialize);
 
 #[pg_extern(
     immutable,
@@ -88,14 +97,70 @@ pub fn arrow_run_pipeline_then_unnest<'s, 'p>(
     name="series",
     schema="toolkit_experimental"
 )]
-pub fn pipeline_series<'e>() -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+pub fn pipeline_series<'e>() -> toolkit_experimental::PipelineForceMaterialize<'e> {
     build! {
-        UnstableTimeseriesPipeline {
+        PipelineForceMaterialize {
             num_elements: 0,
             elements: vec![].into(),
         }
     }
 }
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_force_materialize<'p, 'e>(
+    mut pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
+    then_stats_agg: toolkit_experimental::PipelineForceMaterialize<'e>,
+) -> toolkit_experimental::PipelineForceMaterialize<'e> {
+    if then_stats_agg.num_elements == 0 {
+        // flatten immediately so we don't need a temporary allocation for elements
+        return unsafe {flatten! {
+            PipelineForceMaterialize {
+                num_elements: pipeline.0.num_elements,
+                elements: pipeline.0.elements,
+            }
+        }}
+    }
+
+    let mut elements = replace(pipeline.elements.as_owned(), vec![]);
+    elements.extend(then_stats_agg.elements.iter());
+    build! {
+        PipelineForceMaterialize {
+            num_elements: elements.len().try_into().unwrap(),
+            elements: elements.into(),
+        }
+    }
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_run_pipeline_then_materialize<'s, 'p>(
+    timeseries: toolkit_experimental::TimeSeries<'s>,
+    pipeline: toolkit_experimental::PipelineForceMaterialize<'p>,
+) -> toolkit_experimental::TimeSeries<'static>
+{
+    run_pipeline_elements(timeseries, pipeline.elements.iter())
+        .in_current_context()
+}
+
+type Internal = usize;
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    schema="toolkit_experimental"
+)]
+pub unsafe fn pipeline_materialize_support(input: Internal)
+-> Internal {
+    pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
+        let new_element = PipelineForceMaterialize::from_datum(new_element, false, 0)
+            .unwrap();
+        arrow_force_materialize(old_pipeline, new_element).into_datum().unwrap()
+    })
+}
+
+extension_sql!(r#"
+ALTER FUNCTION "arrow_run_pipeline_then_materialize" SUPPORT toolkit_experimental.pipeline_materialize_support;
+"#);
 
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {
@@ -158,6 +223,45 @@ mod tests {
                 .first()
                 .get_one::<String>();
             assert_eq!(val.unwrap(), "[(ts:\"2020-01-04 00:00:00+00\",val:25),(ts:\"2020-01-01 00:00:00+00\",val:11),(ts:\"2020-01-03 00:00:00+00\",val:21),(ts:\"2020-01-02 00:00:00+00\",val:15),(ts:\"2020-01-05 00:00:00+00\",val:31)]");
+        });
+    }
+
+    #[pg_test]
+    fn test_force_materialize() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            // using the search path trick for this test b/c the operator is
+            // difficult to spot otherwise.
+            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
+
+            // `-> series()` should force materialization, but otherwise the
+            // pipeline-folding optimization should proceed
+            let output = client.select(
+                "EXPLAIN (verbose) SELECT \
+                timeseries('2021-01-01'::timestamptz, 0.1) \
+                -> round() -> abs() \
+                -> series() \
+                -> abs() -> round();",
+                None,
+                None
+            ).skip(1)
+                .next().unwrap()
+                .by_ordinal(1).unwrap()
+                .value::<String>().unwrap();
+            assert_eq!(output.trim(), "Output: \
+                run_pipeline(\
+                    arrow_run_pipeline_then_materialize(\
+                        timeseries('2021-01-01 00:00:00+00'::timestamp with time zone, '0.1'::double precision), \
+                        '(version:1,num_elements:2,elements:[\
+                            Arithmetic(function:Round,rhs:0),Arithmetic(function:Abs,rhs:0)\
+                        ])'::pipelineforcematerialize\
+                    ), \
+                    '(version:1,num_elements:2,elements:[\
+                        Arithmetic(function:Abs,rhs:0),Arithmetic(function:Round,rhs:0)\
+                    ])'::unstabletimeseriespipeline\
+                )");
         });
     }
 }

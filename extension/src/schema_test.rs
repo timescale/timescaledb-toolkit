@@ -270,5 +270,8 @@ mod tests {
         "function x_intercept(statssummary2d)",
         "type statssummary1d",
         "type statssummary2d",
+        "function finalize_with_average(toolkit_experimental.unstabletimeseriespipeline,toolkit_experimental.pipelinethenaverage)",
+        "function finalize_with_num_vals(toolkit_experimental.unstabletimeseriespipeline,toolkit_experimental.pipelinethennumvals)",
+        "function finalize_with_sum(toolkit_experimental.unstabletimeseriespipeline,toolkit_experimental.pipelinethensum)",
     ];
 }

@@ -271,6 +271,23 @@ pub fn hyperloglog_error<'input>(
     hyperloglogplusplus::error_for_precision(precision)
 }
 
+impl HyperLogLog<'_> {
+    pub fn build_from(size: int, type_id: Oid, collation: Option<Oid>, data: impl Iterator<Item=pg_sys::Datum>)
+    -> HyperLogLog<'static> {
+        unsafe {
+            let b = TryInto::<usize>::try_into(size).unwrap().checked_next_power_of_two().unwrap().trailing_zeros();
+            let hasher = DatumHashBuilder::from_type_id(type_id, collation);
+            let mut logger: HLL<pg_sys::Datum, DatumHashBuilder> = HLL::new(b as u8, hasher);
+                
+            for datum in data {
+                logger.add(&datum);
+            }
+
+            flatten_log(&mut logger)
+        }
+    }
+}
+
 fn flatten_log(hyperloglog: &mut HLL<Datum, DatumHashBuilder>)
 -> HyperLogLog<'static> {
     let (element_type, collation) = {

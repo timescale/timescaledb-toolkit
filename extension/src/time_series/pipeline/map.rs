@@ -46,7 +46,8 @@ pub fn check_user_function_type(function: pg_sys::regproc) {
     }
 }
 
-pub fn apply_to_series(series: TimeSeries<'_>, func: pg_sys::RegProcedure) -> TimeSeries<'_> {
+pub fn apply_to_series(mut series: TimeSeries<'_>, func: pg_sys::RegProcedure)
+-> TimeSeries<'_> {
     let mut flinfo: pg_sys::FmgrInfo = unsafe {
         MaybeUninit::zeroed().assume_init()
     };
@@ -59,7 +60,9 @@ pub fn apply_to_series(series: TimeSeries<'_>, func: pg_sys::RegProcedure) -> Ti
         let res = pg_sys::FunctionCall1Coll(
             &mut flinfo,
             pg_sys::InvalidOid,
-            series.into_datum().unwrap(),
+            // SAFETY the input memory context will not end in the sub-function
+            //        and the sub-function will allocate the returned timeseries
+            series.cached_datum_or_flatten(),
         );
         TimeSeries::from_datum(res, false, pg_sys::InvalidOid)
             .expect("unexpected NULL in timeseries mapping function")

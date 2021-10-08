@@ -1,3 +1,17 @@
+
+#[derive(Copy, Clone, Debug)]
+pub enum CachedDatum<'r> {
+    None,
+    FromInput(&'r [u8]),
+    Flattened(&'r [u8]),
+}
+
+impl PartialEq for CachedDatum<'_> {
+    fn eq(&self, _: &Self) -> bool {
+        true
+    }
+}
+
 #[macro_export]
 macro_rules! pg_type {
     // base case, all fields are collected into $vals
@@ -87,7 +101,7 @@ macro_rules! pg_type_impl {
             $(#[$attrs])*
             #[derive(pgx::PostgresType, Clone)]
             #[inoutfuncs]
-            pub struct $name<$lifetemplate>([<$name Data>] $(<$inlife>)?, Option<&$lifetemplate [u8]>);
+            pub struct $name<$lifetemplate>([<$name Data>] $(<$inlife>)?, $crate::type_builder::CachedDatum<$lifetemplate>);
 
             flat_serialize_macro::flat_serialize! {
                 $(#[$attrs])*
@@ -106,13 +120,38 @@ macro_rules! pg_type_impl {
                 pub fn in_current_context<'foo>(&self) -> $name<'foo> {
                     unsafe { self.0.flatten() }
                 }
+
+                pub unsafe fn cached_datum_or_flatten(&mut self) -> pgx::pg_sys::Datum {
+                    use $crate::type_builder::CachedDatum::*;
+                    match self.1 {
+                        None => {
+                            *self = self.0.flatten();
+                            self.cached_datum_or_flatten()
+                        },
+                        FromInput(bytes) | Flattened(bytes) => bytes.as_ptr() as _,
+                    }
+                }
             }
 
             impl<$lifetemplate> [<$name Data>] $(<$inlife>)? {
                 pub unsafe fn flatten<'any>(&self) -> $name<'any> {
+                    use $crate::type_builder::CachedDatum::Flattened;
+                    // if we already have a CachedDatum::Flattened can just
+                    // return it without re-flattening?
+                    // TODO this needs extensive testing before we enable it
+                    //  XXX this will not work if the lifetime of the memory
+                    //      context the value was previously flattened into is
+                    //      wrong; this may be bad enough that we should never
+                    //      enable it by default...
+                    // if let Flattened(bytes) = self.1 {
+                    //     let bytes = extend_lifetime(bytes);
+                    //     let wrapped = [<$name Data>]::try_ref(bytes).unwrap().0;
+                    //     $name(wrapped, Flattened(bytes))
+                    //     return self
+                    // }
                     let bytes: &'static [u8] = self.to_pg_bytes();
                     let wrapped = [<$name Data>]::try_ref(bytes).unwrap().0;
-                    $name(wrapped, Some(bytes))
+                    $name(wrapped, Flattened(bytes))
                 }
 
                 pub fn to_pg_bytes(&self) -> &'static [u8] {
@@ -151,15 +190,16 @@ macro_rules! pg_type_impl {
                         Err(e) => error!(concat!("invalid ", stringify!($name), " {:?}, got len {}"), e, bytes.len()),
                     };
 
-                    $name(data, Some(bytes)).into()
+                    $name(data, $crate::type_builder::CachedDatum::FromInput(bytes)).into()
                 }
             }
 
             impl<$lifetemplate> pgx::IntoDatum for $name<$lifetemplate> {
                 fn into_datum(self) -> Option<pgx::pg_sys::Datum> {
+                    use $crate::type_builder::CachedDatum::*;
                     let datum = match self.1 {
-                        Some(bytes) => bytes.as_ptr() as pgx::pg_sys::Datum,
-                        None => self.0.to_pg_bytes().as_ptr() as pgx::pg_sys::Datum,
+                        Flattened(bytes) => bytes.as_ptr() as pgx::pg_sys::Datum,
+                        FromInput(..) | None => self.0.to_pg_bytes().as_ptr() as pgx::pg_sys::Datum,
                     };
                     Some(datum)
                 }
@@ -178,20 +218,20 @@ macro_rules! pg_type_impl {
 
             impl<$lifetemplate> ::std::ops::DerefMut for $name <$lifetemplate> {
                 fn deref_mut(&mut self) -> &mut Self::Target {
-                    self.1 = None;
+                    self.1 = $crate::type_builder::CachedDatum::None;
                     &mut self.0
                 }
             }
 
             impl<$lifetemplate> From<[<$name Data>]$(<$inlife>)?> for $name<$lifetemplate> {
                 fn from(inner: [<$name Data>]$(<$inlife>)?) -> Self {
-                    Self(inner, None)
+                    Self(inner, $crate::type_builder::CachedDatum::None)
                 }
             }
 
             impl<$lifetemplate> From<[<$name Data>]$(<$inlife>)?> for Option<$name<$lifetemplate>> {
                 fn from(inner: [<$name Data>]$(<$inlife>)?) -> Self {
-                    Some($name(inner, None))
+                    Some($name(inner, $crate::type_builder::CachedDatum::None))
                 }
             }
         }
@@ -228,7 +268,7 @@ macro_rules! ron_inout_funcs {
                     let input = extend_lifetime(str_from_db_encoding(input));
                     ron::from_str(input).unwrap()
                 };
-                unsafe { Self(val, None).flatten() }
+                unsafe { Self(val, $crate::type_builder::CachedDatum::None).flatten() }
             }
         }
     };

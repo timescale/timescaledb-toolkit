@@ -99,14 +99,42 @@ fn get_extension_info_from_pg_config(pg_config: &str) -> xshell::Result<Extensio
     Ok(extension_info)
 }
 
-fn get_extension_info_from_dir(package_dir: &str) -> xshell::Result<ExtensionInfo> {
-    let bin_dir = path!(package_dir/"lib"/"postgresql");
+fn get_extension_info_from_dir(root: &str) -> xshell::Result<ExtensionInfo> {
+    use std::ffi::OsStr;
 
-    let share_dir = path!(package_dir/"share"/"postgresql");
+    let walker = walkdir::WalkDir::new(root)
+        .contents_first(true);
 
-    let extension_dir = path!(share_dir/"extension");
+    let mut extension_info = None;
+    let mut bin_dir = None;
+    for entry in walker {
+        let entry = entry.unwrap();
+        if entry.file_type().is_file() {
+            let path = entry.into_path();
+            if path.extension() == Some(OsStr::new("control")) {
+                // found the control file
+                let extension_dir = path.parent()
+                    .expect("control file not in dir")
+                    .to_path_buf();
+                extension_info = Some((extension_dir, path));
+            } else if path.extension() == Some(OsStr::new("so")) {
+                // found the binary
+                bin_dir = Some(
+                    path.parent().expect("binary file not in dir").to_path_buf()
+                );
+            }
+            if extension_info.is_some() && bin_dir.is_some()  {
+                break
+            }
+        }
+    }
+    if bin_dir.is_none() || extension_info.is_none() {
+        panic!("could not find extension objects")
+    }
 
-    let control_file = path!(extension_dir/"timescaledb_toolkit.control");
+    let bin_dir = bin_dir.unwrap();
+
+    let (extension_dir, control_file) = extension_info.unwrap();
 
     let control_contents = fs::read_to_string(&control_file).unwrap_or_else(|e| panic!(
         "cannot read control file {} due to {}",

@@ -12,22 +12,22 @@ use super::*;
 )]
 pub fn delta_pipeline_element<'p, 'e>(
     accessor: toolkit_experimental::AccessorDelta<'p>,
-) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     let _ = accessor;
     Element::Delta {}.flatten()
 }
 
 extension_sql!(r#"
-    CREATE CAST (toolkit_experimental.AccessorDelta AS toolkit_experimental.UnstableTimeseriesPipeline)
+    CREATE CAST (toolkit_experimental.AccessorDelta AS toolkit_experimental.UnstableTimevectorPipeline)
         WITH FUNCTION toolkit_experimental.delta_cast
         AS IMPLICIT;
 "#);
 
-pub fn timeseries_delta<'s>(
-    series: &toolkit_experimental::TimeSeries<'s>,
-) -> toolkit_experimental::TimeSeries<'s> {
+pub fn timevector_delta<'s>(
+    series: &toolkit_experimental::Timevector<'s>,
+) -> toolkit_experimental::Timevector<'s> {
     if !series.is_sorted() {
-        panic!("can only compute deltas for sorted timeseries");
+        panic!("can only compute deltas for sorted timevector");
     }
 
     let mut it = series.iter();
@@ -40,7 +40,7 @@ pub fn timeseries_delta<'s>(
     }
 
     build!(
-        TimeSeries {
+        Timevector {
             series: SeriesType::SortedSeries {
                 num_points: delta_points.len() as u64,
                 points: delta_points.into(),
@@ -85,7 +85,7 @@ mod tests {
             );
 
             let val = client.select(
-                "SELECT (timeseries(time, value) -> delta())::TEXT FROM series",
+                "SELECT (timevector(time, value) -> delta())::TEXT FROM series",
                 None,
                 None
             )

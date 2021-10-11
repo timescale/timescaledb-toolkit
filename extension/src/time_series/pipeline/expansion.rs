@@ -45,7 +45,7 @@ pub fn pipeline_unnest<'e>() -> toolkit_experimental::PipelineThenUnnest<'e> {
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_finalize_with_unnest<'p, 'e>(
-    mut pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
+    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
     then_stats_agg: toolkit_experimental::PipelineThenUnnest<'e>,
 ) -> toolkit_experimental::PipelineThenUnnest<'e> {
     if then_stats_agg.num_elements == 0 {
@@ -72,11 +72,11 @@ pub fn arrow_finalize_with_unnest<'p, 'e>(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_run_pipeline_then_unnest<'s, 'p>(
-    timeseries: toolkit_experimental::TimeSeries<'s>,
+    timevector: toolkit_experimental::Timevector<'s>,
     pipeline: toolkit_experimental::PipelineThenUnnest<'p>,
 ) -> impl Iterator<Item = (name!(time,pg_sys::TimestampTz),name!(value,f64))>
 {
-    let series = run_pipeline_elements(timeseries, pipeline.elements.iter())
+    let series = run_pipeline_elements(timevector, pipeline.elements.iter())
         .0.into_owned();
     crate::time_series::unnest(series.into())
 }
@@ -109,7 +109,7 @@ pub fn pipeline_series<'e>() -> toolkit_experimental::PipelineForceMaterialize<'
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_force_materialize<'p, 'e>(
-    mut pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
+    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
     then_stats_agg: toolkit_experimental::PipelineForceMaterialize<'e>,
 ) -> toolkit_experimental::PipelineForceMaterialize<'e> {
     if then_stats_agg.num_elements == 0 {
@@ -135,11 +135,11 @@ pub fn arrow_force_materialize<'p, 'e>(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_run_pipeline_then_materialize<'s, 'p>(
-    timeseries: toolkit_experimental::TimeSeries<'s>,
+    timevector: toolkit_experimental::Timevector<'s>,
     pipeline: toolkit_experimental::PipelineForceMaterialize<'p>,
-) -> toolkit_experimental::TimeSeries<'static>
+) -> toolkit_experimental::Timevector<'static>
 {
-    run_pipeline_elements(timeseries, pipeline.elements.iter())
+    run_pipeline_elements(timevector, pipeline.elements.iter())
         .in_current_context()
 }
 
@@ -177,7 +177,7 @@ mod tests {
             client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             // we use a subselect to guarantee order
-            let create_series = "SELECT timeseries(time, value) as series FROM \
+            let create_series = "SELECT timevector(time, value) as series FROM \
                 (VALUES ('2020-01-04 UTC'::TIMESTAMPTZ, 25.0), \
                     ('2020-01-01 UTC'::TIMESTAMPTZ, 10.0), \
                     ('2020-01-03 UTC'::TIMESTAMPTZ, 20.0), \
@@ -208,7 +208,7 @@ mod tests {
             client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             // we use a subselect to guarantee order
-            let create_series = "SELECT timeseries(time, value) as series FROM \
+            let create_series = "SELECT timevector(time, value) as series FROM \
                 (VALUES ('2020-01-04 UTC'::TIMESTAMPTZ, 25.0), \
                     ('2020-01-01 UTC'::TIMESTAMPTZ, 11.0), \
                     ('2020-01-03 UTC'::TIMESTAMPTZ, 21.0), \
@@ -240,7 +240,7 @@ mod tests {
             // pipeline-folding optimization should proceed
             let output = client.select(
                 "EXPLAIN (verbose) SELECT \
-                timeseries('2021-01-01'::timestamptz, 0.1) \
+                timevector('2021-01-01'::timestamptz, 0.1) \
                 -> round() -> abs() \
                 -> series() \
                 -> abs() -> round();",
@@ -253,14 +253,14 @@ mod tests {
             assert_eq!(output.trim(), "Output: \
                 run_pipeline(\
                     arrow_run_pipeline_then_materialize(\
-                        timeseries('2021-01-01 00:00:00+00'::timestamp with time zone, '0.1'::double precision), \
+                        timevector('2021-01-01 00:00:00+00'::timestamp with time zone, '0.1'::double precision), \
                         '(version:1,num_elements:2,elements:[\
                             Arithmetic(function:Round,rhs:0),Arithmetic(function:Abs,rhs:0)\
                         ])'::pipelineforcematerialize\
                     ), \
                     '(version:1,num_elements:2,elements:[\
                         Arithmetic(function:Abs,rhs:0),Arithmetic(function:Round,rhs:0)\
-                    ])'::unstabletimeseriespipeline\
+                    ])'::unstabletimevectorpipeline\
                 )");
         });
     }

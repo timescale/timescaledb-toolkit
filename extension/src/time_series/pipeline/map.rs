@@ -17,7 +17,7 @@ use crate::{
 )]
 pub fn map_series_pipeline_element<'e>(
     function: pg_sys::regproc,
-) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     map_series_element(function).flatten()
 }
 
@@ -34,20 +34,20 @@ pub fn check_user_function_type(function: pg_sys::regproc) {
     };
 
     if nargs != 1 {
-        error!("invalid number of mapping function arguments, expected fn(timeseries) RETURNS timeseries")
+        error!("invalid number of mapping function arguments, expected fn(timevector) RETURNS timevector")
     }
 
-    if unsafe { *argtypes } != *crate::time_series::TIMESERIES_OID {
-        error!("invalid argument type, expected fn(timeseries) RETURNS timeseries")
+    if unsafe { *argtypes } != *crate::time_series::TIMEVECTOR_OID {
+        error!("invalid argument type, expected fn(timevector) RETURNS timevector")
     }
 
-    if rettype != *crate::time_series::TIMESERIES_OID {
-        error!("invalid return type, expected fn(timeseries) RETURNS timeseries")
+    if rettype != *crate::time_series::TIMEVECTOR_OID {
+        error!("invalid return type, expected fn(timevector) RETURNS timevector")
     }
 }
 
-pub fn apply_to_series(mut series: TimeSeries<'_>, func: pg_sys::RegProcedure)
--> TimeSeries<'_> {
+pub fn apply_to_series(mut series: Timevector<'_>, func: pg_sys::RegProcedure)
+-> Timevector<'_> {
     let mut flinfo: pg_sys::FmgrInfo = unsafe {
         MaybeUninit::zeroed().assume_init()
     };
@@ -61,11 +61,11 @@ pub fn apply_to_series(mut series: TimeSeries<'_>, func: pg_sys::RegProcedure)
             &mut flinfo,
             pg_sys::InvalidOid,
             // SAFETY the input memory context will not end in the sub-function
-            //        and the sub-function will allocate the returned timeseries
+            //        and the sub-function will allocate the returned timevector
             series.cached_datum_or_flatten(),
         );
-        TimeSeries::from_datum(res, false, pg_sys::InvalidOid)
-            .expect("unexpected NULL in timeseries mapping function")
+        Timevector::from_datum(res, false, pg_sys::InvalidOid)
+            .expect("unexpected NULL in timevector mapping function")
 
     }
 }
@@ -79,7 +79,7 @@ pub fn apply_to_series(mut series: TimeSeries<'_>, func: pg_sys::RegProcedure)
 )]
 pub fn map_data_pipeline_element<'e>(
     function: pg_sys::regproc,
-) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     let mut argtypes: *mut pg_sys::Oid = ptr::null_mut();
     let mut nargs: ::std::os::raw::c_int = 0;
     let rettype = unsafe {
@@ -101,8 +101,8 @@ pub fn map_data_pipeline_element<'e>(
     Element::MapData { function: PgProcId(function) }.flatten()
 }
 
-pub fn apply_to(mut series: TimeSeries<'_>, func: pg_sys::RegProcedure)
--> TimeSeries<'_> {
+pub fn apply_to(mut series: Timevector<'_>, func: pg_sys::RegProcedure)
+-> Timevector<'_> {
     let mut flinfo: pg_sys::FmgrInfo = unsafe {
         MaybeUninit::zeroed().assume_init()
     };
@@ -112,7 +112,7 @@ pub fn apply_to(mut series: TimeSeries<'_>, func: pg_sys::RegProcedure)
     let fn_addr: unsafe extern "C" fn(*mut pg_sys::FunctionCallInfoBaseData) -> usize;
     let mut fc_info = unsafe {
         pg_sys::fmgr_info(func, &mut flinfo);
-        fn_addr = flinfo.fn_addr.expect("null function in timeseries map");
+        fn_addr = flinfo.fn_addr.expect("null function in timevector map");
         union FcInfo1 {
             data: ManuallyDrop<pg_sys::FunctionCallInfoBaseData>,
             #[allow(dead_code)]
@@ -140,14 +140,14 @@ pub fn apply_to(mut series: TimeSeries<'_>, func: pg_sys::RegProcedure)
         args[0].isnull = false;
         let res = fn_addr(fc_info);
         f64::from_datum(res, fc_info.isnull, pg_sys::InvalidOid)
-            .expect("unexpected NULL in timeseries mapping function")
+            .expect("unexpected NULL in timevector mapping function")
     };
 
     map_series(&mut series, invoke);
     series
 }
 
-pub fn map_series(series: &mut TimeSeries<'_>, mut func: impl FnMut(f64) -> f64) {
+pub fn map_series(series: &mut Timevector<'_>, mut func: impl FnMut(f64) -> f64) {
     use SeriesType::*;
 
     match &mut series.series {
@@ -220,7 +220,7 @@ mod tests {
             );
 
             let val = client.select(
-                "SELECT (timeseries(time, value))::TEXT FROM series",
+                "SELECT (timevector(time, value))::TEXT FROM series",
                 None,
                 None
             )
@@ -242,7 +242,7 @@ mod tests {
 
 
             let val = client.select(
-                "SELECT (timeseries(time, value) -> map_data('x2'))::TEXT FROM series",
+                "SELECT (timevector(time, value) -> map_data('x2'))::TEXT FROM series",
                 None,
                 None
             )
@@ -286,7 +286,7 @@ mod tests {
             );
 
             let val = client.select(
-                "SELECT (timeseries(time, value))::TEXT FROM series",
+                "SELECT (timevector(time, value))::TEXT FROM series",
                 None,
                 None
             )
@@ -301,8 +301,8 @@ mod tests {
             ]");
 
             client.select(
-                "CREATE FUNCTION jan_3_x3(timeseries) RETURNS timeseries AS $$\
-                    SELECT timeseries(time, value * 3) \
+                "CREATE FUNCTION jan_3_x3(timevector) RETURNS timevector AS $$\
+                    SELECT timevector(time, value * 3) \
                     FROM (SELECT (unnest($1)).*) a \
                     WHERE time='2020-01-03 00:00:00+00';\
                 $$ LANGUAGE SQL",
@@ -312,7 +312,7 @@ mod tests {
 
 
             let val = client.select(
-                "SELECT (timeseries(time, value) -> map_series('jan_3_x3'))::TEXT FROM series",
+                "SELECT (timevector(time, value) -> map_series('jan_3_x3'))::TEXT FROM series",
                 None,
                 None
             )
@@ -321,7 +321,7 @@ mod tests {
             assert_eq!(val.unwrap(), "[(ts:\"2020-01-03 00:00:00+00\",val:60)]");
 
             let val = client.select(
-                "SELECT (timeseries(time, value) ->> 'jan_3_x3')::TEXT FROM series",
+                "SELECT (timevector(time, value) ->> 'jan_3_x3')::TEXT FROM series",
                 None,
                 None
             )
@@ -359,7 +359,7 @@ mod tests {
             );
 
             let val = client.select(
-                "SELECT (timeseries(time, value))::TEXT FROM series",
+                "SELECT (timevector(time, value))::TEXT FROM series",
                 None,
                 None
             )
@@ -374,7 +374,7 @@ mod tests {
             ]");
 
             client.select(
-                "CREATE FUNCTION serier(timeseries) RETURNS timeseries AS $$\
+                "CREATE FUNCTION serier(timevector) RETURNS timevector AS $$\
                     SELECT $1;\
                 $$ LANGUAGE SQL",
                 None,
@@ -403,7 +403,7 @@ mod tests {
                 num_elements:1,\
                 elements:[\
                     MapSeries(\
-                        function:\"public.serier(toolkit_experimental.timeseries)\"\
+                        function:\"public.serier(toolkit_experimental.timevector)\"\
                     )\
                 ]\
             )";
@@ -422,8 +422,8 @@ mod tests {
             // FIXME this doesn't work yet
             let (a, b) = client.select(
                 &*format!("SELECT \
-                    '{}'::UnstableTimeseriesPipeline::Text, \
-                    '{}'::UnstableTimeseriesPipeline::Text",
+                    '{}'::UnstableTimevectorPipeline::Text, \
+                    '{}'::UnstableTimevectorPipeline::Text",
                     one, two
                 ),
                 None,

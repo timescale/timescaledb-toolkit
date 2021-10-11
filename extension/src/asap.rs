@@ -9,7 +9,7 @@ use crate::{
 
 use time_series::{TSPoint, GapfillMethod};
 
-use crate::time_series::{TimeSeries, TimeSeriesData, SeriesType};
+use crate::time_series::{Timevector, TimevectorData, SeriesType};
 
 // This is included for debug purposes and probably should not leave experimental
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
@@ -100,7 +100,7 @@ fn find_downsample_interval(points: &[TSPoint], resolution: i64) -> i64 {
 fn asap_final(
     state: Option<Internal<ASAPTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_series::toolkit_experimental::TimeSeries<'static>> {
+) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let state = match state {
@@ -131,7 +131,7 @@ fn asap_final(
             let values = asap_smooth(&normal, state.resolution as u32);
 
             Some(crate::build! {
-                TimeSeries {
+                Timevector {
                     series: SeriesType::NormalSeries {
                         start_ts: start_ts,
                         // Set the step interval for the asap result so that it covers the same interval
@@ -147,11 +147,11 @@ fn asap_final(
 }
 
 #[pg_extern(name="asap_smooth", schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn asap_on_timeseries(
-    mut series: crate::time_series::toolkit_experimental::TimeSeries<'static>,
+pub fn asap_on_timevector(
+    mut series: crate::time_series::toolkit_experimental::Timevector<'static>,
     resolution: i32
-) -> Option<crate::time_series::toolkit_experimental::TimeSeries<'static>> {
-    // TODO: implement this using zero copy (requires sort, find_downsample_interval, and downsample_and_gapfill on TimeSeries)
+) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
+    // TODO: implement this using zero copy (requires sort, find_downsample_interval, and downsample_and_gapfill on Timevector)
     let needs_sort = matches!(&series.series, SeriesType::ExplicitSeries{..});
     let start_ts;
     let downsample_interval;
@@ -187,7 +187,7 @@ pub fn asap_on_timeseries(
     let result = asap_smooth(&normal, resolution as u32);
 
     Some(crate::build! {
-        TimeSeries {
+        Timevector {
             series: SeriesType::NormalSeries {
                 start_ts: start_ts,
                 // Set the step interval for the asap result so that it covers the same interval
@@ -334,13 +334,13 @@ mod tests {
             .get_one::<f64>().unwrap();
             assert!((10.0 - test_val).abs() > (8.0 - test_val).abs());
 
-            // Now compare the asap aggregate to asap run on a timeseries aggregate
+            // Now compare the asap aggregate to asap run on a timevector aggregate
             client.select(
                 "create table asap_vals2 as
                 SELECT *
                 FROM toolkit_experimental.unnest(
                     (SELECT toolkit_experimental.asap_smooth(
-                        (SELECT toolkit_experimental.timeseries(date, value) FROM asap_test),
+                        (SELECT toolkit_experimental.timevector(date, value) FROM asap_test),
                         100)
                     )
                 )", None, None);

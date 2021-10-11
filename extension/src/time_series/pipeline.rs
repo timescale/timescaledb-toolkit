@@ -28,8 +28,8 @@ use resample_to_rate::{
     ResampleMethod,
 };
 
-use sort::sort_timeseries;
-use delta::timeseries_delta;
+use sort::sort_timevector;
+use delta::timevector_delta;
 
 use map::{
     map_series_element,
@@ -39,12 +39,12 @@ use map::{
 
 use crate::serialization::PgProcId;
 
-// TODO once we start stabilizing elements, create a type TimeseriesPipeline
+// TODO once we start stabilizing elements, create a type TimevectorPipeline
 //      stable elements will create a stable pipeline, but adding an unstable
 //      element to a stable pipeline will create an unstable pipeline
 pg_type! {
     #[derive(Debug)]
-    struct UnstableTimeseriesPipeline<'input> {
+    struct UnstableTimevectorPipeline<'input> {
         num_elements: u64,
         elements: [Element; self.num_elements],
     }
@@ -86,11 +86,11 @@ flat_serialize_macro::flat_serialize! {
 }
 
 impl Element {
-    pub fn flatten<'a>(self) -> UnstableTimeseriesPipeline<'a> {
+    pub fn flatten<'a>(self) -> UnstableTimevectorPipeline<'a> {
         let slice = &[self][..];
         unsafe {
             flatten! {
-                UnstableTimeseriesPipeline {
+                UnstableTimevectorPipeline {
                     num_elements: 1,
                     elements: slice.into(),
                 }
@@ -99,10 +99,10 @@ impl Element {
     }
 }
 
-impl From<Element> for UnstableTimeseriesPipeline<'_> {
+impl From<Element> for UnstableTimevectorPipeline<'_> {
     fn from(element: Element) -> Self {
         build! {
-            UnstableTimeseriesPipeline {
+            UnstableTimevectorPipeline {
                 num_elements: 1,
                 elements: vec![element].into(),
             }
@@ -110,65 +110,65 @@ impl From<Element> for UnstableTimeseriesPipeline<'_> {
     }
 }
 
-ron_inout_funcs!(UnstableTimeseriesPipeline);
+ron_inout_funcs!(UnstableTimevectorPipeline);
 
 // hack to allow us to qualify names with "toolkit_experimental"
 // so that pgx generates the correct SQL
 pub mod toolkit_experimental {
     pub(crate) use super::*;
     pub(crate) use crate::accessors::AccessorDelta;
-    varlena_type!(UnstableTimeseriesPipeline);
+    varlena_type!(UnstableTimevectorPipeline);
 }
 
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
 pub fn run_pipeline<'s, 'p>(
-    timeseries: toolkit_experimental::TimeSeries<'s>,
-    pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
-) -> toolkit_experimental::TimeSeries<'static> {
-    run_pipeline_elements(timeseries, pipeline.elements.iter())
+    timevector: toolkit_experimental::Timevector<'s>,
+    pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
+) -> toolkit_experimental::Timevector<'static> {
+    run_pipeline_elements(timevector, pipeline.elements.iter())
         .in_current_context()
 }
 
 pub fn run_pipeline_elements<'s, 'i>(
-    mut timeseries: TimeSeries<'s>,
+    mut timevector: Timevector<'s>,
     pipeline: impl Iterator<Item=Element> + 'i,
-) -> TimeSeries<'s> {
+) -> Timevector<'s> {
     for element in pipeline {
-        timeseries = execute_pipeline_element(timeseries, &element);
+        timevector = execute_pipeline_element(timevector, &element);
     }
-    timeseries
+    timevector
 }
 
 pub fn execute_pipeline_element<'s, 'e>(
-    timeseries: TimeSeries<'s>,
+    timevector: Timevector<'s>,
     element: &Element
-) -> TimeSeries<'s> {
+) -> Timevector<'s> {
     match element {
         Element::LTTB{resolution} =>
-            return crate::lttb::lttb_ts(timeseries, *resolution as _),
+            return crate::lttb::lttb_ts(timevector, *resolution as _),
         Element::ResampleToRate{..} =>
-            return resample_to_rate(&timeseries, &element),
+            return resample_to_rate(&timevector, &element),
         Element::FillHoles{..} =>
-            return fill_holes(timeseries, &element),
+            return fill_holes(timevector, &element),
         Element::Sort{..} =>
-            return sort_timeseries(timeseries),
+            return sort_timevector(timevector),
         Element::Delta{..} =>
-            return timeseries_delta(&timeseries),
+            return timevector_delta(&timevector),
         Element::MapData { function } =>
-            return map::apply_to(timeseries, function.0),
+            return map::apply_to(timevector, function.0),
         Element::MapSeries { function } =>
-            return map::apply_to_series(timeseries, function.0),
+            return map::apply_to_series(timevector, function.0),
         Element::Arithmetic{ function, rhs } =>
-            return arithmetic::apply(timeseries, *function, *rhs),
+            return arithmetic::apply(timevector, *function, *rhs),
     }
 }
 
 // TODO is (immutable, parallel_safe) correct?
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
 pub fn add_unstable_element<'p, 'e>(
-    mut pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
-    element: toolkit_experimental::UnstableTimeseriesPipeline<'e>,
-) -> toolkit_experimental::UnstableTimeseriesPipeline<'p> {
+    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
+    element: toolkit_experimental::UnstableTimevectorPipeline<'e>,
+) -> toolkit_experimental::UnstableTimevectorPipeline<'p> {
     pipeline.elements.as_owned().extend(element.elements.iter());
     pipeline.num_elements = pipeline.elements.len().try_into().unwrap();
     pipeline
@@ -184,7 +184,7 @@ type Internal = usize;
 pub unsafe fn pipeline_support(input: Internal)
 -> Internal {
     pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
-        let new_element = UnstableTimeseriesPipeline::from_datum(new_element, false, 0)
+        let new_element = UnstableTimevectorPipeline::from_datum(new_element, false, 0)
             .unwrap();
         add_unstable_element(old_pipeline, new_element).into_datum().unwrap()
     })
@@ -192,7 +192,7 @@ pub unsafe fn pipeline_support(input: Internal)
 
 pub(crate) unsafe fn pipeline_support_helper(
     input: Internal,
-    make_new_pipeline: impl FnOnce(UnstableTimeseriesPipeline, pg_sys::Datum) -> pg_sys::Datum,
+    make_new_pipeline: impl FnOnce(UnstableTimevectorPipeline, pg_sys::Datum) -> pg_sys::Datum,
 ) -> Internal {
     use std::{mem::{size_of, MaybeUninit}, ptr};
 
@@ -275,7 +275,7 @@ pub(crate) unsafe fn pipeline_support_helper(
 
     let new_element_const: *mut pg_sys::Const = arg2.cast();
 
-    let old_pipeline = UnstableTimeseriesPipeline::from_datum((*old_const).constvalue, false, 0).unwrap();
+    let old_pipeline = UnstableTimevectorPipeline::from_datum((*old_const).constvalue, false, 0).unwrap();
     let new_pipeline = make_new_pipeline(old_pipeline, (*new_element_const).constvalue);
 
     let new_const = pg_sys::palloc(size_of::<pg_sys::Const>()).cast();
@@ -301,37 +301,37 @@ ALTER FUNCTION toolkit_experimental."add_unstable_element" SUPPORT toolkit_exper
 
 CREATE OPERATOR -> (
     PROCEDURE=toolkit_experimental."run_pipeline",
-    LEFTARG=toolkit_experimental.TimeSeries,
-    RIGHTARG=toolkit_experimental.UnstableTimeseriesPipeline
+    LEFTARG=toolkit_experimental.Timevector,
+    RIGHTARG=toolkit_experimental.UnstableTimevectorPipeline
 );
 
 CREATE OPERATOR -> (
     PROCEDURE=toolkit_experimental."add_unstable_element",
-    LEFTARG=toolkit_experimental.UnstableTimeseriesPipeline,
-    RIGHTARG=toolkit_experimental.UnstableTimeseriesPipeline
+    LEFTARG=toolkit_experimental.UnstableTimevectorPipeline,
+    RIGHTARG=toolkit_experimental.UnstableTimevectorPipeline
 );
 "#);
 
 #[pg_extern(stable, parallel_safe, schema="toolkit_experimental")]
 pub fn run_user_pipeline_element<'s, 'p>(
-    timeseries: toolkit_experimental::TimeSeries<'s>,
+    timevector: toolkit_experimental::Timevector<'s>,
     function: pg_sys::regproc,
-) -> toolkit_experimental::TimeSeries<'static> {
+) -> toolkit_experimental::Timevector<'static> {
     check_user_function_type(function);
-    apply_to_series(timeseries, function).in_current_context()
+    apply_to_series(timevector, function).in_current_context()
 }
 
 #[pg_extern(stable, parallel_safe, schema="toolkit_experimental")]
 pub fn build_unstable_user_pipeline<'s, 'p>(
     first: pg_sys::regproc,
     second: pg_sys::regproc,
-) -> toolkit_experimental::UnstableTimeseriesPipeline<'static> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     let elements: Vec<_> = vec![
         map_series_element(first),
         map_series_element(second),
     ];
     build! {
-        UnstableTimeseriesPipeline {
+        UnstableTimevectorPipeline {
             num_elements: 2,
             elements: elements.into(),
         }
@@ -340,14 +340,14 @@ pub fn build_unstable_user_pipeline<'s, 'p>(
 
 #[pg_extern(stable, parallel_safe, schema="toolkit_experimental")]
 pub fn add_user_pipeline_element<'p, 'e>(
-    pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
+    pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
     function: pg_sys::regproc,
-) -> toolkit_experimental::UnstableTimeseriesPipeline<'p> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'p> {
     let elements: Vec<_> = pipeline.elements.iter()
         .chain(Some(map_series_element(function)))
         .collect();
     build! {
-        UnstableTimeseriesPipeline {
+        UnstableTimevectorPipeline {
             num_elements: elements.len().try_into().unwrap(),
             elements: elements.into(),
         }
@@ -355,9 +355,9 @@ pub fn add_user_pipeline_element<'p, 'e>(
 }
 
 // using this instead of pg_operator since the latter doesn't support schemas yet
-// if we use `->` for both this and and the regular timeseries elements trying
+// if we use `->` for both this and and the regular timevector elements trying
 // to do `series -> 'custom_element'` gets an ambiguous operator error
-// `timeseries -> unknown` is not unique. For now we just use a different
+// `timevector -> unknown` is not unique. For now we just use a different
 // operator for user-defined pipeline elements. In the future we could consider
 // changing the element input function to fallback to checking if the input is
 // a regproc if it doesn't recognize it; the formats should be different enough
@@ -367,7 +367,7 @@ pub fn add_user_pipeline_element<'p, 'e>(
 extension_sql!(r#"
 CREATE OPERATOR ->> (
     PROCEDURE=toolkit_experimental."run_user_pipeline_element",
-    LEFTARG=toolkit_experimental.TimeSeries,
+    LEFTARG=toolkit_experimental.Timevector,
     RIGHTARG=regproc
 );
 
@@ -379,7 +379,7 @@ CREATE OPERATOR ->> (
 
 CREATE OPERATOR ->> (
     PROCEDURE=toolkit_experimental."add_user_pipeline_element",
-    LEFTARG=toolkit_experimental.UnstableTimeseriesPipeline,
+    LEFTARG=toolkit_experimental.UnstableTimevectorPipeline,
     RIGHTARG=regproc
 );
 "#);
@@ -393,7 +393,7 @@ CREATE OPERATOR ->> (
 )]
 pub fn lttb_pipeline_element<'p, 'e>(
     resolution: i32,
-) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     Element::LTTB {
         resolution: resolution.try_into().unwrap(),
     }.flatten()
@@ -414,13 +414,13 @@ mod tests {
             client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             client.select(
-                "CREATE TABLE lttb_pipe (series timeseries)",
+                "CREATE TABLE lttb_pipe (series timevector)",
                 None,
                 None
             );
             client.select(
                 "INSERT INTO lttb_pipe \
-                SELECT timeseries(time, val) FROM ( \
+                SELECT timevector(time, val) FROM ( \
                     SELECT \
                         '2020-01-01 UTC'::TIMESTAMPTZ + make_interval(days=>(foo*10)::int) as time, \
                         TRUNC((10 + 5 * cos(foo))::numeric, 4) as val \
@@ -524,22 +524,22 @@ mod tests {
             client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             let output = client.select(
-                "EXPLAIN (verbose) SELECT timeseries('2021-01-01'::timestamptz, 0.1) -> round() -> abs() -> round();",
+                "EXPLAIN (verbose) SELECT timevector('2021-01-01'::timestamptz, 0.1) -> round() -> abs() -> round();",
                 None,
                 None
             ).skip(1)
                 .next().unwrap()
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
-            // check that it's executing as if we had input `timeseries -> (round() -> abs())`
+            // check that it's executing as if we had input `timevector -> (round() -> abs())`
             assert_eq!(output.trim(), "Output: \
                 run_pipeline(\
-                    timeseries('2021-01-01 00:00:00+00'::timestamp with time zone, '0.1'::double precision), \
+                    timevector('2021-01-01 00:00:00+00'::timestamp with time zone, '0.1'::double precision), \
                    '(version:1,num_elements:3,elements:[\
                         Arithmetic(function:Round,rhs:0),\
                         Arithmetic(function:Abs,rhs:0),\
                         Arithmetic(function:Round,rhs:0)\
-                    ])'::unstabletimeseriespipeline\
+                    ])'::unstabletimevectorpipeline\
                 )");
         });
     }

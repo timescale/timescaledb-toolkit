@@ -1,15 +1,15 @@
 
 # Info dump on rolling average APIs #
 
-Rolling averages are currntly nasty to do with with timescaledb (user complaint https://news.ycombinator.com/item?id=27051005).  In our timeseries API we will eventually provide a function like
+Rolling averages are currntly nasty to do with with timescaledb (user complaint https://news.ycombinator.com/item?id=27051005).  In our timevector API we will eventually provide a function like
 ```SQL , ignore
 moving_average(window => '30 minutes', slide => '5 minutes', data)
 ```
-However, because set-returning aggregates cannot not exist in Postgres, this will not work outside of the timeseries API. Currently, doing rolling average properly requires windowed aggregates. In base SQL it is a real PITA because you have to do sum and count separately and then divide them yourself.
+However, because set-returning aggregates cannot not exist in Postgres, this will not work outside of the timevector API. Currently, doing rolling average properly requires windowed aggregates. In base SQL it is a real PITA because you have to do sum and count separately and then divide them yourself.
 
 ```SQL , ignore
 SELECT
-    time_bucket('5 minutes', time) as bucket, 
+    time_bucket('5 minutes', time) as bucket,
     sum(sum(value)) OVER thirty_minutes / sum(count(value)) OVER thirty_minutes as rolling_average
 FROM data
 GROUP BY 1
@@ -48,8 +48,8 @@ WINDOW thirty_minutes as (ORDER BY time_bucket('5 minutes'::interval, ts) RANGE 
 for non-trivial cases, where you want to gather multiple statistics over the same data, this ends up significantly less readable, compare
 ```SQL , ignore
 SELECT
-    time_bucket('5 minutes'::interval, ts) as bucket, 
-    rolling_average(stats_agg(value)) OVER thirty_minutes, 
+    time_bucket('5 minutes'::interval, ts) as bucket,
+    rolling_average(stats_agg(value)) OVER thirty_minutes,
     rolling_stddev(stats_agg(value)) OVER thirty_minutes,
     rolling_approx_percentile(0.1, percentile_agg(val1)) OVER thirty_minutes,
     rolling_approx_percentile(0.9, percentile_agg(val1)) OVER thirty_minutes
@@ -60,7 +60,7 @@ WINDOW thirty_minutes as (ORDER BY time_bucket('5 minutes'::interval, ts) RANGE 
 to
 ```SQL , ignore
 SELECT
-    bucket, 
+    bucket,
     average(rolling_stats),
     stddev(rolling_stats),
     approx_percentile(0.1, rolling_percentile),
@@ -80,9 +80,9 @@ since in real world, and all our documentation, we expect to see multi-statistic
 Seperating out the re-aggregation step also allows for more powerful composition, for instance:
 ```SQL , ignore
 SELECT
-    bucket, 
+    bucket,
     average(rolling_stats) as rolling_average,
-    average(rolling(rolling_stats) OVER (ORDER BY bucket)) AS cumulative_average, 
+    average(rolling(rolling_stats) OVER (ORDER BY bucket)) AS cumulative_average,
     average(rolling(rolling_stats) OVER ()) as full_set_average,
     average(rolling_stats) / average(rolling(rolling_stats) OVER ()) as normalized_average
 FROM (
@@ -100,7 +100,7 @@ FROM (
 
 ```SQL , ignore
 SELECT
-    bucket, 
+    bucket,
     average(rolling_stats),
     stddev(rolling_stats),
     approx_percentile(0.1, rolling_percentile),
@@ -128,7 +128,7 @@ WITH aggs as (
     WINDOW thirty_minutes as (ORDER BY time_bucket('5 minutes'::interval, ts) RANGE '30 minutes' PRECEDING)
 )
 SELECT
-    bucket, 
+    bucket,
     average(rolling_stats),
     stddev(rolling_stats),
     approx_percentile(0.1, rolling_percentile),
@@ -146,7 +146,7 @@ WITH aggs as (
         percentile_agg(value)
     FROM foo
     GROUP BY 1
-), 
+),
 rolling_aggs as (
     SELECT
         bucket
@@ -156,7 +156,7 @@ rolling_aggs as (
     WINDOW thirty_minutes as (ORDER BY bucket RANGE '30 minutes' PRECEDING)
 )
 SELECT
-    bucket, 
+    bucket,
     average(rolling_stats),
     stddev(rolling_stats),
     approx_percentile(0.1, rolling_percentile),
@@ -168,7 +168,7 @@ which is also equivalent to:
 
 ```SQL , ignore
 SELECT
-    bucket, 
+    bucket,
     average(rolling_stats),
     stddev(rolling_stats),
     approx_percentile(0.1, rolling_percentile),

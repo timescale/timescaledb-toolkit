@@ -38,12 +38,12 @@ pub mod toolkit_experimental {
 
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
 pub fn run_pipeline_then_stats_agg<'s, 'p>(
-    mut timeseries: toolkit_experimental::TimeSeries<'s>,
+    mut timevector: toolkit_experimental::Timevector<'s>,
     pipeline: toolkit_experimental::PipelineThenStatsAgg<'p>,
 ) -> StatsSummary1D<'static> {
-    timeseries = run_pipeline_elements(timeseries, pipeline.elements.iter());
+    timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
     let mut stats = InternalStatsSummary1D::new();
-    for TSPoint{ val, ..} in timeseries.iter() {
+    for TSPoint{ val, ..} in timevector.iter() {
         stats.accum(val).expect("error while running stats_agg");
     }
     StatsSummary1D::from_internal(stats)
@@ -51,7 +51,7 @@ pub fn run_pipeline_then_stats_agg<'s, 'p>(
 
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
 pub fn finalize_with_stats_agg<'p, 'e>(
-    mut pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
+    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
     then_stats_agg: toolkit_experimental::PipelineThenStatsAgg<'e>,
 ) -> toolkit_experimental::PipelineThenStatsAgg<'e> {
     if then_stats_agg.num_elements == 0 {
@@ -112,13 +112,13 @@ ALTER FUNCTION toolkit_experimental."run_pipeline_then_stats_agg" SUPPORT toolki
 
 CREATE OPERATOR -> (
     PROCEDURE=toolkit_experimental."run_pipeline_then_stats_agg",
-    LEFTARG=toolkit_experimental.TimeSeries,
+    LEFTARG=toolkit_experimental.Timevector,
     RIGHTARG=toolkit_experimental.PipelineThenStatsAgg
 );
 
 CREATE OPERATOR -> (
     PROCEDURE=toolkit_experimental."finalize_with_stats_agg",
-    LEFTARG=toolkit_experimental.UnstableTimeseriesPipeline,
+    LEFTARG=toolkit_experimental.UnstableTimevectorPipeline,
     RIGHTARG=toolkit_experimental.PipelineThenStatsAgg
 );
 "#);
@@ -163,7 +163,7 @@ extension_sql!(r#"
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_pipeline_then_sum<'s, 'p>(
-    timeseries: toolkit_experimental::TimeSeries<'s>,
+    timevector: toolkit_experimental::Timevector<'s>,
     pipeline: toolkit_experimental::PipelineThenSum<'p>,
 ) -> Option<f64> {
     let pipeline = pipeline.0;
@@ -173,14 +173,14 @@ pub fn arrow_pipeline_then_sum<'s, 'p>(
             elements: pipeline.elements,
         }
     };
-    let stats_agg = run_pipeline_then_stats_agg(timeseries, pipeline);
+    let stats_agg = run_pipeline_then_stats_agg(timevector, pipeline);
     stats_agg::stats1d_sum(stats_agg)
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn finalize_with_sum<'p, 'e>(
-    mut pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
+    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
     then_stats_agg: toolkit_experimental::PipelineThenSum<'e>,
 ) -> toolkit_experimental::PipelineThenSum<'e> {
     if then_stats_agg.num_elements == 0 {
@@ -262,7 +262,7 @@ extension_sql!(r#"
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_pipeline_then_average<'s, 'p>(
-    timeseries: toolkit_experimental::TimeSeries<'s>,
+    timevector: toolkit_experimental::Timevector<'s>,
     pipeline: toolkit_experimental::PipelineThenAverage<'p>,
 ) -> Option<f64> {
     let pipeline = pipeline.0;
@@ -272,14 +272,14 @@ pub fn arrow_pipeline_then_average<'s, 'p>(
             elements: pipeline.elements,
         }
     };
-    let stats_agg = run_pipeline_then_stats_agg(timeseries, pipeline);
+    let stats_agg = run_pipeline_then_stats_agg(timevector, pipeline);
     stats_agg::stats1d_average(stats_agg)
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn finalize_with_average<'p, 'e>(
-    mut pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
+    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
     then_stats_agg: toolkit_experimental::PipelineThenAverage<'e>,
 ) -> toolkit_experimental::PipelineThenAverage<'e> {
     if then_stats_agg.num_elements == 0 {
@@ -361,17 +361,17 @@ extension_sql!(r#"
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_pipeline_then_num_vals<'s, 'p>(
-    timeseries: toolkit_experimental::TimeSeries<'s>,
+    timevector: toolkit_experimental::Timevector<'s>,
     pipeline: toolkit_experimental::PipelineThenNumVals<'p>,
 ) -> i64 {
-    run_pipeline_elements(timeseries, pipeline.elements.iter())
+    run_pipeline_elements(timevector, pipeline.elements.iter())
         .num_vals() as _
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn finalize_with_num_vals<'p, 'e>(
-    mut pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
+    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
     then_stats_agg: toolkit_experimental::PipelineThenNumVals<'e>,
 ) -> toolkit_experimental::PipelineThenNumVals<'e> {
     if then_stats_agg.num_elements == 0 {
@@ -424,14 +424,14 @@ ron_inout_funcs!(PipelineThenCounterAgg);
 
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
 pub fn run_pipeline_then_counter_agg<'s, 'p>(
-    mut timeseries: toolkit_experimental::TimeSeries<'s>,
+    mut timevector: toolkit_experimental::Timevector<'s>,
     pipeline: toolkit_experimental::PipelineThenCounterAgg<'p>,
 ) -> Option<CounterSummary<'static>> {
-    timeseries = run_pipeline_elements(timeseries, pipeline.elements.iter());
-    if timeseries.num_points() == 0 {
+    timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
+    if timevector.num_points() == 0 {
         return None
     }
-    let mut it = timeseries.iter();
+    let mut it = timevector.iter();
     let mut summary = InternalCounterSummary::new(&it.next().unwrap(), None);
     for point in it {
         summary.add_point(&point).expect("error while running counter_agg");
@@ -441,7 +441,7 @@ pub fn run_pipeline_then_counter_agg<'s, 'p>(
 
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
 pub fn finalize_with_counter_agg<'p, 'e>(
-    mut pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
+    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
     then_counter_agg: toolkit_experimental::PipelineThenCounterAgg<'e>,
 ) -> toolkit_experimental::PipelineThenCounterAgg<'e> {
     if then_counter_agg.num_elements == 0 {
@@ -501,13 +501,13 @@ ALTER FUNCTION toolkit_experimental."run_pipeline_then_counter_agg" SUPPORT tool
 
 CREATE OPERATOR -> (
     PROCEDURE=toolkit_experimental."run_pipeline_then_counter_agg",
-    LEFTARG=toolkit_experimental.TimeSeries,
+    LEFTARG=toolkit_experimental.Timevector,
     RIGHTARG=toolkit_experimental.PipelineThenCounterAgg
 );
 
 CREATE OPERATOR -> (
     PROCEDURE=toolkit_experimental."finalize_with_counter_agg",
-    LEFTARG=toolkit_experimental.UnstableTimeseriesPipeline,
+    LEFTARG=toolkit_experimental.UnstableTimevectorPipeline,
     RIGHTARG=toolkit_experimental.PipelineThenCounterAgg
 );
 "#);
@@ -525,22 +525,22 @@ ron_inout_funcs!(PipelineThenHyperLogLog);
 
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
 pub fn run_pipeline_then_hyperloglog<'s, 'p>(
-    mut timeseries: toolkit_experimental::TimeSeries<'s>,
+    mut timevector: toolkit_experimental::Timevector<'s>,
     pipeline: toolkit_experimental::PipelineThenHyperLogLog<'p>,
 ) -> HyperLogLog<'static> {
     unsafe {
-        timeseries = run_pipeline_elements(timeseries, pipeline.elements.iter());
-        HyperLogLog::build_from(pipeline.hll_size as i32, 
-            PgBuiltInOids::FLOAT8OID as u32, 
+        timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
+        HyperLogLog::build_from(pipeline.hll_size as i32,
+            PgBuiltInOids::FLOAT8OID as u32,
             None,
-            timeseries.iter().map(|point| point.val.into_datum().unwrap())
+            timevector.iter().map(|point| point.val.into_datum().unwrap())
         )
     }
 }
 
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
 pub fn finalize_with_hyperloglog<'p, 'e>(
-    mut pipeline: toolkit_experimental::UnstableTimeseriesPipeline<'p>,
+    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
     then_hyperloglog: toolkit_experimental::PipelineThenHyperLogLog<'e>,
 ) -> toolkit_experimental::PipelineThenHyperLogLog<'e> {
     if then_hyperloglog.num_elements == 0 {
@@ -603,13 +603,13 @@ ALTER FUNCTION toolkit_experimental."run_pipeline_then_hyperloglog" SUPPORT tool
 
 CREATE OPERATOR -> (
     PROCEDURE=toolkit_experimental."run_pipeline_then_hyperloglog",
-    LEFTARG=toolkit_experimental.TimeSeries,
+    LEFTARG=toolkit_experimental.Timevector,
     RIGHTARG=toolkit_experimental.PipelineThenHyperLogLog
 );
 
 CREATE OPERATOR -> (
     PROCEDURE=toolkit_experimental."finalize_with_hyperloglog",
-    LEFTARG=toolkit_experimental.UnstableTimeseriesPipeline,
+    LEFTARG=toolkit_experimental.UnstableTimevectorPipeline,
     RIGHTARG=toolkit_experimental.PipelineThenHyperLogLog
 );
 "#);
@@ -629,7 +629,7 @@ mod tests {
             client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             // we use a subselect to guarantee order
-            let create_series = "SELECT timeseries(time, value) as series FROM \
+            let create_series = "SELECT timevector(time, value) as series FROM \
                 (VALUES ('2020-01-04 UTC'::TIMESTAMPTZ, 25.0), \
                     ('2020-01-01 UTC'::TIMESTAMPTZ, 10.0), \
                     ('2020-01-03 UTC'::TIMESTAMPTZ, 20.0), \
@@ -661,7 +661,7 @@ mod tests {
             // pipeline-folding optimization should proceed
             let output = client.select(
                 "EXPLAIN (verbose) SELECT \
-                timeseries('1930-04-05'::timestamptz, 123.0) \
+                timevector('1930-04-05'::timestamptz, 123.0) \
                 -> ceil() -> abs() -> floor() \
                 -> stats_agg() -> average();",
                 None,
@@ -672,7 +672,7 @@ mod tests {
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: (\
                 run_pipeline_then_stats_agg(\
-                    timeseries('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
+                    timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,num_elements:3,elements:[\
                         Arithmetic(function:Ceil,rhs:0),\
                         Arithmetic(function:Abs,rhs:0),\
@@ -694,7 +694,7 @@ mod tests {
             client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             // we use a subselect to guarantee order
-            let create_series = "SELECT timeseries(time, value) as series FROM \
+            let create_series = "SELECT timevector(time, value) as series FROM \
                 (VALUES ('2020-01-04 UTC'::TIMESTAMPTZ, 25.0), \
                     ('2020-01-01 UTC'::TIMESTAMPTZ, 10.0), \
                     ('2020-01-03 UTC'::TIMESTAMPTZ, 20.0), \
@@ -726,7 +726,7 @@ mod tests {
             // pipeline-folding optimization should proceed
             let output = client.select(
                 "EXPLAIN (verbose) SELECT \
-                timeseries('1930-04-05'::timestamptz, 123.0) \
+                timevector('1930-04-05'::timestamptz, 123.0) \
                 -> ceil() -> abs() -> floor() \
                 -> sum();",
                 None,
@@ -737,7 +737,7 @@ mod tests {
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: \
                 arrow_pipeline_then_sum(\
-                    timeseries('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
+                    timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,num_elements:3,elements:[\
                         Arithmetic(function:Ceil,rhs:0),\
                         Arithmetic(function:Abs,rhs:0),\
@@ -758,7 +758,7 @@ mod tests {
             client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             // we use a subselect to guarantee order
-            let create_series = "SELECT timeseries(time, value) as series FROM \
+            let create_series = "SELECT timevector(time, value) as series FROM \
                 (VALUES ('2020-01-04 UTC'::TIMESTAMPTZ, 25.0), \
                     ('2020-01-01 UTC'::TIMESTAMPTZ, 10.0), \
                     ('2020-01-03 UTC'::TIMESTAMPTZ, 20.0), \
@@ -790,7 +790,7 @@ mod tests {
             // pipeline-folding optimization should proceed
             let output = client.select(
                 "EXPLAIN (verbose) SELECT \
-                timeseries('1930-04-05'::timestamptz, 123.0) \
+                timevector('1930-04-05'::timestamptz, 123.0) \
                 -> ceil() -> abs() -> floor() \
                 -> average();",
                 None,
@@ -801,7 +801,7 @@ mod tests {
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: \
                 arrow_pipeline_then_average(\
-                    timeseries('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
+                    timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,num_elements:3,elements:[\
                         Arithmetic(function:Ceil,rhs:0),\
                         Arithmetic(function:Abs,rhs:0),\
@@ -822,7 +822,7 @@ mod tests {
             client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             // we use a subselect to guarantee order
-            let create_series = "SELECT timeseries(time, value) as series FROM \
+            let create_series = "SELECT timevector(time, value) as series FROM \
                 (VALUES ('2020-01-04 UTC'::TIMESTAMPTZ, 25.0), \
                     ('2020-01-01 UTC'::TIMESTAMPTZ, 10.0), \
                     ('2020-01-03 UTC'::TIMESTAMPTZ, 20.0), \
@@ -854,7 +854,7 @@ mod tests {
             // pipeline-folding optimization should proceed
             let output = client.select(
                 "EXPLAIN (verbose) SELECT \
-                timeseries('1930-04-05'::timestamptz, 123.0) \
+                timevector('1930-04-05'::timestamptz, 123.0) \
                 -> ceil() -> abs() -> floor() \
                 -> num_vals();",
                 None,
@@ -865,7 +865,7 @@ mod tests {
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: \
                 arrow_pipeline_then_num_vals(\
-                    timeseries('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
+                    timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,num_elements:3,elements:[\
                         Arithmetic(function:Ceil,rhs:0),\
                         Arithmetic(function:Abs,rhs:0),\
@@ -886,7 +886,7 @@ mod tests {
             client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             // we use a subselect to guarantee order
-            let create_series = "SELECT timeseries(time, value) as series FROM \
+            let create_series = "SELECT timevector(time, value) as series FROM \
             (VALUES ('2020-01-04 UTC'::TIMESTAMPTZ, 10.0), \
                 ('2020-01-01 UTC'::TIMESTAMPTZ, 15.0), \
                 ('2020-01-03 UTC'::TIMESTAMPTZ, 20.0), \
@@ -914,7 +914,7 @@ mod tests {
 
             let output = client.select(
                 "EXPLAIN (verbose) SELECT \
-                timeseries('1930-04-05'::timestamptz, 123.0) \
+                timevector('1930-04-05'::timestamptz, 123.0) \
                 -> ceil() -> abs() -> floor() \
                 -> counter_agg();",
                 None,
@@ -925,7 +925,7 @@ mod tests {
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: \
                 run_pipeline_then_counter_agg(\
-                    timeseries('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
+                    timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,num_elements:3,elements:[\
                         Arithmetic(function:Ceil,rhs:0),\
                         Arithmetic(function:Abs,rhs:0),\
@@ -946,7 +946,7 @@ mod tests {
             client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             // we use a subselect to guarantee order
-            let create_series = "SELECT timeseries(time, value) as series FROM \
+            let create_series = "SELECT timevector(time, value) as series FROM \
             (VALUES ('2020-01-04 UTC'::TIMESTAMPTZ, 10.0), \
                 ('2020-01-01 UTC'::TIMESTAMPTZ, 15.0), \
                 ('2020-01-03 UTC'::TIMESTAMPTZ, 20.0), \
@@ -978,7 +978,7 @@ mod tests {
 
             let output = client.select(
                 "EXPLAIN (verbose) SELECT \
-                timeseries('1930-04-05'::timestamptz, 123.0) \
+                timevector('1930-04-05'::timestamptz, 123.0) \
                 -> ceil() -> abs() -> floor() \
                 -> hyperloglog(100);",
                 None,
@@ -989,7 +989,7 @@ mod tests {
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: \
                 run_pipeline_then_hyperloglog(\
-                    timeseries('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
+                    timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,hll_size:100,num_elements:3,elements:[\
                         Arithmetic(function:Ceil,rhs:0),\
                         Arithmetic(function:Abs,rhs:0),\

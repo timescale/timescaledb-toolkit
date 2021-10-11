@@ -11,20 +11,20 @@ use super::*;
     schema="toolkit_experimental"
 )]
 pub fn sort_pipeline_element<'p, 'e>(
-) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     Element::Sort {}.flatten()
 }
 
-pub fn sort_timeseries(
-    mut series: toolkit_experimental::TimeSeries<'_>,
-) -> toolkit_experimental::TimeSeries<'_> {
+pub fn sort_timevector(
+    mut series: toolkit_experimental::Timevector<'_>,
+) -> toolkit_experimental::Timevector<'_> {
     match &mut series.series {
         SeriesType::GappyNormalSeries{..} | SeriesType::NormalSeries{..} | SeriesType::SortedSeries{..} => series,
         SeriesType::ExplicitSeries{points, ..} => {
             let points = points.as_owned();
             let mut points = std::mem::replace(points, vec![]);
             points.sort_by(|a, b| a.ts.cmp(&b.ts));
-            TimeSeriesData {
+            TimevectorData {
                 header: 0,
                 version: 1,
                 padding: [0; 3],
@@ -69,7 +69,7 @@ mod tests {
             );
 
             let val = client.select(
-                "SELECT (timeseries(time, value))::TEXT FROM series",
+                "SELECT (timevector(time, value))::TEXT FROM series",
                 None,
                 None
             )
@@ -85,7 +85,7 @@ mod tests {
 
 
             let val = client.select(
-                "SELECT (timeseries(time, value) -> sort())::TEXT FROM series",
+                "SELECT (timevector(time, value) -> sort())::TEXT FROM series",
                 None,
                 None
             )

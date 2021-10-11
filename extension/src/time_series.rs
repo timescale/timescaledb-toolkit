@@ -23,7 +23,7 @@ type bytea = pg_sys::Datum;
 
 pg_type! {
     #[derive(Debug)]
-    struct TimeSeries<'input> {
+    struct Timevector<'input> {
         series: enum SeriesType<'input> {
             type_id: u64,
             SortedSeries: 1 {
@@ -53,7 +53,7 @@ pg_type! {
     }
 }
 
-impl<'input> InOutFuncs for TimeSeries<'input> {
+impl<'input> InOutFuncs for Timevector<'input> {
     fn output(&self, buffer: &mut StringInfo) {
         use crate::serialization::{EncodedStr::*, str_to_db_encoding};
 
@@ -88,7 +88,7 @@ impl<'input> InOutFuncs for TimeSeries<'input> {
         };
         unsafe {
             flatten! {
-                TimeSeries {
+                Timevector {
                     series: SeriesType::ExplicitSeries {
                         num_points: series.len() as u64,
                         points: series.into(),
@@ -103,10 +103,10 @@ impl<'input> InOutFuncs for TimeSeries<'input> {
 // so that pgx generates the correct SQL
 pub mod toolkit_experimental {
     pub(crate) use super::*;
-    varlena_type!(TimeSeries);
+    varlena_type!(Timevector);
 }
 
-impl<'input> TimeSeries<'input> {
+impl<'input> Timevector<'input> {
     pub fn num_points(&self) -> usize {
         match &self.series {
             SeriesType::SortedSeries{points, ..} =>
@@ -120,7 +120,7 @@ impl<'input> TimeSeries<'input> {
         }
     }
 
-    // Gets the nth point of a timeseries
+    // Gets the nth point of a timevector
     // Differs from normal vector get in that it returns a copy rather than a reference (as the point may have to be constructed)
     pub fn get(&self, index: usize) -> Option<TSPoint> {
         if index >= self.num_points() {
@@ -135,7 +135,7 @@ impl<'input> TimeSeries<'input> {
             SeriesType::NormalSeries{start_ts, step_interval, values, ..} =>
                 Some(TSPoint{ts: start_ts + index as i64 * step_interval, val: values.as_slice()[index]}),
             SeriesType::GappyNormalSeries{..} =>
-                panic!("Can not efficient index into the middle of a normalized timeseries with gaps"),
+                panic!("Can not efficient index into the middle of a normalized timevector with gaps"),
         }
     }
 
@@ -152,12 +152,12 @@ impl<'input> TimeSeries<'input> {
         }
     }
 
-    fn clone_owned(&self) -> TimeSeries<'static> {
-        TimeSeriesData::clone(&*self).into_owned().into()
+    fn clone_owned(&self) -> Timevector<'static> {
+        TimevectorData::clone(&*self).into_owned().into()
     }
 }
 
-impl<'a> TimeSeries<'a> {
+impl<'a> Timevector<'a> {
     pub fn iter(&self) -> Iter<'_> {
         match &self.series {
             SeriesType::SortedSeries{points, ..} =>
@@ -194,41 +194,41 @@ impl<'a> TimeSeries<'a> {
     }
 }
 
-pub static TIMESERIES_OID: once_cell::sync::Lazy<pg_sys::Oid> = once_cell::sync::Lazy::new(|| {
-    TimeSeries::type_oid()
+pub static TIMEVECTOR_OID: once_cell::sync::Lazy<pg_sys::Oid> = once_cell::sync::Lazy::new(|| {
+    Timevector::type_oid()
 });
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn unnest(
-    series: toolkit_experimental::TimeSeries<'_>,
+    series: toolkit_experimental::Timevector<'_>,
 ) -> impl std::iter::Iterator<Item = (name!(time,pg_sys::TimestampTz),name!(value,f64))> + '_ {
     series.into_iter().map(|points| (points.ts, points.val))
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn timeseries_serialize(
-    state: Internal<TimeSeries<'_>>,
+pub fn timevector_serialize(
+    state: Internal<Timevector<'_>>,
 ) -> bytea {
     let series = &state.series;
     crate::do_serialize!(series)
 }
 
 #[pg_extern(schema = "toolkit_experimental",strict, immutable, parallel_safe)]
-pub fn timeseries_deserialize(
+pub fn timevector_deserialize(
     bytes: bytea,
     _internal: Option<Internal<()>>,
-) -> Internal<TimeSeries<'static>> {
-    let data: TimeSeries<'static> = crate::do_deserialize!(bytes, TimeSeriesData);
+) -> Internal<Timevector<'static>> {
+    let data: Timevector<'static> = crate::do_deserialize!(bytes, TimevectorData);
     data.into()
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn timeseries_trans(
-    state: Option<Internal<TimeSeries<'_>>>,
+pub fn timevector_trans(
+    state: Option<Internal<Timevector<'_>>>,
     time: Option<pg_sys::TimestampTz>,
     value: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<TimeSeries<'_>>> {
+) -> Option<Internal<Timevector<'_>>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let time = match time {
@@ -241,7 +241,7 @@ pub fn timeseries_trans(
             };
             let mut state = match state {
                 None => Internal::from(build!{
-                    TimeSeries {
+                    Timevector {
                         series: SeriesType::SortedSeries{
                             num_points: 0,
                             points: vec![].into(),
@@ -262,7 +262,7 @@ pub fn timeseries_trans(
                         if slice[0].ts > slice[1].ts {
                             let points = std::mem::replace(points, vec![].into());
                             *state = build!{
-                                TimeSeries {
+                                Timevector {
                                     series: SeriesType::ExplicitSeries{
                                         num_points: points.len() as _,
                                         points: points,
@@ -280,11 +280,11 @@ pub fn timeseries_trans(
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn timeseries_compound_trans<'b>(
-    state: Option<Internal<TimeSeries<'static>>>,
-    series: Option<toolkit_experimental::TimeSeries<'b>>,
+pub fn timevector_compound_trans<'b>(
+    state: Option<Internal<Timevector<'static>>>,
+    series: Option<toolkit_experimental::Timevector<'b>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<TimeSeries<'static>>> {
+) -> Option<Internal<Timevector<'static>>> {
     use SeriesType::{SortedSeries, ExplicitSeries};
     unsafe {
         in_aggregate_context(fcinfo, || {
@@ -315,7 +315,7 @@ pub fn timeseries_compound_trans<'b>(
                             points.as_owned().extend(series.iter());
                             let points = std::mem::replace(points, vec![].into());
                             *state = build!{
-                                TimeSeries {
+                                Timevector {
                                     series: SeriesType::ExplicitSeries{
                                         num_points: points.len() as _,
                                         points: points,
@@ -333,11 +333,11 @@ pub fn timeseries_compound_trans<'b>(
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn timeseries_combine<'a, 'b> (
-    state1: Option<Internal<TimeSeries<'a>>>,
-    state2: Option<Internal<TimeSeries<'b>>>,
+pub fn timevector_combine<'a, 'b> (
+    state1: Option<Internal<Timevector<'a>>>,
+    state2: Option<Internal<Timevector<'b>>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<TimeSeries<'static>>> {
+) -> Option<Internal<Timevector<'static>>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state1, state2) {
@@ -351,7 +351,7 @@ pub fn timeseries_combine<'a, 'b> (
     }
 }
 
-pub fn combine(first: TimeSeries<'_>, second: TimeSeries<'_>) -> TimeSeries<'static> {
+pub fn combine(first: Timevector<'_>, second: Timevector<'_>) -> Timevector<'static> {
     use SeriesType::*;
     if first.num_vals() == 0 {
         return second.clone_owned();
@@ -367,7 +367,7 @@ pub fn combine(first: TimeSeries<'_>, second: TimeSeries<'_>) -> TimeSeries<'sta
         if first_points.slice().last().unwrap().ts <= second_points.slice()[0].ts {
             let mut new_points = first_points.clone().into_owned();
             new_points.as_owned().extend(second_points.iter());
-            return build! { TimeSeries {
+            return build! { Timevector {
                 series: SortedSeries {
                     num_points: new_points.len() as _,
                     points: new_points.into(),
@@ -378,7 +378,7 @@ pub fn combine(first: TimeSeries<'_>, second: TimeSeries<'_>) -> TimeSeries<'sta
         if second_points.slice().last().unwrap().ts < first_points.slice()[0].ts {
             let mut new_points = second_points.clone().into_owned();
             new_points.as_owned().extend(first_points.iter());
-            return build! { TimeSeries {
+            return build! { Timevector {
                 series: SortedSeries {
                     num_points: new_points.len() as _,
                     points: new_points.into(),
@@ -407,7 +407,7 @@ pub fn combine(first: TimeSeries<'_>, second: TimeSeries<'_>) -> TimeSeries<'sta
             if *start_ts_2 == start_ts_1 + values_1.len() as i64 * step_interval_1 {
                 let mut new_values = values_1.clone().into_owned();
                 new_values.as_owned().extend(values_2.iter());
-                return build!{ TimeSeries {
+                return build!{ Timevector {
                     series: NormalSeries {
                         start_ts: *start_ts_1,
                         step_interval: *step_interval_1,
@@ -420,7 +420,7 @@ pub fn combine(first: TimeSeries<'_>, second: TimeSeries<'_>) -> TimeSeries<'sta
             if *start_ts_1 == start_ts_2 + values_2.len() as i64 * step_interval_2 {
                 let mut new_values = values_2.clone().into_owned();
                 new_values.as_owned().extend(values_1.iter());
-                return build!{ TimeSeries {
+                return build!{ Timevector {
                     series: NormalSeries {
                         start_ts: *start_ts_2,
                         step_interval: *step_interval_2,
@@ -437,14 +437,14 @@ pub fn combine(first: TimeSeries<'_>, second: TimeSeries<'_>) -> TimeSeries<'sta
     // In all other cases, just return a new explicit series containing all the points from both series
     let points: Vec<_> = first.iter().chain(second.iter()).collect();
     if ordered {
-        build!{ TimeSeries {
+        build!{ Timevector {
             series: SortedSeries {
                 num_points: points.len() as _,
                 points: points.into(),
             }
         }}
     } else {
-        build!{ TimeSeries {
+        build!{ Timevector {
             series: ExplicitSeries {
                 num_points: points.len() as _,
                 points: points.into(),
@@ -454,10 +454,10 @@ pub fn combine(first: TimeSeries<'_>, second: TimeSeries<'_>) -> TimeSeries<'sta
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn timeseries_final<'a>(
-    state: Option<Internal<TimeSeries<'a>>>,
+pub fn timevector_final<'a>(
+    state: Option<Internal<Timevector<'a>>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_series::toolkit_experimental::TimeSeries<'static>> {
+) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let state = match state {
@@ -470,27 +470,27 @@ pub fn timeseries_final<'a>(
 }
 
 extension_sql!(r#"
-CREATE AGGREGATE toolkit_experimental.timeseries(ts TIMESTAMPTZ, value DOUBLE PRECISION) (
-    sfunc = toolkit_experimental.timeseries_trans,
+CREATE AGGREGATE toolkit_experimental.timevector(ts TIMESTAMPTZ, value DOUBLE PRECISION) (
+    sfunc = toolkit_experimental.timevector_trans,
     stype = internal,
-    finalfunc = toolkit_experimental.timeseries_final,
-    combinefunc = toolkit_experimental.timeseries_combine,
-    serialfunc = toolkit_experimental.timeseries_serialize,
-    deserialfunc = toolkit_experimental.timeseries_deserialize,
+    finalfunc = toolkit_experimental.timevector_final,
+    combinefunc = toolkit_experimental.timevector_combine,
+    serialfunc = toolkit_experimental.timevector_serialize,
+    deserialfunc = toolkit_experimental.timevector_deserialize,
     parallel = safe
 );
 "#);
 
 extension_sql!(r#"
 CREATE AGGREGATE toolkit_experimental.rollup(
-    toolkit_experimental.timeseries
+    toolkit_experimental.timevector
 ) (
-    sfunc = toolkit_experimental.timeseries_compound_trans,
+    sfunc = toolkit_experimental.timevector_compound_trans,
     stype = internal,
-    finalfunc = toolkit_experimental.timeseries_final,
-    combinefunc = toolkit_experimental.timeseries_combine,
-    serialfunc = toolkit_experimental.timeseries_serialize,
-    deserialfunc = toolkit_experimental.timeseries_deserialize,
+    finalfunc = toolkit_experimental.timevector_final,
+    combinefunc = toolkit_experimental.timevector_combine,
+    serialfunc = toolkit_experimental.timevector_serialize,
+    deserialfunc = toolkit_experimental.timevector_deserialize,
     parallel = safe
 );
 "#);

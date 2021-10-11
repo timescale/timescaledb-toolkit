@@ -33,10 +33,10 @@ pub enum Function {
 }
 
 pub fn apply(
-    mut series: TimeSeries<'_>,
+    mut series: Timevector<'_>,
     function: Function,
     rhs: f64,
-) -> TimeSeries<'_> {
+) -> Timevector<'_> {
     let function: fn(f64, f64) -> f64 = match function {
         Add => |a, b| a + b,
         Sub => |a, b| a - b,
@@ -74,7 +74,7 @@ pub fn apply(
 )]
 pub fn pipeline_add<'e>(
     rhs: f64,
-) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     Arithmetic { function: Add, rhs: rhs }.flatten()
 }
 
@@ -86,7 +86,7 @@ pub fn pipeline_add<'e>(
 )]
 pub fn pipeline_sub<'e>(
     rhs: f64,
-) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     Arithmetic { function: Sub, rhs: rhs }.flatten()
 }
 
@@ -98,7 +98,7 @@ pub fn pipeline_sub<'e>(
 )]
 pub fn pipeline_mul<'e>(
     rhs: f64,
-) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     Arithmetic { function: Mul, rhs: rhs }.flatten()
 }
 
@@ -110,7 +110,7 @@ pub fn pipeline_mul<'e>(
 )]
 pub fn pipeline_div<'e>(
     rhs: f64,
-) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     Arithmetic { function: Div, rhs: rhs }.flatten()
 }
 
@@ -122,7 +122,7 @@ pub fn pipeline_div<'e>(
 )]
 pub fn pipeline_mod<'e>(
     rhs: f64,
-) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     Arithmetic { function: Mod, rhs: rhs }.flatten()
 }
 
@@ -134,7 +134,7 @@ pub fn pipeline_mod<'e>(
 )]
 pub fn pipeline_power<'e>(
     rhs: f64,
-) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     Arithmetic { function: Power, rhs: rhs }.flatten()
 }
 
@@ -147,7 +147,7 @@ pub fn pipeline_power<'e>(
 )]
 pub fn pipeline_log_n<'e>(
     rhs: f64,
-) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     Arithmetic { function: LogN, rhs: rhs }.flatten()
 }
 
@@ -162,7 +162,7 @@ pub fn pipeline_log_n<'e>(
     schema="toolkit_experimental"
 )]
 pub fn pipeline_abs<'e>()
--> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+-> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     Arithmetic { function: Abs, rhs: 0.0 }.flatten()
 }
 
@@ -173,7 +173,7 @@ pub fn pipeline_abs<'e>()
     schema="toolkit_experimental"
 )]
 pub fn pipeline_cbrt<'e>()
--> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+-> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     Arithmetic { function: Cbrt, rhs: 0.0 }.flatten()
 }
 
@@ -184,7 +184,7 @@ pub fn pipeline_cbrt<'e>()
     schema="toolkit_experimental"
 )]
 pub fn pipeline_ceil<'e>()
--> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+-> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     Arithmetic { function: Ceil, rhs: 0.0 }.flatten()
 }
 
@@ -195,7 +195,7 @@ pub fn pipeline_ceil<'e>()
     schema="toolkit_experimental"
 )]
 pub fn pipeline_floor<'e>()
--> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+-> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     Arithmetic { function: Floor, rhs: 0.0 }.flatten()
 }
 
@@ -206,7 +206,7 @@ pub fn pipeline_floor<'e>()
     schema="toolkit_experimental"
 )]
 pub fn pipeline_ln<'e>()
--> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+-> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     Arithmetic { function: Ln, rhs: 0.0 }.flatten()
 }
 
@@ -217,7 +217,7 @@ pub fn pipeline_ln<'e>()
     schema="toolkit_experimental"
 )]
 pub fn pipeline_log10<'e>()
--> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+-> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     Arithmetic { function: Log10, rhs: 0.0 }.flatten()
 }
 
@@ -228,7 +228,7 @@ pub fn pipeline_log10<'e>()
     schema="toolkit_experimental"
 )]
 pub fn pipeline_round<'e>()
--> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+-> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     Arithmetic { function: Round, rhs: 0.0 }.flatten()
 }
 
@@ -240,7 +240,7 @@ pub fn pipeline_round<'e>()
     schema="toolkit_experimental"
 )]
 pub fn pipeline_sign<'e>()
--> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+-> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     Arithmetic { function: Sign, rhs: 0.0 }.flatten()
 }
 
@@ -251,7 +251,7 @@ pub fn pipeline_sign<'e>()
     schema="toolkit_experimental"
 )]
 pub fn pipeline_sqrt<'e>()
--> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+-> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     Arithmetic { function: Sqrt, rhs: 0.0 }.flatten()
 }
 
@@ -262,7 +262,7 @@ pub fn pipeline_sqrt<'e>()
     schema="toolkit_experimental"
 )]
 pub fn pipeline_trunc<'e>()
--> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+-> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     Arithmetic { function: Trunc, rhs: 0.0 }.flatten()
 }
 
@@ -281,7 +281,7 @@ mod tests {
             client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             // we use a subselect to guarantee order
-            let create_series = "SELECT timeseries(time, value) as series FROM \
+            let create_series = "SELECT timevector(time, value) as series FROM \
                 (VALUES ('2020-01-04 UTC'::TIMESTAMPTZ, 25.0), \
                     ('2020-01-01 UTC'::TIMESTAMPTZ, 10.0), \
                     ('2020-01-03 UTC'::TIMESTAMPTZ, 20.0), \
@@ -407,7 +407,7 @@ mod tests {
             client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             // we use a subselect to guarantee order
-            let create_series = "SELECT timeseries(time, value) as series FROM \
+            let create_series = "SELECT timevector(time, value) as series FROM \
                 (VALUES ('2020-01-04 UTC'::TIMESTAMPTZ, 25.5), \
                     ('2020-01-01 UTC'::TIMESTAMPTZ, -10.1), \
                     ('2020-01-03 UTC'::TIMESTAMPTZ, 20.2), \

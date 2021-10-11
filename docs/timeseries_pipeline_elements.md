@@ -1,30 +1,30 @@
-# Timeseries Pipelines [<sup><mark>experimental</mark></sup>](/docs/README.md#tag-notes)
+# Timevector Pipelines [<sup><mark>experimental</mark></sup>](/docs/README.md#tag-notes)
 
-> [Description](#timeseries-pipeline-description)<br>
-> [Example](#timeseries-pipeline-example)<br>
-> [Pipeline Elements](#timeseries-pipeline-elements)
+> [Description](#timevector-pipeline-description)<br>
+> [Example](#timevector-pipeline-example)<br>
+> [Pipeline Elements](#timevector-pipeline-elements)
 
-## Description <a id="timeseries-pipeline-description"></a>
+## Description <a id="timevector-pipeline-description"></a>
 
-Timescale timeseries objects are just a convenient and efficient way of tracking a single value over time and are detailed a bit more [here](timeseries.md).  One of our primary goals with timeseries is that they should be easy and efficient to perform basic operations on, and that is where pipelines enter the picture.  At its simplest, a pipeline is just a timeseries connected to a [pipeline element](#timeseries-pipeline-elements) via the pipeline operator `->`.  However, most pipeline operations output new timeseries, so it's possible to chain many pipeline elements together such that the output from one element become the input to the next.
+Timescale timevector objects are just a convenient and efficient way of tracking a single value over time and are detailed a bit more [here](timevector.md).  One of our primary goals with timevector is that they should be easy and efficient to perform basic operations on, and that is where pipelines enter the picture.  At its simplest, a pipeline is just a timevector connected to a [pipeline element](#timevector-pipeline-elements) via the pipeline operator `->`.  However, most pipeline operations output new timevector, so it's possible to chain many pipeline elements together such that the output from one element become the input to the next.
 
 ### A note on operator associativity and grouping
 
-Due to limitations in the PostgresQL parser, custom operators are required to be left associative.  The following pipeline will always result in `elementA` being applied to `timeseries` and then `elementB` being applied to the result.
+Due to limitations in the PostgresQL parser, custom operators are required to be left associative.  The following pipeline will always result in `elementA` being applied to `timevector` and then `elementB` being applied to the result.
 
 ```SQL ,ignore
-SELECT timeseries -> elementA -> elementB;
+SELECT timevector -> elementA -> elementB;
 ```
 
 However, it is possible to explicitly group elements using parentheses:
 
 ```SQL ,ignore
-SELECT timeseries -> (elementA -> elementB);
+SELECT timevector -> (elementA -> elementB);
 ```
 
-This will result in a pipeline object being created from elements A and B, which will then be applied to the timeseries.  While we don't presently take maximum advantage of this internally, these multiple element pipelines should enable optimizations moving forward.  Therefore, this second form should be preferred where possible.
+This will result in a pipeline object being created from elements A and B, which will then be applied to the timevector.  While we don't presently take maximum advantage of this internally, these multiple element pipelines should enable optimizations moving forward.  Therefore, this second form should be preferred where possible.
 
-## Usage Example <a id="timeseries-pipeline-example"></a>
+## Usage Example <a id="timevector-pipeline-example"></a>
 
 For this example let start with a table of temperatures collected from different devices at different times.
 
@@ -45,12 +45,12 @@ INSERT INTO test_data
     FROM generate_series(1,10000);
 ```
 
-Now suppose we want to know how much the temperature fluctuates on a daily basis for each device.  Using timeseries and pipelines can simplify the process of finding the answer:
+Now suppose we want to know how much the temperature fluctuates on a daily basis for each device.  Using timevector and pipelines can simplify the process of finding the answer:
 ```SQL ,non-transactional,ignore-output
 SET timescaledb_toolkit_acknowledge_auto_drop TO 'true';
 CREATE VIEW daily_delta AS
     SELECT device,
-        toolkit_experimental.timeseries(time, temperature)
+        toolkit_experimental.timevector(time, temperature)
             -> (toolkit_experimental.sort()
             ->  toolkit_experimental.resample_to_rate('trailing_average', '24 hours', true)
             ->  toolkit_experimental.fill_holes('interpolate')
@@ -59,7 +59,7 @@ CREATE VIEW daily_delta AS
     GROUP BY device;
 ```
 
-This command creates a timeseries from the time and temperature columns (grouped by device), sorts them in increasing time, aggregates them as a daily average, interpolates the values for any missing days, and computes the deltas between days.  Now we can look at the deltas for a specific device:
+This command creates a timevector from the time and temperature columns (grouped by device), sorts them in increasing time, aggregates them as a daily average, interpolates the values for any missing days, and computes the deltas between days.  Now we can look at the deltas for a specific device:
 
 ```SQL
 SELECT time, value::numeric(4,2) AS delta FROM toolkit_experimental.unnest((SELECT deltas FROM daily_delta WHERE device = 3));
@@ -108,45 +108,45 @@ SELECT (deltas -> toolkit_experimental.lttb(10))::TEXT FROM daily_delta where de
   [(ts:"2020-01-02 00:00:00+00",val:0.5555802022457712),(ts:"2020-01-05 00:00:00+00",val:-1.4688929826077484),(ts:"2020-01-08 00:00:00+00",val:2.416048415988122),(ts:"2020-01-09 00:00:00+00",val:-3.0046993833401174),(ts:"2020-01-14 00:00:00+00",val:0.22758839123397223),(ts:"2020-01-17 00:00:00+00",val:-2.1256090660578124),(ts:"2020-01-19 00:00:00+00",val:1.2272792346941657),(ts:"2020-01-25 00:00:00+00",val:-3.1053238977555324),(ts:"2020-01-26 00:00:00+00",val:1.2629388469236815),(ts:"2020-01-30 00:00:00+00",val:-0.7042437967407409)]
 ```
 
-## Current Pipeline Elements(A-Z) <a id="timeseries-pipeline-elements"></a>
+## Current Pipeline Elements(A-Z) <a id="timevector-pipeline-elements"></a>
 
 As of the current timescale release, these elements are all [experimental](/docs/README.md#tag-notes).
 
 
-> - [delta](#timeseries_pipeline_delta)
-> - [fill_holes](#timeseries_pipeline_fill_holes)
-> - [lttb](#timeseries_pipeline_lttb)
-> - [resample_to_rate](#timeseries_pipeline_resample_to_rate)
+> - [delta](#timevector_pipeline_delta)
+> - [fill_holes](#timevector_pipeline_fill_holes)
+> - [lttb](#timevector_pipeline_lttb)
+> - [resample_to_rate](#timevector_pipeline_resample_to_rate)
 > - [sort](#sort)
 
 
 ---
 
-## **delta** <a id="timeseries_pipeline_delta"></a>
+## **delta** <a id="timevector_pipeline_delta"></a>
 ```SQL ,ignore
 delta(
-) RETURNS TimeseriesPipelineElement
+) RETURNS TimevectorPipelineElement
 ```
 
-This element will return a new timeseries where each point is the difference between the current and preceeding value in the input timeseries.  The new series will be one point shorter as it will not have a preceding value to return a delta for the first point.
+This element will return a new timevector where each point is the difference between the current and preceeding value in the input timevector.  The new series will be one point shorter as it will not have a preceding value to return a delta for the first point.
 
-### Required Arguments <a id="timeseries_pipeline_delta-arguments"></a>
+### Required Arguments <a id="timevector_pipeline_delta-arguments"></a>
 |Name| Type |Description|
 |---|---|---|
 <br>
 
-### Pipeline Execution Returns <a id="timeseries_pipeline_delta-returns"></a>
+### Pipeline Execution Returns <a id="timevector_pipeline_delta-returns"></a>
 
 |Column|Type|Description|
 |---|---|---|
-| `timeseries` | `Timeseries` | The result of applying this pipeline element will be a new time series where each point contains the difference in values from the prior point in the input timeseries. |
+| `timevector` | `Timevector` | The result of applying this pipeline element will be a new time series where each point contains the difference in values from the prior point in the input timevector. |
 <br>
 
-### Sample Usage <a id="timeseries_pipeline_delta-examples"></a>
+### Sample Usage <a id="timevector_pipeline_delta-examples"></a>
 ```SQL
 SELECT time, value
 FROM toolkit_experimental.unnest(
-    (SELECT toolkit_experimental.timeseries('2020-01-01'::timestamptz + step * '1 day'::interval, step * step)
+    (SELECT toolkit_experimental.timevector('2020-01-01'::timestamptz + step * '1 day'::interval, step * step)
         -> toolkit_experimental.delta()
     FROM generate_series(1, 5) step)
 );
@@ -162,14 +162,14 @@ FROM toolkit_experimental.unnest(
 
 ---
 
-## **fill_holes** <a id="timeseries_pipeline_fill_holes"></a>
+## **fill_holes** <a id="timevector_pipeline_fill_holes"></a>
 ```SQL ,ignore
 fill_holes(
     fill_method TEXT
-) RETURNS TimeseriesPipelineElement
+) RETURNS TimevectorPipelineElement
 ```
 
-This element will take in a normal timeseries (such as the result of a [resample_to_rate](#timeseries_pipeline_resample_to_rate) pipeline element), and fill in any implicit gaps according to the requested `fill_method`.  Calling this on a non-normal timeseries will produce an error.
+This element will take in a normal timevector (such as the result of a [resample_to_rate](#timevector_pipeline_resample_to_rate) pipeline element), and fill in any implicit gaps according to the requested `fill_method`.  Calling this on a non-normal timevector will produce an error.
 
 Valid fill methods are:
 | Method | Description |
@@ -177,24 +177,24 @@ Valid fill methods are:
 | `locf` | Fill gaps with the last valid preceeding value. |
 | `interpolate` | Compute the missing value linearly from the immediately bounding values |
 
-### Required Arguments <a id="timeseries_pipeline_fill_holes-arguments"></a>
+### Required Arguments <a id="timevector_pipeline_fill_holes-arguments"></a>
 |Name| Type |Description|
 |---|---|---|
 | `fill_method` | `TEXT` | Case insensitive match for one of the fill methods above. |
 <br>
 
-### Pipeline Execution Returns <a id="timeseries_pipeline_fill_holes-returns"></a>
+### Pipeline Execution Returns <a id="timevector_pipeline_fill_holes-returns"></a>
 
 |Column|Type|Description|
 |---|---|---|
-| `timeseries` | `Timeseries` | This creates a complete normal timeseries (no missing values) from the input series.. |
+| `timevector` | `Timevector` | This creates a complete normal timevector (no missing values) from the input series.. |
 <br>
 
-### Sample Usage <a id="timeseries_pipeline_fill_holes-examples"></a>
+### Sample Usage <a id="timevector_pipeline_fill_holes-examples"></a>
 ```SQL
 SELECT time, value
 FROM toolkit_experimental.unnest(
-    (SELECT toolkit_experimental.timeseries('2020-01-01'::timestamptz + step * step * '1 hour'::interval, step * step)
+    (SELECT toolkit_experimental.timevector('2020-01-01'::timestamptz + step * step * '1 hour'::interval, step * step)
         -> (toolkit_experimental.resample_to_rate('nearest', '1 hour', true)
         ->  toolkit_experimental.fill_holes('locf'))
     FROM generate_series(1, 3) step)
@@ -216,41 +216,41 @@ FROM toolkit_experimental.unnest(
 
 ---
 
-## **lttb** <a id="timeseries_pipeline_lttb"></a>
+## **lttb** <a id="timevector_pipeline_lttb"></a>
 ```SQL ,ignore
 lttb(
     resolution int,
-) RETURNS TimeseriesPipelineElement
+) RETURNS TimevectorPipelineElement
 ```
 
-This element will return a [largest triangle three buckets](lttb.md#description) approximation of a given timeseries.  Its behavior is the same as the lttb function documented [here](lttb.md#lttb), save that it expects the series to be sorted.
+This element will return a [largest triangle three buckets](lttb.md#description) approximation of a given timevector.  Its behavior is the same as the lttb function documented [here](lttb.md#lttb), save that it expects the series to be sorted.
 
 ```SQL ,ignore
 SELECT lttb(time, value, 40) FROM data;
 ```
 is equivalent to
 ```SQL ,ignore
-SELECT timeseries(time, value) -> sort() -> lttb() FROM data;
+SELECT timevector(time, value) -> sort() -> lttb() FROM data;
 ```
 
-### Required Arguments <a id="timeseries_pipeline_lttb-arguments"></a>
+### Required Arguments <a id="timevector_pipeline_lttb-arguments"></a>
 |Name| Type |Description|
 |---|---|---|
 | `resolution` | `INTEGER` | Number of points the output should have. |
 <br>
 
-### Pipeline Execution Returns <a id="timeseries_pipeline_lttb-returns"></a>
+### Pipeline Execution Returns <a id="timevector_pipeline_lttb-returns"></a>
 
 |Column|Type|Description|
 |---|---|---|
-| `timeseries` | `Timeseries` | The result of applying this pipeline element will be a new timeseries with `resolution` point that is visually similar to the input series. |
+| `timevector` | `Timevector` | The result of applying this pipeline element will be a new timevector with `resolution` point that is visually similar to the input series. |
 <br>
 
-### Sample Usage <a id="timeseries_pipeline_lttb-examples"></a>
+### Sample Usage <a id="timevector_pipeline_lttb-examples"></a>
 ```SQL
 SELECT time, value
 FROM toolkit_experimental.unnest(
-    (SELECT toolkit_experimental.timeseries('2020-01-01 UTC'::TIMESTAMPTZ + make_interval(days=>(foo*10)::int), 10 + 5 * cos(foo))
+    (SELECT toolkit_experimental.timevector('2020-01-01 UTC'::TIMESTAMPTZ + make_interval(days=>(foo*10)::int), 10 + 5 * cos(foo))
         -> toolkit_experimental.lttb(4)
     FROM generate_series(1,11,0.1) foo)
 );
@@ -266,16 +266,16 @@ FROM toolkit_experimental.unnest(
 
 ---
 
-## **resample_to_rate** <a id="timeseries_pipeline_resample_to_rate"></a>
+## **resample_to_rate** <a id="timevector_pipeline_resample_to_rate"></a>
 ```SQL ,ignore
 resample_to_rate(
     resample_method TEXT,
     interval INTERVAL,
     snap_to_rate BOOL
-) RETURNS TimeseriesPipelineElement
+) RETURNS TimevectorPipelineElement
 ```
 
-This element will operate over a timeseries, returning a new series with points exactly `interval` units apart.  The target timestamp for the first point of this range will either be the first timestamp from the input range if `snap_to_rate` is false, or the `interval` truncated timestamp containing that time if `snap_to_rate` is true.  The value for the new points will be computed from all the points in the input series which fall into the resulting interval, using the `resample_method` as follows:
+This element will operate over a timevector, returning a new series with points exactly `interval` units apart.  The target timestamp for the first point of this range will either be the first timestamp from the input range if `snap_to_rate` is false, or the `interval` truncated timestamp containing that time if `snap_to_rate` is true.  The value for the new points will be computed from all the points in the input series which fall into the resulting interval, using the `resample_method` as follows:
 
 | Method | Description | Interval range |
 |---|---|---|
@@ -286,7 +286,7 @@ This element will operate over a timeseries, returning a new series with points 
 
 In all cases, if there are no points in the input series in the interval range of a particular target time, there will be no point at that time in the output series.
 
-### Required Arguments <a id="timeseries_pipeline_resample_to_rate-arguments"></a>
+### Required Arguments <a id="timevector_pipeline_resample_to_rate-arguments"></a>
 |Name| Type |Description|
 |---|---|---|
 | `resample_method` | `TEXT` | Case insensitive match for one of the methods above. |
@@ -294,18 +294,18 @@ In all cases, if there are no points in the input series in the interval range o
 | `snap_to_rate` | `BOOL` | Whether the resulting points should be multiples of `interval` (if true), else `interval` offsets from the first point in the input series. |
 <br>
 
-### Pipeline Execution Returns <a id="timeseries_pipeline_resample_to_rate-returns"></a>
+### Pipeline Execution Returns <a id="timevector_pipeline_resample_to_rate-returns"></a>
 
 |Column|Type|Description|
 |---|---|---|
-| `timeseries` | `Timeseries` | A new pipeline with `interval` spaced points generated from the input series |
+| `timevector` | `Timevector` | A new pipeline with `interval` spaced points generated from the input series |
 <br>
 
-### Sample Usage <a id="timeseries_pipeline_resample_to_rate-examples"></a>
+### Sample Usage <a id="timevector_pipeline_resample_to_rate-examples"></a>
 ```SQL
 SELECT time, value::numeric(4,2)
 FROM toolkit_experimental.unnest(
-    (SELECT toolkit_experimental.timeseries('2020-01-01'::TIMESTAMPTZ + step *step * step * '1 minute'::interval, step)
+    (SELECT toolkit_experimental.timevector('2020-01-01'::TIMESTAMPTZ + step *step * step * '1 minute'::interval, step)
         -> toolkit_experimental.resample_to_rate('weighted_average', '1 hour', true)
     FROM generate_series(1,10) step)
 );
@@ -325,31 +325,31 @@ FROM toolkit_experimental.unnest(
 
 ---
 
-## **sort** <a id="timeseries_pipeline_sort"></a>
+## **sort** <a id="timevector_pipeline_sort"></a>
 ```SQL ,ignore
 sort(
-) RETURNS TimeseriesPipelineElement
+) RETURNS TimevectorPipelineElement
 ```
 
-This element takes in a timeseries and returns a timeseries consisting of the same points, but in order of increasing time values.
+This element takes in a timevector and returns a timevector consisting of the same points, but in order of increasing time values.
 
-### Required Arguments <a id="timeseries_pipeline_sort-arguments"></a>
+### Required Arguments <a id="timevector_pipeline_sort-arguments"></a>
 |Name| Type |Description|
 |---|---|---|
 <br>
 
-### Pipeline Execution Returns <a id="timeseries_pipeline_sort-returns"></a>
+### Pipeline Execution Returns <a id="timevector_pipeline_sort-returns"></a>
 
 |Column|Type|Description|
 |---|---|---|
-| `timeseries` | `Timeseries` | The result of applying this pipeline element will be a time sorted version of the incoming timeseries. |
+| `timevector` | `Timevector` | The result of applying this pipeline element will be a time sorted version of the incoming timevector. |
 <br>
 
-### Sample Usage <a id="timeseries_pipeline_sort-examples"></a>
+### Sample Usage <a id="timevector_pipeline_sort-examples"></a>
 ```SQL
 SELECT time, value
 FROM toolkit_experimental.unnest(
-    (SELECT toolkit_experimental.timeseries('2020-01-06'::timestamptz - step * '1 day'::interval, step * step)
+    (SELECT toolkit_experimental.timevector('2020-01-06'::timestamptz - step * '1 day'::interval, step * step)
         -> toolkit_experimental.sort()
     FROM generate_series(1, 5) step)
 );

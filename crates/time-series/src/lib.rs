@@ -145,21 +145,21 @@ impl<'de> Deserialize<'de> for TSPoint {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct ExplicitTimeSeries {
+pub struct ExplicitTimevector {
     pub ordered: bool,
     pub points: Vec<TSPoint>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct NormalTimeSeries {
+pub struct NormalTimevector {
     pub start_ts: i64,
     pub step_interval: i64,    // ts delta between values
     pub values: Vec<f64>
 }
 
-// Normal timeseries, but may be missing values.  First and last values are required.
+// Normal timevector, but may be missing values.  First and last values are required.
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct GappyNormalTimeSeries {
+pub struct GappyNormalTimevector {
     pub start_ts: i64,
     pub step_interval: i64,    // ts delta between values
     pub count: u64,            // num values + num gaps
@@ -168,13 +168,13 @@ pub struct GappyNormalTimeSeries {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub enum TimeSeries {
-    Explicit(ExplicitTimeSeries),
-    Normal(NormalTimeSeries),
-    GappyNormal(GappyNormalTimeSeries),
+pub enum Timevector {
+    Explicit(ExplicitTimevector),
+    Normal(NormalTimevector),
+    GappyNormal(GappyNormalTimevector),
 }
 
-pub enum TimeSeriesError {
+pub enum TimevectorError {
     OrderedDataExpected,
     InsufficientDataToExtrapolate,
 }
@@ -186,7 +186,7 @@ pub enum GapfillMethod {
 }
 
 impl GapfillMethod {
-    // Adds the given number of points to the end of a non-empty NormalTimeSeries
+    // Adds the given number of points to the end of a non-empty NormalTimevector
     pub fn fill_normalized_series_gap(&self, values: &mut Vec<f64>, points: i32, post_gap_val: f64) {
         assert!(!values.is_empty());
         let last_val = *values.last().unwrap();
@@ -256,7 +256,7 @@ impl GapfillMethod {
     }
 }
 
-impl ExplicitTimeSeries {
+impl ExplicitTimevector {
     pub fn sort(&mut self) {
         if !self.ordered {
             self.points.sort_unstable_by_key(|p| p.ts);
@@ -267,15 +267,15 @@ impl ExplicitTimeSeries {
     // This function will normalize a time range by averaging the values in `downsample_interval`
     // sized buckets.  Any gaps will be filled via the given method and will use the downsampled
     // values as the relevant points for LOCF or interpolation.
-    pub fn downsample_and_gapfill_to_normal_form(&self, downsample_interval: i64, gapfill_method: GapfillMethod) -> Result<NormalTimeSeries, TimeSeriesError> {
+    pub fn downsample_and_gapfill_to_normal_form(&self, downsample_interval: i64, gapfill_method: GapfillMethod) -> Result<NormalTimevector, TimevectorError> {
         if !self.ordered {
-            return Err(TimeSeriesError::OrderedDataExpected);
+            return Err(TimevectorError::OrderedDataExpected);
         }
         if self.points.len() < 2 || self.points.last().unwrap().ts - self.points.first().unwrap().ts < downsample_interval {
-            return Err(TimeSeriesError::InsufficientDataToExtrapolate);
+            return Err(TimevectorError::InsufficientDataToExtrapolate);
         }
 
-        let mut result = NormalTimeSeries {
+        let mut result = NormalTimevector {
             start_ts: self.points.first().unwrap().ts,
             step_interval: downsample_interval,
             values: Vec::<f64>::new(),
@@ -322,7 +322,7 @@ impl ExplicitTimeSeries {
     }
 }
 
-impl GappyNormalTimeSeries {
+impl GappyNormalTimevector {
     pub fn is_present(&self, index: u64) -> bool {
         let outer = index / 64;
         let inner = index % 64;
@@ -371,13 +371,13 @@ impl GappyNormalTimeSeries {
 }
 
 #[derive(Clone)]
-pub struct GappyNormalTimeSeriesIterator<'a> {
-    container: &'a GappyNormalTimeSeries,
+pub struct GappyNormalTimevectorIterator<'a> {
+    container: &'a GappyNormalTimevector,
     next_time_idx: u64,
     next_value_idx: u64,
 }
 
-impl<'a> Iterator for GappyNormalTimeSeriesIterator<'a> {
+impl<'a> Iterator for GappyNormalTimevectorIterator<'a> {
     type Item = TSPoint;
 
     fn next(&mut self) -> Option<TSPoint> {
@@ -397,19 +397,19 @@ impl<'a> Iterator for GappyNormalTimeSeriesIterator<'a> {
     }
 }
 
-impl TimeSeries {
-    pub fn new_explicit_series() -> TimeSeries {
-        TimeSeries::Explicit(
-            ExplicitTimeSeries {
+impl Timevector {
+    pub fn new_explicit_series() -> Timevector {
+        Timevector::Explicit(
+            ExplicitTimevector {
                 ordered: true,
                 points: vec![],
             }
         )
     }
 
-    pub fn new_normal_series(start: TSPoint, interval: i64) -> TimeSeries {
-        TimeSeries::Normal(
-            NormalTimeSeries {
+    pub fn new_normal_series(start: TSPoint, interval: i64) -> Timevector {
+        Timevector::Normal(
+            NormalTimevector {
                 start_ts: start.ts,
                 step_interval: interval,
                 values: vec![start.val]
@@ -417,9 +417,9 @@ impl TimeSeries {
         )
     }
 
-    pub fn new_gappy_normal_series(start: TSPoint, interval: i64) -> TimeSeries {
-        TimeSeries::GappyNormal(
-            GappyNormalTimeSeries {
+    pub fn new_gappy_normal_series(start: TSPoint, interval: i64) -> Timevector {
+        Timevector::GappyNormal(
+            GappyNormalTimevector {
                 start_ts: start.ts,
                 step_interval: interval,
                 count: 1,
@@ -431,16 +431,16 @@ impl TimeSeries {
 
     pub fn add_point(&mut self, point: TSPoint) {
         match self {
-            TimeSeries::Explicit(series) => {
+            Timevector::Explicit(series) => {
                 series.ordered = series.points.is_empty() || series.ordered && point.ts >= series.points.last().unwrap().ts;
                 series.points.push(point);
             },
-            TimeSeries::Normal(normal) => {
+            Timevector::Normal(normal) => {
                 // TODO: return error rather than assert
                 assert_eq!(normal.start_ts + normal.values.len() as i64 * normal.step_interval, point.ts);
                 normal.values.push(point.val);
             },
-            TimeSeries::GappyNormal(series) => {
+            Timevector::GappyNormal(series) => {
                 // TODO: return error rather than assert
                 assert!(point.ts >= series.start_ts + (series.step_interval * series.count as i64) && (point.ts - series.start_ts) % series.step_interval == 0);
                 series.fill_to(point.ts);
@@ -452,18 +452,18 @@ impl TimeSeries {
 
     pub fn sort(&mut self) {
         match self {
-            TimeSeries::Explicit(series) => {
+            Timevector::Explicit(series) => {
                 series.sort();
             },
-            TimeSeries::Normal(_) => (),
-            TimeSeries::GappyNormal(_) => (),
+            Timevector::Normal(_) => (),
+            Timevector::GappyNormal(_) => (),
         }
     }
 
     pub fn iter(&self) -> Box<dyn Iterator<Item=TSPoint> + '_> {
         match self {
-            TimeSeries::Explicit(series) => Box::new(series.points.iter().cloned()),
-            TimeSeries::Normal(NormalTimeSeries { start_ts, step_interval, values }) => {
+            Timevector::Explicit(series) => Box::new(series.points.iter().cloned()),
+            Timevector::Normal(NormalTimevector { start_ts, step_interval, values }) => {
                 let mut next_ts = *start_ts;
                 let iter = values.iter().cloned().map(move |val| {
                     let ts = next_ts;
@@ -472,22 +472,22 @@ impl TimeSeries {
                 });
                 Box::new(iter)
             },
-            TimeSeries::GappyNormal(series) => {
-                Box::new(GappyNormalTimeSeriesIterator {container: series, next_time_idx: 0, next_value_idx: 0})
+            Timevector::GappyNormal(series) => {
+                Box::new(GappyNormalTimevectorIterator {container: series, next_time_idx: 0, next_value_idx: 0})
             }
         }
     }
 
     pub fn num_vals(&self) -> usize {
         match &self {
-            TimeSeries::Explicit(explicit) => explicit.points.len(),
-            TimeSeries::Normal(normal) => normal.values.len(),
-            TimeSeries::GappyNormal(normal) => normal.values.len(),
+            Timevector::Explicit(explicit) => explicit.points.len(),
+            Timevector::Normal(normal) => normal.values.len(),
+            Timevector::GappyNormal(normal) => normal.values.len(),
         }
     }
 
-    // Combines two TimeSeries and returns the result.
-    pub fn combine(first: &TimeSeries, second: &TimeSeries) -> TimeSeries {
+    // Combines two Timevector and returns the result.
+    pub fn combine(first: &Timevector, second: &Timevector) -> Timevector {
         if first.num_vals() == 0 {
             return second.clone();
         }
@@ -496,34 +496,34 @@ impl TimeSeries {
         }
 
         // If two explicit series are sorted and disjoint, return a sorted explicit series
-        if let (TimeSeries::Explicit(first), TimeSeries::Explicit(second)) = (&first, &second) {
+        if let (Timevector::Explicit(first), Timevector::Explicit(second)) = (&first, &second) {
             if first.ordered && second.ordered {
                 if first.points.last().unwrap().ts < second.points[0].ts {
                     let mut new = first.clone();
                     new.points.extend(second.points.iter());
-                    return TimeSeries::Explicit(new);
+                    return Timevector::Explicit(new);
                 }
 
                 if second.points.last().unwrap().ts < first.points[0].ts {
                     let mut new = second.clone();
                     new.points.extend(first.points.iter());
-                    return TimeSeries::Explicit(new);
+                    return Timevector::Explicit(new);
                 }
             }
         };
 
         // If the series are adjacent normal series, combine them into a larger normal series
-        let ordered = if let (TimeSeries::Normal(first), TimeSeries::Normal(second)) = (&first, &second) {
+        let ordered = if let (Timevector::Normal(first), Timevector::Normal(second)) = (&first, &second) {
             if first.step_interval == second.step_interval {
                 if second.start_ts == first.start_ts + first.values.len() as i64 * first.step_interval {
                     let mut new = first.clone();
                     new.values.extend(second.values.iter());
-                    return TimeSeries::Normal(new);
+                    return Timevector::Normal(new);
                 }
                 if first.start_ts == second.start_ts + second.values.len() as i64 * second.step_interval {
                     let mut new = second.clone();
                     new.values.extend(first.values.iter());
-                    return TimeSeries::Normal(new);
+                    return Timevector::Normal(new);
                 }
             }
 
@@ -533,10 +533,10 @@ impl TimeSeries {
         };
 
         // In all other cases, just return a new explicit series containing all the points from both series
-        let mut new = ExplicitTimeSeries{ordered, points: vec![]};
+        let mut new = ExplicitTimevector{ordered, points: vec![]};
         new.points.extend(first.iter());
         new.points.extend(second.iter());
-        TimeSeries::Explicit(new)
+        Timevector::Explicit(new)
     }
 
     pub fn first(&self) -> Option<TSPoint> {
@@ -544,9 +544,9 @@ impl TimeSeries {
             None
         } else {
             match self {
-                TimeSeries::Explicit(series) => Some(series.points[0]),
-                TimeSeries::Normal(NormalTimeSeries { start_ts, values, ..}) => Some(TSPoint{ts: *start_ts, val: values[0]}),
-                TimeSeries::GappyNormal(GappyNormalTimeSeries { start_ts, values, ..}) => Some(TSPoint{ts: *start_ts, val: values[0]}),
+                Timevector::Explicit(series) => Some(series.points[0]),
+                Timevector::Normal(NormalTimevector { start_ts, values, ..}) => Some(TSPoint{ts: *start_ts, val: values[0]}),
+                Timevector::GappyNormal(GappyNormalTimevector { start_ts, values, ..}) => Some(TSPoint{ts: *start_ts, val: values[0]}),
             }
         }
     }
@@ -556,18 +556,18 @@ impl TimeSeries {
             None
         } else {
             match self {
-                TimeSeries::Explicit(series) => Some(*series.points.last().unwrap()),
-                TimeSeries::Normal(NormalTimeSeries { start_ts, step_interval, values }) => Some(TSPoint{ts: *start_ts + step_interval * (values.len() as i64 - 1), val: *values.last().unwrap()}),
-                TimeSeries::GappyNormal(GappyNormalTimeSeries { start_ts, step_interval, values, count, .. }) => Some(TSPoint{ts: *start_ts + step_interval * (count - 1) as i64, val: *values.last().unwrap()}),
+                Timevector::Explicit(series) => Some(*series.points.last().unwrap()),
+                Timevector::Normal(NormalTimevector { start_ts, step_interval, values }) => Some(TSPoint{ts: *start_ts + step_interval * (values.len() as i64 - 1), val: *values.last().unwrap()}),
+                Timevector::GappyNormal(GappyNormalTimevector { start_ts, step_interval, values, count, .. }) => Some(TSPoint{ts: *start_ts + step_interval * (count - 1) as i64, val: *values.last().unwrap()}),
             }
         }
     }
 }
 
-impl<'a> From<&'a TimeSeries> for Cow<'a, [TSPoint]> {
-    fn from (series : &'a TimeSeries) -> Cow<'a, [TSPoint]> {
+impl<'a> From<&'a Timevector> for Cow<'a, [TSPoint]> {
+    fn from (series : &'a Timevector) -> Cow<'a, [TSPoint]> {
         match series {
-            TimeSeries::Explicit(series) => Cow::Borrowed(&series.points[..]),
+            Timevector::Explicit(series) => Cow::Borrowed(&series.points[..]),
             _ => unreachable!()
         }
     }
@@ -600,19 +600,19 @@ mod tests {
         let b3 = TSPoint{ts: 8, val: 8.0};
         let b4 = TSPoint{ts: 6, val: 6.0};
 
-        let mut a = TimeSeries::new_explicit_series();
+        let mut a = Timevector::new_explicit_series();
         a.add_point(a1);
         a.add_point(a2);
         a.add_point(a3);
         a.add_point(a4);
 
-        let mut b = TimeSeries::new_explicit_series();
+        let mut b = Timevector::new_explicit_series();
         b.add_point(b1);
         b.add_point(b2);
         b.add_point(b3);
         b.add_point(b4);
 
-        let c = TimeSeries::combine(&a, &b);
+        let c = Timevector::combine(&a, &b);
         assert_eq!(8, c.num_vals());
 
         let mut dup_check = 0;
@@ -626,83 +626,83 @@ mod tests {
 
     #[test]
     fn test_sorted_series_combine() {
-        let mut a = TimeSeries::new_explicit_series();
+        let mut a = Timevector::new_explicit_series();
         a.add_point(TSPoint{ts: 2, val: 2.0});
         a.add_point(TSPoint{ts: 5, val: 2.0});
         a.add_point(TSPoint{ts: 10, val: 2.0});
         a.add_point(TSPoint{ts: 15, val: 2.0});
 
-        let mut b = TimeSeries::new_explicit_series();
+        let mut b = Timevector::new_explicit_series();
         b.add_point(TSPoint{ts: 20, val: 2.0});
         b.add_point(TSPoint{ts: 25, val: 2.0});
         b.add_point(TSPoint{ts: 30, val: 2.0});
         b.add_point(TSPoint{ts: 35, val: 2.0});
 
-        let mut c = TimeSeries::new_explicit_series();
+        let mut c = Timevector::new_explicit_series();
         c.add_point(TSPoint{ts: 31, val: 2.0});
         c.add_point(TSPoint{ts: 36, val: 2.0});
         c.add_point(TSPoint{ts: 40, val: 2.0});
         c.add_point(TSPoint{ts: 45, val: 2.0});
 
-        let ab = TimeSeries::combine(&a, &b);
+        let ab = Timevector::combine(&a, &b);
         assert_eq!(8, ab.num_vals());
-        assert!(if let TimeSeries::Explicit(inner) = ab {inner.ordered} else {false});
+        assert!(if let Timevector::Explicit(inner) = ab {inner.ordered} else {false});
 
-        let ca = TimeSeries::combine(&c, &a);
+        let ca = Timevector::combine(&c, &a);
         assert_eq!(8, ca.num_vals());
-        assert!(if let TimeSeries::Explicit(inner) = ca {inner.ordered} else {false});
+        assert!(if let Timevector::Explicit(inner) = ca {inner.ordered} else {false});
 
-        let bc = TimeSeries::combine(&b, &c);
+        let bc = Timevector::combine(&b, &c);
         assert_eq!(8, bc.num_vals());
-        assert!(!(if let TimeSeries::Explicit(inner) = bc {inner.ordered} else {false}));
+        assert!(!(if let Timevector::Explicit(inner) = bc {inner.ordered} else {false}));
     }
 
     #[test]
     fn test_normal_series_combine() {
-        let a = TimeSeries::Normal(
-            NormalTimeSeries {
+        let a = Timevector::Normal(
+            NormalTimevector {
                 start_ts: 5,
                 step_interval: 5,
                 values: vec![1.0, 2.0, 3.0, 4.0]
             }
         );
-        let b = TimeSeries::Normal(
-            NormalTimeSeries {
+        let b = Timevector::Normal(
+            NormalTimevector {
                 start_ts: 25,
                 step_interval: 5,
                 values: vec![5.0, 6.0, 7.0, 8.0]
             }
         );
-        let c = TimeSeries::Normal(
-            NormalTimeSeries {
+        let c = Timevector::Normal(
+            NormalTimevector {
                 start_ts: 30,
                 step_interval: 5,
                 values: vec![6.0, 7.0, 8.0, 9.0]
             }
         );
-        let d = TimeSeries::Normal(
-            NormalTimeSeries {
+        let d = Timevector::Normal(
+            NormalTimevector {
                 start_ts: 25,
                 step_interval: 6,
                 values: vec![5.0, 6.0, 7.0, 8.0]
             }
         );
 
-        let ab = TimeSeries::combine(&a, &b);
+        let ab = Timevector::combine(&a, &b);
         assert_eq!(8, ab.num_vals());
-        assert!(matches!(ab, TimeSeries::Normal(_)));
+        assert!(matches!(ab, Timevector::Normal(_)));
 
-        let ba = TimeSeries::combine(&b, &a);
+        let ba = Timevector::combine(&b, &a);
         assert_eq!(8, ba.num_vals());
-        assert!(matches!(ba, TimeSeries::Normal(_)));
+        assert!(matches!(ba, Timevector::Normal(_)));
 
-        let ca = TimeSeries::combine(&c, &a);
+        let ca = Timevector::combine(&c, &a);
         assert_eq!(8, ca.num_vals());
-        assert!(!matches!(ca, TimeSeries::Normal(_)));
+        assert!(!matches!(ca, Timevector::Normal(_)));
 
-        let ad = TimeSeries::combine(&a, &d);
+        let ad = Timevector::combine(&a, &d);
         assert_eq!(8, ad.num_vals());
-        assert!(!matches!(ad, TimeSeries::Normal(_)));
-        assert!(if let TimeSeries::Explicit(inner) = ad {inner.ordered} else {false});
+        assert!(!matches!(ad, Timevector::Normal(_)));
+        assert!(if let Timevector::Explicit(inner) = ad {inner.ordered} else {false});
     }
 }

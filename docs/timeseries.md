@@ -1,19 +1,19 @@
-# Timeseries [<sup><mark>experimental</mark></sup>](/docs/README.md#tag-notes)
+# Timevector [<sup><mark>experimental</mark></sup>](/docs/README.md#tag-notes)
 
-> [Description](#timeseries-description)<br>
-> [Timeseries Pipelines](#timeseries-pipelines)<br>
-> [Example](#timeseries-example)<br>
-> [API](#timeseries-api)
+> [Description](#timevector-description)<br>
+> [Timevector Pipelines](#timevector-pipelines)<br>
+> [Example](#timevector-example)<br>
+> [API](#timevector-api)
 
-## Description <a id="timeseries-description"></a>
+## Description <a id="timevector-description"></a>
 
-A timeseries is an intermediate representation of a particular value over time used by the extension.  It is a space efficient representation used to store the result of analytic functions such as [asap_smooth]((asap.md#asap_smooth)) or [lttb]((lttb.md#lttb)).  Data can also be directly aggregated into a timeseries and passed to functions which support this representation.  The [unnest](#timeseries_unnest) API can be used to get the data back from a timeseries.
+A timevector is an intermediate representation of a particular value over time used by the extension.  It is a space efficient representation used to store the result of analytic functions such as [asap_smooth]((asap.md#asap_smooth)) or [lttb]((lttb.md#lttb)).  Data can also be directly aggregated into a timevector and passed to functions which support this representation.  The [unnest](#timevector_unnest) API can be used to get the data back from a timevector.
 
-## Timeseries Pipelines <a id="timeseries-pipelines"></a>
+## Timevector Pipelines <a id="timevector-pipelines"></a>
 
-In an attempt to streamline the timeseries interface and make them as easy to use as possible, we've provided a custom operator `->` for applying common operations to timeseries and chaining such operations together.  This is much more fully documented in the [timeseries pipeline elements](timeseries_pipeline_elements.md) page.
+In an attempt to streamline the timevector interface and make them as easy to use as possible, we've provided a custom operator `->` for applying common operations to timevector and chaining such operations together.  This is much more fully documented in the [timevector pipeline elements](timevector_pipeline_elements.md) page.
 
-## Usage Example <a id="timeseries-example"></a>
+## Usage Example <a id="timevector-example"></a>
 
 For this example, let's start with a table containing some random test data.
 
@@ -39,14 +39,14 @@ While still expermental, we'll need to set this before creating our view:
 Now lets capture this data into a time series which we'll store in a view.
 
 ```SQL ,non-transactional,ignore-output
-CREATE VIEW series AS SELECT toolkit_experimental.timeseries(time, value) FROM test;
+CREATE VIEW series AS SELECT toolkit_experimental.timevector(time, value) FROM test;
 ```
 
-We can now use this timeseries to efficiently move the data around to other functions.
+We can now use this timevector to efficiently move the data around to other functions.
 
 ```SQL
 SELECT time, value::numeric(10,2) FROM
-toolkit_experimental.unnest((SELECT toolkit_experimental.lttb(timeseries, 20) FROM series));
+toolkit_experimental.unnest((SELECT toolkit_experimental.lttb(timevector, 20) FROM series));
 ```
 ```output
           time          |       value
@@ -74,28 +74,28 @@ toolkit_experimental.unnest((SELECT toolkit_experimental.lttb(timeseries, 20) FR
 ```
 
 
-## Command List (A-Z) <a id="timeseries-api"></a>
+## Command List (A-Z) <a id="timevector-api"></a>
 Aggregate Functions
-> - [timeseries (point form)](#timeseries)
-> - [rollup (summary form)](#timeseries-summary)
+> - [timevector (point form)](#timevector)
+> - [rollup (summary form)](#timevector-summary)
 
 Accessor Functions
-> - [unnest](#timeseries_unnest)
+> - [unnest](#timevector_unnest)
 
 
 ---
 
-## **timeseries (point form)** <a id="timeseries"></a>
+## **timevector (point form)** <a id="timevector"></a>
 ```SQL ,ignore
-timeseries(
+timevector(
     time TIMESTAMPTZ,
     value DOUBLE PRECISION
-) RETURNS TimeSeries
+) RETURNS Timevector
 ```
 
-This will construct and return timeseries object containing the passed in time, value pairs.
+This will construct and return timevector object containing the passed in time, value pairs.
 
-### Required Arguments <a id="timeseries-required-arguments"></a>
+### Required Arguments <a id="timevector-required-arguments"></a>
 |Name| Type |Description|
 |---|---|---|
 | `time` | `TIMESTAMPTZ` | Time column to aggregate. |
@@ -106,53 +106,53 @@ This will construct and return timeseries object containing the passed in time, 
 
 |Column|Type|Description|
 |---|---|---|
-| `timeseries` | `Timeseries` | A timeseries object which can be efficiently used by any of our timeseries operations. |
+| `timevector` | `Timevector` | A timevector object which can be efficiently used by any of our timevector operations. |
 <br>
 
-### Sample Usages <a id="timeseries-examples"></a>
-For this example, assume we have a table 'samples' with two columns, 'time' and 'weight'.  The following will return that table as a timeseries.
+### Sample Usages <a id="timevector-examples"></a>
+For this example, assume we have a table 'samples' with two columns, 'time' and 'weight'.  The following will return that table as a timevector.
 
 ```SQL ,ignore
-SELECT toolkit_experimental.timeseries(time, weight) FROM samples;
+SELECT toolkit_experimental.timevector(time, weight) FROM samples;
 ```
 
 ---
 
-## **rollup (summary form)** <a id="timeseries-summary"></a>
+## **rollup (summary form)** <a id="timevector-summary"></a>
 ```SQL ,ignore
 rollup(
-    series timeseries
-) RETURNS timeseries
+    series timevector
+) RETURNS timevector
 ```
 
-This will combine multiple already constructed timeseriess. This is very useful for re-aggregating series already constructed using the [point form](#timeseries).
+This will combine multiple already constructed timevectors. This is very useful for re-aggregating series already constructed using the [point form](#timevector).
 
-### Required Arguments <a id="timeseries-summary-required-arguments"></a>
+### Required Arguments <a id="timevector-summary-required-arguments"></a>
 |Name| Type |Description|
 |---|---|---|
-| `series` | `timeseries` | Previously constructed timeseries objects. |
+| `series` | `timevector` | Previously constructed timevector objects. |
 <br>
 
 ### Returns
 
 |Column|Type|Description|
 |---|---|---|
-| `timeseries` | `timeseries` | A timeseries combining all the underlying series. |
+| `timevector` | `timevector` | A timevector combining all the underlying series. |
 <br>
 
-### Sample Usages <a id="timeseries-summary-examples"></a>
-This example assumes a table 'samples' with columns 'time', 'data', and 'batch'.  We can create a view containing timeseries for each batch like so:
+### Sample Usages <a id="timevector-summary-examples"></a>
+This example assumes a table 'samples' with columns 'time', 'data', and 'batch'.  We can create a view containing timevector for each batch like so:
 
 ```SQL ,ignore
 CREATE VIEW series AS
     SELECT
         batch,
-        toolkit_experimental.timeseries(time, data) as batch_series
+        toolkit_experimental.timevector(time, data) as batch_series
     FROM samples
     GROUP BY batch;
 ```
 
-If we want to operate over the combination of all batches, we can get the timeseries for this as follows:
+If we want to operate over the combination of all batches, we can get the timevector for this as follows:
 
 ```SQL ,ignore
 SELECT rollup(batch_series)
@@ -161,33 +161,33 @@ FROM series;
 
 ---
 
-## **unnest** <a id="timeseries_unnest"></a>
+## **unnest** <a id="timevector_unnest"></a>
 
 ```SQL ,ignore
 unnest(
-    series timeseries
+    series timevector
 ) RETURNS TABLE("time" timestamp with time zone, value double precision)
 ```
 
-The unnest function is used to get the (time, value) pairs back out of a timeseries object.
+The unnest function is used to get the (time, value) pairs back out of a timevector object.
 
-### Required Arguments <a id="timeseries_unnest-required-arguments"></a>
+### Required Arguments <a id="timevector_unnest-required-arguments"></a>
 |Name|Type|Description|
 |---|---|---|
-| `series` | `timeseries` | The series to return the data from. |
+| `series` | `timevector` | The series to return the data from. |
 <br>
 
 ### Returns
 |Column|Type|Description|
 |---|---|---|
-| `unnest` | `TABLE` | The (time,value) records contained in the timeseries. |
+| `unnest` | `TABLE` | The (time,value) records contained in the timevector. |
 <br>
 
-### Sample Usage <a id="timeseries_unnest-examples"></a>
+### Sample Usage <a id="timevector_unnest-examples"></a>
 
 ```SQL
 SELECT toolkit_experimental.unnest(
-    (SELECT toolkit_experimental.timeseries(a.time, a.value)
+    (SELECT toolkit_experimental.timevector(a.time, a.value)
     FROM
         (SELECT time, value
         FROM toolkit_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, 45654))

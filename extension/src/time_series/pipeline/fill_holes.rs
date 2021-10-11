@@ -16,7 +16,7 @@ pub enum FillMethod {
 }
 
 impl FillMethod {
-    pub fn process<'s>(&self, series: TimeSeries<'s>) -> TimeSeries<'s> {
+    pub fn process<'s>(&self, series: Timevector<'s>) -> Timevector<'s> {
         match &series.series {
             SeriesType::GappyNormalSeries{start_ts, step_interval, count, present, values, ..} => {
                 match self {
@@ -34,7 +34,7 @@ impl FillMethod {
                         }
 
                         build!(
-                            TimeSeries {
+                            Timevector {
                                 series : SeriesType::NormalSeries {
                                     start_ts: *start_ts,
                                     step_interval: *step_interval,
@@ -58,7 +58,7 @@ impl FillMethod {
                         }
 
                         build!(
-                            TimeSeries {
+                            Timevector {
                                 series : SeriesType::NormalSeries {
                                     start_ts: *start_ts,
                                     step_interval: *step_interval,
@@ -73,7 +73,7 @@ impl FillMethod {
 
             SeriesType::NormalSeries{..} => series.clone(),
 
-            _ => panic!("Gapfill not currently implemented for explicit timeseries")
+            _ => panic!("Gapfill not currently implemented for explicit timevector")
         }
     }
 }
@@ -87,7 +87,7 @@ impl FillMethod {
 )]
 pub fn holefill_pipeline_element<'e> (
     fill_method: String,
-) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     let fill_method = match fill_method.to_lowercase().as_str() {
         "locf" => FillMethod::LOCF,
         "interpolate" => FillMethod::Interpolate,
@@ -101,9 +101,9 @@ pub fn holefill_pipeline_element<'e> (
 }
 
 pub fn fill_holes<'s>(
-    series: toolkit_experimental::TimeSeries<'s>,
+    series: toolkit_experimental::Timevector<'s>,
     element: &toolkit_experimental::Element
-) -> toolkit_experimental::TimeSeries<'s> {
+) -> toolkit_experimental::Timevector<'s> {
     let method = match element {
         Element::FillHoles{fill_method: gapfill_method} => gapfill_method,
         _ => panic!("Gapfill evaluator called on incorrect pipeline element")
@@ -164,7 +164,7 @@ mod tests {
             );
 
             let val = client.select(
-                "SELECT (timeseries(time, value) -> resample_to_rate('average', '240 hours', true))::TEXT FROM gappy_series",
+                "SELECT (timevector(time, value) -> resample_to_rate('average', '240 hours', true))::TEXT FROM gappy_series",
                 None,
                 None
             )
@@ -186,7 +186,7 @@ mod tests {
 
 
             let val = client.select(
-                "SELECT (timeseries(time, value) -> resample_to_rate('average', '240 hours', true) -> fill_holes('LOCF'))::TEXT FROM gappy_series",
+                "SELECT (timevector(time, value) -> resample_to_rate('average', '240 hours', true) -> fill_holes('LOCF'))::TEXT FROM gappy_series",
                 None,
                 None
             )
@@ -209,7 +209,7 @@ mod tests {
             ]");
 
             let val = client.select(
-                "SELECT (timeseries(time, value) -> resample_to_rate('average', '240 hours', true) -> fill_holes('interpolate'))::TEXT FROM gappy_series",
+                "SELECT (timevector(time, value) -> resample_to_rate('average', '240 hours', true) -> fill_holes('interpolate'))::TEXT FROM gappy_series",
                 None,
                 None
             )

@@ -8,7 +8,7 @@ use crate::{
 
 use time_series::TSPoint;
 
-use crate::time_series::{TimeSeriesData, SeriesType, TimeSeries};
+use crate::time_series::{TimevectorData, SeriesType, Timevector};
 
 // hack to allow us to qualify names with "toolkit_experimental"
 // so that pgx generates the correct SQL
@@ -60,7 +60,7 @@ pub fn lttb_trans(
 pub fn lttb_final(
     state: Option<Internal<LttbTrans>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_series::toolkit_experimental::TimeSeries<'static>> {
+) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let mut state = match state {
@@ -71,7 +71,7 @@ pub fn lttb_final(
             let series = Cow::from(&state.series);
             let downsampled = lttb(&*series, state.resolution);
             flatten!(
-                TimeSeries {
+                Timevector {
                     series: SeriesType::SortedSeries {
                         num_points: downsampled.len() as u64,
                         points: (&*downsampled).into(),
@@ -167,22 +167,22 @@ pub fn lttb(data: &[TSPoint], threshold: usize) -> Cow<'_, [TSPoint]> {
 }
 
 #[pg_extern(name="lttb", schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn lttb_on_timeseries(
-    series: crate::time_series::toolkit_experimental::TimeSeries<'static>,
+pub fn lttb_on_timevector(
+    series: crate::time_series::toolkit_experimental::Timevector<'static>,
     threshold: i32,
-) -> Option<crate::time_series::toolkit_experimental::TimeSeries<'static>> {
+) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
     lttb_ts(series, threshold as usize).into()
 }
 
 // based on https://github.com/jeromefroe/lttb-rs version 0.2.0
 pub fn lttb_ts<'s>(
-    data: crate::time_series::toolkit_experimental::TimeSeries<'s>,
+    data: crate::time_series::toolkit_experimental::Timevector<'s>,
     threshold: usize
 )
--> crate::time_series::toolkit_experimental::TimeSeries<'s>
+-> crate::time_series::toolkit_experimental::Timevector<'s>
 {
     if !data.is_sorted() {
-        panic!("lttb requires sorted timeseries");
+        panic!("lttb requires sorted timevector");
     }
 
     if threshold >= data.num_points() || threshold == 0 {
@@ -257,7 +257,7 @@ pub fn lttb_ts<'s>(
     sampled.push(data.get(data.num_points() - 1).unwrap());
 
     crate::build! {
-        TimeSeries {
+        Timevector {
             series: SeriesType::SortedSeries {
                 num_points: sampled.len() as _,
                 points: sampled.into(),
@@ -293,7 +293,7 @@ mod tests {
                 SELECT time, value
                 FROM toolkit_experimental.unnest(
                     (SELECT toolkit_experimental.lttb(
-                        (SELECT toolkit_experimental.timeseries(time, value) FROM test), 100)
+                        (SELECT toolkit_experimental.timevector(time, value) FROM test), 100)
                     )
                 );", None, None);
 

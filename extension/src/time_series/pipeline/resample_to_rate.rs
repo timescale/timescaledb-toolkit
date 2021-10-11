@@ -75,7 +75,7 @@ pub fn resample_pipeline_element<'p, 'e>(
     resample_method: String,
     interval: Interval,
     snap_to_rate: bool,
-) -> toolkit_experimental::UnstableTimeseriesPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     unsafe {
         let interval = interval as *const pg_sys::Interval;
         if (*interval).day > 0 || (*interval).month > 0 {
@@ -113,9 +113,9 @@ fn determine_offset_from_rate(first_timestamp: i64, rate: i64, snap_to_rate: boo
 }
 
 pub fn resample_to_rate<'s>(
-    series: &toolkit_experimental::TimeSeries<'s>,
+    series: &toolkit_experimental::Timevector<'s>,
     element: &toolkit_experimental::Element
-) -> toolkit_experimental::TimeSeries<'s> {
+) -> toolkit_experimental::Timevector<'s> {
     let (interval, method, snap) = match element {
         Element::ResampleToRate{interval, resample_method, snap_to_rate} => (interval, resample_method, snap_to_rate),
         _ => panic!("Downsample evaluator called on incorrect pipeline element")
@@ -139,7 +139,7 @@ pub fn resample_to_rate<'s>(
             if current.is_some() {
                 let TSPoint { ts, val } = method.process(&points, current.unwrap(), interval);
                 match &mut result {
-                    None => result = Some(GappyTimeSeriesBuilder::new(ts, interval, val)),
+                    None => result = Some(GappyTimevectorBuilder::new(ts, interval, val)),
                     Some(series) => series.push_point(ts, val),
                 }
             }
@@ -152,13 +152,13 @@ pub fn resample_to_rate<'s>(
 
     let TSPoint { ts, val } = method.process(&points, current.unwrap(), interval);
     match &mut result {
-        None => result = Some(GappyTimeSeriesBuilder::new(ts, interval, val)),
+        None => result = Some(GappyTimevectorBuilder::new(ts, interval, val)),
         Some(series) => series.push_point(ts, val),
     }
 
     let result = result.unwrap();
     build! {
-        TimeSeries {
+        Timevector {
             series: SeriesType::GappyNormalSeries {
                 start_ts: result.start_ts,
                 step_interval: result.step_interval,
@@ -171,7 +171,7 @@ pub fn resample_to_rate<'s>(
     }
 }
 
-struct GappyTimeSeriesBuilder {
+struct GappyTimevectorBuilder {
     pub start_ts: i64,
     pub step_interval: i64,    // ts delta between values
     pub count: u64,            // num values + num gaps
@@ -179,7 +179,7 @@ struct GappyTimeSeriesBuilder {
     pub values: Vec<f64>
 }
 
-impl GappyTimeSeriesBuilder {
+impl GappyTimevectorBuilder {
     fn new(start_time: i64, step_interval: i64, first_value: f64) -> Self {
         Self {
             start_ts: start_time,
@@ -235,13 +235,13 @@ mod tests {
             client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             client.select(
-                "CREATE TABLE resample_pipe (series timeseries)",
+                "CREATE TABLE resample_pipe (series timevector)",
                 None,
                 None
             );
             client.select(
                 "INSERT INTO resample_pipe \
-                SELECT timeseries(time, val) FROM ( \
+                SELECT timevector(time, val) FROM ( \
                     SELECT \
                         '2020-01-01 UTC'::TIMESTAMPTZ + make_interval(days=>(foo*10)::int) as time, \
                         TRUNC((10 + 5 * cos(foo))::numeric, 4) as val \

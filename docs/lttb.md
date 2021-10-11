@@ -161,10 +161,10 @@ toolkit_experimental.lttb(
     time TIMESTAMPTZ,
     value DOUBLE PRECISION,
     resolution INTEGER
-) RETURNS SortedTimeseries
+) RETURNS SortedTimevector
 ```
 
-This will construct and return a sorted timeseries with at most `resolution`
+This will construct and return a sorted timevector with at most `resolution`
 points. `toolkit_experimental.unnest(...)` can be used to
 extract the `(time, value)` pairs from this series
 

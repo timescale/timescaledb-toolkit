@@ -11,7 +11,7 @@
 
 Metrics generally come in a few different varieties, which many systems have come to call *gauges* and *counters*. A gauge is a typical metric that can vary up or down, something like temperature or percent utilization. A counter is meant to be monotonically increasing. So it keeps track of, say, the total number of visitors to a website.
 
-The main difference in processing counters and gauges is that a decrease in the value of a counter (compared to its previous value in the timeseries) is interpreted as a *reset*. This means that the "true value" of the counter after a decrease is the previous value + the current value. A reset could occur due to a server restart or any number of other reasons. Because of the feature of the reset a counter is often analyzed by taking its change over a time period, accounting for resets. (Our `delta` function offers a way to do this).
+The main difference in processing counters and gauges is that a decrease in the value of a counter (compared to its previous value in the timevector) is interpreted as a *reset*. This means that the "true value" of the counter after a decrease is the previous value + the current value. A reset could occur due to a server restart or any number of other reasons. Because of the feature of the reset a counter is often analyzed by taking its change over a time period, accounting for resets. (Our `delta` function offers a way to do this).
 
 Accounting for resets is hard in pure SQL, so we've developed aggregate and accessor functions that do the proper calculations for counters. While the aggregate is not parallelizable, it is supported with [continuous aggregation](https://docs.timescale.com/latest/using-timescaledb/continuous-aggregates).
 

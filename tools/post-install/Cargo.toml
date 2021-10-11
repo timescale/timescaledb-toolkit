@@ -5,3 +5,4 @@ edition = "2018"
 
 [dependencies]
 xshell = "0.1.14"
+walkdir = "2"

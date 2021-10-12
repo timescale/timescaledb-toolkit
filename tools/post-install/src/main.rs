@@ -102,6 +102,7 @@ fn get_extension_info_from_pg_config(pg_config: &str) -> xshell::Result<Extensio
 fn get_extension_info_from_dir(root: &str) -> xshell::Result<ExtensionInfo> {
     use std::ffi::OsStr;
 
+    println!("starting search at: {}", root);
     let walker = walkdir::WalkDir::new(root)
         .contents_first(true);
 
@@ -109,27 +110,40 @@ fn get_extension_info_from_dir(root: &str) -> xshell::Result<ExtensionInfo> {
     let mut bin_dir = None;
     for entry in walker {
         let entry = entry.unwrap();
+        print!("searching: {} ", entry.path().to_string_lossy());
         if entry.file_type().is_file() {
+            print!("is file");
             let path = entry.into_path();
             if path.extension() == Some(OsStr::new("control")) {
+                print!(", control file");
                 // found the control file
                 let extension_dir = path.parent()
                     .expect("control file not in dir")
                     .to_path_buf();
                 extension_info = Some((extension_dir, path));
             } else if path.extension() == Some(OsStr::new("so")) {
+                print!(", lib file");
                 // found the binary
                 bin_dir = Some(
                     path.parent().expect("binary file not in dir").to_path_buf()
                 );
             }
             if extension_info.is_some() && bin_dir.is_some()  {
+                println!("\nfound both files");
                 break
             }
+            println!();
         }
     }
     if bin_dir.is_none() || extension_info.is_none() {
-        panic!("could not find extension objects")
+        panic!(
+            "could not find extension objects: {:?}, {:?}",
+            bin_dir.map(|b| b.to_string_lossy().into_owned()),
+            extension_info.map(|(e, d)| (
+                e.to_string_lossy().into_owned(),
+                d.to_string_lossy().into_owned()
+            )),
+        )
     }
 
     let bin_dir = bin_dir.unwrap();

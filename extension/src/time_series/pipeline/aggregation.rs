@@ -528,14 +528,12 @@ pub fn run_pipeline_then_hyperloglog<'s, 'p>(
     mut timevector: toolkit_experimental::Timevector<'s>,
     pipeline: toolkit_experimental::PipelineThenHyperLogLog<'p>,
 ) -> HyperLogLog<'static> {
-    unsafe {
-        timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
-        HyperLogLog::build_from(pipeline.hll_size as i32,
-            PgBuiltInOids::FLOAT8OID as u32,
-            None,
-            timevector.iter().map(|point| point.val.into_datum().unwrap())
-        )
-    }
+    timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
+    HyperLogLog::build_from(pipeline.hll_size as i32,
+        PgBuiltInOids::FLOAT8OID as u32,
+        None,
+        timevector.iter().map(|point| point.val.into_datum().unwrap())
+    )
 }
 
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]

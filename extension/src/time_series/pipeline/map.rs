@@ -149,41 +149,62 @@ pub fn apply_to(mut series: Timevector<'_>, func: pg_sys::RegProcedure)
 
 pub fn map_series(series: &mut Timevector<'_>, mut func: impl FnMut(f64) -> f64) {
     use SeriesType::*;
+    use std::panic::AssertUnwindSafe;
 
     match &mut series.series {
         SortedSeries { points, .. } => {
-            let points = points.as_owned();
-            //FIXME add setjmp guard around loop
-            for point in points {
-                *point = TSPoint {
-                    ts: point.ts,
-                    val: func(point.val),
+            let points = points.as_owned().iter_mut();
+            // setjump guard around the loop to reduce the amount we have to
+            // call it
+            // NOTE need to be careful that there's no allocation within the
+            //      loop body so it cannot leak
+            pgx::guard(AssertUnwindSafe(|| {
+                for point in points {
+                    *point = TSPoint {
+                        ts: point.ts,
+                        val: func(point.val),
+                    }
                 }
-            }
+            }))
         },
         NormalSeries { values, .. } => {
-            let values = values.as_owned();
-            //FIXME add setjmp guard around loop
-            for value in values {
-                *value = func(*value)
-            }
+            let values = values.as_owned().iter_mut();
+            // setjump guard around the loop to reduce the amount we have to
+            // call it
+            // NOTE need to be careful that there's no allocation within the
+            //      loop body so it cannot leak
+            pgx::guard(AssertUnwindSafe(|| {
+                for value in values {
+                    *value = func(*value)
+                }
+            }))
         },
         ExplicitSeries { points, .. } => {
-            let points = points.as_owned();
-            //FIXME add setjmp guard around loop
-            for point in points {
-                *point = TSPoint {
-                    ts: point.ts,
-                    val: func(point.val),
+            let points = points.as_owned().iter_mut();
+            // setjump guard around the loop to reduce the amount we have to
+            // call it
+            // NOTE need to be careful that there's not allocation within the
+            //      loop body so it cannot leak
+            pgx::guard(AssertUnwindSafe(|| {
+                for point in points {
+                    *point = TSPoint {
+                        ts: point.ts,
+                        val: func(point.val),
+                    }
                 }
-            }
+            }))
         },
         GappyNormalSeries { values, .. } => {
-            let values = values.as_owned();
-            //FIXME add setjmp guard around loop
-            for value in values {
-                *value = func(*value)
-            }
+            let values = values.as_owned().iter_mut();
+            // setjump guard around the loop to reduce the amount we have to
+            // call it
+            // NOTE need to be careful that there's not allocation within the
+            //      loop body so it cannot leak
+            pgx::guard(AssertUnwindSafe(|| {
+                for value in values {
+                    *value = func(*value)
+                }
+            }))
         },
     }
 }

@@ -10,17 +10,17 @@ use super::*;
 // TODO: there are one or two other gapfill objects in this extension, these should be unified
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug, FlatSerializable)]
 #[repr(u64)]
-pub enum FillMethod {
+pub enum FillHolesMethod {
     LOCF,
     Interpolate,
 }
 
-impl FillMethod {
+impl FillHolesMethod {
     pub fn process<'s>(&self, series: Timevector<'s>) -> Timevector<'s> {
         match &series.series {
             SeriesType::GappyNormalSeries{start_ts, step_interval, count, present, values, ..} => {
                 match self {
-                    FillMethod::LOCF => {
+                    FillHolesMethod::LOCF => {
                         let mut results = Vec::new();
                         let mut last_val = 0.0;
                         let mut vidx = 0;
@@ -44,7 +44,7 @@ impl FillMethod {
                             }
                         )
                     }
-                    FillMethod::Interpolate => {
+                    FillHolesMethod::Interpolate => {
                         let mut iter = series.iter();
                         let mut prev = iter.next().unwrap();
                         let mut results = vec!(prev.val);
@@ -89,9 +89,9 @@ pub fn holefill_pipeline_element<'e> (
     fill_method: String,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     let fill_method = match fill_method.to_lowercase().as_str() {
-        "locf" => FillMethod::LOCF,
-        "interpolate" => FillMethod::Interpolate,
-        "linear" => FillMethod::Interpolate,
+        "locf" => FillHolesMethod::LOCF,
+        "interpolate" => FillHolesMethod::Interpolate,
+        "linear" => FillHolesMethod::Interpolate,
         _ => panic!("Invalid downsample method")
     };
 

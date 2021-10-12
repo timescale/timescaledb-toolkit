@@ -756,7 +756,7 @@ The total number of times we detected a counter reset while calculating the `Cou
 
 |Column|Type|Description|
 |---|---|---|
-| `num_elements` | `BIGINT` | The number of resets detected during the [`counter_agg`](#counter-agg-point) call|
+| `num_resets` | `BIGINT` | The number of resets detected during the [`counter_agg`](#counter-agg-point) call|
 <br>
 
 ### Sample Usage <a id="counter-agg-num-resets-sample"></a>

@@ -3,7 +3,9 @@ mod fill_holes;
 mod resample_to_rate;
 mod sort;
 mod delta;
+mod lambda;
 mod map;
+mod filter;
 mod arithmetic;
 mod aggregation;
 mod expansion;
@@ -46,14 +48,14 @@ pg_type! {
     #[derive(Debug)]
     struct UnstableTimevectorPipeline<'input> {
         num_elements: u64,
-        elements: [Element; self.num_elements],
+        elements: [Element<'input>; self.num_elements],
     }
 }
 
 flat_serialize_macro::flat_serialize! {
     #[derive(Debug)]
     #[derive(serde::Serialize, serde::Deserialize)]
-    enum Element {
+    enum Element<'input> {
         kind: u64,
         LTTB: 1 {
             resolution: u64,
@@ -82,25 +84,34 @@ flat_serialize_macro::flat_serialize! {
             function: arithmetic::Function,
             rhs: f64,
         },
+        MapLambda: 9 {
+            lambda: lambda::LambdaData<'input>,
+        },
+        FilterLambda: 10 {
+            lambda: lambda::LambdaData<'input>,
+        },
     }
 }
 
-impl Element {
+impl<'input> Element<'input> {
     pub fn flatten<'a>(self) -> UnstableTimevectorPipeline<'a> {
-        let slice = &[self][..];
+        // TODO it'd be nice not to have to allocate a vector here but
+        //      `let slice = &[self][..];`
+        //      gives a lifetime error I don't yet know how to solve
+        let slice = vec![self].into();
         unsafe {
             flatten! {
                 UnstableTimevectorPipeline {
                     num_elements: 1,
-                    elements: slice.into(),
+                    elements: slice,
                 }
             }
         }
     }
 }
 
-impl From<Element> for UnstableTimevectorPipeline<'_> {
-    fn from(element: Element) -> Self {
+impl<'e> From<Element<'e>> for UnstableTimevectorPipeline<'e> {
+    fn from(element: Element<'e>) -> Self {
         build! {
             UnstableTimevectorPipeline {
                 num_elements: 1,
@@ -117,6 +128,7 @@ ron_inout_funcs!(UnstableTimevectorPipeline);
 pub mod toolkit_experimental {
     pub(crate) use super::*;
     pub(crate) use crate::accessors::AccessorDelta;
+    pub(crate) use lambda::Lambda;
     varlena_type!(UnstableTimevectorPipeline);
 }
 
@@ -129,9 +141,9 @@ pub fn run_pipeline<'s, 'p>(
         .in_current_context()
 }
 
-pub fn run_pipeline_elements<'s, 'i>(
+pub fn run_pipeline_elements<'s, 'j, 'i>(
     mut timevector: Timevector<'s>,
-    pipeline: impl Iterator<Item=Element> + 'i,
+    pipeline: impl Iterator<Item=Element<'j>> + 'i,
 ) -> Timevector<'s> {
     for element in pipeline {
         timevector = execute_pipeline_element(timevector, &element);
@@ -158,6 +170,10 @@ pub fn execute_pipeline_element<'s, 'e>(
             return map::apply_to(timevector, function.0),
         Element::MapSeries { function } =>
             return map::apply_to_series(timevector, function.0),
+        Element::MapLambda{ lambda } =>
+            return map::apply_lambda_to(timevector, lambda),
+        Element::FilterLambda{ lambda } =>
+            return filter::apply_lambda_to(timevector, lambda),
         Element::Arithmetic{ function, rhs } =>
             return arithmetic::apply(timevector, *function, *rhs),
     }
@@ -165,9 +181,9 @@ pub fn execute_pipeline_element<'s, 'e>(
 
 // TODO is (immutable, parallel_safe) correct?
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
-pub fn add_unstable_element<'p, 'e>(
+pub fn add_unstable_element<'p>(
     mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
-    element: toolkit_experimental::UnstableTimevectorPipeline<'e>,
+    element: toolkit_experimental::UnstableTimevectorPipeline<'p>,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'p> {
     pipeline.elements.as_owned().extend(element.elements.iter());
     pipeline.num_elements = pipeline.elements.len().try_into().unwrap();

@@ -21,7 +21,7 @@ pg_type! {
     #[derive(Debug)]
     struct PipelineThenUnnest<'input> {
         num_elements: u64,
-        elements: [Element; self.num_elements],
+        elements: [Element<'input>; self.num_elements],
     }
 }
 
@@ -44,10 +44,10 @@ pub fn pipeline_unnest<'e>() -> toolkit_experimental::PipelineThenUnnest<'e> {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_finalize_with_unnest<'p, 'e>(
+pub fn arrow_finalize_with_unnest<'p>(
     mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
-    then_stats_agg: toolkit_experimental::PipelineThenUnnest<'e>,
-) -> toolkit_experimental::PipelineThenUnnest<'e> {
+    then_stats_agg: toolkit_experimental::PipelineThenUnnest<'p>,
+) -> toolkit_experimental::PipelineThenUnnest<'p> {
     if then_stats_agg.num_elements == 0 {
         // flatten immediately so we don't need a temporary allocation for elements
         return unsafe {flatten! {
@@ -71,9 +71,9 @@ pub fn arrow_finalize_with_unnest<'p, 'e>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline_then_unnest<'s, 'p>(
+pub fn arrow_run_pipeline_then_unnest<'s>(
     timevector: toolkit_experimental::Timevector<'s>,
-    pipeline: toolkit_experimental::PipelineThenUnnest<'p>,
+    pipeline: toolkit_experimental::PipelineThenUnnest<'s>,
 ) -> impl Iterator<Item = (name!(time,pg_sys::TimestampTz),name!(value,f64))>
 {
     let series = run_pipeline_elements(timevector, pipeline.elements.iter())
@@ -85,7 +85,7 @@ pg_type! {
     #[derive(Debug)]
     struct PipelineForceMaterialize<'input> {
         num_elements: u64,
-        elements: [Element; self.num_elements],
+        elements: [Element<'input>; self.num_elements],
     }
 }
 
@@ -108,8 +108,8 @@ pub fn pipeline_series<'e>() -> toolkit_experimental::PipelineForceMaterialize<'
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_force_materialize<'p, 'e>(
-    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
+pub fn arrow_force_materialize<'e>(
+    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'e>,
     then_stats_agg: toolkit_experimental::PipelineForceMaterialize<'e>,
 ) -> toolkit_experimental::PipelineForceMaterialize<'e> {
     if then_stats_agg.num_elements == 0 {

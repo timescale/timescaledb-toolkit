@@ -40,6 +40,9 @@ rand_distr = "0.4.0"
 rand_chacha = "0.3.0"
 ron="0.6.0"
 
+pest = "2.1"
+pest_derive = "2.1"
+
 [dev-dependencies]
 pgx-tests = {git="https://github.com/JLockerman/pgx.git", branch="timescale2"}
 approx = "0.4.0"

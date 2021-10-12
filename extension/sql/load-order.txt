@@ -13,6 +13,7 @@ stats_agg.generated.sql
 time_series_pipeline.generated.sql
 time_series_pipeline_delta.generated.sql
 time_series_pipeline_fill_holes.generated.sql
+time_series_pipeline_lambda.generated.sql
 time_series_pipeline_map.generated.sql
 time_series_pipeline_resample_to_rate.generated.sql
 time_series_pipeline_sort.generated.sql
@@ -21,6 +22,7 @@ time_series_pipeline_arithmetic.generated.sql
 time_series_pipeline_aggregation.generated.sql
 zz_triggers.generated.sql
 time_series_pipeline_expansion.generated.sql
+time_series_pipeline_filter.generated.sql
 schema_test.generated.sql
 serialization_collations.generated.sql
 serialization_types.generated.sql

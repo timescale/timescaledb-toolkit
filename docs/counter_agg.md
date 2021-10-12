@@ -737,7 +737,7 @@ FROM (
 ```
 
 ---
-## **num_elements()** <a id="counter-agg-num-resets"></a>
+## **num_resets()** <a id="counter-agg-num-resets"></a>
 
 ```SQL ,ignore
 num_resets(

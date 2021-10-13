@@ -3,16 +3,30 @@ use pgx::*;
 
 use super::*;
 
-pub struct ExpressionExecutor<'e> {
+pub struct ExpressionExecutor<'e, T> {
     exprs: &'e Expression,
     var_vals: Vec<Option<Value>>,
+    tracer: T,
 }
 
-impl<'e> ExpressionExecutor<'e> {
+impl<'e> ExpressionExecutor<'e, ()> {
     pub fn new(exprs: &'e Expression) -> Self {
+        Self::with_tracer(exprs, ())
+    }
+}
+
+impl<'e, T> ExpressionExecutor<'e, T>
+where T: Tracer {
+    pub fn with_fn_tracer(exprs: &'e Expression, tracer: T) -> Self
+    where T: FnMut(&ExpressionSegment, &Value) {
+        Self::with_tracer(exprs, tracer)
+    }
+
+    pub fn with_tracer(exprs: &'e Expression, tracer: T) -> Self {
         Self {
             var_vals: vec![None; exprs.variables.len()],
             exprs,
+            tracer,
         }
     }
 
@@ -26,9 +40,15 @@ impl<'e> ExpressionExecutor<'e> {
         self.exec_expression(&self.exprs.expr, value, time)
     }
 
-    fn exec_expression(&mut self, expr: &ExpressionSegment, value: f64, time: i64) -> Value {
+    fn exec_expression(
+        &mut self,
+        expr: &ExpressionSegment,
+        value: f64,
+        time: i64,
+        // trace_function: impl FnMut(&ExpressionSegment, &Value),
+    ) -> Value {
         use ExpressionSegment::*;
-        match expr {
+        let res = match expr {
             ValueVar => Value::Double(value),
             TimeVar => Value::Time(time),
             DoubleConstant(f) => Value::Double(*f),
@@ -48,7 +68,9 @@ impl<'e> ExpressionExecutor<'e> {
 
             BuildTuple(exprs, _) =>
                 Value::Tuple(exprs.iter().map(|e| self.exec_expression(e, value, time)).collect()),
-        }
+        };
+        self.tracer.trace(expr, &res);
+        res
     }
 
     fn force_var(&mut self, i: usize, value: f64, time: i64) -> Value {
@@ -330,5 +352,22 @@ impl<'e> ExpressionExecutor<'e> {
                 self.exec_expression(right, value, time)
             },
         }
+    }
+}
+
+pub trait Tracer {
+    fn trace(&mut self, expr: &ExpressionSegment, result: &Value);
+}
+
+impl Tracer for () {
+    fn trace(&mut self, _: &ExpressionSegment, _: &Value) {
+        ()
+    }
+}
+
+impl<T> Tracer for T
+where T: FnMut(&ExpressionSegment, &Value) {
+    fn trace(&mut self, expr: &ExpressionSegment, result: &Value) {
+        self(expr, result)
     }
 }

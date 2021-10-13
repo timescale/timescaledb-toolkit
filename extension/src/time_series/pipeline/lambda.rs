@@ -1,4 +1,6 @@
 
+use std::borrow::Cow;
+
 use pgx::*;
 
 use super::*;
@@ -166,6 +168,30 @@ pub fn point_lambda<'s>(
     Some((columns[0].time(), columns[1].float())).into_iter()
 }
 
+#[pg_extern(
+    stable,
+    parallel_safe,
+    schema="toolkit_experimental"
+)]
+pub fn trace_lambda<'s>(
+    lambda: toolkit_experimental::Lambda<'s>,
+    time: pg_sys::TimestampTz,
+    value: f64
+) -> impl std::iter::Iterator<Item = String> {
+    let expression = lambda.parse();
+
+    let mut trace: Vec<_> = vec![];
+    let mut executor = ExpressionExecutor::with_fn_tracer(&expression, |e, v| {
+        trace.push((e.name(), format!("{:?}", v)))
+    });
+
+    let _ = executor.exec(value, time);
+    let col1_size = trace.iter().map(|(e, _)| e.len()).max().unwrap_or(0);
+
+    trace.into_iter().map(move |(e, v)|
+        format!("{:>width$}: {:?}", e, v, width=col1_size)
+    )
+}
 
 //
 // Common types across the parser and executor
@@ -179,7 +205,7 @@ pub struct Expression {
 }
 
 #[derive(Clone, Debug)]
-enum ExpressionSegment {
+pub enum ExpressionSegment {
     ValueVar,
     TimeVar,
     DoubleConstant(f64),
@@ -193,13 +219,13 @@ enum ExpressionSegment {
 }
 
 #[derive(Clone, Copy, Debug)]
-enum UnaryOp {
+pub enum UnaryOp {
     Not,
     Negative,
 }
 
 #[derive(Clone, Copy, Debug)]
-enum BinOp {
+pub enum BinOp {
     Plus,
     Minus,
     Mul,
@@ -299,6 +325,22 @@ impl ExpressionSegment {
         };
 
         matches!(&**columns, [Type::Time, Type::Double])
+    }
+
+    pub fn name(&self) -> Cow<'static, str> {
+        use ExpressionSegment::*;
+        match self {
+            ValueVar => "$value".into(),
+            TimeVar => "$time".into(),
+            DoubleConstant(_) => "f64 const".into(),
+            TimeConstant(_) => "time const".into(),
+            IntervalConstant(_) => "interval const".into(),
+            UserVar(i, t) => format!("user var {}: {:?}", i, t).into(),
+            Unary(op, _, t) => format!("uop {:?} {:?}", op, t).into(),
+            Binary(op, _, _, t) => format!("binop {:?} {:?}", op, t).into(),
+            FunctionCall(f, _) => format!("function {:?}", f).into(),
+            BuildTuple(_, t) => format!("tuple {:?}", t).into(),
+        }
     }
 }
 

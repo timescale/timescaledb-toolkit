@@ -1,5 +1,6 @@
 
 mod fill_holes;
+mod fill_to;
 mod resample_to_rate;
 mod sort;
 mod delta;
@@ -22,7 +23,12 @@ use crate::{
 
 use fill_holes::{
     fill_holes,
-    FillMethod,
+    FillHolesMethod,
+};
+
+use fill_to::{
+    fill_to,
+    FillToMethod,
 };
 
 use resample_to_rate::{
@@ -66,7 +72,7 @@ flat_serialize_macro::flat_serialize! {
             snap_to_rate: i64, // padded bool
         },
         FillHoles: 3 {
-            fill_method: FillMethod,
+            fill_method: FillHolesMethod,
         },
         Sort: 4 {
         },
@@ -89,6 +95,10 @@ flat_serialize_macro::flat_serialize! {
         },
         FilterLambda: 10 {
             lambda: lambda::LambdaData<'input>,
+        },
+        FillTo: 11 {
+            interval: i64,
+            fill_method: FillToMethod,
         },
     }
 }
@@ -176,6 +186,8 @@ pub fn execute_pipeline_element<'s, 'e>(
             return filter::apply_lambda_to(timevector, lambda),
         Element::Arithmetic{ function, rhs } =>
             return arithmetic::apply(timevector, *function, *rhs),
+        Element::FillTo{..} =>
+            return fill_to(timevector, &element),
     }
 }
 

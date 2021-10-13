@@ -25,7 +25,7 @@ GROUP BY time_bucket('7 day'::interval, time);
 ## Populate table
 
 ```SQL ,non-transactional,ignore-output
-INSERT INTO test 
+INSERT INTO test
     SELECT '2020-01-01'::TIMESTAMPTZ + '1 hour'::INTERVAL * row_number() OVER (),
         v.b, v.b::DOUBLE PRECISION/v.a::DOUBLE PRECISION
     FROM (SELECT a, generate_series(a, 100) AS b FROM generate_series(1, 100) a) v;
@@ -36,11 +36,12 @@ INSERT INTO test
 ```SQL
 SELECT week, distinct_count(hll), rate(counter), skewness_x(stats, 'population')
 FROM weekly_aggs
-WHERE week > '2020-06-01'::TIMESTAMPTZ;
+WHERE week > '2020-06-01'::TIMESTAMPTZ
+ORDER BY week;
 ```
 
 ```output
-          week          | distinct_count |         rate          |      skewness_x       
+          week          | distinct_count |         rate          |      skewness_x
 ------------------------+----------------+-----------------------+-----------------------
  2020-06-08 00:00:00+00 |             73 | 0.0006270791749833666 |   0.09701672748134148
  2020-06-15 00:00:00+00 |             70 |  0.000653692614770459 |  -0.08851573882262405
@@ -52,13 +53,13 @@ WHERE week > '2020-06-01'::TIMESTAMPTZ;
  2020-07-27 00:00:00+00 |             10 |  0.004324712643678161 |    0.6249161132826231
 ```
 
-```SQL 
+```SQL
 SELECT distinct_count(rollup(hll)), stderror(rollup(hll))
 FROM weekly_aggs;
 ```
 
 ```output
- distinct_count | stderror 
+ distinct_count | stderror
 ----------------+----------
             123 |     0.13
 ```
@@ -69,7 +70,7 @@ FROM weekly_aggs;
 ```
 
 ```output
- num_resets 
+ num_resets
 ------------
          98
 ```
@@ -80,7 +81,7 @@ FROM weekly_aggs;
 ```
 
 ```output
- average_y |     stddev_y      |     skewness_y      |     kurtosis_y     
+ average_y |     stddev_y      |     skewness_y      |     kurtosis_y
 -----------+-------------------+---------------------+--------------------
         67 | 23.68778400591983 | -0.5657484434338033 | 2.399643493761138
 ```

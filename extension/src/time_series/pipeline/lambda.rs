@@ -463,6 +463,16 @@ impl<'a> Lambda<'a> {
 mod tests {
     use pgx::*;
 
+    macro_rules! trace_lambda {
+        ($client: expr, $expr:literal) => {
+            $client.select(
+                concat!("SELECT trace_lambda($$ ", $expr ," $$, '2021-01-01', 2.0)"),
+                None,
+                None,
+            ).map(|r| r.by_ordinal(1).unwrap().value::<String>().unwrap()).collect()
+        };
+    }
+
     macro_rules! point_lambda {
         ($client: expr, $expr:literal) => {
             $client.select(
@@ -754,6 +764,22 @@ mod tests {
             bool_lambda_eq!(client, "let $foo = 1 = 1; $foo", "true");
             bool_lambda_eq!(client, "let $foo = 1 = 1; $foo and $foo", "true");
             bool_lambda_eq!(client, "let $foo = 1 = 1; $foo or $foo", "true");
+
+            // verify that variables are only expanded once
+            let rows: Vec<_> = trace_lambda!(client, "let $bar = 1 + 1; $bar + $bar + $bar");
+            assert_eq!(
+                &*rows,
+                [
+                    r#"         f64 const: "Double(1.0)""#,
+                    r#"         f64 const: "Double(1.0)""#,
+                    r#" binop Plus Double: "Double(2.0)""#,
+                    r#"user var 0: Double: "Double(2.0)""#,
+                    r#"user var 0: Double: "Double(2.0)""#,
+                    r#" binop Plus Double: "Double(4.0)""#,
+                    r#"user var 0: Double: "Double(2.0)""#,
+                    r#" binop Plus Double: "Double(6.0)""#,
+                ],
+            );
         });
     }
 }

@@ -655,8 +655,6 @@ mod tests {
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
             client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
-            // `-> series()` should force materialization, but otherwise the
-            // pipeline-folding optimization should proceed
             let output = client.select(
                 "EXPLAIN (verbose) SELECT \
                 timevector('1930-04-05'::timestamptz, 123.0) \
@@ -720,8 +718,6 @@ mod tests {
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
             client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
-            // `-> series()` should force materialization, but otherwise the
-            // pipeline-folding optimization should proceed
             let output = client.select(
                 "EXPLAIN (verbose) SELECT \
                 timevector('1930-04-05'::timestamptz, 123.0) \
@@ -784,8 +780,6 @@ mod tests {
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
             client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
-            // `-> series()` should force materialization, but otherwise the
-            // pipeline-folding optimization should proceed
             let output = client.select(
                 "EXPLAIN (verbose) SELECT \
                 timevector('1930-04-05'::timestamptz, 123.0) \
@@ -848,8 +842,6 @@ mod tests {
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
             client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
-            // `-> series()` should force materialization, but otherwise the
-            // pipeline-folding optimization should proceed
             let output = client.select(
                 "EXPLAIN (verbose) SELECT \
                 timevector('1930-04-05'::timestamptz, 123.0) \

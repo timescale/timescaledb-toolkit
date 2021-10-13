@@ -94,7 +94,7 @@ ron_inout_funcs!(PipelineForceMaterialize);
 #[pg_extern(
     immutable,
     parallel_safe,
-    name="series",
+    name="materialize",
     schema="toolkit_experimental"
 )]
 pub fn pipeline_series<'e>() -> toolkit_experimental::PipelineForceMaterialize<'e> {
@@ -216,7 +216,7 @@ mod tests {
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 31.0)) as v(time, value)";
 
             let val = client.select(
-                &format!("SELECT (series -> series())::TEXT FROM ({}) s", create_series),
+                &format!("SELECT (series -> materialize())::TEXT FROM ({}) s", create_series),
                 None,
                 None
             )
@@ -236,13 +236,13 @@ mod tests {
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
             client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
-            // `-> series()` should force materialization, but otherwise the
+            // `-> materialize()` should force materialization, but otherwise the
             // pipeline-folding optimization should proceed
             let output = client.select(
                 "EXPLAIN (verbose) SELECT \
                 timevector('2021-01-01'::timestamptz, 0.1) \
                 -> round() -> abs() \
-                -> series() \
+                -> materialize() \
                 -> abs() -> round();",
                 None,
                 None

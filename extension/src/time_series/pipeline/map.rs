@@ -387,6 +387,81 @@ mod tests {
     }
 
     #[pg_test]
+    fn test_pipeline_map_lambda2() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            // using the search path trick for this test b/c the operator is
+            // difficult to spot otherwise.
+            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
+
+            client.select(
+                "CREATE TABLE series(time timestamptz, value double precision)",
+                None,
+                None
+            );
+            client.select(
+                "INSERT INTO series \
+                    VALUES \
+                    ('2020-01-04 UTC'::TIMESTAMPTZ, 25.0), \
+                    ('2020-01-01 UTC'::TIMESTAMPTZ, 10.0), \
+                    ('2020-01-03 UTC'::TIMESTAMPTZ, 20.0), \
+                    ('2020-01-02 UTC'::TIMESTAMPTZ, 15.0), \
+                    ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)",
+                None,
+                None
+            );
+
+            let val = client.select(
+                "SELECT (timevector(time, value))::TEXT FROM series",
+                None,
+                None
+            )
+                .first()
+                .get_one::<String>();
+            assert_eq!(val.unwrap(), "[\
+                (ts:\"2020-01-04 00:00:00+00\",val:25),\
+                (ts:\"2020-01-01 00:00:00+00\",val:10),\
+                (ts:\"2020-01-03 00:00:00+00\",val:20),\
+                (ts:\"2020-01-02 00:00:00+00\",val:15),\
+                (ts:\"2020-01-05 00:00:00+00\",val:30)\
+            ]");
+
+            let expected = "[\
+                (ts:\"2020-01-04 00:00:00+00\",val:725.7),\
+                (ts:\"2020-01-01 00:00:00+00\",val:166.2),\
+                (ts:\"2020-01-03 00:00:00+00\",val:489.2),\
+                (ts:\"2020-01-02 00:00:00+00\",val:302.7),\
+                (ts:\"2020-01-05 00:00:00+00\",val:1012.2)\
+            ]";
+            let val = client.select(
+                "SELECT (timevector(time, value) \
+                    -> map($$ ($time, $value^2 + $value * 2.3 + 43.2) $$))::TEXT \
+                    FROM series",
+                None,
+                None
+            )
+                .first()
+                .get_one::<String>();
+            assert_eq!(val.unwrap(), expected);
+
+            let val = client.select(
+                "SELECT (timevector(time, value) \
+                    -> map($$ ($value^2 + $value * 2.3 + 43.2) $$))::TEXT \
+                    FROM series",
+                None,
+                None
+            )
+                .first()
+                .get_one::<String>();
+            assert_eq!(val.unwrap(), expected);
+
+
+        });
+    }
+
+    #[pg_test]
     fn test_pipeline_map_data() {
         Spi::execute(|client| {
             client.select("SET timezone TO 'UTC'", None, None);

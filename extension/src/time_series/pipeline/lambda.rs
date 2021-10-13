@@ -421,6 +421,16 @@ impl<'a> Lambda<'a> {
 mod tests {
     use pgx::*;
 
+    macro_rules! point_lambda {
+        ($client: expr, $expr:literal) => {
+            $client.select(
+                concat!("SELECT point_lambda($$ ", $expr ," $$, '2021-01-01', 2.0)::text"),
+                None,
+                None,
+            ).first().get_one::<String>().unwrap()
+        };
+    }
+
     macro_rules! interval_lambda {
         ($client: expr, $expr:literal) => {
             $client.select(
@@ -448,6 +458,15 @@ mod tests {
                 None,
                 None,
             ).first().get_one::<String>().unwrap()
+        };
+    }
+
+    macro_rules! point_lambda_eq {
+        ($client: expr, $expr:literal, $expects:literal) => {
+            assert_eq!(
+                point_lambda!($client, $expr),
+                $expects,
+            )
         };
     }
 
@@ -538,9 +557,16 @@ mod tests {
             assert_eq!(&*res.unwrap(), "2020-11-23 13:00:01+00");
 
 
-            let res = client.select("SELECT point_lambda($$ '2020-11-22 13:00:01't + '1 day'i, 2.0 * 3.0 $$, now(), 2.0)::text", None, None)
-                .first().get_one::<String>();
-            assert_eq!(&*res.unwrap(), "(\"2020-11-23 13:00:01+00\",6)");
+            point_lambda_eq!(client,
+                "'2020-11-22 13:00:01't + '1 day'i, 2.0 * 3.0",
+                r#"("2020-11-23 13:00:01+00",6)"#
+            );
+
+            point_lambda_eq!(client,
+                "($time, $value^2 + $value * 2.3 + 43.2)",
+                r#"("2021-01-01 00:00:00+00",51.800000000000004)"#
+            );
+
         });
     }
 

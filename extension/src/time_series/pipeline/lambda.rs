@@ -780,6 +780,24 @@ mod tests {
                     r#" binop Plus Double: "Double(6.0)""#,
                 ],
             );
+
+            let rows: Vec<_> = trace_lambda!(
+                client,
+                "let $foo = -2;\nlet $bar = $foo * $foo;\n $bar * $bar"
+            );
+            assert_eq!(
+                &*rows,
+                [ // TODO try and fix parsing so than `-2` parses as a constant `-2`
+                    r#"          f64 const: "Double(2.0)""#,
+                    r#"uop Negative Double: "Double(-2.0)""#,
+                    r#" user var 0: Double: "Double(-2.0)""#,
+                    r#" user var 0: Double: "Double(-2.0)""#,
+                    r#"   binop Mul Double: "Double(4.0)""#,
+                    r#" user var 1: Double: "Double(4.0)""#,
+                    r#" user var 1: Double: "Double(4.0)""#,
+                    r#"   binop Mul Double: "Double(16.0)""#,
+                ],
+            );
         });
     }
 }

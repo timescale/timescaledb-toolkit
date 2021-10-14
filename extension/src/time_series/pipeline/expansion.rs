@@ -251,7 +251,7 @@ mod tests {
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: \
-                run_pipeline(\
+                arrow_run_pipeline(\
                     arrow_run_pipeline_then_materialize(\
                         timevector('2021-01-01 00:00:00+00'::timestamp with time zone, '0.1'::double precision), \
                         '(version:1,num_elements:2,elements:[\

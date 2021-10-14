@@ -142,8 +142,9 @@ pub mod toolkit_experimental {
     varlena_type!(UnstableTimevectorPipeline);
 }
 
-#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
-pub fn run_pipeline<'s, 'p>(
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_run_pipeline<'s, 'p>(
     timevector: toolkit_experimental::Timevector<'s>,
     pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
 ) -> toolkit_experimental::Timevector<'static> {
@@ -192,8 +193,9 @@ pub fn execute_pipeline_element<'s, 'e>(
 }
 
 // TODO is (immutable, parallel_safe) correct?
-#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
-pub fn add_unstable_element<'p>(
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_add_unstable_element<'p>(
     mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
     element: toolkit_experimental::UnstableTimevectorPipeline<'p>,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'p> {
@@ -214,7 +216,7 @@ pub unsafe fn pipeline_support(input: Internal)
     pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
         let new_element = UnstableTimevectorPipeline::from_datum(new_element, false, 0)
             .unwrap();
-        add_unstable_element(old_pipeline, new_element).into_datum().unwrap()
+        arrow_add_unstable_element(old_pipeline, new_element).into_datum().unwrap()
     })
 }
 
@@ -273,8 +275,7 @@ pub(crate) unsafe fn pipeline_support_helper(
             //       instead of
             //       `unsafe extern "C" fn(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum`
             //       we'll fix this upstream
-            let expected_executor =
-                run_pipeline_wrapper as usize;
+            let expected_executor = arrow_run_pipeline_wrapper as usize;
             match executor_fn {
                 None => return ptr::null_mut::<pg_sys::Expr>() as _,
                 // FIXME the direct comparison should work
@@ -324,20 +325,8 @@ pub(crate) unsafe fn pipeline_support_helper(
 // FIXME there is no CREATE OR REPLACE OPERATOR need to update post-install.rs
 //       need to ensure this works with out unstable warning
 extension_sql!(r#"
-ALTER FUNCTION toolkit_experimental."run_pipeline" SUPPORT toolkit_experimental.toolkit_pipeline_support;
-ALTER FUNCTION toolkit_experimental."add_unstable_element" SUPPORT toolkit_experimental.toolkit_pipeline_support;
-
-CREATE OPERATOR -> (
-    PROCEDURE=toolkit_experimental."run_pipeline",
-    LEFTARG=toolkit_experimental.Timevector,
-    RIGHTARG=toolkit_experimental.UnstableTimevectorPipeline
-);
-
-CREATE OPERATOR -> (
-    PROCEDURE=toolkit_experimental."add_unstable_element",
-    LEFTARG=toolkit_experimental.UnstableTimevectorPipeline,
-    RIGHTARG=toolkit_experimental.UnstableTimevectorPipeline
-);
+ALTER FUNCTION "arrow_run_pipeline" SUPPORT toolkit_experimental.toolkit_pipeline_support;
+ALTER FUNCTION "arrow_add_unstable_element" SUPPORT toolkit_experimental.toolkit_pipeline_support;
 "#);
 
 #[pg_extern(stable, parallel_safe, schema="toolkit_experimental")]
@@ -561,7 +550,7 @@ mod tests {
                 .value::<String>().unwrap();
             // check that it's executing as if we had input `timevector -> (round() -> abs())`
             assert_eq!(output.trim(), "Output: \
-                run_pipeline(\
+                arrow_run_pipeline(\
                     timevector('2021-01-01 00:00:00+00'::timestamp with time zone, '0.1'::double precision), \
                    '(version:1,num_elements:3,elements:[\
                         Arithmetic(function:Round,rhs:0),\

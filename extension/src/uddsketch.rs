@@ -46,6 +46,9 @@ pub fn uddsketch_trans(
     }
 }
 
+const PERCENTILE_AGG_DEFAULT_SIZE: u32 = 200;
+const PERCENTILE_AGG_DEFAULT_ERROR: f64 = 0.001;
+
 // transition function for the simpler percentile_agg aggregate, which doesn't
 // take parameters for the size and error, but uses a default
 #[pg_extern(immutable, parallel_safe)]
@@ -54,8 +57,8 @@ pub fn percentile_agg_trans(
     value: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal<UddSketchInternal>> {
-    let default_size = 200;
-    let default_max_error = 0.001;
+    let default_size = PERCENTILE_AGG_DEFAULT_SIZE;
+    let default_max_error = PERCENTILE_AGG_DEFAULT_ERROR;
     uddsketch_trans(state, default_size, default_max_error, value, fcinfo)
 }
 
@@ -268,32 +271,28 @@ impl<'input> UddSketch<'input> {
     fn to_uddsketch(&self) -> UddSketchInternal {
         UddSketchInternal::new_from_data(self.max_buckets as u64, self.alpha, self.compactions, self.count, self.sum, self.keys(), self.counts())
     }
-}
 
-// PG function to generate a user-facing UddSketch object from a UddSketchInternal.
-#[pg_extern(immutable, parallel_safe)]
-fn uddsketch_final(
-    state: Option<Internal<UddSketchInternal>>,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<UddSketch<'static>> {
-    unsafe {
-        in_aggregate_context(fcinfo, || {
-            let state = match state {
-                None => return None,
-                Some(state) => state,
-            };
+    pub fn from_iter(iter: impl Iterator<Item=f64>) -> Self {
+        let mut sketch = UddSketchInternal::new(PERCENTILE_AGG_DEFAULT_SIZE.into(), PERCENTILE_AGG_DEFAULT_ERROR);
+        for value in iter {
+            sketch.add_value(value);
+        }
+        Self::from_internal(&sketch)
+    }
 
-            let CompressedBuckets {
-                negative_indexes,
-                negative_counts,
-                zero_bucket_count,
-                positive_indexes,
-                positive_counts,
-            } = compress_buckets(state.bucket_iter());
+    fn from_internal(state: &UddSketchInternal) -> Self {
+        let CompressedBuckets {
+            negative_indexes,
+            negative_counts,
+            zero_bucket_count,
+            positive_indexes,
+            positive_counts,
+        } = compress_buckets(state.bucket_iter());
 
 
-            // we need to flatten the vector to a single buffer that contains
-            // both the size, the data, and the varlen header
+        // we need to flatten the vector to a single buffer that contains
+        // both the size, the data, and the varlen header
+        unsafe {
             flatten!(
                 UddSketch {
                     alpha: state.max_error(),
@@ -313,6 +312,24 @@ fn uddsketch_final(
                     positive_counts: positive_counts.into(),
                 }
             ).into()
+        }
+    }
+}
+
+// PG function to generate a user-facing UddSketch object from a UddSketchInternal.
+#[pg_extern(immutable, parallel_safe)]
+fn uddsketch_final(
+    state: Option<Internal<UddSketchInternal>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<UddSketch<'static>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            let state = match state {
+                None => return None,
+                Some(state) => state,
+            };
+
+            UddSketch::from_internal(&state).into()
         })
     }
 }

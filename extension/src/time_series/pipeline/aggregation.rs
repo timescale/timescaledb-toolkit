@@ -9,7 +9,8 @@ use crate::{
     ron_inout_funcs, pg_type, build,
     stats_agg::{self, InternalStatsSummary1D, StatsSummary1D},
     counter_agg::{InternalCounterSummary, CounterSummary},
-    hyperloglog::HyperLogLog
+    hyperloglog::HyperLogLog,
+    uddsketch::UddSketch,
 };
 
 
@@ -34,6 +35,7 @@ pub mod toolkit_experimental {
     varlena_type!(PipelineThenNumVals);
     varlena_type!(PipelineThenCounterAgg);
     varlena_type!(PipelineThenHyperLogLog);
+    varlena_type!(PipelineThenPercentileAgg);
 }
 
 #[pg_operator(immutable, parallel_safe)]
@@ -579,6 +581,88 @@ extension_sql!(r#"
 ALTER FUNCTION "arrow_run_pipeline_then_hyperloglog" SUPPORT toolkit_experimental.pipeline_hyperloglog_support;
 "#);
 
+pg_type! {
+    #[derive(Debug)]
+    struct PipelineThenPercentileAgg<'input> {
+        num_elements: u64,
+        elements: [Element<'input>; self.num_elements],
+    }
+}
+
+ron_inout_funcs!(PipelineThenPercentileAgg);
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_run_pipeline_then_percentile_agg<'s, 'p>(
+    mut timevector: toolkit_experimental::Timevector<'s>,
+    pipeline: toolkit_experimental::PipelineThenPercentileAgg<'p>,
+) -> UddSketch<'static> {
+    timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
+    UddSketch::from_iter(timevector.into_iter().map(|p| p.val))
+}
+
+#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
+pub fn finalize_with_percentile_agg<'e>(
+    mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'e>,
+    then_hyperloglog: toolkit_experimental::PipelineThenPercentileAgg<'e>,
+) -> toolkit_experimental::PipelineThenPercentileAgg<'e> {
+    if then_hyperloglog.num_elements == 0 {
+        // flatten immediately so we don't need a temporary allocation for elements
+        return unsafe {flatten! {
+            PipelineThenPercentileAgg {
+                num_elements: pipeline.0.num_elements,
+                elements: pipeline.0.elements,
+            }
+        }}
+    }
+
+    let mut elements = replace(pipeline.elements.as_owned(), vec![]);
+    elements.extend(then_hyperloglog.elements.iter());
+    build! {
+        PipelineThenPercentileAgg {
+            num_elements: elements.len().try_into().unwrap(),
+            elements: elements.into(),
+        }
+    }
+}
+
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name="percentile_agg",
+    schema="toolkit_experimental"
+)]
+pub fn pipeline_percentile_agg<'e>() -> toolkit_experimental::PipelineThenPercentileAgg<'e> {
+    build! {
+        PipelineThenPercentileAgg {
+            num_elements: 0,
+            elements: vec![].into(),
+        }
+    }
+}
+
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    schema="toolkit_experimental"
+)]
+pub unsafe fn pipeline_percentile_agg_support(input: Internal)
+-> Internal {
+    pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
+        let new_element = PipelineThenPercentileAgg::from_datum(new_element, false, 0)
+            .unwrap();
+        finalize_with_percentile_agg(old_pipeline, new_element).into_datum().unwrap()
+    })
+}
+
+// using this instead of pg_operator since the latter doesn't support schemas yet
+// FIXME there is no CREATE OR REPLACE OPERATOR need to update post-install.rs
+//       need to ensure this works with out unstable warning
+extension_sql!(r#"
+ALTER FUNCTION "arrow_run_pipeline_then_percentile_agg" SUPPORT toolkit_experimental.pipeline_percentile_agg_support;
+"#);
+
+
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {
     use pgx::*;
@@ -954,5 +1038,84 @@ mod tests {
                     ])'::pipelinethenhyperloglog\
                 )");
         })
+    }
+
+    #[pg_test]
+    fn test_percentile_agg_finalizer() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            // using the search path trick for this test b/c the operator is
+            // difficult to spot otherwise.
+            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
+
+            // we use a subselect to guarantee order
+            let create_series = "SELECT timevector(time, value) as series FROM \
+                (VALUES ('2020-01-04 UTC'::TIMESTAMPTZ, 25.0), \
+                    ('2020-01-01 UTC'::TIMESTAMPTZ, 10.0), \
+                    ('2020-01-03 UTC'::TIMESTAMPTZ, 20.0), \
+                    ('2020-01-02 UTC'::TIMESTAMPTZ, 15.0), \
+                    ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)) as v(time, value)";
+
+            let val = client.select(
+                &format!("SELECT (series -> percentile_agg())::TEXT FROM ({}) s", create_series),
+                None,
+                None
+            )
+                .first()
+                .get_one::<String>();
+            assert_eq!(
+                val.unwrap(),
+                "(version:1,\
+                    alpha:0.001,\
+                    max_buckets:200,\
+                    num_buckets:5,\
+                    compactions:0,\
+                    count:5,\
+                    sum:100,\
+                    buckets:[\
+                        (Positive(1152),1),\
+                        (Positive(1355),1),\
+                        (Positive(1498),1),\
+                        (Positive(1610),1),\
+                        (Positive(1701),1)\
+                    ]\
+                )",
+            );
+        });
+    }
+
+    #[pg_test]
+    fn test_percentile_agg_pipeline_folding() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            // using the search path trick for this test b/c the operator is
+            // difficult to spot otherwise.
+            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
+
+            let output = client.select(
+                "EXPLAIN (verbose) SELECT \
+                timevector('1930-04-05'::timestamptz, 123.0) \
+                -> ceil() -> abs() -> floor() \
+                -> percentile_agg();",
+                None,
+                None
+            ).skip(1)
+                .next().unwrap()
+                .by_ordinal(1).unwrap()
+                .value::<String>().unwrap();
+            assert_eq!(output.trim(), "Output: \
+                arrow_run_pipeline_then_percentile_agg(\
+                    timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
+                    '(version:1,num_elements:3,elements:[\
+                        Arithmetic(function:Ceil,rhs:0),\
+                        Arithmetic(function:Abs,rhs:0),\
+                        Arithmetic(function:Floor,rhs:0)\
+                    ])'::pipelinethenpercentileagg\
+                )");
+        });
     }
 }

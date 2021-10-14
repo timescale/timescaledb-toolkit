@@ -44,4 +44,4 @@ string = _{ "'" ~ (!"'" ~ ANY)* ~ "'" }
 var = @{ "$" ~ (ASCII_ALPHANUMERIC | "_")+ }
 function_name = @{ ASCII_ALPHA ~ ASCII_ALPHANUMERIC* }
 
-WHITESPACE = _{ " " | "\t" }
+WHITESPACE = _{ " " | "\t" | NEWLINE }

@@ -151,29 +151,27 @@ fn parse_primary<'a>(
         binops => build_expression(pair.into_inner(), var_expressions, known_vars),
 
         let_expr => {
-            // let_expr has two forms
-            // `let <variable> = <expression>; <expression>` and `<expression>`
-            // if we have more than one sub-pair in our pairs then we know we're
-            // in the first state, otherwise we must be in the second.
             let mut pairs = pair.into_inner();
-            let var_name_or_expr = pairs.next().unwrap();
-            let var_value = match pairs.next() {
-                None => return parse_primary(var_name_or_expr, var_expressions, known_vars),
-                Some(val) => val,
+            loop {
+                // let_expr has two forms
+                // `let <variable> = <expression>; <expression>` and `<expression>`
+                // if we have more than one sub-pair in our pairs then we know we're
+                // in the first state, otherwise we must be in the second.
+                let var_name_or_expr = pairs.next().unwrap();
+                let var_value = match pairs.next() {
+                    None => return parse_primary(var_name_or_expr, var_expressions, known_vars),
+                    Some(val) => val,
 
-            };
-            let remaining = pairs.next().unwrap();
-            assert!(pairs.next().is_none());
+                };
 
-            let var_value = parse_primary(var_value, var_expressions, known_vars);
+                let var_value = parse_primary(var_value, var_expressions, known_vars);
 
-            let var_name = var_name_or_expr.as_str();
-            known_vars.entry(var_name)
-                .and_modify(|_| panic!("duplicate var {}", var_name))
-                .or_insert_with(|| (var_value.ty().clone(), var_expressions.len()));
-            var_expressions.push(var_value);
-
-            parse_primary(remaining, var_expressions, known_vars)
+                let var_name = var_name_or_expr.as_str();
+                known_vars.entry(var_name)
+                    .and_modify(|_| panic!("duplicate var {}", var_name))
+                    .or_insert_with(|| (var_value.ty().clone(), var_expressions.len()));
+                var_expressions.push(var_value);
+            }
         },
 
         tuple => {

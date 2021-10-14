@@ -36,8 +36,9 @@ pub mod toolkit_experimental {
     varlena_type!(PipelineThenHyperLogLog);
 }
 
-#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
-pub fn run_pipeline_then_stats_agg<'s, 'p>(
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_run_pipeline_then_stats_agg<'s, 'p>(
     mut timevector: toolkit_experimental::Timevector<'s>,
     pipeline: toolkit_experimental::PipelineThenStatsAgg<'p>,
 ) -> StatsSummary1D<'static> {
@@ -108,19 +109,7 @@ pub unsafe fn pipeline_stats_agg_support(input: Internal)
 // FIXME there is no CREATE OR REPLACE OPERATOR need to update post-install.rs
 //       need to ensure this works with out unstable warning
 extension_sql!(r#"
-ALTER FUNCTION toolkit_experimental."run_pipeline_then_stats_agg" SUPPORT toolkit_experimental.pipeline_stats_agg_support;
-
-CREATE OPERATOR -> (
-    PROCEDURE=toolkit_experimental."run_pipeline_then_stats_agg",
-    LEFTARG=toolkit_experimental.Timevector,
-    RIGHTARG=toolkit_experimental.PipelineThenStatsAgg
-);
-
-CREATE OPERATOR -> (
-    PROCEDURE=toolkit_experimental."finalize_with_stats_agg",
-    LEFTARG=toolkit_experimental.UnstableTimevectorPipeline,
-    RIGHTARG=toolkit_experimental.PipelineThenStatsAgg
-);
+ALTER FUNCTION "arrow_run_pipeline_then_stats_agg" SUPPORT toolkit_experimental.pipeline_stats_agg_support;
 "#);
 
 //
@@ -173,7 +162,7 @@ pub fn arrow_pipeline_then_sum<'s, 'p>(
             elements: pipeline.elements,
         }
     };
-    let stats_agg = run_pipeline_then_stats_agg(timevector, pipeline);
+    let stats_agg = arrow_run_pipeline_then_stats_agg(timevector, pipeline);
     stats_agg::stats1d_sum(stats_agg)
 }
 
@@ -272,7 +261,7 @@ pub fn arrow_pipeline_then_average<'s, 'p>(
             elements: pipeline.elements,
         }
     };
-    let stats_agg = run_pipeline_then_stats_agg(timevector, pipeline);
+    let stats_agg = arrow_run_pipeline_then_stats_agg(timevector, pipeline);
     stats_agg::stats1d_average(stats_agg)
 }
 
@@ -422,8 +411,9 @@ pg_type! {
 
 ron_inout_funcs!(PipelineThenCounterAgg);
 
-#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
-pub fn run_pipeline_then_counter_agg<'s, 'p>(
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_run_pipeline_then_counter_agg<'s, 'p>(
     mut timevector: toolkit_experimental::Timevector<'s>,
     pipeline: toolkit_experimental::PipelineThenCounterAgg<'p>,
 ) -> Option<CounterSummary<'static>> {
@@ -497,19 +487,7 @@ pub unsafe fn pipeline_counter_agg_support(input: Internal)
 // FIXME there is no CREATE OR REPLACE OPERATOR need to update post-install.rs
 //       need to ensure this works with out unstable warning
 extension_sql!(r#"
-ALTER FUNCTION toolkit_experimental."run_pipeline_then_counter_agg" SUPPORT toolkit_experimental.pipeline_counter_agg_support;
-
-CREATE OPERATOR -> (
-    PROCEDURE=toolkit_experimental."run_pipeline_then_counter_agg",
-    LEFTARG=toolkit_experimental.Timevector,
-    RIGHTARG=toolkit_experimental.PipelineThenCounterAgg
-);
-
-CREATE OPERATOR -> (
-    PROCEDURE=toolkit_experimental."finalize_with_counter_agg",
-    LEFTARG=toolkit_experimental.UnstableTimevectorPipeline,
-    RIGHTARG=toolkit_experimental.PipelineThenCounterAgg
-);
+ALTER FUNCTION "arrow_run_pipeline_then_counter_agg" SUPPORT toolkit_experimental.pipeline_counter_agg_support;
 "#);
 
 pg_type! {
@@ -523,8 +501,9 @@ pg_type! {
 
 ron_inout_funcs!(PipelineThenHyperLogLog);
 
-#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
-pub fn run_pipeline_then_hyperloglog<'s, 'p>(
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_run_pipeline_then_hyperloglog<'s, 'p>(
     mut timevector: toolkit_experimental::Timevector<'s>,
     pipeline: toolkit_experimental::PipelineThenHyperLogLog<'p>,
 ) -> HyperLogLog<'static> {
@@ -597,19 +576,7 @@ pub unsafe fn pipeline_hyperloglog_support(input: Internal)
 // FIXME there is no CREATE OR REPLACE OPERATOR need to update post-install.rs
 //       need to ensure this works with out unstable warning
 extension_sql!(r#"
-ALTER FUNCTION toolkit_experimental."run_pipeline_then_hyperloglog" SUPPORT toolkit_experimental.pipeline_hyperloglog_support;
-
-CREATE OPERATOR -> (
-    PROCEDURE=toolkit_experimental."run_pipeline_then_hyperloglog",
-    LEFTARG=toolkit_experimental.Timevector,
-    RIGHTARG=toolkit_experimental.PipelineThenHyperLogLog
-);
-
-CREATE OPERATOR -> (
-    PROCEDURE=toolkit_experimental."finalize_with_hyperloglog",
-    LEFTARG=toolkit_experimental.UnstableTimevectorPipeline,
-    RIGHTARG=toolkit_experimental.PipelineThenHyperLogLog
-);
+ALTER FUNCTION "arrow_run_pipeline_then_hyperloglog" SUPPORT toolkit_experimental.pipeline_hyperloglog_support;
 "#);
 
 #[cfg(any(test, feature = "pg_test"))]
@@ -667,7 +634,7 @@ mod tests {
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: (\
-                run_pipeline_then_stats_agg(\
+                arrow_run_pipeline_then_stats_agg(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,num_elements:3,elements:[\
                         Arithmetic(function:Ceil,rhs:0),\
@@ -914,7 +881,7 @@ mod tests {
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: \
-                run_pipeline_then_counter_agg(\
+                arrow_run_pipeline_then_counter_agg(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,num_elements:3,elements:[\
                         Arithmetic(function:Ceil,rhs:0),\
@@ -978,7 +945,7 @@ mod tests {
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: \
-                run_pipeline_then_hyperloglog(\
+                arrow_run_pipeline_then_hyperloglog(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,hll_size:100,num_elements:3,elements:[\
                         Arithmetic(function:Ceil,rhs:0),\

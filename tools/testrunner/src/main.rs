@@ -18,6 +18,7 @@ fn main() {
             connection should use. By default this DB will only be used \
             to spawn the individual test databases; no tests will run against \
             it.")
+        (@arg AT_ROOT: --exec-at-root "run the tests in the root DB instead of creating a new one.")
     ).get_matches();
 
     let connection_config = ConnectionConfig {
@@ -27,6 +28,8 @@ fn main() {
         password: matches.value_of("PASSWORD"),
         database: matches.value_of("DB"),
     };
+
+    let at_root = matches.is_present("AT_ROOT");
 
     let root_connection_config = connection_config.to_config_string();
     let root_connection_config = &root_connection_config;
@@ -46,10 +49,15 @@ fn main() {
         .simple_query(&format!(r#"CREATE DATABASE "{}""#, db_name))
         .expect("could not create test DB");
 
-    let test_connection_config = ConnectionConfig {
-        database: Some(db_name),
-        ..connection_config
-    };
+    let test_connection_config =
+        if at_root {
+            connection_config
+        } else {
+            ConnectionConfig {
+                database: Some(db_name),
+                ..connection_config
+            }
+        };
 
     let start = Instant::now();
 
@@ -58,7 +66,7 @@ fn main() {
         .expect("could not connect to test DB");
 
     println!("{}", "Creating Extension".bold().green());
-    client.simple_query("CREATE EXTENSION timescaledb_toolkit;"
+    client.simple_query("CREATE EXTENSION IF NOT EXISTS timescaledb_toolkit;"
         ).expect("cannot retrieve test names");
 
     println!("{}", "Retrieving Tests".bold().green());

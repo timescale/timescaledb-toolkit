@@ -428,8 +428,7 @@ where T: serde::Serialize + Clone + FlatSerializable<'i> {
         S: serde::Serializer {
         use serde::ser::SerializeSeq;
 
-        // TODO len should be computable
-        let mut s = serializer.serialize_seq(None)?;
+        let mut s = serializer.serialize_seq(Some(self.len()))?;
         for t in self.iter() {
             s.serialize_element(&t)?
         }

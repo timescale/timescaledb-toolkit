@@ -20,9 +20,12 @@ pub unsafe fn in_aggregate_context<T, F: FnOnce() -> T>(
     crate::palloc::in_memory_context(mctx, f)
 }
 
-pub fn aggregate_mctx(fcinfo: pg_sys::FunctionCallInfo) -> Option<pg_sys::MemoryContext> {
+pub unsafe fn aggregate_mctx(fcinfo: pg_sys::FunctionCallInfo) -> Option<pg_sys::MemoryContext> {
+    if fcinfo.is_null() {
+        return Some(pg_sys::CurrentMemoryContext)
+    }
     let mut mctx = null_mut();
-    let is_aggregate = unsafe { pg_sys::AggCheckCallContext(fcinfo, &mut mctx) };
+    let is_aggregate = pg_sys::AggCheckCallContext(fcinfo, &mut mctx);
     if is_aggregate == 0 {
         return None;
     } else {

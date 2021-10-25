@@ -98,7 +98,7 @@ impl<'input> CounterSummary<'input> {
     // }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct CounterSummaryTransState {
     #[serde(skip)]
     point_buffer: Vec<TSPoint>,
@@ -902,6 +902,34 @@ mod tests {
             let resets_test = select_one!(client, &stmt, i64);
             assert_eq!(resets, resets_test);
         });
+    }
+
+    #[pg_test]
+    fn test_counter_byte_io() {
+        unsafe {
+            use std::ptr;
+            const BASE: i64 = 631152000000000;
+            const MIN: i64 = 60000000;
+            let state = counter_agg_trans(None, Some(BASE), Some(10.0), None, ptr::null_mut());
+            let state = counter_agg_trans(state, Some(BASE + 1 * MIN), Some(20.0), None, ptr::null_mut());
+            let state = counter_agg_trans(state, Some(BASE + 2 * MIN), Some(30.0), None, ptr::null_mut());
+            let state = counter_agg_trans(state, Some(BASE + 3 * MIN), Some(10.0), None, ptr::null_mut());
+            let state = counter_agg_trans(state, Some(BASE + 4 * MIN), Some(20.0), None, ptr::null_mut());
+            let state = counter_agg_trans(state, Some(BASE + 5 * MIN), Some(30.0), None, ptr::null_mut());
+
+            let mut control = state.unwrap();
+            let buffer = counter_summary_trans_serialize(control.clone().into());
+            let buffer = pgx::varlena::varlena_to_byte_slice(buffer as *mut pg_sys::varlena);
+
+            let expected = [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 96, 194, 134, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 36, 64, 0, 231, 85, 138, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 52, 64, 0, 124, 16, 149, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 52, 64, 0, 3, 164, 152, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 62, 64, 0, 0, 0, 0, 0, 0, 62, 64, 1, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 144, 246, 54, 236, 65, 0, 0, 0, 0, 0, 195, 238, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 32, 17, 209, 65, 0, 0, 0, 0, 0, 64, 106, 64, 0, 0, 0, 0, 0, 88, 155, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 76, 248, 42, 65, 0, 0, 0, 0, 0, 130, 196, 64, 0];
+            assert_eq!(buffer, expected);
+
+            let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
+            let new_state = counter_summary_trans_deserialize(&*expected as *const pg_sys::varlena as pg_sys::Datum, None);
+
+            control.combine_summaries();  // Serialized form is always combined
+            assert_eq!(*new_state, *control);
+        }
     }
 
 

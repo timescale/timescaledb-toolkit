@@ -22,7 +22,7 @@ use tdigest::{
 
 // Intermediate state kept in postgres.  This is a tdigest object paired
 // with a vector of values that still need to be inserted.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct TDigestTransState {
     #[serde(skip)]
     buffer: Vec<f64>,
@@ -425,6 +425,7 @@ pub fn tdigest_mean(
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {
     use pgx::*;
+    use super::*;
 
     // Assert equality between two floats, within some fixed error range.
     fn apx_eql(value: f64, expected: f64, error: f64) {
@@ -584,6 +585,31 @@ mod tests {
                 .get_one();
             assert_eq!(estimate, Some(90.5));
         });
+    }
+
+    #[pg_test]
+    fn test_tdigest_byte_io() {
+        unsafe {
+            use std::ptr;
+            let state = tdigest_trans(None, 100, Some(14.0), ptr::null_mut());
+            let state = tdigest_trans(state, 100, Some(18.0), ptr::null_mut());
+            let state = tdigest_trans(state, 100, Some(22.7), ptr::null_mut());
+            let state = tdigest_trans(state, 100, Some(39.42), ptr::null_mut());
+            let state = tdigest_trans(state, 100, Some(-43.0), ptr::null_mut());
+
+            let mut control = state.unwrap();
+            let buffer = tdigest_serialize(control.clone().into());
+            let buffer = pgx::varlena::varlena_to_byte_slice(buffer as *mut pg_sys::varlena);
+
+            let expected = [1, 1, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 69, 192, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 44, 64, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 64, 1, 0, 0, 0, 0, 0, 0, 0, 51, 51, 51, 51, 51, 179, 54, 64, 1, 0, 0, 0, 0, 0, 0, 0, 246, 40, 92, 143, 194, 181, 67, 64, 1, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0, 0, 0, 0, 0, 0, 144, 194, 245, 40, 92, 143, 73, 64, 5, 0, 0, 0, 0, 0, 0, 0, 246, 40, 92, 143, 194, 181, 67, 64, 0, 0, 0, 0, 0, 128, 69, 192];
+            assert_eq!(buffer, expected);
+
+            let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
+            let new_state = tdigest_deserialize(&*expected as *const pg_sys::varlena as pg_sys::Datum, None);
+
+            control.digest();  // Serialized form is always digested
+            assert_eq!(*new_state, *control);
+        }
     }
 
     #[pg_test]

@@ -63,14 +63,14 @@ impl SketchHashKey {
 }
 
 // Entries in the SketchHashMap contain a count and the next valid index of the map.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 struct SketchHashEntry {
     count: u64,
     next: SketchHashKey,
 }
 
 // SketchHashMap is a special hash map of SketchHashKey->count that also keeps the equivalent of a linked list of the entries by increasing key value.
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 struct SketchHashMap {
     map: HashMap<SketchHashKey, SketchHashEntry>,
     head: SketchHashKey,
@@ -184,7 +184,7 @@ impl SketchHashMap {
     }
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct UDDSketch {
     buckets: SketchHashMap,
     alpha: f64,

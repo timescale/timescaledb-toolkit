@@ -14,14 +14,14 @@ mod hyperloglog_data;
 pub mod registers;
 pub mod sparse;
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq)]
 pub struct HyperLogLog<'s, T: ?Sized, B> {
     storage: HyperLogLogStorage<'s>,
     pub buildhasher: B,
     _pd: PhantomData<T>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq)]
 pub enum HyperLogLogStorage<'s> {
     Sparse(sparse::Storage<'s>),
     Dense(dense::Storage<'s>),
@@ -104,7 +104,7 @@ impl<'s, T, B> HyperLogLog<'s, T, B> {
         &self.storage
     }
 
-    fn merge_all(&mut self) {
+    pub fn merge_all(&mut self) {
         match &mut self.storage {
             HyperLogLogStorage::Sparse(s) => s.merge_buffers(),
             HyperLogLogStorage::Dense(_) => {},

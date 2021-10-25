@@ -586,6 +586,7 @@ pub fn uddsketch_error(
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {
     use pgx::*;
+    use super::*;
 
     // Assert equality between two floats, within some fixed error range.
     fn apx_eql(value: f64, expected: f64, error: f64) {
@@ -821,5 +822,28 @@ mod tests {
                 assert_eq!(expected, test);
             }
         });
+    }
+
+    #[pg_test]
+    fn uddsketch_byte_io_test() {
+        unsafe {
+            use std::ptr;
+            let state = uddsketch_trans(None, 100, 0.005, Some(14.0), ptr::null_mut());
+            let state = uddsketch_trans(state, 100, 0.005, Some(18.0), ptr::null_mut());
+            let state = uddsketch_trans(state, 100, 0.005, Some(22.7), ptr::null_mut());
+            let state = uddsketch_trans(state, 100, 0.005, Some(39.42), ptr::null_mut());
+            let state = uddsketch_trans(state, 100, 0.005, Some(-43.0), ptr::null_mut());
+
+            let control = state.unwrap();
+            let buffer = uddsketch_serialize(control.clone().into());
+            let buffer = pgx::varlena::varlena_to_byte_slice(buffer as *mut pg_sys::varlena);
+
+            let expected = [1, 1, 123, 20, 174, 71, 225, 122, 116, 63, 100, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 144, 194, 245, 40, 92, 143, 73, 64, 2, 0, 0, 0, 0, 0, 0, 0, 202, 11, 1, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 66, 8, 105, 93, 221, 4, 0, 0, 0, 0, 0, 0, 0, 5, 1, 1, 1];
+            assert_eq!(buffer, expected);
+
+            let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
+            let new_state = uddsketch_deserialize(&*expected as *const pg_sys::varlena as pg_sys::Datum, None);
+            assert_eq!(*new_state, *control);
+        }
     }
 }

@@ -1,5 +1,6 @@
 
 use std::{
+    alloc::{GlobalAlloc, Layout, System},
     ptr::NonNull,
 };
 
@@ -70,5 +71,69 @@ impl<T> std::ops::Deref for Internal<T> {
 impl<T> std::ops::DerefMut for Internal<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { self.0.as_mut() }
+    }
+}
+
+// By default rust will `abort()` the process when the allocator returns NULL.
+// Since many systems can't reliably determine when an allocation will cause the
+// process to run out of memory, and just rely on the OOM killer cleaning up
+// afterwards, this is acceptable for many workloads. However, `abort()`-ing a
+// Postgres will restart the database, and since we often run Postgres on
+// systems which _can_ reliably return NULL on out-of-memory, we would like to
+// take advantage of this to cleanly shut down a single transaction when we fail
+// to allocate. Long-term the solution for this likely involves the `oom=panic`
+// flag[1], but at the time of writing the flag is not yet stable.
+//
+// This allocator implements a partial solution for turning out-of-memory into
+// transaction-rollback instead of process-abort. It is a thin shim over the
+// System allocator that `panic!()`s when the System allocator returns `NULL`.
+// In the event that still have enough remaining memory to serve the panic, this
+// will unwind the stack all the way to transaction-rollback. In the event we
+// don't even have enough memory to handle unwinding this will merely abort the
+// process with a panic-in-panic instead of a memory-allocation-failure. Under
+// the assumption that we're more likely to fail due to a few large allocations
+// rather than a very large number of small allocations, it seems likely that we
+// will have some memory remaining for unwinding, and that this will reduce the
+// likelihood of aborts.
+//
+// [1] `oom=panic` tracking issue: https://github.com/rust-lang/rust/issues/43596
+struct PanickingAllocator;
+
+#[global_allocator]
+static ALLOCATOR: PanickingAllocator = PanickingAllocator;
+
+unsafe impl GlobalAlloc for PanickingAllocator {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        let p = System.alloc(layout);
+        if p.is_null() {
+            panic!("Out of memory")
+        }
+        return p
+
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        System.dealloc(ptr, layout)
+    }
+
+    unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
+        let p = System.alloc_zeroed(layout);
+        if p.is_null() {
+            panic!("Out of memory")
+        }
+        return p
+    }
+
+    unsafe fn realloc(
+        &self,
+        ptr: *mut u8,
+        layout: Layout,
+        new_size: usize
+    ) -> *mut u8 {
+        let p = System.realloc(ptr, layout, new_size);
+        if p.is_null() {
+            panic!("Out of memory")
+        }
+        return p
     }
 }

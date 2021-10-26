@@ -1195,6 +1195,7 @@ pub fn as_method(method: &str) -> Option<Method> {
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {
     use pgx::*;
+    use super::*;
     use approx::relative_eq;
     use rand::rngs::SmallRng;
     use rand::seq::SliceRandom;
@@ -1206,7 +1207,7 @@ mod tests {
     const PRINT_VALS: bool = false;  // Print out test values on error, this can be spammy if VALS is high
 
     #[pg_test]
-    fn test_io() {
+    fn test_stats_agg_text_io() {
         Spi::execute(|client| {
            client.select(
                 "CREATE TABLE test_table (test_x DOUBLE PRECISION, test_y DOUBLE PRECISION)",
@@ -1296,6 +1297,31 @@ mod tests {
                 unwrap();
             assert_eq!(test, "(version:1,n:4,sx:NaN,sx2:NaN,sx3:NaN,sx4:NaN,sy:inf,sy2:NaN,sy3:NaN,sy4:NaN,sxy:NaN)");
         });
+    }
+
+    #[pg_test]
+    fn test_stats_agg_byte_io() {
+        unsafe {
+            use std::ptr;
+            let state = stats1d_trans(None, Some(14.0), ptr::null_mut());
+            let state = stats1d_trans(state, Some(18.0), ptr::null_mut());
+            let state = stats1d_trans(state, Some(22.7), ptr::null_mut());
+            let state = stats1d_trans(state, Some(39.42), ptr::null_mut());
+            let state = stats1d_trans(state, Some(-43.0), ptr::null_mut());
+
+            let control = state.unwrap();
+            let buffer = stats1d_trans_serialize(control.clone().into());
+            let buffer = pgx::varlena::varlena_to_byte_slice(buffer as *mut pg_sys::varlena);
+
+            let expected = [1, 1, 1, 5, 0, 0, 0, 0, 0, 0, 0, 144, 194, 245, 40, 92, 143, 73, 64, 100, 180, 142, 170, 38, 151, 174, 64, 72, 48, 180, 190, 189, 33, 254, 192, 119, 78, 30, 195, 209, 190, 96, 65];
+            assert_eq!(buffer, expected);
+
+            let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
+            let new_state = stats1d_trans_deserialize(&*expected as *const pg_sys::varlena as pg_sys::Datum, None);
+
+            assert_eq!(*new_state, *control);
+        }
+
     }
 
     #[pg_test]

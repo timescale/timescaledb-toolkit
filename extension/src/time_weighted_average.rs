@@ -44,7 +44,7 @@ impl<'input> TimeWeightSummary<'input> {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct TimeWeightTransState {
     #[serde(skip)]
     point_buffer: Vec<TSPoint>,
@@ -294,6 +294,7 @@ pub fn time_weighted_average_average(
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {
     use pgx::*;
+    use super::*;
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {
             $client
@@ -441,5 +442,33 @@ mod tests {
             assert_eq!(select_one!(client, locf_time_weight, String), expected);
             assert_eq!(select_one!(client, &*avg(expected), f64), 17.75);
         });
+    }
+
+    #[pg_test]
+    fn test_time_weight_byte_io() {
+        unsafe {
+            use std::ptr;
+            const BASE: i64 = 631152000000000;
+            const MIN: i64 = 60000000;
+            let state = time_weight_trans(None, "linear".to_string(), Some(BASE), Some(10.0), ptr::null_mut());
+            let state = time_weight_trans(state, "linear".to_string(), Some(BASE + 1 * MIN), Some(20.0), ptr::null_mut());
+            let state = time_weight_trans(state, "linear".to_string(), Some(BASE + 2 * MIN), Some(30.0), ptr::null_mut());
+            let state = time_weight_trans(state, "linear".to_string(), Some(BASE + 3 * MIN), Some(10.0), ptr::null_mut());
+            let state = time_weight_trans(state, "linear".to_string(), Some(BASE + 4 * MIN), Some(20.0), ptr::null_mut());
+            let state = time_weight_trans(state, "linear".to_string(), Some(BASE + 5 * MIN), Some(30.0), ptr::null_mut());
+
+            let mut control = state.unwrap();
+            let buffer = time_weight_trans_serialize(control.clone().into());
+            let buffer = pgx::varlena::varlena_to_byte_slice(buffer as *mut pg_sys::varlena);
+
+            let expected = [1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 96, 194, 134, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 36, 64, 0, 3, 164, 152, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 62, 64, 0, 0, 0, 192, 11, 90, 246, 65];
+            assert_eq!(buffer, expected);
+
+            let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
+            let new_state = time_weight_trans_deserialize(&*expected as *const pg_sys::varlena as pg_sys::Datum, None);
+
+            control.combine_summaries();  // Serialized form is always combined
+            assert_eq!(*new_state, *control);
+        }
     }
 }

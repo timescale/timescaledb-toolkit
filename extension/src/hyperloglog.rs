@@ -22,7 +22,7 @@ use crate::{
 
 use hyperloglogplusplus::{HyperLogLog as HLL, HyperLogLogStorage};
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, PartialEq)]
 pub struct HyperLogLogTrans {
     logger: HLL<'static, Datum, DatumHashBuilder>,
 }
@@ -91,7 +91,8 @@ pub fn hyperloglog_combine(
 type bytea = pg_sys::Datum;
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn hyperloglog_serialize(state: Internal<HyperLogLogTrans>) -> bytea {
+pub fn hyperloglog_serialize(mut state: Internal<HyperLogLogTrans>) -> bytea {
+    state.logger.merge_all();
     crate::do_serialize!(state)
 }
 
@@ -499,6 +500,7 @@ impl<'de> Deserialize<'de> for DatumHashBuilder {
 #[cfg(any(test, feature = "pg_test"))]
 mod tests {
     use pgx::*;
+    use super::*;
 
     #[pg_test]
     fn test_hll_aggregate() {
@@ -553,6 +555,54 @@ mod tests {
                 .get_one::<i32>();
             assert_eq!(count2, count);
         });
+    }
+
+    #[pg_test]
+    fn test_hll_byte_io() {
+        unsafe {
+            // Unable to build the hyperloglog through hyperloglog_trans, as that requires a valid fcinfo to determine OIDs.
+
+            // FIXME: use named constant for default correlation oid
+            let hasher = DatumHashBuilder::from_type_id(pg_sys::TEXTOID, Some(100));
+            let mut control = HyperLogLogTrans {
+                logger: HLL::new(6, hasher),
+            };
+            control.logger.add(&rust_str_to_text_p("first").into_datum().unwrap());
+            control.logger.add(&rust_str_to_text_p("second").into_datum().unwrap());
+            control.logger.add(&rust_str_to_text_p("first").into_datum().unwrap());
+            control.logger.add(&rust_str_to_text_p("second").into_datum().unwrap());
+            control.logger.add(&rust_str_to_text_p("third").into_datum().unwrap());
+
+            let buffer = hyperloglog_serialize(control.clone().into());
+            let buffer = pgx::varlena::varlena_to_byte_slice(buffer as *mut pg_sys::varlena);
+
+            let mut expected = vec![1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 136, 136, 9, 7, 8, 74, 76, 47, 200, 231, 53, 25, 3, 0, 0, 0, 0, 0, 0, 0, 6, 9, 0, 0, 0, 1];
+            bincode::serialize_into(&mut expected, &PgCollationId(100)).unwrap();
+            assert_eq!(buffer, expected);
+
+            let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
+            let new_state = hyperloglog_deserialize(&*expected as *const pg_sys::varlena as pg_sys::Datum, None);
+
+            control.logger.merge_all();  // Sparse representation buffers always merged on serialization
+            assert!(*new_state == control);
+
+            // Now generate a dense represenataion and validate that
+            for i in 0..500 {
+                control.logger.add(&rust_str_to_text_p(&i.to_string()).into_datum().unwrap());
+            }
+
+            let buffer = hyperloglog_serialize(control.clone().into());
+            let buffer = pgx::varlena::varlena_to_byte_slice(buffer as *mut pg_sys::varlena);
+
+            let mut expected = vec![1, 1, 1, 0, 0, 0, 49, 0, 0, 0, 0, 0, 0, 0, 20, 65, 2, 12, 48, 199, 20, 33, 4, 12, 49, 67, 16, 81, 66, 32, 145, 131, 24, 49, 4, 20, 33, 5, 8, 81, 66, 12, 81, 4, 8, 49, 2, 8, 65, 131, 24, 32, 133, 12, 50, 66, 12, 48, 197, 12, 81, 130, 255, 58, 6, 255, 255, 255, 255, 255, 255, 255, 3, 9, 0, 0, 0, 1];
+            bincode::serialize_into(&mut expected, &PgCollationId(100)).unwrap();
+            assert_eq!(buffer, expected);
+
+            let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
+            let new_state = hyperloglog_deserialize(&*expected as *const pg_sys::varlena as pg_sys::Datum, None);
+
+            assert!(*new_state == control);
+        }
     }
 
     #[pg_test]

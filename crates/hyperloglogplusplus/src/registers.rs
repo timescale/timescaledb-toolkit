@@ -19,7 +19,7 @@ use std::{borrow::Cow, convert::TryInto, debug_assert};
 // and treat the block like a regular integer, using shifts to get the
 // values in and out
 #[derive(Clone)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Registers<'s>(Cow<'s, [u8]>);
 
 impl<'s> Registers<'s> {

@@ -12,7 +12,7 @@ use self::varint::*;
 
 mod varint;
 
-#[derive(serde::Serialize, serde::Deserialize, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq)]
 pub struct Storage<'s> {
     to_merge: HashSet<Encoded>,
     pub compressed: Compressed<'s>,

@@ -71,8 +71,10 @@ pub fn filter_lambda_over_series(
 }
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
+    use pgx_macros::pg_test;
 
     #[pg_test]
     fn test_pipeline_filter_lambda() {

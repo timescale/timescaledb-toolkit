@@ -18,6 +18,7 @@ mod aggregate_utils;
 mod type_builder;
 mod serialization;
 mod schema_test;
+mod raw;
 
 // This should be last so we don't run our warning trigger on when
 // installing this extension

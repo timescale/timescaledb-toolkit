@@ -4,7 +4,7 @@ use std::{slice};
 use pgx::*;
 
 use crate::{
-    aggregate_utils::in_aggregate_context, pg_type, build, flatten, palloc::Internal,
+    aggregate_utils::in_aggregate_context, pg_type, build, flatten, palloc::{Internal, InternalAsValue, Inner, ToInternal},
 };
 
 use time_series::{
@@ -18,84 +18,82 @@ use flat_serialize::*;
 mod pipeline;
 mod iter;
 
-#[allow(non_camel_case_types)]
-type bytea = pg_sys::Datum;
+use crate::raw::bytea;
 
-pg_type! {
-    #[derive(Debug)]
-    struct Timevector<'input> {
-        series: enum SeriesType<'input> {
-            type_id: u64,
-            SortedSeries: 1 {
-                num_points: u64,  // required to be aligned
-                points: [TSPoint; self.num_points],
-            },
-            NormalSeries: 2 {
-                start_ts: i64,
-                step_interval: i64,
-                num_vals: u64,  // required to be aligned
-                values: [f64; self.num_vals],
-            },
-            // ExplicitSeries is assumed to be unordered
-            ExplicitSeries: 3 {
-                num_points: u64,  // required to be aligned
-                points: [TSPoint; self.num_points],
-            },
-            GappyNormalSeries: 4 {
-                start_ts: i64,
-                step_interval: i64,
-                num_vals: u64,  // required to be aligned
-                count: u64,
-                values: [f64; self.num_vals],
-                present: [u64; (self.count + 63) / 64]
-            },
-        },
-    }
-}
+pub use toolkit_experimental::{Timevector, TimevectorData, SeriesType};
 
-impl<'input> InOutFuncs for Timevector<'input> {
-    fn output(&self, buffer: &mut StringInfo) {
-        use crate::serialization::{EncodedStr::*, str_to_db_encoding};
-
-        // TODO remove extra allocation
-        // FIXME print timestamps as times, not integers
-        let serializer: Vec<_> = self.iter().collect();
-
-        // Extra & in the to_string call due to ron not supporting ?Sized, shouldn't affect output
-        let stringified = ron::to_string(&&*serializer).unwrap();
-        match str_to_db_encoding(&stringified) {
-            Utf8(s) => buffer.push_str(s),
-            Other(s) => buffer.push_bytes(s.to_bytes()),
+#[pg_schema]
+pub mod toolkit_experimental {
+    use super::*;
+    pg_type! {
+        #[derive(Debug)]
+        struct Timevector<'input> {
+            series: enum SeriesType<'input> {
+                type_id: u64,
+                SortedSeries: 1 {
+                    num_points: u64,  // required to be aligned
+                    points: [TSPoint; self.num_points],
+                },
+                NormalSeries: 2 {
+                    start_ts: i64,
+                    step_interval: i64,
+                    num_vals: u64,  // required to be aligned
+                    values: [f64; self.num_vals],
+                },
+                // ExplicitSeries is assumed to be unordered
+                ExplicitSeries: 3 {
+                    num_points: u64,  // required to be aligned
+                    points: [TSPoint; self.num_points],
+                },
+                GappyNormalSeries: 4 {
+                    start_ts: i64,
+                    step_interval: i64,
+                    num_vals: u64,  // required to be aligned
+                    count: u64,
+                    values: [f64; self.num_vals],
+                    present: [u64; (self.count + 63) / 64]
+                },
+            },
         }
     }
 
-    fn input(input: &std::ffi::CStr) -> Self
-    where
-        Self: Sized,
-    {
-        use crate::serialization::str_from_db_encoding;
+    impl<'input> InOutFuncs for Timevector<'input> {
+        fn output(&self, buffer: &mut StringInfo) {
+            use crate::serialization::{EncodedStr::*, str_to_db_encoding};
 
-        // TODO reduce allocation?
-        let input = str_from_db_encoding(input);
-        let series: Vec<TSPoint> = ron::from_str(input).unwrap();
-        unsafe {
-            flatten! {
-                Timevector {
-                    series: SeriesType::ExplicitSeries {
-                        num_points: series.len() as u64,
-                        points: series.into(),
+            // TODO remove extra allocation
+            // FIXME print timestamps as times, not integers
+            let serializer: Vec<_> = self.iter().collect();
+
+            // Extra & in the to_string call due to ron not supporting ?Sized, shouldn't affect output
+            let stringified = ron::to_string(&&*serializer).unwrap();
+            match str_to_db_encoding(&stringified) {
+                Utf8(s) => buffer.push_str(s),
+                Other(s) => buffer.push_bytes(s.to_bytes()),
+            }
+        }
+
+        fn input(input: &std::ffi::CStr) -> Self
+        where
+            Self: Sized,
+        {
+            use crate::serialization::str_from_db_encoding;
+
+            // TODO reduce allocation?
+            let input = str_from_db_encoding(input);
+            let series: Vec<TSPoint> = ron::from_str(input).unwrap();
+            unsafe {
+                flatten! {
+                    Timevector {
+                        series: SeriesType::ExplicitSeries {
+                            num_points: series.len() as u64,
+                            points: series.into(),
+                        }
                     }
                 }
             }
         }
     }
-}
-
-// hack to allow us to qualify names with "toolkit_experimental"
-// so that pgx generates the correct SQL
-pub mod toolkit_experimental {
-    pub(crate) use super::*;
-    varlena_type!(Timevector);
 }
 
 impl<'input> Timevector<'input> {
@@ -193,14 +191,15 @@ pub static TIMEVECTOR_OID: once_cell::sync::Lazy<pg_sys::Oid> = once_cell::sync:
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn unnest(
     series: toolkit_experimental::Timevector<'_>,
-) -> impl std::iter::Iterator<Item = (name!(time,pg_sys::TimestampTz),name!(value,f64))> + '_ {
-    series.into_iter().map(|points| (points.ts, points.val))
+) -> impl std::iter::Iterator<Item = (name!(time,crate::raw::TimestampTz),name!(value,f64))> + '_ {
+    series.into_iter().map(|points| (points.ts.into(), points.val))
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn timevector_serialize(
-    state: Internal<Timevector<'_>>,
+    state: Internal,
 ) -> bytea {
+    let state: &Timevector = unsafe { state.get().unwrap() };
     let series = &state.series;
     crate::do_serialize!(series)
 }
@@ -208,31 +207,42 @@ pub fn timevector_serialize(
 #[pg_extern(schema = "toolkit_experimental",strict, immutable, parallel_safe)]
 pub fn timevector_deserialize(
     bytes: bytea,
-    _internal: Option<Internal<()>>,
-) -> Internal<Timevector<'static>> {
+    _internal: Internal,
+) -> Internal {
     let data: Timevector<'static> = crate::do_deserialize!(bytes, TimevectorData);
-    data.into()
+    Inner::from(data).internal()
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn timevector_trans(
-    state: Option<Internal<Timevector<'_>>>,
-    time: Option<pg_sys::TimestampTz>,
+    state: Internal,
+    time: Option<crate::raw::TimestampTz>,
     value: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<Timevector<'_>>> {
+) -> Internal {
+    unsafe {
+        timevector_trans_inner(state.to_inner(), time, value, fcinfo).internal()
+    }
+}
+
+pub fn timevector_trans_inner(
+        state: Option<Inner<Timevector<'_>>>,
+        time: Option<crate::raw::TimestampTz>,
+        value: Option<f64>,
+        fcinfo: pg_sys::FunctionCallInfo,
+    ) -> Option<Inner<Timevector<'_>>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
-            let time = match time {
+            let time: pg_sys::TimestampTz = match time {
                 None => return state,
-                Some(time) => time,
+                Some(time) => time.into(),
             };
             let value = match value {
                 None => return state,   // Should we support NULL values?
                 Some(value) => value,
             };
             let mut state = match state {
-                None => Internal::from(build!{
+                None => Inner::from(build!{
                     Timevector {
                         series: SeriesType::SortedSeries{
                             num_points: 0,
@@ -273,10 +283,18 @@ pub fn timevector_trans(
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn timevector_compound_trans<'b>(
-    state: Option<Internal<Timevector<'static>>>,
+    state: Internal,
     series: Option<toolkit_experimental::Timevector<'b>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<Timevector<'static>>> {
+) -> Internal {
+    inner_compound_trans(unsafe { state.to_inner() }, series, fcinfo).internal()
+}
+
+pub fn inner_compound_trans<'b>(
+    state: Option<Inner<Timevector<'static>>>,
+    series: Option<toolkit_experimental::Timevector<'b>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<Timevector<'static>>> {
     use SeriesType::{SortedSeries, ExplicitSeries};
     unsafe {
         in_aggregate_context(fcinfo, || {
@@ -326,10 +344,20 @@ pub fn timevector_compound_trans<'b>(
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn timevector_combine<'a, 'b> (
-    state1: Option<Internal<Timevector<'a>>>,
-    state2: Option<Internal<Timevector<'b>>>,
+    state1: Internal,
+    state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<Timevector<'static>>> {
+) -> Internal {
+    unsafe {
+        inner_combine(state1.to_inner(), state2.to_inner(), fcinfo).internal()
+    }
+}
+
+pub fn inner_combine<'a, 'b> (
+    state1: Option<Inner<Timevector<'a>>>,
+    state2: Option<Inner<Timevector<'b>>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<Timevector<'static>>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state1, state2) {
@@ -447,7 +475,16 @@ pub fn combine(first: Timevector<'_>, second: Timevector<'_>) -> Timevector<'sta
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn timevector_final<'a>(
-    state: Option<Internal<Timevector<'a>>>,
+    state: Internal,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
+    unsafe {
+        timevector_final_inner(state.to_inner(), fcinfo).into()
+    }
+}
+
+pub fn timevector_final_inner<'a>(
+    state: Option<Inner<Timevector<'a>>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
     unsafe {
@@ -461,28 +498,34 @@ pub fn timevector_final<'a>(
     }
 }
 
-extension_sql!(r#"
-CREATE AGGREGATE toolkit_experimental.timevector(ts TIMESTAMPTZ, value DOUBLE PRECISION) (
-    sfunc = toolkit_experimental.timevector_trans,
-    stype = internal,
-    finalfunc = toolkit_experimental.timevector_final,
-    combinefunc = toolkit_experimental.timevector_combine,
-    serialfunc = toolkit_experimental.timevector_serialize,
-    deserialfunc = toolkit_experimental.timevector_deserialize,
-    parallel = safe
+extension_sql!("\n\
+    CREATE AGGREGATE toolkit_experimental.timevector(ts TIMESTAMPTZ, value DOUBLE PRECISION) (\n\
+        sfunc = toolkit_experimental.timevector_trans,\n\
+        stype = internal,\n\
+        finalfunc = toolkit_experimental.timevector_final,\n\
+        combinefunc = toolkit_experimental.timevector_combine,\n\
+        serialfunc = toolkit_experimental.timevector_serialize,\n\
+        deserialfunc = toolkit_experimental.timevector_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+name="timevector_agg",
+requires= [timevector_trans, timevector_final, timevector_combine, timevector_serialize, timevector_deserialize],
 );
-"#);
 
-extension_sql!(r#"
-CREATE AGGREGATE toolkit_experimental.rollup(
-    toolkit_experimental.timevector
-) (
-    sfunc = toolkit_experimental.timevector_compound_trans,
-    stype = internal,
-    finalfunc = toolkit_experimental.timevector_final,
-    combinefunc = toolkit_experimental.timevector_combine,
-    serialfunc = toolkit_experimental.timevector_serialize,
-    deserialfunc = toolkit_experimental.timevector_deserialize,
-    parallel = safe
+extension_sql!("\n\
+CREATE AGGREGATE toolkit_experimental.rollup(\n\
+    toolkit_experimental.timevector\n\
+) (\n\
+    sfunc = toolkit_experimental.timevector_compound_trans,\n\
+    stype = internal,\n\
+    finalfunc = toolkit_experimental.timevector_final,\n\
+    combinefunc = toolkit_experimental.timevector_combine,\n\
+    serialfunc = toolkit_experimental.timevector_serialize,\n\
+    deserialfunc = toolkit_experimental.timevector_deserialize,\n\
+    parallel = safe\n\
+);\n\
+",
+name="timevector_rollup",
+requires= [timevector_compound_trans, timevector_final, timevector_combine, timevector_serialize, timevector_deserialize],
 );
-"#);

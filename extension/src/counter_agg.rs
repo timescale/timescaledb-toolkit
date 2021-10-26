@@ -5,7 +5,6 @@ use std::{
 };
 
 use pgx::*;
-use pg_sys::Datum;
 
 use flat_serialize::*;
 
@@ -13,7 +12,7 @@ use crate::{
     aggregate_utils::in_aggregate_context,
     ron_inout_funcs,
     flatten,
-    palloc::Internal,
+    palloc::{Internal, InternalAsValue, Inner, ToInternal},
     pg_type,
     range::*,
 };
@@ -30,11 +29,9 @@ use stats_agg::stats2d::StatsSummary2D;
 
 use self::Method::*;
 
-#[allow(non_camel_case_types)]
-type tstzrange = Datum;
+use crate::raw::tstzrange;
 
-#[allow(non_camel_case_types)]
-type bytea = pg_sys::Datum;
+use crate::raw::bytea;
 
 pg_type! {
     #[derive(Debug, PartialEq)]
@@ -53,8 +50,6 @@ pg_type! {
 }
 
 ron_inout_funcs!(CounterSummary);
-
-varlena_type!(CounterSummary);
 
 
 // hack to allow us to qualify names with "toolkit_experimental"
@@ -162,8 +157,9 @@ impl CounterSummaryTransState {
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn counter_summary_trans_serialize(
-    mut state: Internal<CounterSummaryTransState>,
+    state: Internal,
 ) -> bytea {
+    let state: &mut CounterSummaryTransState = unsafe { state.get_mut().unwrap() };
     state.combine_summaries();
     crate::do_serialize!(state)
 }
@@ -171,31 +167,46 @@ pub fn counter_summary_trans_serialize(
 #[pg_extern(strict, immutable, parallel_safe)]
 pub fn counter_summary_trans_deserialize(
     bytes: bytea,
-    _internal: Option<Internal<()>>,
-) -> Internal<CounterSummaryTransState> {
-    crate::do_deserialize!(bytes, CounterSummaryTransState)
+    _internal: Internal,
+) -> Internal {
+    counter_summary_trans_deserialize_inner(bytes).internal()
+}
+pub fn counter_summary_trans_deserialize_inner(
+    bytes: bytea,
+) -> Inner<CounterSummaryTransState> {
+    let c: CounterSummaryTransState = crate::do_deserialize!(bytes, CounterSummaryTransState);
+    c.into()
 }
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn counter_agg_trans(
-    state: Option<Internal<CounterSummaryTransState>>,
-    ts: Option<pg_sys::TimestampTz>,
+    state: Internal,
+    ts: Option<crate::raw::TimestampTz>,
     val: Option<f64>,
     bounds: Option<tstzrange>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<CounterSummaryTransState>> {
+) -> Internal {
+    counter_agg_trans_inner(unsafe { state.to_inner() }, ts, val, bounds, fcinfo).internal()
+}
+pub fn counter_agg_trans_inner(
+    state: Option<Inner<CounterSummaryTransState>>,
+    ts: Option<crate::raw::TimestampTz>,
+    val: Option<f64>,
+    bounds: Option<tstzrange>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<CounterSummaryTransState>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let p = match (ts, val) {
                 (_, None) => return state,
                 (None, _) => return state,
-                (Some(ts), Some(val)) => TSPoint{ts, val},
+                (Some(ts), Some(val)) => TSPoint{ts: ts.into(), val},
             };
             match state {
                 None => {
                     let mut s = CounterSummaryTransState{point_buffer: vec![], bounds: None, summary_buffer: vec![]};
                     if let Some(r) = bounds {
-                        s.bounds = get_range(r as *mut pg_sys::varlena);
+                        s.bounds = get_range(r.0 as *mut pg_sys::varlena);
                     }
                     s.push_point(p);
                     Some(s.into())
@@ -208,21 +219,28 @@ pub fn counter_agg_trans(
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn counter_agg_trans_no_bounds(
-    state: Option<Internal<CounterSummaryTransState>>,
-    ts: Option<pg_sys::TimestampTz>,
+    state: Internal,
+    ts: Option<crate::raw::TimestampTz>,
     val: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<CounterSummaryTransState>> {
-    counter_agg_trans(state, ts, val, None, fcinfo)
+) -> Internal {
+    counter_agg_trans_inner(unsafe{ state.to_inner() }, ts, val, None, fcinfo).internal()
 }
 
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn counter_agg_summary_trans(
-    state: Option<Internal<CounterSummaryTransState>>,
+    state: Internal,
     value: Option<CounterSummary>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<CounterSummaryTransState>> {
+) -> Internal {
+    counter_agg_summary_trans_inner(unsafe{ state.to_inner() }, value, fcinfo).internal()
+}
+pub fn counter_agg_summary_trans_inner(
+    state: Option<Inner<CounterSummaryTransState>>,
+    value: Option<CounterSummary>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<CounterSummaryTransState>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state, value) {
@@ -240,10 +258,19 @@ pub fn counter_agg_summary_trans(
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn counter_agg_combine(
-    state1: Option<Internal<CounterSummaryTransState>>,
-    state2: Option<Internal<CounterSummaryTransState>>,
+    state1: Internal,
+    state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-)  -> Option<Internal<CounterSummaryTransState>> {
+) -> Internal {
+    unsafe {
+        counter_agg_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
+    }
+}
+pub fn counter_agg_combine_inner(
+    state1: Option<Inner<CounterSummaryTransState>>,
+    state2: Option<Inner<CounterSummaryTransState>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<CounterSummaryTransState>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state1, state2) {
@@ -265,7 +292,13 @@ pub fn counter_agg_combine(
 
 #[pg_extern(immutable, parallel_safe)]
 fn counter_agg_final(
-    state: Option<Internal<CounterSummaryTransState>>,
+    state: Internal,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<CounterSummary<'static>> {
+    counter_agg_final_inner(unsafe{ state.to_inner() }, fcinfo)
+}
+fn counter_agg_final_inner(
+    state: Option<Inner<CounterSummaryTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<CounterSummary<'static>> {
     unsafe {
@@ -291,45 +324,53 @@ fn counter_agg_final(
 }
 
 
-extension_sql!(r#"
-CREATE AGGREGATE counter_agg( ts timestamptz, value DOUBLE PRECISION, bounds tstzrange )
-(
-    sfunc = counter_agg_trans,
-    stype = internal,
-    finalfunc = counter_agg_final,
-    combinefunc = counter_agg_combine,
-    serialfunc = counter_summary_trans_serialize,
-    deserialfunc = counter_summary_trans_deserialize,
-    parallel = restricted
+extension_sql!("\n\
+    CREATE AGGREGATE counter_agg( ts timestamptz, value DOUBLE PRECISION, bounds tstzrange )\n\
+    (\n\
+        sfunc = counter_agg_trans,\n\
+        stype = internal,\n\
+        finalfunc = counter_agg_final,\n\
+        combinefunc = counter_agg_combine,\n\
+        serialfunc = counter_summary_trans_serialize,\n\
+        deserialfunc = counter_summary_trans_deserialize,\n\
+        parallel = restricted\n\
+    );\n",
+name = "counter_agg",
+requires = [counter_agg_trans, counter_agg_final, counter_agg_combine, counter_summary_trans_serialize, counter_summary_trans_deserialize],
 );
-"#);
 
 // allow calling counter agg without bounds provided.
-extension_sql!(r#"
-CREATE AGGREGATE counter_agg( ts timestamptz, value DOUBLE PRECISION )
-(
-    sfunc = counter_agg_trans_no_bounds,
-    stype = internal,
-    finalfunc = counter_agg_final,
-    combinefunc = counter_agg_combine,
-    serialfunc = counter_summary_trans_serialize,
-    deserialfunc = counter_summary_trans_deserialize,
-    parallel = restricted
+extension_sql!("\n\
+    CREATE AGGREGATE counter_agg( ts timestamptz, value DOUBLE PRECISION )\n\
+    (\n\
+        sfunc = counter_agg_trans_no_bounds,\n\
+        stype = internal,\n\
+        finalfunc = counter_agg_final,\n\
+        combinefunc = counter_agg_combine,\n\
+        serialfunc = counter_summary_trans_serialize,\n\
+        deserialfunc = counter_summary_trans_deserialize,\n\
+        parallel = restricted\n\
+    );\n\
+",
+name = "counter_agg2",
+requires = [counter_agg_trans_no_bounds, counter_agg_final, counter_agg_combine, counter_summary_trans_serialize, counter_summary_trans_deserialize],
 );
-"#);
 
-extension_sql!(r#"
-CREATE AGGREGATE rollup(cs CounterSummary)
-(
-    sfunc = counter_agg_summary_trans,
-    stype = internal,
-    finalfunc = counter_agg_final,
-    combinefunc = counter_agg_combine,
-    serialfunc = counter_summary_trans_serialize,
-    deserialfunc = counter_summary_trans_deserialize,
-    parallel = restricted
+extension_sql!("\n\
+    CREATE AGGREGATE rollup(cs CounterSummary)\n\
+    (\n\
+        sfunc = counter_agg_summary_trans,\n\
+        stype = internal,\n\
+        finalfunc = counter_agg_final,\n\
+        combinefunc = counter_agg_combine,\n\
+        serialfunc = counter_summary_trans_serialize,\n\
+        deserialfunc = counter_summary_trans_deserialize,\n\
+        parallel = restricted\n\
+    );\n\
+",
+name = "counter_rollup",
+requires = [counter_agg_summary_trans, counter_agg_final, counter_agg_combine, counter_summary_trans_serialize, counter_summary_trans_deserialize],
 );
-"#);
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
@@ -475,7 +516,7 @@ fn counter_agg_with_bounds(
     bounds: tstzrange,
 ) -> CounterSummary {
     unsafe{
-        let ptr = bounds as *mut pg_sys::varlena;
+        let ptr = bounds.0 as *mut pg_sys::varlena;
         let mut summary = summary.to_internal_counter_summary();
         summary.bounds = get_range(ptr);
         CounterSummary::from_internal_counter_summary(summary)
@@ -643,7 +684,7 @@ fn counter_agg_corr(
 pub fn arrow_counter_agg_zero_time(
     sketch: CounterSummary,
     accessor: toolkit_experimental::AccessorZeroTime,
-) -> Option<pg_sys::TimestampTz> {
+) -> Option<crate::raw::TimestampTz> {
     let _ = accessor;
     counter_agg_counter_zero_time(sketch)
 }
@@ -651,8 +692,8 @@ pub fn arrow_counter_agg_zero_time(
 #[pg_extern(name="counter_zero_time", strict, immutable, parallel_safe)]
 fn counter_agg_counter_zero_time(
     summary: CounterSummary,
-)-> Option<pg_sys::TimestampTz> {
-    Some((summary.to_internal_counter_summary().stats.x_intercept()? * 1_000_000.0) as i64)
+)-> Option<crate::raw::TimestampTz> {
+    Some(((summary.to_internal_counter_summary().stats.x_intercept()? * 1_000_000.0) as i64).into())
 }
 
 #[derive(Clone, Copy)]
@@ -677,6 +718,7 @@ pub fn as_method(method: &str) -> Option<Method> {
 
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
 
     use approx::assert_relative_eq;
@@ -910,25 +952,25 @@ mod tests {
             use std::ptr;
             const BASE: i64 = 631152000000000;
             const MIN: i64 = 60000000;
-            let state = counter_agg_trans(None, Some(BASE), Some(10.0), None, ptr::null_mut());
-            let state = counter_agg_trans(state, Some(BASE + 1 * MIN), Some(20.0), None, ptr::null_mut());
-            let state = counter_agg_trans(state, Some(BASE + 2 * MIN), Some(30.0), None, ptr::null_mut());
-            let state = counter_agg_trans(state, Some(BASE + 3 * MIN), Some(10.0), None, ptr::null_mut());
-            let state = counter_agg_trans(state, Some(BASE + 4 * MIN), Some(20.0), None, ptr::null_mut());
-            let state = counter_agg_trans(state, Some(BASE + 5 * MIN), Some(30.0), None, ptr::null_mut());
+            let state = counter_agg_trans_inner(None, Some(BASE.into()), Some(10.0), None, ptr::null_mut());
+            let state = counter_agg_trans_inner(state, Some((BASE + 1 * MIN).into()), Some(20.0), None, ptr::null_mut());
+            let state = counter_agg_trans_inner(state, Some((BASE + 2 * MIN).into()), Some(30.0), None, ptr::null_mut());
+            let state = counter_agg_trans_inner(state, Some((BASE + 3 * MIN).into()), Some(10.0), None, ptr::null_mut());
+            let state = counter_agg_trans_inner(state, Some((BASE + 4 * MIN).into()), Some(20.0), None, ptr::null_mut());
+            let state = counter_agg_trans_inner(state, Some((BASE + 5 * MIN).into()), Some(30.0), None, ptr::null_mut());
 
             let mut control = state.unwrap();
-            let buffer = counter_summary_trans_serialize(control.clone().into());
-            let buffer = pgx::varlena::varlena_to_byte_slice(buffer as *mut pg_sys::varlena);
+            let buffer = counter_summary_trans_serialize(Inner::from(control.clone()).internal());
+            let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
 
             let expected = [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 96, 194, 134, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 36, 64, 0, 231, 85, 138, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 52, 64, 0, 124, 16, 149, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 52, 64, 0, 3, 164, 152, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 62, 64, 0, 0, 0, 0, 0, 0, 62, 64, 1, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 144, 246, 54, 236, 65, 0, 0, 0, 0, 0, 195, 238, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 32, 17, 209, 65, 0, 0, 0, 0, 0, 64, 106, 64, 0, 0, 0, 0, 0, 88, 155, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 76, 248, 42, 65, 0, 0, 0, 0, 0, 130, 196, 64, 0];
             assert_eq!(buffer, expected);
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
-            let new_state = counter_summary_trans_deserialize(&*expected as *const pg_sys::varlena as pg_sys::Datum, None);
+            let new_state = counter_summary_trans_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
 
             control.combine_summaries();  // Serialized form is always combined
-            assert_eq!(*new_state, *control);
+            assert_eq!(&*new_state, &*control);
         }
     }
 

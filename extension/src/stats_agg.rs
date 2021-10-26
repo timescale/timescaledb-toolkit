@@ -10,7 +10,7 @@ use crate::{
     aggregate_utils::in_aggregate_context,
     ron_inout_funcs,
     build,
-    palloc::Internal,
+    palloc::{Internal, InternalAsValue, Inner, ToInternal},
     pg_type,
 };
 
@@ -20,8 +20,7 @@ pub use stats_agg::stats2d::StatsSummary2D as InternalStatsSummary2D;
 
 use self::Method::*;
 
-#[allow(non_camel_case_types)]
-type bytea = pg_sys::Datum;
+use crate::raw::bytea;
 
 pg_type! {
     #[derive(Debug, PartialEq)]
@@ -59,9 +58,6 @@ ron_inout_funcs!(StatsSummary2D);
 mod toolkit_experimental {
     pub(crate) use crate::accessors::toolkit_experimental::*;
 }
-
-varlena_type!(StatsSummary1D);
-varlena_type!(StatsSummary2D);
 
 impl<'input> StatsSummary1D<'input> {
     fn to_internal(&self) -> InternalStatsSummary1D {
@@ -123,44 +119,61 @@ impl<'input> StatsSummary2D<'input> {
 
 #[pg_extern(immutable, parallel_safe, strict)]
 pub fn stats1d_trans_serialize<'s>(
-    state: Internal<StatsSummary1D<'s>>,
+    state: Internal,
 ) -> bytea {
-    let ser: &StatsSummary1DData = &*state;
+    let ser: &StatsSummary1DData = unsafe { state.get().unwrap() };
     crate::do_serialize!(ser)
 }
 
 #[pg_extern(immutable, parallel_safe, strict)]
 pub fn stats1d_trans_deserialize(
     bytes: bytea,
-    _internal: Option<Internal<()>>,
-) -> Internal<StatsSummary1D<'static>> {
+    _internal: Internal,
+) -> Internal {
+    stats1d_trans_deserialize_inner(bytes).internal()
+}
+pub fn stats1d_trans_deserialize_inner(
+    bytes: bytea,
+) -> Inner<StatsSummary1D<'static>> {
     let de: StatsSummary1D = crate::do_deserialize!(bytes, StatsSummary1DData);
     de.into()
 }
 
 #[pg_extern(immutable, parallel_safe, strict)]
 pub fn stats2d_trans_serialize<'s>(
-    state: Internal<StatsSummary2D<'s>>,
+    state: Internal,
 ) -> bytea {
-    let ser: &StatsSummary2DData = &*state;
+    let ser: &StatsSummary2DData = unsafe { state.get().unwrap() };
     crate::do_serialize!(ser)
 }
 
 #[pg_extern(immutable, parallel_safe, strict)]
 pub fn stats2d_trans_deserialize(
     bytes: bytea,
-    _internal: Option<Internal<()>>,
-) -> Internal<StatsSummary2D<'static>> {
+    _internal: Internal,
+) -> Internal {
+    stats2d_trans_deserialize_inner(bytes).internal()
+}
+pub fn stats2d_trans_deserialize_inner(
+    bytes: bytea,
+) -> Inner<StatsSummary2D<'static>> {
     let de: StatsSummary2D = crate::do_deserialize!(bytes, StatsSummary2DData);
     de.into()
 }
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn stats1d_trans<'s>(
-    state: Option<Internal<StatsSummary1D<'s>>>,
+    state: Internal,
     val: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<StatsSummary1D<'s>>> {
+) -> Internal {
+    stats1d_trans_inner(unsafe{ state.to_inner() }, val, fcinfo).internal()
+}
+pub fn stats1d_trans_inner<'s>(
+    state: Option<Inner<StatsSummary1D<'s>>>,
+    val: Option<f64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<StatsSummary1D<'s>>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state, val) {
@@ -184,12 +197,20 @@ pub fn stats1d_trans<'s>(
 // Note that in general, for all stats2d cases, if either the y or x value is missing, we disregard the entire point as the n is shared between them
 // if the user wants us to treat nulls as a particular value (ie zero), they can use COALESCE to do so
 #[pg_extern(immutable, parallel_safe)]
-pub fn stats2d_trans<'s>(
-    state: Option<Internal<StatsSummary2D<'s>>>,
+pub fn stats2d_trans(
+    state: Internal,
     y: Option<f64>,
     x: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<StatsSummary2D<'s>>> {
+) -> Internal {
+    stats2d_trans_inner(unsafe{ state.to_inner() }, y, x, fcinfo).internal()
+}
+pub fn stats2d_trans_inner<'s>(
+    state: Option<Inner<StatsSummary2D<'s>>>,
+    y: Option<f64>,
+    x: Option<f64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<StatsSummary2D<'s>>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let val: Option<XYPair> = match (y, x) {
@@ -219,10 +240,17 @@ pub fn stats2d_trans<'s>(
 
 #[pg_extern(immutable)]
 pub fn stats1d_inv_trans<'s>(
-    state: Option<Internal<StatsSummary1D<'s>>>,
+    state: Internal,
     val: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<StatsSummary1D<'s>>> {
+) -> Internal {
+    stats1d_inv_trans_inner(unsafe{ state.to_inner()}, val, fcinfo).internal()
+}
+pub fn stats1d_inv_trans_inner<'s>(
+    state: Option<Inner<StatsSummary1D<'s>>>,
+    val: Option<f64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<StatsSummary1D<'s>>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state, val) {
@@ -242,12 +270,20 @@ pub fn stats1d_inv_trans<'s>(
 }
 
 #[pg_extern(immutable)]
-pub fn stats2d_inv_trans<'s>(
-    state: Option<Internal<StatsSummary2D<'s>>>,
+pub fn stats2d_inv_trans(
+    state: Internal,
     y: Option<f64>,
     x: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<StatsSummary2D<'s>>> {
+) -> Internal {
+    stats2d_inv_trans_inner(unsafe{ state.to_inner()}, y, x, fcinfo).internal()
+}
+pub fn stats2d_inv_trans_inner<'s>(
+    state: Option<Inner<StatsSummary2D<'s>>>,
+    y: Option<f64>,
+    x: Option<f64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<StatsSummary2D<'s>>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let val: Option<XYPair> = match (y, x) {
@@ -273,11 +309,18 @@ pub fn stats2d_inv_trans<'s>(
 
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn stats1d_summary_trans<'s, 'v>(
-    state: Option<Internal<StatsSummary1D<'s>>>,
+pub fn stats1d_summary_trans<'v>(
+    state: Internal,
     value: Option<StatsSummary1D<'v>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<StatsSummary1D<'s>>> {
+) -> Internal {
+    stats1d_summary_trans_inner(unsafe{ state.to_inner() }, value, fcinfo).internal()
+}
+pub fn stats1d_summary_trans_inner<'s, 'v>(
+    state: Option<Inner<StatsSummary1D<'s>>>,
+    value: Option<StatsSummary1D<'v>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<StatsSummary1D<'s>>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state, value) {
@@ -298,11 +341,18 @@ pub fn stats1d_summary_trans<'s, 'v>(
 
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn stats2d_summary_trans<'s, 'v>(
-    state: Option<Internal<StatsSummary2D<'s>>>,
+pub fn stats2d_summary_trans<'v>(
+    state: Internal,
     value: Option<StatsSummary2D<'v>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<StatsSummary2D<'s>>> {
+) -> Internal {
+    stats2d_summary_trans_inner(unsafe{ state.to_inner() }, value, fcinfo).internal()
+}
+pub fn stats2d_summary_trans_inner<'s, 'v>(
+    state: Option<Inner<StatsSummary2D<'s>>>,
+    value: Option<StatsSummary2D<'v>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<StatsSummary2D<'s>>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state, value) {
@@ -322,10 +372,17 @@ pub fn stats2d_summary_trans<'s, 'v>(
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn stats1d_summary_inv_trans<'s, 'v>(
-    state: Option<Internal<StatsSummary1D<'s>>>,
+    state: Internal,
     value: Option<StatsSummary1D<'v>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<StatsSummary1D<'s>>> {
+) -> Internal {
+    stats1d_summary_inv_trans_inner(unsafe{ state.to_inner() }, value, fcinfo).internal()
+}
+pub fn stats1d_summary_inv_trans_inner<'s, 'v>(
+    state: Option<Inner<StatsSummary1D<'s>>>,
+    value: Option<StatsSummary1D<'v>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<StatsSummary1D<'s>>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state, &value) {
@@ -346,11 +403,18 @@ pub fn stats1d_summary_inv_trans<'s, 'v>(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn stats2d_summary_inv_trans<'s, 'v>(
-    state: Option<Internal<StatsSummary2D<'s>>>,
+pub fn stats2d_summary_inv_trans<'v>(
+    state: Internal,
     value: Option<StatsSummary2D<'v>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<StatsSummary2D<'s>>> {
+) -> Internal {
+    stats2d_summary_inv_trans_inner(unsafe {state.to_inner()}, value, fcinfo).internal()
+}
+pub fn stats2d_summary_inv_trans_inner<'s, 'v>(
+    state: Option<Inner<StatsSummary2D<'s>>>,
+    value: Option<StatsSummary2D<'v>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<StatsSummary2D<'s>>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state, &value) {
@@ -371,11 +435,20 @@ pub fn stats2d_summary_inv_trans<'s, 'v>(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn stats1d_combine<'s, 'v>(
-    state1: Option<Internal<StatsSummary1D<'s>>>,
-    state2: Option<Internal<StatsSummary1D<'v>>>,
+pub fn stats1d_combine(
+    state1: Internal,
+    state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-)  -> Option<Internal<StatsSummary1D<'s>>> {
+) -> Internal {
+    unsafe {
+        stats1d_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
+    }
+}
+pub fn stats1d_combine_inner<'s, 'v>(
+    state1: Option<Inner<StatsSummary1D<'s>>>,
+    state2: Option<Inner<StatsSummary1D<'v>>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<StatsSummary1D<'s>>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state1, state2) {
@@ -400,11 +473,20 @@ pub fn stats1d_combine<'s, 'v>(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn stats2d_combine<'s, 'v>(
-    state1: Option<Internal<StatsSummary2D<'s>>>,
-    state2: Option<Internal<StatsSummary2D<'v>>>,
+pub fn stats2d_combine(
+    state1: Internal,
+    state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-)  -> Option<Internal<StatsSummary2D<'s>>> {
+) -> Internal {
+    unsafe {
+        stats2d_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
+    }
+}
+pub fn stats2d_combine_inner<'s, 'v>(
+    state1: Option<Inner<StatsSummary2D<'s>>>,
+    state2: Option<Inner<StatsSummary2D<'v>>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<StatsSummary2D<'s>>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state1, state2) {
@@ -430,14 +512,17 @@ pub fn stats2d_combine<'s, 'v>(
 
 #[pg_extern(immutable, parallel_safe)]
 fn stats1d_final<'s>(
-    state: Option<Internal<StatsSummary1D<'s>>>,
+    state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<StatsSummary1D<'s>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
-            match state {
+            match state.get() {
                 None => None,
-                Some(state) => Some(state.in_current_context()),
+                Some(state) => {
+                    let state: &StatsSummary1D = state;
+                    Some(state.in_current_context())
+                },
             }
         })
     }
@@ -445,14 +530,17 @@ fn stats1d_final<'s>(
 
 #[pg_extern(immutable, parallel_safe)]
 fn stats2d_final<'s>(
-    state: Option<Internal<StatsSummary2D<'s>>>,
+    state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<StatsSummary2D<'s>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
-            match state {
+            match state.get() {
                 None => None,
-                Some(state) => Some(state.in_current_context()),
+                Some(state) => {
+                    let state: &StatsSummary2D = state;
+                    Some(state.in_current_context())
+                },
             }
         })
     }
@@ -460,136 +548,160 @@ fn stats2d_final<'s>(
 
 
 
-extension_sql!(r#"
-CREATE AGGREGATE stats_agg( value DOUBLE PRECISION )
-(
-    sfunc = stats1d_trans,
-    stype = internal,
-    finalfunc = stats1d_final,
-    combinefunc = stats1d_combine,
-    serialfunc = stats1d_trans_serialize,
-    deserialfunc = stats1d_trans_deserialize,
-    msfunc = stats1d_trans,
-    minvfunc = stats1d_inv_trans,
-    mstype = internal,
-    mfinalfunc = stats1d_final,
-    parallel = safe
+extension_sql!("\n\
+    CREATE AGGREGATE stats_agg( value DOUBLE PRECISION )\n\
+    (\n\
+        sfunc = stats1d_trans,\n\
+        stype = internal,\n\
+        finalfunc = stats1d_final,\n\
+        combinefunc = stats1d_combine,\n\
+        serialfunc = stats1d_trans_serialize,\n\
+        deserialfunc = stats1d_trans_deserialize,\n\
+        msfunc = stats1d_trans,\n\
+        minvfunc = stats1d_inv_trans,\n\
+        mstype = internal,\n\
+        mfinalfunc = stats1d_final,\n\
+        parallel = safe\n\
+    );\n\
+",
+name = "stats_agg_1d",
+requires = [stats1d_trans, stats1d_final, stats1d_combine, stats1d_trans_serialize, stats1d_trans_deserialize, stats1d_trans, stats1d_inv_trans, stats1d_final],
 );
-"#);
 
 // mostly for testing/debugging, in case we want one without the inverse functions defined.
-extension_sql!(r#"
-CREATE AGGREGATE stats_agg_no_inv( value DOUBLE PRECISION )
-(
-    sfunc = stats1d_trans,
-    stype = internal,
-    finalfunc = stats1d_final,
-    combinefunc = stats1d_combine,
-    serialfunc = stats1d_trans_serialize,
-    deserialfunc = stats1d_trans_deserialize,
-    parallel = safe
+extension_sql!("\n\
+    CREATE AGGREGATE stats_agg_no_inv( value DOUBLE PRECISION )\n\
+    (\n\
+        sfunc = stats1d_trans,\n\
+        stype = internal,\n\
+        finalfunc = stats1d_final,\n\
+        combinefunc = stats1d_combine,\n\
+        serialfunc = stats1d_trans_serialize,\n\
+        deserialfunc = stats1d_trans_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+name = "stats_agg_no_inv",
+requires = [stats1d_trans, stats1d_final, stats1d_combine],
 );
-"#);
 
 // same things for the 2d case
-extension_sql!(r#"
-CREATE AGGREGATE stats_agg( y DOUBLE PRECISION, x DOUBLE PRECISION )
-(
-    sfunc = stats2d_trans,
-    stype = internal,
-    finalfunc = stats2d_final,
-    combinefunc = stats2d_combine,
-    serialfunc = stats2d_trans_serialize,
-    deserialfunc = stats2d_trans_deserialize,
-    msfunc = stats2d_trans,
-    minvfunc = stats2d_inv_trans,
-    mstype = internal,
-    mfinalfunc = stats2d_final,
-    parallel = safe
+extension_sql!("\n\
+    CREATE AGGREGATE stats_agg( y DOUBLE PRECISION, x DOUBLE PRECISION )\n\
+    (\n\
+        sfunc = stats2d_trans,\n\
+        stype = internal,\n\
+        finalfunc = stats2d_final,\n\
+        combinefunc = stats2d_combine,\n\
+        serialfunc = stats2d_trans_serialize,\n\
+        deserialfunc = stats2d_trans_deserialize,\n\
+        msfunc = stats2d_trans,\n\
+        minvfunc = stats2d_inv_trans,\n\
+        mstype = internal,\n\
+        mfinalfunc = stats2d_final,\n\
+        parallel = safe\n\
+    );\n\
+",
+name = "stats_agg_2d",
+requires = [stats2d_trans, stats2d_final, stats2d_combine, stats2d_trans_serialize, stats2d_trans_deserialize, stats2d_trans, stats2d_inv_trans, stats2d_final],
 );
-"#);
 
 // mostly for testing/debugging, in case we want one without the inverse functions defined.
-extension_sql!(r#"
-CREATE AGGREGATE stats_agg_no_inv( y DOUBLE PRECISION, x DOUBLE PRECISION )
-(
-    sfunc = stats2d_trans,
-    stype = internal,
-    finalfunc = stats2d_final,
-    combinefunc = stats2d_combine,
-    serialfunc = stats2d_trans_serialize,
-    deserialfunc = stats2d_trans_deserialize,
-    parallel = safe
+extension_sql!("\n\
+    CREATE AGGREGATE stats_agg_no_inv( y DOUBLE PRECISION, x DOUBLE PRECISION )\n\
+    (\n\
+        sfunc = stats2d_trans,\n\
+        stype = internal,\n\
+        finalfunc = stats2d_final,\n\
+        combinefunc = stats2d_combine,\n\
+        serialfunc = stats2d_trans_serialize,\n\
+        deserialfunc = stats2d_trans_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+name = "stats_agg2_no_inv",
+requires = [stats2d_trans, stats2d_final, stats2d_combine],
 );
-"#);
 
 //  Currently, rollup does not have the inverse function so if you want the behavior where we don't use the inverse,
 // you can use it in your window functions (useful for our own perf testing as well)
 
-extension_sql!(r#"
-CREATE AGGREGATE rollup(ss statssummary1d)
-(
-    sfunc = stats1d_summary_trans,
-    stype = internal,
-    finalfunc = stats1d_final,
-    combinefunc = stats1d_combine,
-    serialfunc = stats1d_trans_serialize,
-    deserialfunc = stats1d_trans_deserialize,
-    parallel = safe
+extension_sql!("\n\
+    CREATE AGGREGATE rollup(ss statssummary1d)\n\
+    (\n\
+        sfunc = stats1d_summary_trans,\n\
+        stype = internal,\n\
+        finalfunc = stats1d_final,\n\
+        combinefunc = stats1d_combine,\n\
+        serialfunc = stats1d_trans_serialize,\n\
+        deserialfunc = stats1d_trans_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+name = "stats_1d_rollup",
+requires = [stats1d_summary_trans, stats1d_final, stats1d_combine, stats1d_trans_serialize, stats1d_trans_deserialize],
 );
-"#);
 
 //  For UI, we decided to have slightly differently named functions for the windowed context and not, so that it reads better, as well as using the inverse function only in the window context
-extension_sql!(r#"
-CREATE AGGREGATE rolling(ss statssummary1d)
-(
-    sfunc = stats1d_summary_trans,
-    stype = internal,
-    finalfunc = stats1d_final,
-    combinefunc = stats1d_combine,
-    serialfunc = stats1d_trans_serialize,
-    deserialfunc = stats1d_trans_deserialize,
-    msfunc = stats1d_summary_trans,
-    minvfunc = stats1d_summary_inv_trans,
-    mstype = internal,
-    mfinalfunc = stats1d_final,
-    parallel = safe
+extension_sql!("\n\
+    CREATE AGGREGATE rolling(ss statssummary1d)\n\
+    (\n\
+        sfunc = stats1d_summary_trans,\n\
+        stype = internal,\n\
+        finalfunc = stats1d_final,\n\
+        combinefunc = stats1d_combine,\n\
+        serialfunc = stats1d_trans_serialize,\n\
+        deserialfunc = stats1d_trans_deserialize,\n\
+        msfunc = stats1d_summary_trans,\n\
+        minvfunc = stats1d_summary_inv_trans,\n\
+        mstype = internal,\n\
+        mfinalfunc = stats1d_final,\n\
+        parallel = safe\n\
+    );\n\
+",
+name = "stats_1d_rolling",
+requires = [stats1d_summary_trans, stats1d_final, stats1d_combine, stats1d_trans_serialize, stats1d_trans_deserialize, stats1d_summary_inv_trans],
 );
-"#);
 
 
 // Same as for the 1D case, but for the 2D
 
-extension_sql!(r#"
-CREATE AGGREGATE rollup(ss statssummary2d)
-(
-    sfunc = stats2d_summary_trans,
-    stype = internal,
-    finalfunc = stats2d_final,
-    combinefunc = stats2d_combine,
-    serialfunc = stats2d_trans_serialize,
-    deserialfunc = stats2d_trans_deserialize,
-    parallel = safe
+extension_sql!("\n\
+    CREATE AGGREGATE rollup(ss statssummary2d)\n\
+    (\n\
+        sfunc = stats2d_summary_trans,\n\
+        stype = internal,\n\
+        finalfunc = stats2d_final,\n\
+        combinefunc = stats2d_combine,\n\
+        serialfunc = stats2d_trans_serialize,\n\
+        deserialfunc = stats2d_trans_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+name = "stats_2d_rollup",
+requires = [stats2d_summary_trans, stats2d_final, stats2d_combine, stats2d_trans_serialize, stats2d_trans_deserialize],
 );
-"#);
 
 //  For UI, we decided to have slightly differently named functions for the windowed context and not, so that it reads better, as well as using the inverse function only in the window context
-extension_sql!(r#"
-CREATE AGGREGATE rolling(ss statssummary2d)
-(
-    sfunc = stats2d_summary_trans,
-    stype = internal,
-    finalfunc = stats2d_final,
-    combinefunc = stats2d_combine,
-    serialfunc = stats2d_trans_serialize,
-    deserialfunc = stats2d_trans_deserialize,
-    msfunc = stats2d_summary_trans,
-    minvfunc = stats2d_summary_inv_trans,
-    mstype = internal,
-    mfinalfunc = stats2d_final,
-    parallel = safe
+extension_sql!("\n\
+    CREATE AGGREGATE rolling(ss statssummary2d)\n\
+    (\n\
+        sfunc = stats2d_summary_trans,\n\
+        stype = internal,\n\
+        finalfunc = stats2d_final,\n\
+        combinefunc = stats2d_combine,\n\
+        serialfunc = stats2d_trans_serialize,\n\
+        deserialfunc = stats2d_trans_deserialize,\n\
+        msfunc = stats2d_summary_trans,\n\
+        minvfunc = stats2d_summary_inv_trans,\n\
+        mstype = internal,\n\
+        mfinalfunc = stats2d_final,\n\
+        parallel = safe\n\
+    );\n\
+",
+name = "stats_2d_rolling",
+requires = [stats2d_summary_trans, stats2d_final, stats2d_combine, stats2d_trans_serialize, stats2d_trans_deserialize, stats2d_summary_inv_trans],
 );
-"#);
 
 
 #[pg_operator(immutable, parallel_safe)]
@@ -642,7 +754,7 @@ pub fn arrow_stats1d_stddev(
 #[pg_extern(name="stddev",  immutable, parallel_safe)]
 fn stats1d_stddev(
     summary: Option<StatsSummary1D>,
-    method: default!(&str, "sample"),
+    method: default!(&str, "'sample'"),
 )-> Option<f64> {
     match method_kind(method) {
         Population => summary?.to_internal().stddev_pop(),
@@ -665,7 +777,7 @@ pub fn arrow_stats1d_variance(
 #[pg_extern(name="variance",  immutable, parallel_safe)]
 fn stats1d_variance(
     summary: Option<StatsSummary1D>,
-    method: default!(&str, "sample"),
+    method: default!(&str, "'sample'"),
 )-> Option<f64> {
     match method_kind(method) {
         Population => summary?.to_internal().var_pop(),
@@ -688,7 +800,7 @@ pub fn arrow_stats1d_skewness(
 #[pg_extern(name="skewness",  immutable, parallel_safe)]
 fn stats1d_skewness(
     summary: StatsSummary1D,
-    method: default!(&str, "sample"),
+    method: default!(&str, "'sample'"),
 )-> Option<f64> {
     match method_kind(method) {
         Population => summary.to_internal().skewness_pop(),
@@ -711,7 +823,7 @@ pub fn arrow_stats1d_kurtosis(
 #[pg_extern(name="kurtosis",  immutable, parallel_safe)]
 fn stats1d_kurtosis(
     summary: StatsSummary1D,
-    method: default!(&str, "sample"),
+    method: default!(&str, "'sample'"),
 )-> Option<f64> {
     match method_kind(method) {
         Population => summary.to_internal().kurtosis_pop(),
@@ -825,7 +937,7 @@ pub fn arrow_stats2d_stdddev_x(
 #[pg_extern(name="stddev_x",  immutable, parallel_safe)]
 fn stats2d_stddev_x(
     summary: Option<StatsSummary2D>,
-    method: default!(&str, "sample"),
+    method: default!(&str, "'sample'"),
 )-> Option<f64> {
     match method_kind(method) {
         Population => Some(summary?.to_internal().stddev_pop()?.x),
@@ -848,7 +960,7 @@ pub fn arrow_stats2d_stdddev_y(
 #[pg_extern(name="stddev_y",  immutable, parallel_safe)]
 fn stats2d_stddev_y(
     summary: Option<StatsSummary2D>,
-    method: default!(&str, "sample"),
+    method: default!(&str, "'sample'"),
 )-> Option<f64> {
     match method_kind(method) {
         Population => Some(summary?.to_internal().stddev_pop()?.y),
@@ -871,7 +983,7 @@ pub fn arrow_stats2d_variance_x(
 #[pg_extern(name="variance_x",  immutable, parallel_safe)]
 fn stats2d_variance_x(
     summary: Option<StatsSummary2D>,
-    method: default!(&str, "sample"),
+    method: default!(&str, "'sample'"),
 )-> Option<f64> {
     match method_kind(method) {
         Population => Some(summary?.to_internal().var_pop()?.x),
@@ -894,7 +1006,7 @@ pub fn arrow_stats2d_variance_y(
 #[pg_extern(name="variance_y",  immutable, parallel_safe)]
 fn stats2d_variance_y(
     summary: Option<StatsSummary2D>,
-    method: default!(&str, "sample"),
+    method: default!(&str, "'sample'"),
 )-> Option<f64> {
     match method_kind(method) {
         Population => Some(summary?.to_internal().var_pop()?.y),
@@ -917,7 +1029,7 @@ pub fn arrow_stats2d_skewness_x(
 #[pg_extern(name="skewness_x",  strict, immutable, parallel_safe)]
 fn stats2d_skewness_x(
     summary: StatsSummary2D,
-    method: default!(&str, "sample"),
+    method: default!(&str, "'sample'"),
 )-> Option<f64> {
     match method_kind(method) {
         Population => Some(summary.to_internal().skewness_pop()?.x),
@@ -940,7 +1052,7 @@ pub fn arrow_stats2d_skewness_y(
 #[pg_extern(name="skewness_y",  strict, immutable, parallel_safe)]
 fn stats2d_skewness_y(
     summary: StatsSummary2D,
-    method: default!(&str, "sample"),
+    method: default!(&str, "'sample'"),
 )-> Option<f64> {
     match method_kind(method) {
         Population => Some(summary.to_internal().skewness_pop()?.y),
@@ -963,7 +1075,7 @@ pub fn arrow_stats2d_kurtosis_x(
 #[pg_extern(name="kurtosis_x",  strict, immutable, parallel_safe)]
 fn stats2d_kurtosis_x(
     summary: StatsSummary2D,
-    method: default!(&str, "sample"),
+    method: default!(&str, "'sample'"),
 )-> Option<f64> {
     match method_kind(method) {
         Population => Some(summary.to_internal().kurtosis_pop()?.x),
@@ -986,7 +1098,7 @@ pub fn arrow_stats2d_kurtosis_y(
 #[pg_extern(name="kurtosis_y",  strict, immutable, parallel_safe)]
 fn stats2d_kurtosis_y(
     summary: StatsSummary2D,
-    method: default!(&str, "sample"),
+    method: default!(&str, "'sample'"),
 )-> Option<f64> {
     match method_kind(method) {
         Population => Some(summary.to_internal().kurtosis_pop()?.y),
@@ -1117,7 +1229,7 @@ pub fn arrow_stats2d_covar(
 #[pg_extern(name="covariance",  immutable, parallel_safe)]
 fn stats2d_covar(
     summary: Option<StatsSummary2D>,
-    method: default!(&str, "sample"),
+    method: default!(&str, "'sample'"),
 )-> Option<f64> {
     match method_kind(method) {
         Population => summary?.to_internal().covar_pop(),
@@ -1193,9 +1305,11 @@ pub fn as_method(method: &str) -> Option<Method> {
 // }
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
     use super::*;
+    use pgx_macros::pg_test;
     use approx::relative_eq;
     use rand::rngs::SmallRng;
     use rand::seq::SliceRandom;
@@ -1303,23 +1417,23 @@ mod tests {
     fn test_stats_agg_byte_io() {
         unsafe {
             use std::ptr;
-            let state = stats1d_trans(None, Some(14.0), ptr::null_mut());
-            let state = stats1d_trans(state, Some(18.0), ptr::null_mut());
-            let state = stats1d_trans(state, Some(22.7), ptr::null_mut());
-            let state = stats1d_trans(state, Some(39.42), ptr::null_mut());
-            let state = stats1d_trans(state, Some(-43.0), ptr::null_mut());
+            let state = stats1d_trans_inner(None, Some(14.0), ptr::null_mut());
+            let state = stats1d_trans_inner(state, Some(18.0), ptr::null_mut());
+            let state = stats1d_trans_inner(state, Some(22.7), ptr::null_mut());
+            let state = stats1d_trans_inner(state, Some(39.42), ptr::null_mut());
+            let state = stats1d_trans_inner(state, Some(-43.0), ptr::null_mut());
 
             let control = state.unwrap();
-            let buffer = stats1d_trans_serialize(control.clone().into());
-            let buffer = pgx::varlena::varlena_to_byte_slice(buffer as *mut pg_sys::varlena);
+            let buffer = stats1d_trans_serialize(Inner::from(control.clone()).internal());
+            let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
 
             let expected = [1, 1, 1, 5, 0, 0, 0, 0, 0, 0, 0, 144, 194, 245, 40, 92, 143, 73, 64, 100, 180, 142, 170, 38, 151, 174, 64, 72, 48, 180, 190, 189, 33, 254, 192, 119, 78, 30, 195, 209, 190, 96, 65];
             assert_eq!(buffer, expected);
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
-            let new_state = stats1d_trans_deserialize(&*expected as *const pg_sys::varlena as pg_sys::Datum, None);
+            let new_state = stats1d_trans_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
 
-            assert_eq!(*new_state, *control);
+            assert_eq!(&*new_state, &*control);
         }
 
     }

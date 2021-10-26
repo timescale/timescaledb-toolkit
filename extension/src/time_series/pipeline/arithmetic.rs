@@ -142,7 +142,7 @@ pub fn pipeline_power<'e>(
 #[pg_extern(
     immutable,
     parallel_safe,
-    name="logN",
+    name="logn",
     schema="toolkit_experimental"
 )]
 pub fn pipeline_log_n<'e>(
@@ -267,8 +267,10 @@ pub fn pipeline_trunc<'e>()
 }
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
+    use pgx_macros::pg_test;
 
     #[pg_test]
     fn test_simple_arith_binops() {
@@ -380,7 +382,7 @@ mod tests {
 
 
             let val = client.select(
-                &format!("SELECT (series -> logN(10.0))::TEXT FROM ({}) s", create_series),
+                &format!("SELECT (series -> logn(10.0))::TEXT FROM ({}) s", create_series),
                 None,
                 None
             )

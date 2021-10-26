@@ -24,8 +24,12 @@ ENV PATH="/build/.cargo/bin:${PATH}"
 RUN set -ex \
     && rm -rf "${CARGO_HOME}/registry" "${CARGO_HOME}/git" \
     && chown postgres:postgres -R "${CARGO_HOME}" \
-    && cargo install --git https://github.com/JLockerman/pgx.git --branch timescale cargo-pgx \
-    && cargo pgx init --pg13 /usr/lib/postgresql/13/bin/pg_config
+    && cargo install cargo-pgx \
+    # initdb fails as root so generate the correct config ourselves
+    # && cargo pgx init --pg13 /usr/lib/postgresql/13/bin/pg_config
+    && mkdir -p /root/.pgx \
+    && printf '[configs]\npg13="/usr/lib/postgresql/13/bin/pg_config"\n' > /root/.pgx/config.toml
+
 
 COPY . /rust/timescaledb-toolkit
 

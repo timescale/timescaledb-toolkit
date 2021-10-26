@@ -3,17 +3,13 @@ use pgx::*;
 use std::borrow::Cow;
 
 use crate::{
-    aggregate_utils::in_aggregate_context, flatten, palloc::Internal,
+    aggregate_utils::in_aggregate_context, flatten, palloc::{Internal, InternalAsValue, Inner, ToInternal},
 };
 
 use time_series::TSPoint;
 
 use crate::time_series::{TimevectorData, SeriesType, Timevector};
 
-// hack to allow us to qualify names with "toolkit_experimental"
-// so that pgx generates the correct SQL
-mod toolkit_experimental {
-}
 
 pub struct LttbTrans {
     series: Vec<TSPoint>,
@@ -22,12 +18,21 @@ pub struct LttbTrans {
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn lttb_trans(
-    state: Option<Internal<LttbTrans>>,
-    time: pg_sys::TimestampTz,
+    state: Internal,
+    time: crate::raw::TimestampTz,
     val: Option<f64>,
     resolution: i32,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<LttbTrans>> {
+) -> Internal {
+    lttb_trans_inner(unsafe{ state.to_inner() }, time, val, resolution, fcinfo).internal()
+}
+pub fn lttb_trans_inner(
+    state: Option<Inner<LttbTrans>>,
+    time: crate::raw::TimestampTz,
+    val: Option<f64>,
+    resolution: i32,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<LttbTrans>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let val = match val {
@@ -48,7 +53,7 @@ pub fn lttb_trans(
             };
 
             state.series.push(TSPoint {
-                ts: time,
+                ts: time.into(),
                 val: val,
             });
             Some(state)
@@ -58,7 +63,13 @@ pub fn lttb_trans(
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn lttb_final(
-    state: Option<Internal<LttbTrans>>,
+    state: Internal,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
+    lttb_final_inner(unsafe{ state.to_inner() }, fcinfo)
+}
+pub fn lttb_final_inner(
+    state: Option<Inner<LttbTrans>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
     unsafe {
@@ -82,13 +93,16 @@ pub fn lttb_final(
     }
 }
 
-extension_sql!(r#"
-CREATE AGGREGATE toolkit_experimental.lttb(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution INT) (
-    sfunc = toolkit_experimental.lttb_trans,
-    stype = internal,
-    finalfunc = toolkit_experimental.lttb_final
+extension_sql!("\n\
+CREATE AGGREGATE toolkit_experimental.lttb(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution INT) (\n\
+    sfunc = toolkit_experimental.lttb_trans,\n\
+    stype = internal,\n\
+    finalfunc = toolkit_experimental.lttb_final\n\
+);\n\
+",
+name = "lttb_agg",
+requires = [lttb_trans, lttb_final],
 );
-"#);
 
 
 // based on https://github.com/jeromefroe/lttb-rs version 0.2.0
@@ -267,8 +281,10 @@ pub fn lttb_ts<'s>(
 }
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
+    use pgx_macros::pg_test;
 
     #[pg_test]
     fn test_lttb_equivalence() {

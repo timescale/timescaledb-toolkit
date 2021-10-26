@@ -262,16 +262,8 @@ macro_rules! ron_inout_funcs {
             {
                 use $crate::serialization::str_from_db_encoding;
 
-                // SAFETY our serde shims will allocate and leak copies of all
-                // the data, so the lifetimes of the borrows aren't actually
-                // relevant to the output lifetime
-                let val = unsafe {
-                    unsafe fn extend_lifetime(s: &str) -> &'static str {
-                        std::mem::transmute(s)
-                    }
-                    let input = extend_lifetime(str_from_db_encoding(input));
-                    ron::from_str(input).unwrap()
-                };
+                let input = str_from_db_encoding(input);
+                let val = ron::from_str(input).unwrap();
                 unsafe { Self(val, $crate::type_builder::CachedDatum::None).flatten() }
             }
         }

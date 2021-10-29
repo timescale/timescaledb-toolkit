@@ -42,7 +42,7 @@ BEGIN
       ) created ON created.id = depend.objid))
   THEN
     PERFORM timescaledb_toolkit_probe();
-    RAISE EXCEPTION 'features in toolkit_experimental are unstable, and objects depending on them will be deleted on extension update (there will be a DROP SCHEMA toolkit_experimental CASCADE), which on Forge can happen at any time.'
+    RAISE EXCEPTION 'features in toolkit_experimental are unstable, and objects depending on them will be deleted on extension update (there will be a DROP SCHEMA toolkit_experimental CASCADE), which on Timescale Cloud can happen at any time.'
       USING DETAIL='If you really want to do this, and are willing to accept the possibility that objects so created may be deleted without warning, set timescaledb_toolkit_acknowledge_auto_drop to ''true''.';
   END IF;
 END;
@@ -86,7 +86,7 @@ BEGIN
     )
   THEN
     PERFORM timescaledb_toolkit_probe();
-    RAISE EXCEPTION 'features in toolkit_experimental are unstable, and objects depending on them will be deleted on extension update (there will be a DROP SCHEMA toolkit_experimental CASCADE), which on Forge can happen at any time.'
+    RAISE EXCEPTION 'features in toolkit_experimental are unstable, and objects depending on them will be deleted on extension update (there will be a DROP SCHEMA toolkit_experimental CASCADE), which on Timescale Cloud can happen at any time.'
         USING DETAIL='If you really want to do this, and are willing to accept the possibility that objects so created may be deleted without warning, set timescaledb_toolkit_acknowledge_auto_drop to ''true''.';
   END IF;
 END;

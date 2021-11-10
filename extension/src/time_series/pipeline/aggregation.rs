@@ -13,29 +13,107 @@ use crate::{
     uddsketch::UddSketch,
 };
 
+use self::toolkit_experimental::{
+    PipelineThenStatsAgg,
+    PipelineThenStatsAggData,
+    PipelineThenSum,
+    PipelineThenSumData,
+    PipelineThenAverage,
+    PipelineThenAverageData,
+    PipelineThenNumVals,
+    PipelineThenNumValsData,
+    PipelineThenCounterAgg,
+    PipelineThenCounterAggData,
+    PipelineThenHyperLogLog,
+    PipelineThenHyperLogLogData,
+    PipelineThenPercentileAgg,
+    PipelineThenPercentileAggData,
+};
 
-pg_type! {
-    #[derive(Debug)]
-    struct PipelineThenStatsAgg<'input> {
-        num_elements: u64,
-        elements: [Element<'input>; self.num_elements],
-    }
-}
-
-ron_inout_funcs!(PipelineThenStatsAgg);
-
-// hack to allow us to qualify names with "toolkit_experimental"
-// so that pgx generates the correct SQL
+#[pg_schema]
 pub mod toolkit_experimental {
-    pub(crate) use super::*;
-    pub(crate) use crate::accessors::*;
-    varlena_type!(PipelineThenStatsAgg);
-    varlena_type!(PipelineThenSum);
-    varlena_type!(PipelineThenAverage);
-    varlena_type!(PipelineThenNumVals);
-    varlena_type!(PipelineThenCounterAgg);
-    varlena_type!(PipelineThenHyperLogLog);
-    varlena_type!(PipelineThenPercentileAgg);
+    use super::*;
+    pub(crate) use crate::time_series::Timevector;
+    pub(crate) use crate::time_series::pipeline::UnstableTimevectorPipeline;
+    pub(crate) use crate::accessors::toolkit_experimental::*;
+
+    pg_type! {
+        #[derive(Debug)]
+        struct PipelineThenStatsAgg<'input> {
+            num_elements: u64,
+            elements: [Element<'input>; self.num_elements],
+        }
+    }
+
+    ron_inout_funcs!(PipelineThenStatsAgg);
+
+
+    pg_type! {
+        #[derive(Debug)]
+        struct PipelineThenSum<'input> {
+            num_elements: u64,
+            elements: [Element<'input>; self.num_elements],
+        }
+    }
+
+    ron_inout_funcs!(PipelineThenSum);
+
+
+    pg_type! {
+        #[derive(Debug)]
+        struct PipelineThenAverage<'input> {
+            num_elements: u64,
+            elements: [Element<'input>; self.num_elements],
+        }
+    }
+
+    ron_inout_funcs!(PipelineThenAverage);
+
+
+    pg_type! {
+        #[derive(Debug)]
+        struct PipelineThenNumVals<'input> {
+            num_elements: u64,
+            elements: [Element<'input>; self.num_elements],
+        }
+    }
+
+    ron_inout_funcs!(PipelineThenNumVals);
+
+
+
+    pg_type! {
+        #[derive(Debug)]
+        struct PipelineThenCounterAgg<'input> {
+            num_elements: u64,
+            elements: [Element<'input>; self.num_elements],
+        }
+    }
+
+    ron_inout_funcs!(PipelineThenCounterAgg);
+
+
+    pg_type! {
+        #[derive(Debug)]
+        struct PipelineThenHyperLogLog<'input> {
+            hll_size: u64,
+            num_elements: u64,
+            elements: [Element<'input>; self.num_elements],
+        }
+    }
+
+    ron_inout_funcs!(PipelineThenHyperLogLog);
+
+
+    pg_type! {
+        #[derive(Debug)]
+        struct PipelineThenPercentileAgg<'input> {
+            num_elements: u64,
+            elements: [Element<'input>; self.num_elements],
+        }
+    }
+
+    ron_inout_funcs!(PipelineThenPercentileAgg);
 }
 
 #[pg_operator(immutable, parallel_safe)]
@@ -92,7 +170,6 @@ pub fn pipeline_stats_agg<'e>() -> toolkit_experimental::PipelineThenStatsAgg<'e
     }
 }
 
-type Internal = usize;
 #[pg_extern(
     immutable,
     parallel_safe,
@@ -112,20 +189,10 @@ pub unsafe fn pipeline_stats_agg_support(input: Internal)
 //       need to ensure this works with out unstable warning
 extension_sql!(r#"
 ALTER FUNCTION "arrow_run_pipeline_then_stats_agg" SUPPORT toolkit_experimental.pipeline_stats_agg_support;
-"#);
-
-//
-// SUM
-//
-pg_type! {
-    #[derive(Debug)]
-    struct PipelineThenSum<'input> {
-        num_elements: u64,
-        elements: [Element<'input>; self.num_elements],
-    }
-}
-
-ron_inout_funcs!(PipelineThenSum);
+"#,
+name="pipeline_stats_agg_support",
+requires= [pipeline_stats_agg_support],
+);
 
 #[pg_extern(
     immutable,
@@ -149,7 +216,10 @@ extension_sql!(r#"
     CREATE CAST (toolkit_experimental.AccessorSum AS toolkit_experimental.PipelineThenSum)
         WITH FUNCTION toolkit_experimental.sum_cast
         AS IMPLICIT;
-"#);
+"#,
+name="sum_pipe_cast",
+requires= [AccessorSum, PipelineThenSum, sum_pipeline_element],
+);
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
@@ -210,26 +280,17 @@ pub unsafe fn pipeline_sum_support(input: Internal)
 
 extension_sql!(r#"
 ALTER FUNCTION "arrow_pipeline_then_sum" SUPPORT toolkit_experimental.pipeline_sum_support;
-"#);
+"#,
+name="arrow_then_sum_support",
+requires= [pipeline_sum_support],
+);
 
 
-//
-// AVERAGE
-//
-pg_type! {
-    #[derive(Debug)]
-    struct PipelineThenAverage<'input> {
-        num_elements: u64,
-        elements: [Element<'input>; self.num_elements],
-    }
-}
 
-ron_inout_funcs!(PipelineThenAverage);
 
 #[pg_extern(
     immutable,
     parallel_safe,
-    name="average_cast",
     schema="toolkit_experimental"
 )]
 pub fn average_pipeline_element<'p, 'e>(
@@ -246,9 +307,12 @@ pub fn average_pipeline_element<'p, 'e>(
 
 extension_sql!(r#"
     CREATE CAST (toolkit_experimental.AccessorAverage AS toolkit_experimental.PipelineThenAverage)
-        WITH FUNCTION toolkit_experimental.average_cast
+        WITH FUNCTION toolkit_experimental.average_pipeline_element
         AS IMPLICIT;
-"#);
+"#,
+name="avg_pipe_cast",
+requires= [AccessorAverage, PipelineThenAverage, average_pipeline_element],
+);
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
@@ -309,21 +373,12 @@ pub unsafe fn pipeline_average_support(input: Internal)
 
 extension_sql!(r#"
 ALTER FUNCTION "arrow_pipeline_then_average" SUPPORT toolkit_experimental.pipeline_average_support;
-"#);
+"#,
+name="pipe_avg_support",
+requires= [pipeline_average_support],
+);
 
 
-//
-// NUM_VALS
-//
-pg_type! {
-    #[derive(Debug)]
-    struct PipelineThenNumVals<'input> {
-        num_elements: u64,
-        elements: [Element<'input>; self.num_elements],
-    }
-}
-
-ron_inout_funcs!(PipelineThenNumVals);
 
 #[pg_extern(
     immutable,
@@ -347,7 +402,10 @@ extension_sql!(r#"
     CREATE CAST (toolkit_experimental.AccessorNumVals AS toolkit_experimental.PipelineThenNumVals)
         WITH FUNCTION toolkit_experimental.num_vals_cast
         AS IMPLICIT;
-"#);
+"#,
+name="num_vals_pipe_cast",
+requires= [AccessorNumVals, PipelineThenNumVals, num_vals_pipeline_element],
+);
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
@@ -401,17 +459,11 @@ pub unsafe fn pipeline_num_vals_support(input: Internal)
 
 extension_sql!(r#"
 ALTER FUNCTION "arrow_pipeline_then_num_vals" SUPPORT toolkit_experimental.pipeline_num_vals_support;
-"#);
+"#,
+name="pipe_then_num_vals",
+requires= [pipeline_num_vals_support],
+);
 
-pg_type! {
-    #[derive(Debug)]
-    struct PipelineThenCounterAgg<'input> {
-        num_elements: u64,
-        elements: [Element<'input>; self.num_elements],
-    }
-}
-
-ron_inout_funcs!(PipelineThenCounterAgg);
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
@@ -490,18 +542,11 @@ pub unsafe fn pipeline_counter_agg_support(input: Internal)
 //       need to ensure this works with out unstable warning
 extension_sql!(r#"
 ALTER FUNCTION "arrow_run_pipeline_then_counter_agg" SUPPORT toolkit_experimental.pipeline_counter_agg_support;
-"#);
+"#,
+name="pipe_then_counter_agg",
+requires= [pipeline_counter_agg_support],
+);
 
-pg_type! {
-    #[derive(Debug)]
-    struct PipelineThenHyperLogLog<'input> {
-        hll_size: u64,
-        num_elements: u64,
-        elements: [Element<'input>; self.num_elements],
-    }
-}
-
-ron_inout_funcs!(PipelineThenHyperLogLog);
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
@@ -579,17 +624,12 @@ pub unsafe fn pipeline_hyperloglog_support(input: Internal)
 //       need to ensure this works with out unstable warning
 extension_sql!(r#"
 ALTER FUNCTION "arrow_run_pipeline_then_hyperloglog" SUPPORT toolkit_experimental.pipeline_hyperloglog_support;
-"#);
+"#,
+name="pipe_then_hll",
+requires= [pipeline_hyperloglog_support],
+);
 
-pg_type! {
-    #[derive(Debug)]
-    struct PipelineThenPercentileAgg<'input> {
-        num_elements: u64,
-        elements: [Element<'input>; self.num_elements],
-    }
-}
 
-ron_inout_funcs!(PipelineThenPercentileAgg);
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
@@ -660,12 +700,17 @@ pub unsafe fn pipeline_percentile_agg_support(input: Internal)
 //       need to ensure this works with out unstable warning
 extension_sql!(r#"
 ALTER FUNCTION "arrow_run_pipeline_then_percentile_agg" SUPPORT toolkit_experimental.pipeline_percentile_agg_support;
-"#);
+"#,
+name="pipe_then_percentile",
+requires= [pipeline_percentile_agg_support],
+);
 
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
+    use pgx_macros::pg_test;
 
     #[pg_test]
     fn test_stats_agg_finalizer() {

@@ -1,4 +1,4 @@
-FROM rust:1.51.0 AS pgx_builder
+FROM rust:1.56.0 AS pgx_builder
 
 RUN apt-get update \
     && apt-get install -y clang libclang1 sudo bash cmake \
@@ -7,16 +7,18 @@ RUN apt-get update \
 RUN useradd -ms /bin/bash postgres
 USER postgres
 
-# custom pgx until upstream workspace support is added
-RUN cargo install --git https://github.com/JLockerman/pgx.git --branch timescale2 cargo-pgx
+# install cargo pgx
+RUN cargo install cargo-pgx
 
 # only use pg12 for now timescaledb doesn't support 13
 RUN set -ex \
-    && cargo pgx init --pg12 download --pg13 download \
+    && cargo pgx init --pg12 download --pg13 download --pg14 download \
     && cargo pgx start pg12 \
-    && cargo pgx stop pg12 \
+    && cargo pgx stop  pg12 \
     && cargo pgx start pg13 \
-    && cargo pgx stop pg13
+    && cargo pgx stop  pg13 \
+    && cargo pgx start pg14 \
+    && cargo pgx stop  pg14
 
 # install timescaledb
 # TODO make seperate image from ^
@@ -24,16 +26,16 @@ RUN set -ex \
     && cd ~ \
     && git clone https://github.com/timescale/timescaledb.git \
     && cd timescaledb \
-    && git checkout 2.2.x \
+    && git checkout 2.5.x \
     && cd ~/timescaledb \
-        && ./bootstrap -DPG_CONFIG=~/.pgx/12.6/pgx-install/bin/pg_config -DCMAKE_BUILD_TYPE="RelWithDebugInfo" -DUSE_OPENSSL=false -DSEND_TELEMETRY_DEFAULT=false -DREGRESS_CHECKS=false \
+        && ./bootstrap -DPG_CONFIG=~/.pgx/12.8/pgx-install/bin/pg_config -DCMAKE_BUILD_TYPE="RelWithDebInfo" -DUSE_OPENSSL=false -DSEND_TELEMETRY_DEFAULT=false -DREGRESS_CHECKS=false \
         && cd build \
         && make -j4 \
         && make -j4 install \
         && echo "shared_preload_libraries = 'timescaledb'" >> ~/.pgx/data-12/postgresql.conf \
     && cd .. \
     && rm -rf ./build \
-        && ./bootstrap -DPG_CONFIG=~/.pgx/13.2/pgx-install/bin/pg_config -DCMAKE_BUILD_TYPE="RelWithDebugInfo" -DUSE_OPENSSL=false -DSEND_TELEMETRY_DEFAULT=false -DREGRESS_CHECKS=false \
+        && ./bootstrap -DPG_CONFIG=~/.pgx/13.4/pgx-install/bin/pg_config -DCMAKE_BUILD_TYPE="RelWithDebInfo" -DUSE_OPENSSL=false -DSEND_TELEMETRY_DEFAULT=false -DREGRESS_CHECKS=false \
         && cd build \
         && make -j4 \
         && make -j4 install \

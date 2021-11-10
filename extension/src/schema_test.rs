@@ -1,9 +1,13 @@
 
+use pgx::*;
+
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use std::collections::HashSet;
 
     use pgx::*;
+    use pgx_macros::pg_test;
 
     #[pg_extern(schema="toolkit_experimental")]
     fn expected_failure() -> i32 { 1 }

@@ -21,7 +21,9 @@ extension_sql!(r#"
     CREATE CAST (toolkit_experimental.AccessorDelta AS toolkit_experimental.UnstableTimevectorPipeline)
         WITH FUNCTION toolkit_experimental.delta_cast
         AS IMPLICIT;
-"#);
+"#,
+name="accessor_delta_cast",
+);
 
 pub fn timevector_delta<'s>(
     series: &toolkit_experimental::Timevector<'s>,
@@ -50,8 +52,10 @@ pub fn timevector_delta<'s>(
 }
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
+    use pgx_macros::pg_test;
 
     #[pg_test]
     fn test_pipeline_delta() {

@@ -9,23 +9,39 @@ use crate::{
     ron_inout_funcs, pg_type, build,
 };
 
-// hack to allow us to qualify names with "toolkit_experimental"
-// so that pgx generates the correct SQL
+use self::toolkit_experimental::{
+    PipelineThenUnnest,
+    PipelineThenUnnestData,
+    PipelineForceMaterialize,
+    PipelineForceMaterializeData,
+};
+
+
+#[pg_schema]
 pub mod toolkit_experimental {
     pub(crate) use super::*;
-    varlena_type!(PipelineThenUnnest);
-    varlena_type!(PipelineForceMaterialize);
-}
 
-pg_type! {
-    #[derive(Debug)]
-    struct PipelineThenUnnest<'input> {
-        num_elements: u64,
-        elements: [Element<'input>; self.num_elements],
+    pg_type! {
+        #[derive(Debug)]
+        struct PipelineThenUnnest<'input> {
+            num_elements: u64,
+            elements: [Element<'input>; self.num_elements],
+        }
     }
-}
 
-ron_inout_funcs!(PipelineThenUnnest);
+    ron_inout_funcs!(PipelineThenUnnest);
+
+
+    pg_type! {
+        #[derive(Debug)]
+        struct PipelineForceMaterialize<'input> {
+            num_elements: u64,
+            elements: [Element<'input>; self.num_elements],
+        }
+    }
+
+    ron_inout_funcs!(PipelineForceMaterialize);
+}
 
 #[pg_extern(
     immutable,
@@ -74,22 +90,12 @@ pub fn arrow_finalize_with_unnest<'p>(
 pub fn arrow_run_pipeline_then_unnest<'s>(
     timevector: toolkit_experimental::Timevector<'s>,
     pipeline: toolkit_experimental::PipelineThenUnnest<'s>,
-) -> impl Iterator<Item = (name!(time,pg_sys::TimestampTz),name!(value,f64))>
+) -> impl Iterator<Item = (name!(time,crate::raw::TimestampTz),name!(value,f64))>
 {
     let series = run_pipeline_elements(timevector, pipeline.elements.iter())
         .0.into_owned();
     crate::time_series::unnest(series.into())
 }
-
-pg_type! {
-    #[derive(Debug)]
-    struct PipelineForceMaterialize<'input> {
-        num_elements: u64,
-        elements: [Element<'input>; self.num_elements],
-    }
-}
-
-ron_inout_funcs!(PipelineForceMaterialize);
 
 #[pg_extern(
     immutable,
@@ -143,28 +149,32 @@ pub fn arrow_run_pipeline_then_materialize<'s, 'p>(
         .in_current_context()
 }
 
-type Internal = usize;
 #[pg_extern(
     immutable,
     parallel_safe,
     schema="toolkit_experimental"
 )]
-pub unsafe fn pipeline_materialize_support(input: Internal)
--> Internal {
+pub unsafe fn pipeline_materialize_support(input: pgx::Internal)
+-> pgx::Internal {
     pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
         let new_element = PipelineForceMaterialize::from_datum(new_element, false, 0)
             .unwrap();
-        arrow_force_materialize(old_pipeline, new_element).into_datum().unwrap()
+       arrow_force_materialize(old_pipeline, new_element).into_datum().unwrap()
     })
 }
 
 extension_sql!(r#"
 ALTER FUNCTION "arrow_run_pipeline_then_materialize" SUPPORT toolkit_experimental.pipeline_materialize_support;
-"#);
+"#,
+name="pipe_then_materialize",
+requires= [pipeline_materialize_support],
+);
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
+    use pgx_macros::pg_test;
 
     #[pg_test]
     fn test_unnest_finalizer() {

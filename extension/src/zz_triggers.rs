@@ -102,4 +102,7 @@ CREATE EVENT TRIGGER disallow_experimental_deps ON ddl_command_end
 CREATE EVENT TRIGGER disallow_experimental_dependencies_on_views ON ddl_command_end
   WHEN tag IN ('CREATE MATERIALIZED VIEW', 'CREATE VIEW')
   EXECUTE FUNCTION disallow_experimental_view_dependencies();
-"#);
+"#,
+name = "warning_trigger",
+finalize,
+);

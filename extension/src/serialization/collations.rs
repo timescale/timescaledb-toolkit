@@ -226,6 +226,7 @@ unsafe fn get_struct<T>(tuple: pg_sys::HeapTuple) -> *mut T {
 }
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
 
     use super::PgCollationId;

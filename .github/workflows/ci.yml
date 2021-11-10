@@ -38,16 +38,18 @@ jobs:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
-        key: ${{ runner.os }}-cargo-pg12-2
+        key: ${{ runner.os }}-cargo-pg12-3
         restore-keys: |
+          ${{ runner.os }}-cargo-pg12-2
           ${{ runner.os }}-cargo-pg12
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-cargo-build-target-pg12-2
+        key: ${{ runner.os }}-cargo-build-target-pg12-3
         restore-keys: |
+          ${{ runner.os }}-cargo-build-target-pg12-2
           ${{ runner.os }}-cargo-build-target-pg12
 
     - name: Run PG 12 Tests
@@ -56,7 +58,7 @@ jobs:
     - name: Run post-install tests
       run: |
         sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg12 && /usr/local/cargo/bin/cargo pgx start pg12"
-        RUST_BACKTRACE=short cargo run --manifest-path ./tools/post-install/Cargo.toml /home/postgres/.pgx/12.6/pgx-install/bin/pg_config
+        RUST_BACKTRACE=short cargo run --manifest-path ./tools/post-install/Cargo.toml /home/postgres/.pgx/12.8/pgx-install/bin/pg_config
         cargo run --manifest-path ./tools/testrunner/Cargo.toml -- -h localhost -p 28812
 
     - name: Run Doc Tests
@@ -92,16 +94,18 @@ jobs:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
-        key: ${{ runner.os }}-cargo-build-target-pg13-2
+        key: ${{ runner.os }}-cargo-build-target-pg13-3
         restore-keys: |
+          ${{ runner.os }}-cargo-build-target-pg13-2
           ${{ runner.os }}-cargo-pg13
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-cargo-build-target-pg13-2
+        key: ${{ runner.os }}-cargo-build-target-pg13-3
         restore-keys: |
+          ${{ runner.os }}-cargo-build-target-pg13-2
           ${{ runner.os }}-cargo-build-target-pg13
 
     - name: Run PG 13 Tests
@@ -110,7 +114,7 @@ jobs:
     - name: Run post-install tests
       run: |
         sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg13 && /usr/local/cargo/bin/cargo pgx start pg13"
-        RUST_BACKTRACE=short cargo run --manifest-path ./tools/post-install/Cargo.toml /home/postgres/.pgx/13.2/pgx-install/bin/pg_config
+        RUST_BACKTRACE=short cargo run --manifest-path ./tools/post-install/Cargo.toml /home/postgres/.pgx/13.4/pgx-install/bin/pg_config
         cargo run --manifest-path ./tools/testrunner/Cargo.toml -- -h localhost -p 28813
 
     - name: Run Doc Tests

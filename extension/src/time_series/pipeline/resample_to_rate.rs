@@ -7,8 +7,6 @@ use serde::{Deserialize, Serialize};
 
 use super::*;
 
-type Interval = pg_sys::Datum;
-
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug, FlatSerializable)]
 #[repr(u64)]
 pub enum ResampleMethod {
@@ -73,11 +71,11 @@ impl ResampleMethod {
 )]
 pub fn resample_pipeline_element<'p, 'e>(
     resample_method: String,
-    interval: Interval,
+    interval: crate::raw::Interval,
     snap_to_rate: bool,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     unsafe {
-        let interval = interval as *const pg_sys::Interval;
+        let interval = interval.0 as *const pg_sys::Interval;
         if (*interval).day > 0 || (*interval).month > 0 {
             panic!("downsample intervals are currently restricted to stable units (hours or smaller)");
         }
@@ -221,8 +219,10 @@ impl GappyTimevectorBuilder {
 
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
+    use pgx_macros::pg_test;
 
     #[pg_test]
     fn test_pipeline_resample() {

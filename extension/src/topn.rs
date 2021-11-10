@@ -9,57 +9,54 @@ use crate::{
     aggregate_utils::in_aggregate_context,
     ron_inout_funcs,
     build,
-    palloc::Internal, pg_type
+    palloc::{Internal, InternalAsValue, Inner, ToInternal}, pg_type
 };
 
 use spacesaving::SpaceSaving;
 type InternalTopN = SpaceSaving<i64>;
 
-#[allow(non_camel_case_types)]
-type int = u32;
-
-#[allow(non_camel_case_types)]
-type bytea = pg_sys::Datum;
+use crate::raw::bytea;
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn topn_serialize(
-    state: Internal<InternalTopN>,
+    state: Internal,
 ) -> bytea {
+    let state: Inner<InternalTopN> = unsafe { state.to_inner().unwrap() };
     crate::do_serialize!(state)
 }
 
 #[pg_extern(immutable, parallel_safe, strict,schema = "toolkit_experimental")]
 pub fn topn_deserialize(
     bytes: bytea,
-    _internal: Option<Internal<InternalTopN>>,
-) -> Internal<InternalTopN> {
-    crate::do_deserialize!(bytes, InternalTopN)
+    _internal: Internal,
+) -> Internal {
+    let i: InternalTopN = crate::do_deserialize!(bytes, InternalTopN);
+    Inner::from(i).internal()
 }
 
-// PG object for topn
-pg_type! {
-    #[derive(Debug)]
-    struct TopN<'input> {
-        num_values: u32,
-        max_values: u32,
-        total_inputs: u64,
-        values: [i64; self.num_values],
-        counts: [u64; self.num_values],
-        overcounts: [u64; self.num_values],
-    }
-}
+use toolkit_experimental::{TopN, TopNData};
 
-ron_inout_funcs!(TopN);
-
-// hack to allow us to qualify names with "toolkit_experimental"
-// so that pgx generates the correct SQL
+#[pg_schema]
 pub mod toolkit_experimental {
     pub(crate) use super::*;
-    varlena_type!(TopN);
+    // PG object for topn
+    pg_type! {
+        #[derive(Debug)]
+        struct TopN<'input> {
+            num_values: u32,
+            max_values: u32,
+            total_inputs: u64,
+            values: [i64; self.num_values],
+            counts: [u64; self.num_values],
+            overcounts: [u64; self.num_values],
+        }
+    }
+
+    ron_inout_funcs!(TopN);
 }
 
 impl<'input> TopN<'input> {
-    fn to_internal_topn(&self) -> InternalTopN {
+    fn internal_topn(&self) -> InternalTopN {
         InternalTopN::new_from_components(
             1.0 / self.max_values as f64,
             self.values.slice(),
@@ -92,11 +89,20 @@ impl<'input> TopN<'input> {
 // PG function for adding values to a topn count.
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn topn_trans(
-    state: Option<Internal<InternalTopN>>,
-    size: int,
-    value: Option<int>,
+    state: Internal,
+    size: i32,
+    value: Option<i32>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<InternalTopN>> {
+) -> Internal {
+    topn_trans_inner(unsafe{ state.to_inner()}, size, value, fcinfo).internal()
+}
+
+pub fn topn_trans_inner(
+    state: Option<Inner<InternalTopN>>,
+    size: i32,
+    value: Option<i32>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<InternalTopN>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let value = match value {
@@ -117,10 +123,19 @@ pub fn topn_trans(
 // PG function for merging topns.
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn topn_combine(
-    state1: Option<Internal<InternalTopN>>,
-    state2: Option<Internal<InternalTopN>>,
+    state1: Internal,
+    state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<InternalTopN>> {
+) -> Internal {
+    unsafe {
+        topn_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
+    }
+}
+pub fn topn_combine_inner(
+    state1: Option<Inner<InternalTopN>>,
+    state2: Option<Inner<InternalTopN>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<InternalTopN>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state1, state2) {
@@ -137,7 +152,14 @@ pub fn topn_combine(
 // PG function to generate a user-facing TopN object from a InternalTopN.
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 fn topn_final(
-    state: Option<Internal<InternalTopN>>,
+    state: Internal,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<toolkit_experimental::TopN<'static>> {
+    topn_final_inner(unsafe{ state.to_inner() }, fcinfo).into()
+}
+
+fn topn_final_inner(
+    state: Option<Inner<InternalTopN>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<toolkit_experimental::TopN<'static>> {
     unsafe {
@@ -152,56 +174,69 @@ fn topn_final(
     }
 }
 
-extension_sql!(r#"
-CREATE AGGREGATE toolkit_experimental.topn_agg(size int, value int)
-(
-    sfunc = toolkit_experimental.topn_trans,
-    stype = internal,
-    finalfunc = toolkit_experimental.topn_final,
-    combinefunc = toolkit_experimental.topn_combine,
-    serialfunc = toolkit_experimental.topn_serialize,
-    deserialfunc = toolkit_experimental.topn_deserialize,
-    parallel = safe
+extension_sql!("\n\
+    CREATE AGGREGATE toolkit_experimental.topn_agg(size int, value int)\n\
+    (\n\
+        sfunc = toolkit_experimental.topn_trans,\n\
+        stype = internal,\n\
+        finalfunc = toolkit_experimental.topn_final,\n\
+        combinefunc = toolkit_experimental.topn_combine,\n\
+        serialfunc = toolkit_experimental.topn_serialize,\n\
+        deserialfunc = toolkit_experimental.topn_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+name="topn_agg",
+requires= [topn_trans, topn_final, topn_combine, topn_serialize, topn_deserialize],
 );
-"#);
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn topn_compound_trans<'b>(
-    state: Option<Internal<InternalTopN>>,
+    state: Internal,
     value: Option<toolkit_experimental::TopN<'b>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<InternalTopN>> {
+) -> Internal {
+    topn_compound_trans_inner(unsafe{ state.to_inner() }, value, fcinfo).internal()
+}
+pub fn topn_compound_trans_inner<'b>(
+    state: Option<Inner<InternalTopN>>,
+    value: Option<toolkit_experimental::TopN<'b>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<InternalTopN>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state, value) {
                 (a, None) => a,
-                (None, Some(a)) => Some(a.to_internal_topn().into()),
+                (None, Some(a)) => Some(a.internal_topn().into()),
                 (Some(a), Some(b)) =>
-                    Some(InternalTopN::combine(&a, &b.to_internal_topn()).into()),
+                    Some(InternalTopN::combine(&a, &b.internal_topn()).into()),
             }
         })
     }
 }
 
-extension_sql!(r#"
-CREATE AGGREGATE toolkit_experimental.rollup(
-    toolkit_experimental.topn
-) (
-    sfunc = toolkit_experimental.topn_compound_trans,
-    stype = internal,
-    finalfunc = toolkit_experimental.topn_final,
-    combinefunc = toolkit_experimental.topn_combine,
-    serialfunc = toolkit_experimental.topn_serialize,
-    deserialfunc = toolkit_experimental.topn_deserialize,
-    parallel = safe
+extension_sql!("\n\
+    CREATE AGGREGATE toolkit_experimental.rollup(\n\
+        toolkit_experimental.topn\n\
+    ) (\n\
+        sfunc = toolkit_experimental.topn_compound_trans,\n\
+        stype = internal,\n\
+        finalfunc = toolkit_experimental.topn_final,\n\
+        combinefunc = toolkit_experimental.topn_combine,\n\
+        serialfunc = toolkit_experimental.topn_serialize,\n\
+        deserialfunc = toolkit_experimental.topn_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+name="topn_rollup",
+requires= [topn_compound_trans, topn_final, topn_combine, topn_serialize, topn_deserialize],
 );
-"#);
 
 //---- Available PG operations on the topn structure
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn num_vals<'input>(
     agg: toolkit_experimental::TopN<'input>,
-) -> int {
+) -> i32 {
     agg.total_inputs as _
 }
 
@@ -254,7 +289,7 @@ pub fn guaranteed_topn<'input>(
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn max_ordered_n<'input>(
     agg: toolkit_experimental::TopN<'input>,
-) -> int {
+) -> i32 {
     for i in 1..agg.num_values as usize {
         if agg.counts.slice()[i] > agg.counts.slice()[i-1] - agg.overcounts.slice()[i-1] {
             return (i - 1) as _;
@@ -265,8 +300,10 @@ pub fn max_ordered_n<'input>(
 }
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
+    use pgx_macros::pg_test;
 
     #[pg_test]
     fn test_topn_aggregate() {

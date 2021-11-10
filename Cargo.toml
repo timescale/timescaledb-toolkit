@@ -23,9 +23,11 @@ members = [
 
 [profile.dev]
 panic = "unwind"
+lto = "thin"
 
 [profile.release]
 panic = "unwind"
 opt-level = 3
 lto = "fat"
 debug = true
+codegen-units = 1

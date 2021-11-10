@@ -217,6 +217,7 @@ fn parse_primary<'a>(
 
 fn build_binary_op(op: Pair<Rule>, left: ExpressionSegment, right: ExpressionSegment) -> ExpressionSegment {
     use BinOp::*;
+    use Type::Interval;
     macro_rules! return_ty {
         ($op:literal $(($l: pat, $r:pat) => $ty:expr),+ $(,)?) => {
             match (left.ty(), right.ty()) {

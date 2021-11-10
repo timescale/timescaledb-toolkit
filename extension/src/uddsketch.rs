@@ -12,24 +12,30 @@ use uddsketch::{SketchHashKey, UDDSketch as UddSketchInternal};
 use crate::{
     aggregate_utils::in_aggregate_context,
     flatten,
-    palloc::Internal, pg_type,
+    palloc::{Internal, InternalAsValue, Inner, ToInternal}, pg_type,
     accessors::toolkit_experimental,
 };
-
-
-#[allow(non_camel_case_types)]
-type int = u32;
 
 // PG function for adding values to a sketch.
 // Null values are ignored.
 #[pg_extern(immutable, parallel_safe)]
 pub fn uddsketch_trans(
-    state: Option<Internal<UddSketchInternal>>,
-    size: int,
+    state: Internal,
+    size: i32,
     max_error: f64,
     value: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<UddSketchInternal>> {
+) -> Internal {
+    uddsketch_trans_inner(unsafe{ state.to_inner() }, size, max_error, value, fcinfo).internal()
+}
+
+pub fn uddsketch_trans_inner(
+    state: Option<Inner<UddSketchInternal>>,
+    size: i32,
+    max_error: f64,
+    value: Option<f64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<UddSketchInternal>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let value = match value {
@@ -53,22 +59,39 @@ const PERCENTILE_AGG_DEFAULT_ERROR: f64 = 0.001;
 // take parameters for the size and error, but uses a default
 #[pg_extern(immutable, parallel_safe)]
 pub fn percentile_agg_trans(
-    state: Option<Internal<UddSketchInternal>>,
+    state: Internal,
     value: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<UddSketchInternal>> {
+) -> Internal {
+    percentile_agg_trans_inner(unsafe{ state.to_inner() }, value, fcinfo).internal()
+}
+
+pub fn percentile_agg_trans_inner(
+    state: Option<Inner<UddSketchInternal>>,
+    value: Option<f64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<UddSketchInternal>> {
     let default_size = PERCENTILE_AGG_DEFAULT_SIZE;
     let default_max_error = PERCENTILE_AGG_DEFAULT_ERROR;
-    uddsketch_trans(state, default_size, default_max_error, value, fcinfo)
+    uddsketch_trans_inner(state, default_size as _, default_max_error, value, fcinfo)
 }
 
 // PG function for merging sketches.
 #[pg_extern(immutable, parallel_safe)]
 pub fn uddsketch_combine(
-    state1: Option<Internal<UddSketchInternal>>,
-    state2: Option<Internal<UddSketchInternal>>,
+    state1: Internal,
+    state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<UddSketchInternal>> {
+) -> Internal {
+    unsafe {
+        uddsketch_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
+    }
+}
+pub fn uddsketch_combine_inner(
+    state1: Option<Inner<UddSketchInternal>>,
+    state2: Option<Inner<UddSketchInternal>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<UddSketchInternal>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state1, state2) {
@@ -85,22 +108,26 @@ pub fn uddsketch_combine(
     }
 }
 
-#[allow(non_camel_case_types)]
-type bytea = pg_sys::Datum;
+use crate::raw::bytea;
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn uddsketch_serialize(
-    state: Internal<UddSketchInternal>,
+    state: Internal,
 ) -> bytea {
-    let serializable = &SerializedUddSketch::from(&*state);
-    crate::do_serialize!(serializable)
+    let serializable = &SerializedUddSketch::from(unsafe { state.get().unwrap() });
+    crate::do_serialize!(serializable).into()
 }
 
 #[pg_extern(strict, immutable, parallel_safe)]
 pub fn uddsketch_deserialize(
     bytes: bytea,
-    _internal: Option<Internal<()>>,
-) -> Internal<UddSketchInternal> {
+    _internal: Internal,
+) -> Internal {
+    uddsketch_deserialize_inner(bytes).internal()
+}
+pub fn uddsketch_deserialize_inner(
+    bytes: bytea,
+) -> Inner<UddSketchInternal> {
     let sketch: UddSketchInternal = crate::do_deserialize!(bytes, SerializedUddSketch);
     sketch.into()
 }
@@ -232,8 +259,6 @@ impl<'a, 'b> From<&'a ReadableUddSketch> for UddSketch<'b> {
     }
 }
 
-varlena_type!(UddSketch);
-
 impl<'input> InOutFuncs for UddSketch<'input> {
     fn output(&self, buffer: &mut StringInfo) {
         use crate::serialization::{EncodedStr::*, str_to_db_encoding};
@@ -319,7 +344,15 @@ impl<'input> UddSketch<'input> {
 // PG function to generate a user-facing UddSketch object from a UddSketchInternal.
 #[pg_extern(immutable, parallel_safe)]
 fn uddsketch_final(
-    state: Option<Internal<UddSketchInternal>>,
+    state: Internal,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<UddSketch<'static>> {
+    unsafe {
+        uddsketch_final_inner(state.to_inner(), fcinfo)
+    }
+}
+fn uddsketch_final_inner(
+    state: Option<Inner<UddSketchInternal>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<UddSketch<'static>> {
     unsafe {
@@ -410,39 +443,54 @@ fn decompress_counts<'b>(
     negatives.chain(zero).chain(positives)
 }
 
-extension_sql!(r#"
-CREATE AGGREGATE uddsketch(
-    size int, max_error DOUBLE PRECISION, value DOUBLE PRECISION
-) (
-    sfunc = uddsketch_trans,
-    stype = internal,
-    finalfunc = uddsketch_final,
-    combinefunc = uddsketch_combine,
-    serialfunc = uddsketch_serialize,
-    deserialfunc = uddsketch_deserialize,
-    parallel = safe
+extension_sql!("\n\
+    CREATE AGGREGATE uddsketch(\n\
+        size int, max_error DOUBLE PRECISION, value DOUBLE PRECISION\n\
+    ) (\n\
+        sfunc = uddsketch_trans,\n\
+        stype = internal,\n\
+        finalfunc = uddsketch_final,\n\
+        combinefunc = uddsketch_combine,\n\
+        serialfunc = uddsketch_serialize,\n\
+        deserialfunc = uddsketch_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+name = "udd_agg",
+requires = [uddsketch_trans, uddsketch_final, uddsketch_combine, uddsketch_serialize, uddsketch_deserialize],
 );
-"#);
 
-extension_sql!(r#"
-CREATE AGGREGATE percentile_agg(value DOUBLE PRECISION)
-(
-    sfunc = percentile_agg_trans,
-    stype = internal,
-    finalfunc = uddsketch_final,
-    combinefunc = uddsketch_combine,
-    serialfunc = uddsketch_serialize,
-    deserialfunc = uddsketch_deserialize,
-    parallel = safe
+extension_sql!("\n\
+    CREATE AGGREGATE percentile_agg(value DOUBLE PRECISION)\n\
+    (\n\
+        sfunc = percentile_agg_trans,\n\
+        stype = internal,\n\
+        finalfunc = uddsketch_final,\n\
+        combinefunc = uddsketch_combine,\n\
+        serialfunc = uddsketch_serialize,\n\
+        deserialfunc = uddsketch_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+name = "percentile_agg",
+requires = [percentile_agg_trans, uddsketch_final, uddsketch_combine, uddsketch_serialize, uddsketch_deserialize],
 );
-"#);
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn uddsketch_compound_trans(
-    state: Option<Internal<UddSketchInternal>>,
+    state: Internal,
     value: Option<UddSketch>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<UddSketchInternal>> {
+) -> Internal {
+    unsafe {
+        uddsketch_compound_trans_inner(state.to_inner(), value, fcinfo).internal()
+    }
+}
+pub fn uddsketch_compound_trans_inner(
+    state: Option<Inner<UddSketchInternal>>,
+    value: Option<UddSketch>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<UddSketchInternal>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let value = match value {
@@ -459,19 +507,22 @@ pub fn uddsketch_compound_trans(
     }
 }
 
-extension_sql!(r#"
-CREATE AGGREGATE rollup(
-    sketch uddsketch
-) (
-    sfunc = uddsketch_compound_trans,
-    stype = internal,
-    finalfunc = uddsketch_final,
-    combinefunc = uddsketch_combine,
-    serialfunc = uddsketch_serialize,
-    deserialfunc = uddsketch_deserialize,
-    parallel = safe
+extension_sql!("\n\
+    CREATE AGGREGATE rollup(\n\
+        sketch uddsketch\n\
+    ) (\n\
+        sfunc = uddsketch_compound_trans,\n\
+        stype = internal,\n\
+        finalfunc = uddsketch_final,\n\
+        combinefunc = uddsketch_combine,\n\
+        serialfunc = uddsketch_serialize,\n\
+        deserialfunc = uddsketch_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+name = "udd_rollup",
+requires = [uddsketch_compound_trans, uddsketch_final, uddsketch_combine, uddsketch_serialize, uddsketch_deserialize],
 );
-"#);
 
 //---- Available PG operations on the sketch
 
@@ -584,9 +635,11 @@ pub fn uddsketch_error(
 }
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
     use super::*;
+    use pgx_macros::pg_test;
 
     // Assert equality between two floats, within some fixed error range.
     fn apx_eql(value: f64, expected: f64, error: f64) {
@@ -828,22 +881,22 @@ mod tests {
     fn uddsketch_byte_io_test() {
         unsafe {
             use std::ptr;
-            let state = uddsketch_trans(None, 100, 0.005, Some(14.0), ptr::null_mut());
-            let state = uddsketch_trans(state, 100, 0.005, Some(18.0), ptr::null_mut());
-            let state = uddsketch_trans(state, 100, 0.005, Some(22.7), ptr::null_mut());
-            let state = uddsketch_trans(state, 100, 0.005, Some(39.42), ptr::null_mut());
-            let state = uddsketch_trans(state, 100, 0.005, Some(-43.0), ptr::null_mut());
+            let state = uddsketch_trans_inner(None, 100, 0.005, Some(14.0), ptr::null_mut());
+            let state = uddsketch_trans_inner(state, 100, 0.005, Some(18.0), ptr::null_mut());
+            let state = uddsketch_trans_inner(state, 100, 0.005, Some(22.7), ptr::null_mut());
+            let state = uddsketch_trans_inner(state, 100, 0.005, Some(39.42), ptr::null_mut());
+            let state = uddsketch_trans_inner(state, 100, 0.005, Some(-43.0), ptr::null_mut());
 
             let control = state.unwrap();
-            let buffer = uddsketch_serialize(control.clone().into());
-            let buffer = pgx::varlena::varlena_to_byte_slice(buffer as *mut pg_sys::varlena);
+            let buffer = uddsketch_serialize(Inner::from(control.clone()).internal());
+            let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
 
             let expected = [1, 1, 123, 20, 174, 71, 225, 122, 116, 63, 100, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 144, 194, 245, 40, 92, 143, 73, 64, 2, 0, 0, 0, 0, 0, 0, 0, 202, 11, 1, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 66, 8, 105, 93, 221, 4, 0, 0, 0, 0, 0, 0, 0, 5, 1, 1, 1];
             assert_eq!(buffer, expected);
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
-            let new_state = uddsketch_deserialize(&*expected as *const pg_sys::varlena as pg_sys::Datum, None);
-            assert_eq!(*new_state, *control);
+            let new_state = uddsketch_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
+            assert_eq!(&*new_state, &*control);
         }
     }
 }

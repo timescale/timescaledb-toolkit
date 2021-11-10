@@ -1,16 +1,16 @@
 use pgx::*;
-use pg_sys::{TimestampTz};
+use crate::raw::TimestampTz;
 
 #[pg_extern(name="generate_periodic_normal_series", schema = "toolkit_experimental")]
 pub fn default_generate_periodic_normal_series(
-    series_start: pg_sys::TimestampTz,
+    series_start: crate::raw::TimestampTz,
     rng_seed: Option<i64>,
 ) -> impl std::iter::Iterator<Item = (name!(time,TimestampTz),name!(value,f64))> + 'static {
     generate_periodic_normal_series(series_start, None, None, None, None, None, None, rng_seed)
 }
 
 pub fn alternate_generate_periodic_normal_series(
-    series_start: pg_sys::TimestampTz,
+    series_start: crate::raw::TimestampTz,
     periods_per_series: i64,
     points_per_period: i64,
     seconds_between_points: i64,
@@ -28,7 +28,7 @@ pub fn alternate_generate_periodic_normal_series(
 
 #[pg_extern(schema = "toolkit_experimental")]
 pub fn generate_periodic_normal_series(
-    series_start: pg_sys::TimestampTz,
+    series_start: crate::raw::TimestampTz,
     series_len: Option<i64>, //pg_sys::Interval,
     sample_interval: Option<i64>, //pg_sys::Interval,
     base_value: Option<f64>,
@@ -80,24 +80,29 @@ pub fn generate_periodic_normal_series(
 
     let distribution = rand_distr::Normal::new(0.0, standard_deviation).unwrap();
 
+    let series_start: i64 = series_start.into();
     (0..series_len).step_by(sample_interval as usize).map(move |accum| {
         let time = series_start + accum;
         let base = base_value + f64::sin(accum as f64 / (2.0 * std::f64::consts::PI * period as f64)) * periodic_magnitude;
         let error = distribution.sample(&mut rng);
-        (time, base + error)
+        (time.into(), base + error)
     })
 }
 
 // Convert a timestamp to a double precision unix epoch
-extension_sql!(r#"
-CREATE OR REPLACE FUNCTION toolkit_experimental.to_epoch(timestamptz) RETURNS DOUBLE PRECISION LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS $$
-SELECT EXTRACT(EPOCH FROM $1);
-$$;
-"#);
+extension_sql!("\n\
+CREATE OR REPLACE FUNCTION toolkit_experimental.to_epoch(timestamptz) RETURNS DOUBLE PRECISION LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS $$\n\
+SELECT EXTRACT(EPOCH FROM $1);\n\
+$$;\n\
+",
+name="to_epoch",
+);
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
+    use pgx_macros::pg_test;
 
     #[pg_test]
     fn test_to_epoch() {

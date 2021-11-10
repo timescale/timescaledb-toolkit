@@ -130,12 +130,13 @@ pub fn map_lambda_over_series(
     schema="toolkit_experimental"
 )]
 pub fn map_series_pipeline_element<'e>(
-    function: pg_sys::regproc,
+    function: crate::raw::regproc,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
-    map_series_element(function).flatten()
+    map_series_element(function.0.try_into().unwrap()).flatten()
 }
 
-pub fn map_series_element<'a>(function: pg_sys::regproc) -> Element<'a> {
+pub fn map_series_element<'a>(function: crate::raw::regproc) -> Element<'a> {
+    let function: pg_sys::regproc = function.0.try_into().unwrap();
     check_user_function_type(function);
     Element::MapSeries { function: PgProcId(function) }
 }
@@ -192,12 +193,12 @@ pub fn apply_to_series(mut series: Timevector<'_>, func: pg_sys::RegProcedure)
     schema="toolkit_experimental"
 )]
 pub fn map_data_pipeline_element<'e>(
-    function: pg_sys::regproc,
+    function: crate::raw::regproc,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     let mut argtypes: *mut pg_sys::Oid = ptr::null_mut();
     let mut nargs: ::std::os::raw::c_int = 0;
     let rettype = unsafe {
-        pg_sys::get_func_signature(function, &mut argtypes, &mut nargs)
+        pg_sys::get_func_signature(function.0.try_into().unwrap(), &mut argtypes, &mut nargs)
     };
 
     if nargs != 1 {
@@ -212,7 +213,7 @@ pub fn map_data_pipeline_element<'e>(
         error!("invalid return type, expected fn(double precision) RETURNS double precision")
     }
 
-    Element::MapData { function: PgProcId(function) }.flatten()
+    Element::MapData { function: PgProcId(function.0.try_into().unwrap()) }.flatten()
 }
 
 pub fn apply_to(mut series: Timevector<'_>, func: pg_sys::RegProcedure)
@@ -324,8 +325,10 @@ pub fn map_series(series: &mut Timevector<'_>, mut func: impl FnMut(f64) -> f64)
 }
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
+    use pgx_macros::pg_test;
 
     #[pg_test]
     fn test_pipeline_map_lambda() {

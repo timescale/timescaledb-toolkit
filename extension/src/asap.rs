@@ -4,7 +4,7 @@ use asap::*;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    aggregate_utils::in_aggregate_context, palloc::Internal,
+    aggregate_utils::in_aggregate_context, palloc::{Internal, InternalAsValue, Inner, ToInternal},
 };
 
 use time_series::{TSPoint, GapfillMethod};
@@ -34,18 +34,27 @@ pub struct ASAPTransState {
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn asap_trans(
-    state: Option<Internal<ASAPTransState>>,
-    ts: Option<pg_sys::TimestampTz>,
+    state: Internal,
+    ts: Option<crate::raw::TimestampTz>,
     val: Option<f64>,
     resolution: i32,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<ASAPTransState>> {
+) -> Internal {
+    asap_trans_internal(unsafe{ state.to_inner() }, ts, val, resolution, fcinfo).internal()
+}
+pub fn asap_trans_internal(
+    state: Option<Inner<ASAPTransState>>,
+    ts: Option<crate::raw::TimestampTz>,
+    val: Option<f64>,
+    resolution: i32,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<ASAPTransState>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let p = match (ts, val) {
                 (_, None) => return state,
                 (None, _) => return state,
-                (Some(ts), Some(val)) => TSPoint { ts, val },
+                (Some(ts), Some(val)) => TSPoint { ts: ts.into(), val },
             };
 
             match state {
@@ -98,7 +107,13 @@ fn find_downsample_interval(points: &[TSPoint], resolution: i64) -> i64 {
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 fn asap_final(
-    state: Option<Internal<ASAPTransState>>,
+    state: Internal,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
+    asap_final_inner(unsafe{ state.to_inner() }, fcinfo)
+}
+fn asap_final_inner(
+    state: Option<Inner<ASAPTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
     unsafe {
@@ -251,17 +266,22 @@ fn downsample_and_gapfill_to_normal_form(
 }
 
 // Aggregate on only values (assumes aggregation over ordered normalized timestamp)
-extension_sql!(r#"
-CREATE AGGREGATE toolkit_experimental.asap_smooth(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution INT) (
-    sfunc = toolkit_experimental.asap_trans,
-    stype = internal,
-    finalfunc = toolkit_experimental.asap_final
+extension_sql!("\n\
+    CREATE AGGREGATE toolkit_experimental.asap_smooth(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution INT)\n\
+    (\n\
+        sfunc = toolkit_experimental.asap_trans,\n\
+        stype = internal,\n\
+        finalfunc = toolkit_experimental.asap_final\n\
+    );\n",
+name = "asap_agg",
+requires = [asap_trans, asap_final],
 );
-"#);
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
+    use pgx_macros::pg_test;
 
     #[pg_test]
     fn test_asap() {

@@ -1,4 +1,4 @@
-
+#[cfg(any(test, feature = "pg_test"))]
 use pgx::*;
 
 #[cfg(any(test, feature = "pg_test"))]

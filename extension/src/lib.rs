@@ -22,6 +22,9 @@ mod serialization;
 mod schema_test;
 mod raw;
 
+#[cfg(any(test, feature = "pg_test"))]
+mod aggregate_builder_tests;
+
 // This should be last so we don't run our warning trigger on when
 // installing this extension
 pub mod zz_triggers;

@@ -76,27 +76,19 @@ pub extern "C" fn _ts_toolkit_decode_timestamptz(
     }
 }
 
-// FIXME upstream to pgx
-pub(crate) const PG_UTF8: i32 = 6;
-extern "C" {
-    pub fn pg_server_to_any(s: *const c_char, len: c_int, encoding: c_int) -> *const c_char;
-    pub fn pg_any_to_server(s: *const c_char, len: c_int, encoding: c_int) -> *const c_char;
-    pub fn GetDatabaseEncoding() -> c_int;
-}
-
 pub enum EncodedStr<'s> {
     Utf8(&'s str),
     Other(&'s CStr)
 }
 
 pub fn str_to_db_encoding(s: &str) -> EncodedStr {
-    if unsafe { GetDatabaseEncoding() == PG_UTF8 } {
+    if unsafe { pg_sys::GetDatabaseEncoding() == pg_sys::pg_enc_PG_UTF8 as i32 } {
         return EncodedStr::Utf8(s)
     }
 
     let bytes = s.as_bytes();
     let encoded = unsafe {
-        pg_any_to_server(bytes.as_ptr() as *const c_char, bytes.len().try_into().unwrap(), PG_UTF8)
+        pg_sys::pg_any_to_server(bytes.as_ptr() as *const c_char, bytes.len().try_into().unwrap(), pg_sys::pg_enc_PG_UTF8 as _)
     };
     if encoded as usize == bytes.as_ptr() as usize {
         return EncodedStr::Utf8(s)
@@ -107,13 +99,13 @@ pub fn str_to_db_encoding(s: &str) -> EncodedStr {
 }
 
 pub fn str_from_db_encoding(s: &CStr) -> &str {
-    if unsafe { GetDatabaseEncoding() == PG_UTF8 } {
+    if unsafe { pg_sys::GetDatabaseEncoding() == pg_sys::pg_enc_PG_UTF8 as i32 } {
         return s.to_str().unwrap()
     }
 
     let str_len = s.to_bytes().len().try_into().unwrap();
     let encoded = unsafe {
-        pg_server_to_any(s.as_ptr(), str_len, PG_UTF8)
+        pg_sys::pg_server_to_any(s.as_ptr(), str_len, pg_sys::pg_enc_PG_UTF8 as _)
     };
     if encoded as usize == s.as_ptr() as usize {
         //TODO redundant check?

@@ -9,6 +9,7 @@ on:
   schedule:
     # we build at 8am UTC, 3am Eastern, midnight Pacific
     - cron:  '0 8 * * 1-4'
+  workflow_dispatch:
 
 jobs:
   test12:
@@ -121,3 +122,59 @@ jobs:
       run: |
         sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg13 && /usr/local/cargo/bin/cargo pgx start pg13"
         sql-doctester -h localhost -s "CREATE EXTENSION timescaledb; CREATE EXTENSION timescaledb_toolkit; SET SESSION TIMEZONE TO 'UTC'" -p 28813 docs
+
+  test14:
+    name: Test PG 14
+    runs-on: ubuntu-latest
+    container:
+      image: timescaledev/rust-pgx:latest
+      env:
+        CARGO_INCREMENTAL: 0
+        CARGO_NET_RETRY: 10
+        CI: 1
+        RUST_BACKTRACE: short
+        RUSTUP_MAX_RETRIES: 10
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    - name: chown Repository
+      run: chown -R postgres .
+
+    - name: Cache cargo directories
+      uses: actions/cache@v2
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+        key: ${{ runner.os }}-cargo-build-target-pg14-3
+        restore-keys: |
+          ${{ runner.os }}-cargo-build-target-pg14-2
+          ${{ runner.os }}-cargo-pg14
+
+    - name: Cache cargo target dir
+      uses: actions/cache@v2
+      with:
+        path: target
+        key: ${{ runner.os }}-cargo-build-target-pg14-3
+        restore-keys: |
+          ${{ runner.os }}-cargo-build-target-pg14-2
+          ${{ runner.os }}-cargo-build-target-pg14
+
+    - name: Run PG 14 Tests
+      run: sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo test --workspace --features 'pg14 pg_test'"
+
+    - name: Run post-install tests
+      run: |
+        sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg14 && /usr/local/cargo/bin/cargo pgx start pg14"
+        RUST_BACKTRACE=short cargo run --manifest-path ./tools/post-install/Cargo.toml /home/postgres/.pgx/14.0/pgx-install/bin/pg_config
+        cargo run --manifest-path ./tools/testrunner/Cargo.toml -- -h localhost -p 28813
+
+    # TODO These require TimescaleDB to support pg14
+    # - name: Run Doc Tests
+    #   run: |
+    #     sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg14 && /usr/local/cargo/bin/cargo pgx start pg14"
+    #     sql-doctester -h localhost -s "CREATE EXTENSION timescaledb; CREATE EXTENSION timescaledb_toolkit; SET SESSION TIMEZONE TO 'UTC'" -p 28813 docs

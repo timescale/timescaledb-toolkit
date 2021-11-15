@@ -827,9 +827,9 @@ checksum = "ab5ef0d4909ef3724cc8cce6ccc8572c5c817592e9285f5464f8e86f8bd3726e"
 
 [[package]]
 name = "heapless"
-version = "0.7.7"
+version = "0.7.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fe65ef062f1af5b1b189842b0bc45bd671c38e1d22c6aa22e6ada03d01026d53"
+checksum = "9c1ad878e07405df82b695089e63d278244344f80e764074d0bdfe99b89460f3"
 dependencies = [
  "atomic-polyfill",
  "hash32",
@@ -1275,9 +1275,9 @@ dependencies = [
 
 [[package]]
 name = "pgx"
-version = "0.2.1"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05afda51b125b4d6cd101c50f51cd09dbf968ad3a6d14d3533e53e474af7c058"
+checksum = "2fe3d7b5af6534a84b66109d175a9c944aa41744dab8e9385cb78f624f3a0050"
 dependencies = [
  "atomic-traits",
  "bitflags",
@@ -1303,9 +1303,9 @@ dependencies = [
 
 [[package]]
 name = "pgx-macros"
-version = "0.2.1"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5e052bcc9c551130b30806321cbc97958ee04189de24602dce0b53a92a1dc85"
+checksum = "1d0794ddeee7ff991c81cc8a1daa6f9f3b486ede60a6b58f26a68e63d842ffd8"
 dependencies = [
  "pgx-utils",
  "proc-macro-crate",
@@ -1317,9 +1317,9 @@ dependencies = [
 
 [[package]]
 name = "pgx-pg-sys"
-version = "0.2.1"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "afae320962dbef5ccd08906823b61d0c2f062b878e95843977b4f79fda0f2d17"
+checksum = "497951e5c77c486eb6fef8e2f13123d8632bd7598f722c24ea4288ed70b3d446"
 dependencies = [
  "bindgen",
  "build-deps",
@@ -1337,9 +1337,9 @@ dependencies = [
 
 [[package]]
 name = "pgx-tests"
-version = "0.2.1"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2613daf5279634fbdbaac5e13845d31c65a8ba04a4c107303011da8a79d53ad3"
+checksum = "07bb7daa249b3b4a1c67201e739a0e676fff33c99fd2f2c16c09e815d00745a7"
 dependencies = [
  "colored",
  "lazy_static",
@@ -1357,9 +1357,9 @@ dependencies = [
 
 [[package]]
 name = "pgx-utils"
-version = "0.2.1"
+version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "98ed72f6ecc3ec6a8981c2c30ad4aa8a074cde3eaa2c13f9ed84c7462995f7a2"
+checksum = "22f7b0970c6257f3cd415956df476270bc1eca2e07072c1cc4f0fc2cf4f5494b"
 dependencies = [
  "clap",
  "color-eyre",
@@ -2160,9 +2160,9 @@ dependencies = [
 
 [[package]]
 name = "time"
-version = "0.3.4"
+version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "99beeb0daeac2bd1e86ac2c21caddecb244b39a093594da1a661ec2060c7aedd"
+checksum = "41effe7cfa8af36f439fac33861b66b049edc6f9a32331e2312660529c1c24ad"
 dependencies = [
  "itoa",
  "libc",

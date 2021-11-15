@@ -20,7 +20,6 @@ pub struct PgProcId(pub Oid);
 
 impl_flat_serializable!(PgProcId);
 
-use super::{pg_server_to_any, PG_UTF8};
 // FIXME upstream to pgx
 // TODO use this or regprocedureout()?
 extern "C" {
@@ -35,7 +34,7 @@ impl Serialize for PgProcId {
         unsafe {
             let qualified_name = format_procedure_qualified(self.0);
             let len = CStr::from_ptr(qualified_name).to_bytes().len();
-            let qualified_name = pg_server_to_any(qualified_name, len as _, PG_UTF8);
+            let qualified_name = pg_sys::pg_server_to_any(qualified_name, len as _, pg_sys::pg_enc_PG_UTF8 as _);
             let qualified_name = CStr::from_ptr(qualified_name);
             let qualified_name = qualified_name.to_str().unwrap();
             qualified_name.serialize(serializer)

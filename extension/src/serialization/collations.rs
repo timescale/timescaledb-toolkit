@@ -1,6 +1,6 @@
 use std::{
     ffi::{CStr, CString},
-    os::raw::{c_char, c_int},
+    os::raw::c_char,
     slice,
     mem::{size_of, align_of, MaybeUninit},
 };
@@ -36,17 +36,11 @@ impl PgCollationId {
     }
 }
 
-// FIXME upstream to pgx
-const PG_UTF8: i32 = 6;
 #[allow(non_upper_case_globals)]
 const Anum_pg_collation_oid: u32 = 1;
 // https://github.com/postgres/postgres/blob/e955bd4b6c2bcdbd253837f6cf4c7520b98e69d4/src/include/catalog/pg_collation.dat
 const DEFAULT_COLLATION_OID: u32 = 100;
-extern "C" {
-    fn pg_server_to_any(s: *const c_char, len: c_int, encoding: c_int) -> *const c_char;
-    fn pg_any_to_server(s: *const c_char, len: c_int, encoding: c_int) -> *const c_char;
-    fn GetDatabaseEncoding() -> c_int;
-}
+
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone)]
 #[repr(C)]
@@ -107,7 +101,7 @@ impl Serialize for PgCollationId {
             }
 
             let namespace_len = CStr::from_ptr(namespace).to_bytes().len();
-            let namespace = pg_server_to_any(namespace, namespace_len as _, PG_UTF8);
+            let namespace = pg_sys::pg_server_to_any(namespace, namespace_len as _, pg_sys::pg_enc_PG_UTF8 as _);
             let namespace = CStr::from_ptr(namespace);
             let namespace = namespace.to_str().unwrap();
 
@@ -129,7 +123,7 @@ impl Serialize for PgCollationId {
                 };
 
             let collation_name_len = CStr::from_ptr(collation_name).to_bytes().len();
-            let collation_name = pg_server_to_any(collation_name, collation_name_len as _, PG_UTF8);
+            let collation_name = pg_sys::pg_server_to_any(collation_name, collation_name_len as _, pg_sys::pg_enc_PG_UTF8 as _);
             let collation_name = CStr::from_ptr(collation_name);
             let collation_name = collation_name.to_str().unwrap();
 
@@ -164,10 +158,10 @@ impl<'de> Deserialize<'de> for PgCollationId {
         );
         let (namespace_len, name_len) = (namespace.to_bytes().len(), name.to_bytes().len());
         unsafe {
-            let namespace = pg_any_to_server(namespace.as_ptr(), namespace_len as _, PG_UTF8);
+            let namespace = pg_sys::pg_any_to_server(namespace.as_ptr(), namespace_len as _, pg_sys::pg_enc_PG_UTF8 as _);
             let namespace = CStr::from_ptr(namespace);
 
-            let name = pg_any_to_server(name.as_ptr(), name_len as _, PG_UTF8);
+            let name = pg_sys::pg_any_to_server(name.as_ptr(), name_len as _, pg_sys::pg_enc_PG_UTF8 as _);
             let name = CStr::from_ptr(name);
 
             let namespace_id = pg_sys::LookupExplicitNamespace(namespace.as_ptr(), true as _);
@@ -190,7 +184,7 @@ impl<'de> Deserialize<'de> for PgCollationId {
                 pg_sys::SysCacheIdentifier_COLLNAMEENCNSP as _,
                 Anum_pg_collation_oid as _,
                 name.as_ptr() as Datum,
-                GetDatabaseEncoding() as _,
+                pg_sys::GetDatabaseEncoding() as _,
                 namespace_id as Datum,
                 0, //unused
             );

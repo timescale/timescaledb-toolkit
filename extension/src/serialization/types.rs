@@ -194,8 +194,6 @@ impl ShortTypIdSerializer {
 #[repr(transparent)]
 pub struct PgTypId(pub Oid);
 
-use super::{pg_server_to_any, pg_any_to_server, PG_UTF8};
-
 impl Serialize for PgTypId {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -216,13 +214,13 @@ impl Serialize for PgTypId {
             }
 
             let namespace_len = CStr::from_ptr(namespace).to_bytes().len();
-            let namespace = pg_server_to_any(namespace, namespace_len as _, PG_UTF8);
+            let namespace = pg_sys::pg_server_to_any(namespace, namespace_len as _, pg_sys::pg_enc_PG_UTF8 as _);
             let namespace = CStr::from_ptr(namespace);
             let namespace = namespace.to_str().unwrap();
 
             let type_name = (*type_tuple).typname.data.as_ptr();
             let type_name_len = CStr::from_ptr(type_name).to_bytes().len();
-            let type_name = pg_server_to_any(type_name, type_name_len as _, PG_UTF8);
+            let type_name = pg_sys::pg_server_to_any(type_name, type_name_len as _, pg_sys::pg_enc_PG_UTF8 as _);
             let type_name = CStr::from_ptr(type_name);
             let type_name = type_name.to_str().unwrap();
 
@@ -248,10 +246,10 @@ impl<'de> Deserialize<'de> for PgTypId {
         );
         let (namespace_len, name_len) = (namespace.to_bytes().len(), name.to_bytes().len());
         unsafe {
-            let namespace = pg_any_to_server(namespace.as_ptr(), namespace_len as _, PG_UTF8);
+            let namespace = pg_sys::pg_any_to_server(namespace.as_ptr(), namespace_len as _, pg_sys::pg_enc_PG_UTF8 as _);
             let namespace = CStr::from_ptr(namespace);
 
-            let name = pg_any_to_server(name.as_ptr(), name_len as _, PG_UTF8);
+            let name = pg_sys::pg_any_to_server(name.as_ptr(), name_len as _, pg_sys::pg_enc_PG_UTF8 as _);
             let name = CStr::from_ptr(name);
 
             let namespace_id = pg_sys::LookupExplicitNamespace(namespace.as_ptr(), true as _);

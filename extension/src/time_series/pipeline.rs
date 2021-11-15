@@ -230,14 +230,7 @@ pub(crate) unsafe fn pipeline_support_helper(
         return ptr::null_mut::<pg_sys::Expr>().internal()
     }
 
-    //FIXME add include/nodes/supportnodes.h to pgx headers
-    #[repr(C)]
-    struct SupportRequestSimplify {
-        ty: pg_sys::NodeTag,
-        root: *mut pg_sys::PlannerInfo,
-        fcall: *mut pg_sys::FuncExpr,
-    }
-    let req: *mut SupportRequestSimplify = input.cast();
+    let req: *mut pg_sys::SupportRequestSimplify = input.cast();
 
     let final_executor = (*req).fcall;
     let original_args = PgList::from_pg((*final_executor).args);

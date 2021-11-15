@@ -165,7 +165,7 @@ jobs:
           ${{ runner.os }}-cargo-build-target-pg14
 
     - name: Run PG 14 Tests
-      run: sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo test --workspace --features 'pg14 pg_test'"
+      run: sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo test --workspace --features 'pg14 pg_test'" --frozen
 
     - name: Run post-install tests
       run: |

@@ -40,6 +40,13 @@ RUN set -ex \
         && make -j4 \
         && make -j4 install \
         && echo "shared_preload_libraries = 'timescaledb'" >> ~/.pgx/data-13/postgresql.conf \
+    && cd .. \
+    && rm -rf ./build \
+        && ./bootstrap -DPG_CONFIG=~/.pgx/14.0/pgx-install/bin/pg_config -DCMAKE_BUILD_TYPE="RelWithDebInfo" -DUSE_OPENSSL=false -DSEND_TELEMETRY_DEFAULT=false -DREGRESS_CHECKS=false \
+        && cd build \
+        && make -j4 \
+        && make -j4 install \
+        && echo "shared_preload_libraries = 'timescaledb'" >> ~/.pgx/data-14/postgresql.conf \
     && cd ~ \
     && rm -rf ~/timescaledb
 

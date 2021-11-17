@@ -171,10 +171,9 @@ jobs:
       run: |
         sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg14 && /usr/local/cargo/bin/cargo pgx start pg14"
         RUST_BACKTRACE=short cargo run --manifest-path ./tools/post-install/Cargo.toml /home/postgres/.pgx/14.0/pgx-install/bin/pg_config
-        cargo run --manifest-path ./tools/testrunner/Cargo.toml -- -h localhost -p 28813
+        cargo run --manifest-path ./tools/testrunner/Cargo.toml -- -h localhost -p 28814
 
-    # TODO These require TimescaleDB to support pg14
-    # - name: Run Doc Tests
-    #   run: |
-    #     sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg14 && /usr/local/cargo/bin/cargo pgx start pg14"
-    #     sql-doctester -h localhost -s "CREATE EXTENSION timescaledb; CREATE EXTENSION timescaledb_toolkit; SET SESSION TIMEZONE TO 'UTC'" -p 28813 docs
+    - name: Run Doc Tests
+      run: |
+        sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg14 && /usr/local/cargo/bin/cargo pgx start pg14"
+        sql-doctester -h localhost -s "CREATE EXTENSION timescaledb; CREATE EXTENSION timescaledb_toolkit; SET SESSION TIMEZONE TO 'UTC'" -p 28814 docs

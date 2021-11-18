@@ -8,6 +8,7 @@ fn timescaledb_toolkit_probe() {
 }
 
 extension_sql!(r#"
+GRANT USAGE ON SCHEMA toolkit_experimental TO PUBLIC;
 CREATE OR REPLACE FUNCTION disallow_experimental_dependencies()
   RETURNS event_trigger
  LANGUAGE plpgsql

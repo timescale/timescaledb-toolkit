@@ -2,7 +2,7 @@
 name = "flat_serialize"
 version = "0.1.0"
 authors = ["Joshua Lockerman"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 ordered-float = "1.0"

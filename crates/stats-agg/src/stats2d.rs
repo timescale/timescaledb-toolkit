@@ -19,6 +19,11 @@ pub struct StatsSummary2D {
     pub sxy: f64, // sum((x-sx/n)*(y-sy/n)) (sum of products)
 }
 
+impl Default for StatsSummary2D {
+    fn default() -> Self {
+       Self::new()
+    }
+}
 
 impl StatsSummary2D {
     pub fn new() -> Self {
@@ -172,7 +177,7 @@ impl StatsSummary2D {
         }
 
         // we can't have an initial value of n = 0 if we're removing something...
-        if self.n <= 0 {
+        if self.n == 0 {
             panic!(); //perhaps we should do error handling here, but I think this is reasonable as we are assuming that the removal is of an already-added item in the rest of this
         }
 
@@ -257,7 +262,7 @@ impl StatsSummary2D {
         let tmpy = self.sy / self.n64() - other.sy / other.n64();
         let n = self.n + other.n;
         let r = StatsSummary2D {
-            n: n,
+            n,
             sx: self.sx + other.sx,
             sx2: self.sx2 + other.sx2 + self.n64() * other.n64() * tmpx * tmpx / n as f64,
             sx3: M3::combine(self.n64(), other.n64(), self.sx, other.sx, self.sx2, other.sx2, self.sx3, other.sx3),
@@ -285,10 +290,7 @@ impl StatsSummary2D {
             return Some(StatsSummary2D::new());
         }  else if remove.n == 0 {
             return Some(*self);
-        } else if combined.n == 0 {
-            // if we've gotten here remove.n != 0, this should never occur, we can't subtract from nothing
-            panic!();
-        } else if  combined.n < remove.n {
+        } else if combined.n < remove.n {
             panic!(); //  given that we're always removing things that we've previously added, we shouldn't be able to get a case where we're removing an n that's larger.
         }
         // if the sum we're removing is very large compared to the overall value we need to recalculate, see note on the remove function
@@ -335,8 +337,8 @@ impl StatsSummary2D {
         // Y + C - Sy/N - C
         // Y - Sy/N
     pub fn offset(&mut self, offset: XYPair) -> Result<(), StatsError> {
-        self.sx = self.sx + self.n64() * offset.x;
-        self.sy = self.sy + self.n64() * offset.y;
+        self.sx += self.n64() * offset.x;
+        self.sy += self.n64() * offset.y;
         if self.has_infinite() && offset.x.is_finite() && offset.y.is_finite(){
             return Err(StatsError::DoubleOverflow);
         }

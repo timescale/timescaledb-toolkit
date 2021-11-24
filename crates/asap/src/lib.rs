@@ -1,7 +1,7 @@
 mod fft;
 
 // Smooth out the data to promote human readability, resolution is an upper bound on the number of points returned
-pub fn asap_smooth(data: &Vec<f64>, resolution: u32) -> Vec<f64> {
+pub fn asap_smooth(data: &[f64], resolution: u32) -> Vec<f64> {
     use std::borrow::Cow;
     
     let data = if data.len() > 2 * resolution as usize {
@@ -11,14 +11,14 @@ pub fn asap_smooth(data: &Vec<f64>, resolution: u32) -> Vec<f64> {
         Cow::Borrowed(data)
     };
 
-    let mut acf = ACF::new(&data, (data.len() as f64 / 10.0).round() as u32);
+    let mut acf = Acf::new(&data, (data.len() as f64 / 10.0).round() as u32);
     let peaks = acf.find_peaks();
     let mut metrics = Metrics::new(&data);
     let original_kurt = metrics.kurtosis();
     let mut min_obj = metrics.roughness();
-    let mut window_size = 1 as u32;
+    let mut window_size = 1_u32;
     let mut lb = 1;
-    let mut largest_feasible = -1 as i32;
+    let mut largest_feasible = -1_i32;
     let mut tail = data.len() as u32 / 10;
 
     for i in (0..peaks.len()).rev() {
@@ -59,7 +59,7 @@ pub fn asap_smooth(data: &Vec<f64>, resolution: u32) -> Vec<f64> {
     sma(&data, window_size, 1)
 }
 
-fn binary_search(head: u32, tail:u32, data: &Vec<f64>, min_obj: f64, original_kurt: f64, window_size: u32) -> u32 {
+fn binary_search(head: u32, tail:u32, data: &[f64], min_obj: f64, original_kurt: f64, window_size: u32) -> u32 {
     let mut head = head;
     let mut tail = tail;
     let mut min_obj = min_obj;
@@ -83,7 +83,7 @@ fn binary_search(head: u32, tail:u32, data: &Vec<f64>, min_obj: f64, original_ku
 }
 
 
-fn sma(data: &Vec<f64>, range: u32, slide: u32) -> Vec<f64> {
+fn sma(data: &[f64], range: u32, slide: u32) -> Vec<f64> {
     let mut window_start = 0;
     let mut sum = 0.0;
     let mut count = 0;
@@ -106,21 +106,21 @@ fn sma(data: &Vec<f64>, range: u32, slide: u32) -> Vec<f64> {
     values
 }
 
-fn mean(values: &Vec<f64>) -> f64 {
+fn mean(values: &[f64]) -> f64 {
     values.iter().sum::<f64>() / values.len() as f64
 }
 
-fn std(values: &Vec<f64>) -> f64 {
+fn std(values: &[f64]) -> f64 {
     let m = mean(values);
 
     let std: f64 = values.iter().map(|&x| (x-m).powi(2)).sum();
     (std / values.len() as f64).sqrt()
 }
 
-impl<'a> ACF<'a> {
-    fn new(values: &'a Vec<f64>, max_lag: u32) -> ACF<'a> {
-        let mut acf = ACF {
-            mean: mean(&values),
+impl<'a> Acf<'a> {
+    fn new(values: &'a [f64], max_lag: u32) -> Acf<'a> {
+        let mut acf = Acf {
+            mean: mean(values),
             values,
             correlations: Vec::with_capacity(max_lag as usize),
             max_acf: 0.0,
@@ -131,12 +131,12 @@ impl<'a> ACF<'a> {
 
     fn calculate(&mut self) {
         /* Padding to the closest power of 2 */
-        let len = (2 as u32).pow((self.values.len() as f64).log2() as u32 + 1);
+        let len = (2_u32).pow((self.values.len() as f64).log2() as u32 + 1);
         let mut fftreal = vec![0.0; len as usize];
         let mut fftimg = vec![0.0; len as usize];
 
-        for i in 0..self.values.len() {
-            fftreal[i] = self.values[i] - self.mean;
+        for (i, real) in fftreal.iter_mut().enumerate().take(self.values.len()) {
+            *real = self.values[i] - self.mean;
         }
 
         /* F_R(f) = FFT(X) */
@@ -169,14 +169,12 @@ impl<'a> ACF<'a> {
                     positive = !positive;
                 } else if positive && self.correlations[i] > self.correlations[max] {
                     max = i;
-                } else if positive && self.correlations[i] < self.correlations[i-1] {
-                    if max > 1 && self.correlations[max] > CORR_THRESH {
-                        peak_indicies.push(max as u32);
-                        if self.correlations[max] > self.max_acf {
-                            self.max_acf = self.correlations[max];
-                        }
-                        positive = !positive;
+                } else if positive && self.correlations[i] < self.correlations[i-1] && max > 1 && self.correlations[max] > CORR_THRESH {
+                    peak_indicies.push(max as u32);
+                    if self.correlations[max] > self.max_acf {
+                        self.max_acf = self.correlations[max];
                     }
+                    positive = !positive;
                 }
             }
         }
@@ -196,12 +194,12 @@ impl<'a> ACF<'a> {
 
 struct Metrics<'a> {
     len: u32,
-    values: &'a Vec<f64>,
+    values: &'a [f64],
     m: f64,
 }
 
 impl<'a> Metrics<'a> {
-    fn new(values: &Vec<f64>) -> Metrics {
+    fn new(values: &[f64]) -> Metrics {
         Metrics {
             len: values.len() as u32,
             values,
@@ -234,9 +232,9 @@ impl<'a> Metrics<'a> {
     }
 }
 
-struct ACF<'a> {
+struct Acf<'a> {
     mean: f64,
-    values: &'a Vec<f64>,
+    values: &'a [f64],
     correlations: Vec<f64>,
     max_acf: f64,
 }

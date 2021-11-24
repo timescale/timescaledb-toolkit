@@ -361,7 +361,6 @@ pub trait Tracer {
 
 impl Tracer for () {
     fn trace(&mut self, _: &ExpressionSegment, _: &Value) {
-        ()
     }
 }
 

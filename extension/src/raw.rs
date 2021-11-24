@@ -52,9 +52,9 @@ macro_rules! raw_type {
             }
         }
 
-        impl Into<pg_sys::Datum> for $name {
-            fn into(self) -> pg_sys::Datum {
-                self.0
+        impl From<$name> for pg_sys::Datum {
+            fn from(v: $name) -> Self {
+                v.0
             }
         }
     }
@@ -69,9 +69,9 @@ pub struct TimestampTz(pub pg_sys::Datum);
 
 raw_type!(TimestampTz, pg_sys::TIMESTAMPTZOID, pg_sys::TIMESTAMPTZARRAYOID);
 
-impl Into<pg_sys::TimestampTz> for TimestampTz {
-    fn into(self) -> pg_sys::TimestampTz {
-        self.0 as _
+impl From<TimestampTz> for pg_sys::TimestampTz {
+    fn from(tstz: TimestampTz) -> Self {
+        tstz.0 as _
     }
 }
 

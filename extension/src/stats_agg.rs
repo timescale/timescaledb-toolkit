@@ -118,7 +118,7 @@ impl<'input> StatsSummary2D<'input> {
 
 
 #[pg_extern(immutable, parallel_safe, strict)]
-pub fn stats1d_trans_serialize<'s>(
+pub fn stats1d_trans_serialize(
     state: Internal,
 ) -> bytea {
     let ser: &StatsSummary1DData = unsafe { state.get().unwrap() };
@@ -140,7 +140,7 @@ pub fn stats1d_trans_deserialize_inner(
 }
 
 #[pg_extern(immutable, parallel_safe, strict)]
-pub fn stats2d_trans_serialize<'s>(
+pub fn stats2d_trans_serialize(
     state: Internal,
 ) -> bytea {
     let ser: &StatsSummary2DData = unsafe { state.get().unwrap() };
@@ -169,11 +169,11 @@ pub fn stats1d_trans<'s>(
 ) -> Internal {
     stats1d_trans_inner(unsafe{ state.to_inner() }, val, fcinfo).internal()
 }
-pub fn stats1d_trans_inner<'s>(
-    state: Option<Inner<StatsSummary1D<'s>>>,
+pub fn stats1d_trans_inner(
+    state: Option<Inner<StatsSummary1D>>,
     val: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<StatsSummary1D<'s>>> {
+) -> Option<Inner<StatsSummary1D>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state, val) {
@@ -205,12 +205,12 @@ pub fn stats2d_trans(
 ) -> Internal {
     stats2d_trans_inner(unsafe{ state.to_inner() }, y, x, fcinfo).internal()
 }
-pub fn stats2d_trans_inner<'s>(
-    state: Option<Inner<StatsSummary2D<'s>>>,
+pub fn stats2d_trans_inner(
+    state: Option<Inner<StatsSummary2D>>,
     y: Option<f64>,
     x: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<StatsSummary2D<'s>>> {
+) -> Option<Inner<StatsSummary2D>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let val: Option<XYPair> = match (y, x) {
@@ -239,18 +239,18 @@ pub fn stats2d_trans_inner<'s>(
 
 
 #[pg_extern(immutable)]
-pub fn stats1d_inv_trans<'s>(
+pub fn stats1d_inv_trans(
     state: Internal,
     val: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Internal {
     stats1d_inv_trans_inner(unsafe{ state.to_inner()}, val, fcinfo).internal()
 }
-pub fn stats1d_inv_trans_inner<'s>(
-    state: Option<Inner<StatsSummary1D<'s>>>,
+pub fn stats1d_inv_trans_inner(
+    state: Option<Inner<StatsSummary1D>>,
     val: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<StatsSummary1D<'s>>> {
+) -> Option<Inner<StatsSummary1D>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state, val) {
@@ -259,10 +259,7 @@ pub fn stats1d_inv_trans_inner<'s>(
                 (Some(state), Some(val)) => {
                     let s: InternalStatsSummary1D = state.to_internal();
                     let s = s.remove(val);
-                    match s {
-                        None => None,
-                        Some(s) => Some(StatsSummary1D::from_internal(s).into())
-                    }
+                    s.map(|s| StatsSummary1D::from_internal(s).into())
                 },
             }
         })
@@ -278,12 +275,12 @@ pub fn stats2d_inv_trans(
 ) -> Internal {
     stats2d_inv_trans_inner(unsafe{ state.to_inner()}, y, x, fcinfo).internal()
 }
-pub fn stats2d_inv_trans_inner<'s>(
-    state: Option<Inner<StatsSummary2D<'s>>>,
+pub fn stats2d_inv_trans_inner(
+    state: Option<Inner<StatsSummary2D>>,
     y: Option<f64>,
     x: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<StatsSummary2D<'s>>> {
+) -> Option<Inner<StatsSummary2D>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let val: Option<XYPair> = match (y, x) {
@@ -297,10 +294,7 @@ pub fn stats2d_inv_trans_inner<'s>(
                 (Some(state), Some(val)) => {
                     let s: InternalStatsSummary2D = state.to_internal();
                     let s = s.remove(val);
-                    match s {
-                        None => None,
-                        Some(s) => Some(StatsSummary2D::from_internal(s).into())
-                    }
+                    s.map(|s| StatsSummary2D::from_internal(s).into())
                 },
             }
         })
@@ -309,16 +303,16 @@ pub fn stats2d_inv_trans_inner<'s>(
 
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn stats1d_summary_trans<'v>(
+pub fn stats1d_summary_trans(
     state: Internal,
-    value: Option<StatsSummary1D<'v>>,
+    value: Option<StatsSummary1D>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Internal {
     stats1d_summary_trans_inner(unsafe{ state.to_inner() }, value, fcinfo).internal()
 }
-pub fn stats1d_summary_trans_inner<'s, 'v>(
+pub fn stats1d_summary_trans_inner<'s>(
     state: Option<Inner<StatsSummary1D<'s>>>,
-    value: Option<StatsSummary1D<'v>>,
+    value: Option<StatsSummary1D>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<StatsSummary1D<'s>>> {
     unsafe {
@@ -341,16 +335,16 @@ pub fn stats1d_summary_trans_inner<'s, 'v>(
 
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn stats2d_summary_trans<'v>(
+pub fn stats2d_summary_trans(
     state: Internal,
-    value: Option<StatsSummary2D<'v>>,
+    value: Option<StatsSummary2D>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Internal {
     stats2d_summary_trans_inner(unsafe{ state.to_inner() }, value, fcinfo).internal()
 }
-pub fn stats2d_summary_trans_inner<'s, 'v>(
+pub fn stats2d_summary_trans_inner<'s>(
     state: Option<Inner<StatsSummary2D<'s>>>,
-    value: Option<StatsSummary2D<'v>>,
+    value: Option<StatsSummary2D>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<StatsSummary2D<'s>>> {
     unsafe {
@@ -371,16 +365,16 @@ pub fn stats2d_summary_trans_inner<'s, 'v>(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn stats1d_summary_inv_trans<'s, 'v>(
+pub fn stats1d_summary_inv_trans(
     state: Internal,
-    value: Option<StatsSummary1D<'v>>,
+    value: Option<StatsSummary1D>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Internal {
     stats1d_summary_inv_trans_inner(unsafe{ state.to_inner() }, value, fcinfo).internal()
 }
-pub fn stats1d_summary_inv_trans_inner<'s, 'v>(
+pub fn stats1d_summary_inv_trans_inner<'s>(
     state: Option<Inner<StatsSummary1D<'s>>>,
-    value: Option<StatsSummary1D<'v>>,
+    value: Option<StatsSummary1D>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<StatsSummary1D<'s>>> {
     unsafe {
@@ -392,10 +386,7 @@ pub fn stats1d_summary_inv_trans_inner<'s, 'v>(
                     let s = state.to_internal();
                     let v = value.to_internal();
                     let s = s.remove_combined(v);
-                    match s {
-                        None => None,
-                        Some(s) => Some(StatsSummary1D::from_internal(s).into()),
-                    }
+                    s.map(|s| StatsSummary1D::from_internal(s).into())
                 }
             }
         })
@@ -403,16 +394,16 @@ pub fn stats1d_summary_inv_trans_inner<'s, 'v>(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn stats2d_summary_inv_trans<'v>(
+pub fn stats2d_summary_inv_trans(
     state: Internal,
-    value: Option<StatsSummary2D<'v>>,
+    value: Option<StatsSummary2D>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Internal {
     stats2d_summary_inv_trans_inner(unsafe {state.to_inner()}, value, fcinfo).internal()
 }
-pub fn stats2d_summary_inv_trans_inner<'s, 'v>(
+pub fn stats2d_summary_inv_trans_inner<'s>(
     state: Option<Inner<StatsSummary2D<'s>>>,
-    value: Option<StatsSummary2D<'v>>,
+    value: Option<StatsSummary2D>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<StatsSummary2D<'s>>> {
     unsafe {
@@ -424,10 +415,7 @@ pub fn stats2d_summary_inv_trans_inner<'s, 'v>(
                     let s = state.to_internal();
                     let v = value.to_internal();
                     let s = s.remove_combined(v);
-                    match s {
-                        None => None,
-                        Some(s) => Some(StatsSummary2D::from_internal(s).into()),
-                    }
+                    s.map(|s| StatsSummary2D::from_internal(s).into())
                 }
             }
         })
@@ -1508,13 +1496,14 @@ mod tests {
         }
     }
 
-    fn check_agg_equivalence(state: &TestState, client: &SpiClient, pg_cmd: &String, tk_cmd: &String, allowed_diff: f64) {
-        let pg_result = client.select(&pg_cmd, None, None)
+    #[allow(clippy::float_cmp)]
+    fn check_agg_equivalence(state: &TestState, client: &SpiClient, pg_cmd: &str, tk_cmd: &str, allowed_diff: f64) {
+        let pg_result = client.select(pg_cmd, None, None)
             .first()
             .get_one::<f64>()
             .unwrap();
 
-        let (tk_result, arrow_result) = client.select(&tk_cmd, None, None)
+        let (tk_result, arrow_result) = client.select(tk_cmd, None, None)
             .first()
             .get_two::<f64, f64>();
         let (tk_result, arrow_result) = (tk_result.unwrap(), arrow_result.unwrap());
@@ -1599,7 +1588,7 @@ mod tests {
             client.select(&format!("INSERT INTO test_table VALUES {}",
                 state.x_values.iter().zip(state.y_values.iter()).map(
                     |(x, y)| "(".to_string() + &x.to_string() + "," + &y.to_string()+ ")" + ","
-                ).collect::<String>().trim_end_matches(",")), None, None);
+                ).collect::<String>().trim_end_matches(',')), None, None);
 
             // Definitions for allowed errors for different aggregates
             const NONE: f64 = 0.;                 // Exact match
@@ -1608,56 +1597,56 @@ mod tests {
             const EPS3: f64 = 3. * f64::EPSILON;  // Sum of squares in variance agg accumulates a bit more error
             const BILLIONTH: f64 = 1e-9;          // Higher order moments exponentially compound the error
 
-            check_agg_equivalence(&state, &client, &pg1d_aggx("avg"), &tk1d_agg("average"), NONE);
-            check_agg_equivalence(&state, &client, &pg1d_aggx("sum"), &tk1d_agg("sum"), NONE);
-            check_agg_equivalence(&state, &client, &pg1d_aggx("count"), &tk1d_agg("num_vals"), NONE);
-            check_agg_equivalence(&state, &client, &pg1d_aggx("stddev"), &tk1d_agg("stddev"), EPS2);
-            check_agg_equivalence(&state, &client, &pg1d_aggx("stddev_pop"), &tk1d_agg_arg("stddev", "population"), EPS2);
-            check_agg_equivalence(&state, &client, &pg1d_aggx("stddev_samp"), &tk1d_agg_arg("stddev", "sample"), EPS2);
-            check_agg_equivalence(&state, &client, &pg1d_aggx("variance"), &tk1d_agg("variance"), EPS3);
-            check_agg_equivalence(&state, &client, &pg1d_aggx("var_pop"), &tk1d_agg_arg("variance", "population"), EPS3);
-            check_agg_equivalence(&state, &client, &pg1d_aggx("var_samp"), &tk1d_agg_arg("variance", "sample"), EPS3);
+            check_agg_equivalence(state, &client, &pg1d_aggx("avg"), &tk1d_agg("average"), NONE);
+            check_agg_equivalence(state, &client, &pg1d_aggx("sum"), &tk1d_agg("sum"), NONE);
+            check_agg_equivalence(state, &client, &pg1d_aggx("count"), &tk1d_agg("num_vals"), NONE);
+            check_agg_equivalence(state, &client, &pg1d_aggx("stddev"), &tk1d_agg("stddev"), EPS2);
+            check_agg_equivalence(state, &client, &pg1d_aggx("stddev_pop"), &tk1d_agg_arg("stddev", "population"), EPS2);
+            check_agg_equivalence(state, &client, &pg1d_aggx("stddev_samp"), &tk1d_agg_arg("stddev", "sample"), EPS2);
+            check_agg_equivalence(state, &client, &pg1d_aggx("variance"), &tk1d_agg("variance"), EPS3);
+            check_agg_equivalence(state, &client, &pg1d_aggx("var_pop"), &tk1d_agg_arg("variance", "population"), EPS3);
+            check_agg_equivalence(state, &client, &pg1d_aggx("var_samp"), &tk1d_agg_arg("variance", "sample"), EPS3);
 
-            check_agg_equivalence(&state, &client, &pg2d_agg("regr_avgx"), &tk2d_agg("average_x"), NONE);
-            check_agg_equivalence(&state, &client, &pg2d_agg("regr_avgy"), &tk2d_agg("average_y"), NONE);
-            check_agg_equivalence(&state, &client, &pg1d_aggx("sum"), &tk2d_agg("sum_x"), NONE);
-            check_agg_equivalence(&state, &client, &pg1d_aggy("sum"), &tk2d_agg("sum_y"), NONE);
-            check_agg_equivalence(&state, &client, &pg1d_aggx("stddev"), &tk2d_agg("stddev_x"), EPS2);
-            check_agg_equivalence(&state, &client, &pg1d_aggy("stddev"), &tk2d_agg("stddev_y"), EPS2);
-            check_agg_equivalence(&state, &client, &pg1d_aggx("stddev_pop"), &tk2d_agg_arg("stddev_x", "population"), EPS2);
-            check_agg_equivalence(&state, &client, &pg1d_aggy("stddev_pop"), &tk2d_agg_arg("stddev_y", "population"), EPS2);
-            check_agg_equivalence(&state, &client, &pg1d_aggx("stddev_samp"), &tk2d_agg_arg("stddev_x", "sample"), EPS2);
-            check_agg_equivalence(&state, &client, &pg1d_aggy("stddev_samp"), &tk2d_agg_arg("stddev_y", "sample"), EPS2);
-            check_agg_equivalence(&state, &client, &pg1d_aggx("variance"), &tk2d_agg("variance_x"), EPS3);
-            check_agg_equivalence(&state, &client, &pg1d_aggy("variance"), &tk2d_agg("variance_y"), EPS3);
-            check_agg_equivalence(&state, &client, &pg1d_aggx("var_pop"), &tk2d_agg_arg("variance_x", "population"), EPS3);
-            check_agg_equivalence(&state, &client, &pg1d_aggy("var_pop"), &tk2d_agg_arg("variance_y", "population"), EPS3);
-            check_agg_equivalence(&state, &client, &pg1d_aggx("var_samp"), &tk2d_agg_arg("variance_x", "sample"), EPS3);
-            check_agg_equivalence(&state, &client, &pg1d_aggy("var_samp"), &tk2d_agg_arg("variance_y", "sample"), EPS3);
-            check_agg_equivalence(&state, &client, &pg2d_agg("regr_count"), &tk2d_agg("num_vals"), NONE);
+            check_agg_equivalence(state, &client, &pg2d_agg("regr_avgx"), &tk2d_agg("average_x"), NONE);
+            check_agg_equivalence(state, &client, &pg2d_agg("regr_avgy"), &tk2d_agg("average_y"), NONE);
+            check_agg_equivalence(state, &client, &pg1d_aggx("sum"), &tk2d_agg("sum_x"), NONE);
+            check_agg_equivalence(state, &client, &pg1d_aggy("sum"), &tk2d_agg("sum_y"), NONE);
+            check_agg_equivalence(state, &client, &pg1d_aggx("stddev"), &tk2d_agg("stddev_x"), EPS2);
+            check_agg_equivalence(state, &client, &pg1d_aggy("stddev"), &tk2d_agg("stddev_y"), EPS2);
+            check_agg_equivalence(state, &client, &pg1d_aggx("stddev_pop"), &tk2d_agg_arg("stddev_x", "population"), EPS2);
+            check_agg_equivalence(state, &client, &pg1d_aggy("stddev_pop"), &tk2d_agg_arg("stddev_y", "population"), EPS2);
+            check_agg_equivalence(state, &client, &pg1d_aggx("stddev_samp"), &tk2d_agg_arg("stddev_x", "sample"), EPS2);
+            check_agg_equivalence(state, &client, &pg1d_aggy("stddev_samp"), &tk2d_agg_arg("stddev_y", "sample"), EPS2);
+            check_agg_equivalence(state, &client, &pg1d_aggx("variance"), &tk2d_agg("variance_x"), EPS3);
+            check_agg_equivalence(state, &client, &pg1d_aggy("variance"), &tk2d_agg("variance_y"), EPS3);
+            check_agg_equivalence(state, &client, &pg1d_aggx("var_pop"), &tk2d_agg_arg("variance_x", "population"), EPS3);
+            check_agg_equivalence(state, &client, &pg1d_aggy("var_pop"), &tk2d_agg_arg("variance_y", "population"), EPS3);
+            check_agg_equivalence(state, &client, &pg1d_aggx("var_samp"), &tk2d_agg_arg("variance_x", "sample"), EPS3);
+            check_agg_equivalence(state, &client, &pg1d_aggy("var_samp"), &tk2d_agg_arg("variance_y", "sample"), EPS3);
+            check_agg_equivalence(state, &client, &pg2d_agg("regr_count"), &tk2d_agg("num_vals"), NONE);
 
-            check_agg_equivalence(&state, &client, &pg2d_agg("regr_slope"), &tk2d_agg("slope"), EPS1);
-            check_agg_equivalence(&state, &client, &pg2d_agg("corr"), &tk2d_agg("corr"), EPS1);
-            check_agg_equivalence(&state, &client, &pg2d_agg("regr_intercept"), &tk2d_agg("intercept"), EPS1);
+            check_agg_equivalence(state, &client, &pg2d_agg("regr_slope"), &tk2d_agg("slope"), EPS1);
+            check_agg_equivalence(state, &client, &pg2d_agg("corr"), &tk2d_agg("corr"), EPS1);
+            check_agg_equivalence(state, &client, &pg2d_agg("regr_intercept"), &tk2d_agg("intercept"), EPS1);
             // check_agg_equivalence(&state, &client, &pg2d_agg(""), &tk2d_agg("x_intercept"), 0.0000001); !!! No postgres equivalent for x_intercept
-            check_agg_equivalence(&state, &client, &pg2d_agg("regr_r2"), &tk2d_agg("determination_coeff"), EPS1);
-            check_agg_equivalence(&state, &client, &pg2d_agg("covar_pop"), &tk2d_agg_arg("covariance", "population"), EPS1);
-            check_agg_equivalence(&state, &client, &pg2d_agg("covar_samp"), &tk2d_agg_arg("covariance", "sample"), EPS1);
+            check_agg_equivalence(state, &client, &pg2d_agg("regr_r2"), &tk2d_agg("determination_coeff"), EPS1);
+            check_agg_equivalence(state, &client, &pg2d_agg("covar_pop"), &tk2d_agg_arg("covariance", "population"), EPS1);
+            check_agg_equivalence(state, &client, &pg2d_agg("covar_samp"), &tk2d_agg_arg("covariance", "sample"), EPS1);
 
             // Skewness and kurtosis don't have aggregate functions in postgres, but we can compute them
-            check_agg_equivalence(&state, &client, &pg_moment_pop_query(3, "test_x"), &tk1d_agg_arg("skewness", "population"), BILLIONTH);
-            check_agg_equivalence(&state, &client, &pg_moment_pop_query(3, "test_x"), &tk2d_agg_arg("skewness_x", "population"), BILLIONTH);
-            check_agg_equivalence(&state, &client, &pg_moment_pop_query(3, "test_y"), &tk2d_agg_arg("skewness_y", "population"), BILLIONTH);
-            check_agg_equivalence(&state, &client, &pg_moment_pop_query(4, "test_x"), &tk1d_agg_arg("kurtosis", "population"), BILLIONTH);
-            check_agg_equivalence(&state, &client, &pg_moment_pop_query(4, "test_x"), &tk2d_agg_arg("kurtosis_x", "population"), BILLIONTH);
-            check_agg_equivalence(&state, &client, &pg_moment_pop_query(4, "test_y"), &tk2d_agg_arg("kurtosis_y", "population"), BILLIONTH);
+            check_agg_equivalence(state, &client, &pg_moment_pop_query(3, "test_x"), &tk1d_agg_arg("skewness", "population"), BILLIONTH);
+            check_agg_equivalence(state, &client, &pg_moment_pop_query(3, "test_x"), &tk2d_agg_arg("skewness_x", "population"), BILLIONTH);
+            check_agg_equivalence(state, &client, &pg_moment_pop_query(3, "test_y"), &tk2d_agg_arg("skewness_y", "population"), BILLIONTH);
+            check_agg_equivalence(state, &client, &pg_moment_pop_query(4, "test_x"), &tk1d_agg_arg("kurtosis", "population"), BILLIONTH);
+            check_agg_equivalence(state, &client, &pg_moment_pop_query(4, "test_x"), &tk2d_agg_arg("kurtosis_x", "population"), BILLIONTH);
+            check_agg_equivalence(state, &client, &pg_moment_pop_query(4, "test_y"), &tk2d_agg_arg("kurtosis_y", "population"), BILLIONTH);
 
-            check_agg_equivalence(&state, &client, &pg_moment_samp_query(3, "test_x"), &tk1d_agg_arg("skewness", "sample"), BILLIONTH);
-            check_agg_equivalence(&state, &client, &pg_moment_samp_query(3, "test_x"), &tk2d_agg_arg("skewness_x", "sample"), BILLIONTH);
-            check_agg_equivalence(&state, &client, &pg_moment_samp_query(3, "test_y"), &tk2d_agg_arg("skewness_y", "sample"), BILLIONTH);
-            check_agg_equivalence(&state, &client, &pg_moment_samp_query(4, "test_x"), &tk1d_agg_arg("kurtosis", "sample"), BILLIONTH);
-            check_agg_equivalence(&state, &client, &pg_moment_samp_query(4, "test_x"), &tk2d_agg_arg("kurtosis_x", "sample"), BILLIONTH);
-            check_agg_equivalence(&state, &client, &pg_moment_samp_query(4, "test_y"), &tk2d_agg_arg("kurtosis_y", "sample"), BILLIONTH);
+            check_agg_equivalence(state, &client, &pg_moment_samp_query(3, "test_x"), &tk1d_agg_arg("skewness", "sample"), BILLIONTH);
+            check_agg_equivalence(state, &client, &pg_moment_samp_query(3, "test_x"), &tk2d_agg_arg("skewness_x", "sample"), BILLIONTH);
+            check_agg_equivalence(state, &client, &pg_moment_samp_query(3, "test_y"), &tk2d_agg_arg("skewness_y", "sample"), BILLIONTH);
+            check_agg_equivalence(state, &client, &pg_moment_samp_query(4, "test_x"), &tk1d_agg_arg("kurtosis", "sample"), BILLIONTH);
+            check_agg_equivalence(state, &client, &pg_moment_samp_query(4, "test_x"), &tk2d_agg_arg("kurtosis_x", "sample"), BILLIONTH);
+            check_agg_equivalence(state, &client, &pg_moment_samp_query(4, "test_y"), &tk2d_agg_arg("kurtosis_y", "sample"), BILLIONTH);
 
             client.select("DROP TABLE test_table",
                 None,

@@ -95,7 +95,7 @@ pub fn str_to_db_encoding(s: &str) -> EncodedStr {
     }
 
     let cstr = unsafe { CStr::from_ptr(encoded) };
-    return EncodedStr::Other(cstr)
+    EncodedStr::Other(cstr)
 }
 
 pub fn str_from_db_encoding(s: &CStr) -> &str {

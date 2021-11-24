@@ -39,7 +39,7 @@ fn ts_to_xy(pt: TSPoint) -> XYPair{
 }
 
 fn to_seconds(t: f64)-> f64{
-    t / 1_000_000 as f64// by default postgres timestamps have microsecond precision
+    t / 1_000_000_f64 // by default postgres timestamps have microsecond precision
 }
 
 /// CounterSummary tracks monotonically increasing counters that may reset, ie every time the value decreases
@@ -79,7 +79,8 @@ impl CounterSummary {
             self.num_resets+= 1;
         }
         // right now we treat a counter reset that goes to exactly zero as a change (not sure that's correct, but it seems defensible)
-        if incoming.val != self.last.val{
+        #[allow(clippy::float_cmp)]  // These values are not rounded, so direct comparison is valid
+        if incoming.val != self.last.val {
             self.num_changes += 1;
         }
         if self.first == self.second {
@@ -104,7 +105,8 @@ impl CounterSummary {
             return Err(CounterError::OrderError);
         }
 
-        if self.last.val != incoming.first.val{
+        #[allow(clippy::float_cmp)]  // These values are not rounded, so direct comparison is valid
+        if self.last.val != incoming.first.val {
             self.num_changes += 1;
             if  incoming.first.val < self.last.val {
                 self.reset_sum += self.last.val;
@@ -120,7 +122,7 @@ impl CounterSummary {
         if self.single_value() {
             self.second = incoming.first;
         }
-        let mut stats = incoming.stats.clone();
+        let mut stats = incoming.stats;
         // have to offset based on our reset_sum, including the amount we added based on any resets that happened at the boundary (but before we add in the incoming reset_sum)
         stats.offset(XYPair{x:0.0, y: self.reset_sum}).unwrap();
         self.last = incoming.last;
@@ -251,7 +253,7 @@ impl CounterSummary {
         } else {
             extrapolate_to_interval += avg_duration_between_samples / 2.0
         }
-        result_val = result_val * (extrapolate_to_interval / sampled_interval);
+        result_val *= extrapolate_to_interval / sampled_interval;
         Ok(Some(result_val))
     }
 

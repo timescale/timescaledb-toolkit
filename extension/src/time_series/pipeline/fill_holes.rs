@@ -11,16 +11,16 @@ use super::*;
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug, FlatSerializable)]
 #[repr(u64)]
 pub enum FillHolesMethod {
-    LOCF,
+    Locf,
     Interpolate,
 }
 
 impl FillHolesMethod {
     pub fn process<'s>(&self, series: Timevector<'s>) -> Timevector<'s> {
         match &series.series {
-            SeriesType::GappyNormalSeries{start_ts, step_interval, count, present, values, ..} => {
+            SeriesType::GappyNormal{start_ts, step_interval, count, present, values, ..} => {
                 match self {
-                    FillHolesMethod::LOCF => {
+                    FillHolesMethod::Locf => {
                         let mut results = Vec::new();
                         let mut last_val = 0.0;
                         let mut vidx = 0;
@@ -35,7 +35,7 @@ impl FillHolesMethod {
 
                         build!(
                             Timevector {
-                                series : SeriesType::NormalSeries {
+                                series : SeriesType::Normal {
                                     start_ts: *start_ts,
                                     step_interval: *step_interval,
                                     num_vals: *count,
@@ -59,7 +59,7 @@ impl FillHolesMethod {
 
                         build!(
                             Timevector {
-                                series : SeriesType::NormalSeries {
+                                series : SeriesType::Normal {
                                     start_ts: *start_ts,
                                     step_interval: *step_interval,
                                     num_vals: *count,
@@ -71,7 +71,7 @@ impl FillHolesMethod {
                 }
             }
 
-            SeriesType::NormalSeries{..} => series.clone(),
+            SeriesType::Normal{..} => series.clone(),
 
             _ => panic!("Gapfill not currently implemented for explicit timevector")
         }
@@ -89,7 +89,7 @@ pub fn holefill_pipeline_element<'e> (
     fill_method: String,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     let fill_method = match fill_method.to_lowercase().as_str() {
-        "locf" => FillHolesMethod::LOCF,
+        "locf" => FillHolesMethod::Locf,
         "interpolate" => FillHolesMethod::Interpolate,
         "linear" => FillHolesMethod::Interpolate,
         _ => panic!("Invalid downsample method")

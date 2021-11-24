@@ -141,6 +141,12 @@ pub mod prefix_varint {
             }
         }
     }
+    
+    impl Default for I64Compressor<fn(i64) -> i64> {
+        fn default() -> Self {
+            Self::new()
+        }
+    }
 
     impl<F: FnMut(i64) -> i64> I64Compressor<F> {
         pub fn with(encoder: F) -> Self {
@@ -171,6 +177,12 @@ pub mod prefix_varint {
                 bytes: vec![],
                 encoder: |i| i,
             }
+        }
+    }
+    
+    impl Default for U64Compressor<fn(u64) -> u64> {
+        fn default() -> Self {
+            Self::new()
         }
     }
 
@@ -221,8 +233,8 @@ pub mod prefix_varint {
             value = (2 * value + 1) << (bytes - 1)
         }
         let value = value.to_le_bytes();
-        for i in 0..(bytes as usize) {
-            out.push(value[i]);
+        for value in value.iter().take(bytes as usize) {
+            out.push(*value);
         }
     }
 
@@ -237,19 +249,17 @@ pub mod prefix_varint {
     -> impl Iterator<Item=u64> + '_ {
         std::iter::from_fn(move || {
             if bytes.is_empty() {
-                return None
+                None
+            } else {
+                let (value, len) = read_from_slice(bytes);
+                bytes = &bytes[len..];
+                Some(value)
             }
-
-            let (value, len) = read_from_slice(bytes);
-            bytes = &bytes[len..];
-            return Some(value)
         })
     }
 
     #[inline]
     pub fn read_from_slice(bytes: &[u8]) -> (Value, usize) {
-        use std::convert::TryInto;
-
         let value: [u8; 8] = if bytes.len() >= 8 {
             bytes[0..8].try_into().unwrap()
         } else {
@@ -265,13 +275,13 @@ pub mod prefix_varint {
         let length = prefix_length(tag_byte) as usize;
         let value = if length < 9 {
             let unused = 64 - 8 * length;
-            let value = u64::from_le_bytes(value.try_into().unwrap());
+            let value = u64::from_le_bytes(value);
             (value << unused) >> (unused + length)
         } else {
             u64::from_le_bytes(bytes[1..9].try_into().unwrap())
         };
 
-        return (value, length)
+        (value, length)
     }
 
     #[inline(always)]

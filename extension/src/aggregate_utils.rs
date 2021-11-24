@@ -27,9 +27,9 @@ pub unsafe fn aggregate_mctx(fcinfo: pg_sys::FunctionCallInfo) -> Option<pg_sys:
     let mut mctx = null_mut();
     let is_aggregate = pg_sys::AggCheckCallContext(fcinfo, &mut mctx);
     if is_aggregate == 0 {
-        return None;
+        None
     } else {
         debug_assert!(!mctx.is_null());
-        return Some(mctx);
+        Some(mctx)
     }
 }

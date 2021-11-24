@@ -35,7 +35,7 @@ impl<'input> InOutFuncs for Lambda<'input> {
         use crate::serialization::{EncodedStr::*, str_to_db_encoding};
 
         let stringified = std::str::from_utf8(self.string.as_slice()).unwrap();
-        match str_to_db_encoding(&stringified) {
+        match str_to_db_encoding(stringified) {
             Utf8(s) => buffer.push_str(s),
             Other(s) => buffer.push_bytes(s.to_bytes()),
         }
@@ -77,8 +77,8 @@ impl<'a> LambdaData<'a> {
     parallel_safe,
     schema="toolkit_experimental"
 )]
-pub fn bool_lambda<'s>(
-    lambda: toolkit_experimental::Lambda<'s>,
+pub fn bool_lambda(
+    lambda: toolkit_experimental::Lambda,
     time: crate::raw::TimestampTz,
     value: f64
 ) -> bool {
@@ -95,8 +95,8 @@ pub fn bool_lambda<'s>(
     parallel_safe,
     schema="toolkit_experimental"
 )]
-pub fn f64_lambda<'s>(
-    lambda: toolkit_experimental::Lambda<'s>,
+pub fn f64_lambda(
+    lambda: toolkit_experimental::Lambda,
     time: crate::raw::TimestampTz,
     value: f64
 ) -> f64 {
@@ -113,8 +113,8 @@ pub fn f64_lambda<'s>(
     parallel_safe,
     schema="toolkit_experimental"
 )]
-pub fn ttz_lambda<'s>(
-    lambda: toolkit_experimental::Lambda<'s>,
+pub fn ttz_lambda(
+    lambda: toolkit_experimental::Lambda,
     time: crate::raw::TimestampTz,
     value: f64
 ) -> crate::raw::TimestampTz {
@@ -132,8 +132,8 @@ use crate::raw::Interval;
     parallel_safe,
     schema="toolkit_experimental"
 )]
-pub fn interval_lambda<'s>(
-    lambda: toolkit_experimental::Lambda<'s>,
+pub fn interval_lambda(
+    lambda: toolkit_experimental::Lambda,
     time: crate::raw::TimestampTz,
     value: f64
 ) -> Interval {
@@ -150,8 +150,8 @@ pub fn interval_lambda<'s>(
     parallel_safe,
     schema="toolkit_experimental"
 )]
-pub fn point_lambda<'s>(
-    lambda: toolkit_experimental::Lambda<'s>,
+pub fn point_lambda(
+    lambda: toolkit_experimental::Lambda,
     time: crate::raw::TimestampTz,
     value: f64
 ) -> impl std::iter::Iterator<Item = (name!(time,crate::raw::TimestampTz),name!(value,f64))> {
@@ -173,8 +173,8 @@ pub fn point_lambda<'s>(
     parallel_safe,
     schema="toolkit_experimental"
 )]
-pub fn trace_lambda<'s>(
-    lambda: toolkit_experimental::Lambda<'s>,
+pub fn trace_lambda(
+    lambda: toolkit_experimental::Lambda,
     time: crate::raw::TimestampTz,
     value: f64
 ) -> impl std::iter::Iterator<Item = String> {
@@ -398,13 +398,7 @@ impl PartialOrd for Value {
                     *l0 as _,
                     *r0 as _,
                 ) as i32;
-                if res < 0 {
-                    std::cmp::Ordering::Less
-                } else if res == 0 {
-                    std::cmp::Ordering::Equal
-                } else {
-                    std::cmp::Ordering::Greater
-                }.into()
+                res.cmp(&0).into()
             },
             (_, _) => None,
         }
@@ -535,9 +529,8 @@ mod tests {
 
     macro_rules! f64_lambda_eq {
         ($client: expr, $expr:literal, $expects:expr) => {
-            assert_eq!(
-                f64_lambda!($client, $expr),
-                $expects,
+            assert!(
+                (f64_lambda!($client, $expr) - ($expects)).abs() < f64::EPSILON,
             )
         };
     }
@@ -698,7 +691,7 @@ mod tests {
             f64_lambda_eq!(client, "tanh(2.0)",   ( 2.0f64).tanh());
             f64_lambda_eq!(client, "asinh(1.0)",  ( 1.0f64).asinh());
             f64_lambda_eq!(client, "acosh(1.0)",  ( 1.0f64).acosh());
-            f64_lambda_eq!(client, "atanh(1.0)",  ( 1.0f64).atanh());
+            f64_lambda_eq!(client, "atanh(0.9)",  ( 0.9f64).atanh());
 
             f64_lambda_eq!(client, "log(2.0, 10)",   2.0f64.log(10.0));
             f64_lambda_eq!(client, "atan2(2.0, 10)", 2.0f64.atan2(10.0));

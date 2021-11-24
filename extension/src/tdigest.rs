@@ -1,5 +1,5 @@
 
-use std::{convert::TryInto, mem::replace, ops::Deref, slice};
+use std::{convert::TryInto, mem::take, ops::Deref, slice};
 
 use serde::{Serialize, Deserialize};
 
@@ -44,7 +44,7 @@ impl TDigestTransState {
         if self.buffer.is_empty() {
             return
         }
-        let new = replace(&mut self.buffer, vec![]);
+        let new = take(&mut self.buffer);
         self.digested = self.digested.merge_unsorted(new)
     }
 }
@@ -131,7 +131,6 @@ pub fn tdigest_combine_inner(
     }
 }
 
-#[allow(non_camel_case_types)]
 use crate::raw::bytea;
 
 #[pg_extern(immutable, parallel_safe)]
@@ -194,7 +193,7 @@ impl<'input> TDigest<'input> {
         unsafe {
             flatten!(
                 TDigest {
-                    max_buckets: max_buckets,
+                    max_buckets,
                     buckets: centroids.len() as u32,
                     count: digest.count(),
                     sum: digest.sum(),
@@ -310,10 +309,7 @@ fn tdigest_compound_final(
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<TDigest<'static>> {
     let state: Option<&InternalTDigest> = unsafe { state.get() };
-    match state {
-        None => None,
-        Some(state) => Some(TDigest::from_internal_tdigest(&state.deref())),
-    }
+    state.map(|state| TDigest::from_internal_tdigest(state.deref()))
 }
 
 #[pg_extern(immutable, parallel_safe)]

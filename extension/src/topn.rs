@@ -155,7 +155,7 @@ fn topn_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<toolkit_experimental::TopN<'static>> {
-    topn_final_inner(unsafe{ state.to_inner() }, fcinfo).into()
+    topn_final_inner(unsafe{ state.to_inner() }, fcinfo)
 }
 
 fn topn_final_inner(
@@ -191,16 +191,16 @@ requires= [topn_trans, topn_final, topn_combine, topn_serialize, topn_deserializ
 );
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn topn_compound_trans<'b>(
+pub fn topn_compound_trans(
     state: Internal,
-    value: Option<toolkit_experimental::TopN<'b>>,
+    value: Option<toolkit_experimental::TopN>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Internal {
     topn_compound_trans_inner(unsafe{ state.to_inner() }, value, fcinfo).internal()
 }
-pub fn topn_compound_trans_inner<'b>(
+pub fn topn_compound_trans_inner(
     state: Option<Inner<InternalTopN>>,
-    value: Option<toolkit_experimental::TopN<'b>>,
+    value: Option<toolkit_experimental::TopN>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<InternalTopN>> {
     unsafe {
@@ -234,8 +234,8 @@ requires= [topn_compound_trans, topn_final, topn_combine, topn_serialize, topn_d
 
 //---- Available PG operations on the topn structure
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn num_vals<'input>(
-    agg: toolkit_experimental::TopN<'input>,
+pub fn num_vals(
+    agg: toolkit_experimental::TopN,
 ) -> i32 {
     agg.total_inputs as _
 }
@@ -268,9 +268,9 @@ pub fn topn_iter (
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn guaranteed_topn<'input>(
+pub fn guaranteed_topn(
     n: i32,
-    agg: toolkit_experimental::TopN<'input>,
+    agg: toolkit_experimental::TopN,
 ) -> bool {
     if n >= agg.num_values as _ {
         return false;
@@ -287,8 +287,8 @@ pub fn guaranteed_topn<'input>(
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn max_ordered_n<'input>(
-    agg: toolkit_experimental::TopN<'input>,
+pub fn max_ordered_n(
+    agg: toolkit_experimental::TopN,
 ) -> i32 {
     for i in 1..agg.num_values as usize {
         if agg.counts.slice()[i] > agg.counts.slice()[i-1] - agg.overcounts.slice()[i-1] {

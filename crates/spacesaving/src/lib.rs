@@ -76,9 +76,7 @@ impl <T: Eq + Hash + Copy> SpaceSaving<T> {
     fn swap_entries(&mut self, idx1: usize, idx2 : usize) {
         *self.value_idx_map.get_mut(&self.entries[idx1].value).unwrap() = idx2 as u32;
         *self.value_idx_map.get_mut(&self.entries[idx2].value).unwrap() = idx1 as u32;
-        let temp = self.entries[idx1];
-        self.entries[idx1] = self.entries[idx2];
-        self.entries[idx2] = temp;
+        self.entries.swap(idx1, idx2);
     }
 
     pub fn add(&mut self, val: T) {
@@ -99,27 +97,25 @@ impl <T: Eq + Hash + Copy> SpaceSaving<T> {
             if target_idx == self.replacement_idx as _ {
                 self.replacement_idx += 1;
             }
-        } else {
-            if self.entries.len() < self.maximum_entries as _ {
+        } else if self.entries.len() < self.maximum_entries as _ {
                 self.value_idx_map.insert(val, self.entries.len() as _);
                 self.entries.push(SSHashEntry {value: val, count: 1, overcount: 0});
-            } else {
-                // Lazily update replacement index if it's fallen off the back of the array
-                if self.replacement_idx == self.maximum_entries {
+        } else {
+            // Lazily update replacement index if it's fallen off the back of the array
+            if self.replacement_idx == self.maximum_entries {
+                self.replacement_idx -= 1;
+                while self.replacement_idx > 0 && self.entries[self.replacement_idx as usize - 1].count == self.entries[self.replacement_idx as usize].count {
                     self.replacement_idx -= 1;
-                    while self.replacement_idx > 0 && self.entries[self.replacement_idx as usize - 1].count == self.entries[self.replacement_idx as usize].count {
-                        self.replacement_idx -= 1;
-                    }
                 }
-
-                let mut entry = self.entries.get_mut(self.replacement_idx as usize).unwrap();
-                self.value_idx_map.remove(&entry.value);
-                self.value_idx_map.insert(val, self.replacement_idx);
-                entry.value = val;
-                entry.overcount = entry.count;
-                entry.count += 1;  // will not require a resort
-                self.replacement_idx += 1;
             }
+
+            let mut entry = self.entries.get_mut(self.replacement_idx as usize).unwrap();
+            self.value_idx_map.remove(&entry.value);
+            self.value_idx_map.insert(val, self.replacement_idx);
+            entry.value = val;
+            entry.overcount = entry.count;
+            entry.count += 1;  // will not require a resort
+            self.replacement_idx += 1;
         }
     }
 
@@ -140,39 +136,30 @@ impl <T: Eq + Hash + Copy> SpaceSaving<T> {
                 value = it.next();
             }
 
-            match value {
-                None => None,
-                Some(value) => {
-                    Some({
-                        let ent1 = match first.value_idx_map.get(&value) {
-                            None => None,
-                            Some (idx) => Some(first.entries.get(*idx as usize).unwrap()),
-                        };
-                        let ent2 = match second.value_idx_map.get(&value) {
-                            None => None,
-                            Some (idx) => Some(second.entries.get(*idx as usize).unwrap()),
-                        };
-            
-                        if ent1.is_none() {
-                            let mut result = *ent2.unwrap();
-                            result.count += first.low_value();
-                            result.overcount += first.low_value();
-                            result
-                        } else if ent2.is_none() {
-                            let mut result = *ent1.unwrap();
-                            result.count += second.low_value();
-                            result.overcount += second.low_value();
-                            result
-                        } else {
-                            SSHashEntry {
-                                value: value,
-                                count: ent1.unwrap().count + ent2.unwrap().count,
-                                overcount: ent1.unwrap().overcount + ent2.unwrap().overcount,
-                            }
+            value.map(|value| {
+                let ent1 = first.value_idx_map.get(&value).map(|idx| first.entries.get(*idx as usize).unwrap());
+                let ent2 = second.value_idx_map.get(&value).map(|idx| second.entries.get(*idx as usize).unwrap());
+
+                if let Some(ent1) = ent1 {
+                    if let Some(ent2) = ent2 {
+                        SSHashEntry {
+                            value,
+                            count: ent1.count + ent2.count,
+                            overcount: ent1.overcount + ent2.overcount,
                         }
-                    })
+                    } else {
+                        let mut result = *ent1;
+                        result.count += second.low_value();
+                        result.overcount += second.low_value();
+                        result
+                    }
+                } else {
+                    let mut result = *ent2.unwrap();
+                    result.count += first.low_value();
+                    result.overcount += first.low_value();
+                    result
                 }
-            }
+            })
         }
 
         let maximum_entries = std::cmp::max(first.maximum_entries, second.maximum_entries) as u32;
@@ -247,7 +234,7 @@ impl <T: Eq + Hash + Copy> SpaceSaving<T> {
             }
         }
 
-        return true;
+        true
     }
 
     // returns the highest 'n' such that the first 'n' values are guanteed to be a correct ordered TopN result
@@ -279,7 +266,7 @@ impl <T: Eq + Hash + Copy> SpaceSaving<T> {
             0
         };
 
-        self.entries.iter().filter(move |_| {count = count + 1; count < n}).map(move |e| e.value)
+        self.entries.iter().filter(move |_| {count += 1; count < n}).map(move |e| e.value)
     }
 
     // Returns an iterator over (Item, min_frequency, max_frequency)

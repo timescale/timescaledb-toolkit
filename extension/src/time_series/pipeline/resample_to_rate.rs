@@ -49,11 +49,15 @@ impl ResampleMethod {
                 let mut result = 0.0;
                 for TSPoint{ts, val} in vals.iter() {
                     let distance = (ts - target).abs();
-                    if distance < closest {
-                        closest = distance;
-                        result = *val;
-                    } else if distance == closest {
-                        result = (result + val) / 2.0;
+                    match distance.cmp(&closest) {
+                        std::cmp::Ordering::Less => {
+                            closest = distance;
+                            result = *val;
+                        },
+                        std::cmp::Ordering::Equal => {
+                            result = (result + val) / 2.0;
+                        },
+                        std::cmp::Ordering::Greater => (),
                     }
                 }
                 TSPoint{ts: target, val: result}
@@ -134,8 +138,8 @@ pub fn resample_to_rate<'s>(
 
         let target = (ts - offset_from_rate.unwrap()) / interval * interval + offset_from_rate.unwrap();
         if current != Some(target) {
-            if current.is_some() {
-                let TSPoint { ts, val } = method.process(&points, current.unwrap(), interval);
+            if let Some(value) = current {
+                let TSPoint { ts, val } = method.process(&points, value, interval);
                 match &mut result {
                     None => result = Some(GappyTimevectorBuilder::new(ts, interval, val)),
                     Some(series) => series.push_point(ts, val),
@@ -157,7 +161,7 @@ pub fn resample_to_rate<'s>(
     let result = result.unwrap();
     build! {
         Timevector {
-            series: SeriesType::GappyNormalSeries {
+            series: SeriesType::GappyNormal {
                 start_ts: result.start_ts,
                 step_interval: result.step_interval,
                 num_vals: result.values.len() as _,

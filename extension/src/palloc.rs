@@ -123,8 +123,7 @@ unsafe impl GlobalAlloc for PanickingAllocator {
         if p.is_null() {
             panic!("Out of memory")
         }
-        return p
-
+        p
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
@@ -136,7 +135,7 @@ unsafe impl GlobalAlloc for PanickingAllocator {
         if p.is_null() {
             panic!("Out of memory")
         }
-        return p
+        p
     }
 
     unsafe fn realloc(
@@ -149,6 +148,6 @@ unsafe impl GlobalAlloc for PanickingAllocator {
         if p.is_null() {
             panic!("Out of memory")
         }
-        return p
+        p
     }
 }

@@ -316,7 +316,7 @@ fn counter_agg_final_inner(
                     if !st.bounds_valid() {
                         panic!("counter bounds invalid")
                     }
-                    Some(CounterSummary::from_internal_counter_summary(st).into())
+                    Some(CounterSummary::from_internal_counter_summary(st))
                 }
             }
         })
@@ -932,10 +932,10 @@ mod tests {
 
             let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
             let delta = select_one!(client, stmt, f64);
-            assert_eq!(delta, 100.);
+            assert!((delta - 100.).abs() < f64::EPSILON);
             let stmt = format!("SELECT delta('{}')", expected);
             let delta_test = select_one!(client, &stmt, f64);
-            assert_eq!(delta, delta_test);
+            assert!((delta - delta_test).abs() < f64::EPSILON);
 
             let stmt = "SELECT num_resets(counter_agg(ts, val)) FROM test";
             let resets = select_one!(client, stmt, i64);
@@ -953,7 +953,7 @@ mod tests {
             const BASE: i64 = 631152000000000;
             const MIN: i64 = 60000000;
             let state = counter_agg_trans_inner(None, Some(BASE.into()), Some(10.0), None, ptr::null_mut());
-            let state = counter_agg_trans_inner(state, Some((BASE + 1 * MIN).into()), Some(20.0), None, ptr::null_mut());
+            let state = counter_agg_trans_inner(state, Some((BASE + MIN).into()), Some(20.0), None, ptr::null_mut());
             let state = counter_agg_trans_inner(state, Some((BASE + 2 * MIN).into()), Some(30.0), None, ptr::null_mut());
             let state = counter_agg_trans_inner(state, Some((BASE + 3 * MIN).into()), Some(10.0), None, ptr::null_mut());
             let state = counter_agg_trans_inner(state, Some((BASE + 4 * MIN).into()), Some(20.0), None, ptr::null_mut());

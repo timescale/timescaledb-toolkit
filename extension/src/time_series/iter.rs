@@ -27,18 +27,9 @@ impl<'a> Iterator for Iter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            Slice{iter} => {
-                match iter.next() {
-                    None => None,
-                    Some(point) => Some(point)
-                }
-            },
+            Slice{iter} => iter.next(),
             Normal{idx, start, step, vals} => {
-                let val = vals.next();
-                if val.is_none() {
-                    return None;
-                }
-                let val = val.unwrap();
+                let val = vals.next()?;
                 let ts = *start + *idx as i64 * *step;
                 *idx += 1;
                 Some(TSPoint{ts, val})

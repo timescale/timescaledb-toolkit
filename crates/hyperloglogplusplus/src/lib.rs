@@ -212,7 +212,7 @@ pub fn precision_for_error(max_error: f64) -> u8 {
     // number_of_registers = (1.04/error)^2
     let num_registers = (1.04f64/max_error).powi(2);
     let precision = num_registers.log2().ceil();
-    if precision < 4.0 || precision > 18.0 {
+    if !(4.0..=18.0).contains(&precision) {
         panic!("derived precision is not valid, error should be in the range [0.26, 0.00203125]")
     }
     precision as u8

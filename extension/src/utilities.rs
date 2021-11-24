@@ -9,6 +9,7 @@ pub fn default_generate_periodic_normal_series(
     generate_periodic_normal_series(series_start, None, None, None, None, None, None, rng_seed)
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn alternate_generate_periodic_normal_series(
     series_start: crate::raw::TimestampTz,
     periods_per_series: i64,
@@ -26,6 +27,7 @@ pub fn alternate_generate_periodic_normal_series(
         Some(standard_deviation), rng_seed)
 }
 
+#[allow(clippy::too_many_arguments)]
 #[pg_extern(schema = "toolkit_experimental")]
 pub fn generate_periodic_normal_series(
     series_start: crate::raw::TimestampTz,
@@ -44,30 +46,12 @@ pub fn generate_periodic_normal_series(
     const DAY: i64 = 24 * HOUR;
 
     // TODO: exposing defaults in the PG function definition would be much nicer
-    let series_len = match series_len {
-        Some(v) => v,
-        None => 28 * DAY
-    };
-    let sample_interval = match sample_interval {
-        Some(v) => v,
-        None => 10 * MIN
-    };
-    let base_value = match base_value {
-        Some(v) => v,
-        None => 1000.0
-    };
-    let period = match period {
-        Some(v) => v,
-        None => 1 * DAY
-    };
-    let periodic_magnitude = match periodic_magnitude {
-        Some(v) => v,
-        None => 100.0
-    };
-    let standard_deviation = match standard_deviation {
-        Some(v) => v,
-        None => 100.0
-    };
+    let series_len = series_len.unwrap_or(28 * DAY);
+    let sample_interval = sample_interval.unwrap_or(10 * MIN);
+    let base_value = base_value.unwrap_or(1000.0);
+    let period = period.unwrap_or(DAY);
+    let periodic_magnitude = periodic_magnitude.unwrap_or(100.0);
+    let standard_deviation = standard_deviation.unwrap_or(100.0);
 
     use rand_distr::Distribution;
     use rand::SeedableRng;
@@ -111,19 +95,19 @@ mod tests {
                 .select("SELECT toolkit_experimental.to_epoch('2021-01-01 00:00:00+03'::timestamptz)", None, None)
                 .first()
                 .get_one::<f64>().unwrap();
-            assert_eq!(test_val, 1609448400f64);
+            assert!((test_val - 1609448400f64).abs() < f64::EPSILON);
 
             let test_val = client
                 .select("SELECT toolkit_experimental.to_epoch('epoch'::timestamptz)", None, None)
                 .first()
                 .get_one::<f64>().unwrap();
-            assert_eq!(test_val, 0f64);
+            assert!((test_val - 0f64).abs() < f64::EPSILON);
 
             let test_val = client
                 .select("SELECT toolkit_experimental.to_epoch('epoch'::timestamptz - interval '42 seconds')", None, None)
                 .first()
                 .get_one::<f64>().unwrap();
-            assert_eq!(test_val, -42f64);
+            assert!((test_val - -42f64).abs() < f64::EPSILON);
         });
     }
 }

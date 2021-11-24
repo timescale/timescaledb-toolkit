@@ -31,7 +31,7 @@ pub mod toolkit_experimental {
     ) -> toolkit_experimental::AccessorApproxPercentile<'static> {
         build!{
             AccessorApproxPercentile {
-                percentile: percentile,
+                percentile,
             }
         }
     }
@@ -51,7 +51,7 @@ pub mod toolkit_experimental {
     ) -> toolkit_experimental::AccessorApproxRank<'static> {
         build!{
             AccessorApproxRank {
-                value: value,
+                value,
             }
         }
     }
@@ -1011,7 +1011,7 @@ pub mod toolkit_experimental {
                 }
             },
         }
-        return accessor
+        accessor
     }
 
     impl<'i> AccessorWithBounds<'i> {

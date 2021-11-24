@@ -1,3 +1,5 @@
+#![allow(clippy::identity_op)] // clippy gets confused by flat_serialize! enums
+
 use std::{
     convert::TryInto,
     hash::{BuildHasher, Hasher},
@@ -210,16 +212,16 @@ requires = [hyperloglog_trans, hyperloglog_final, hyperloglog_combine, hyperlogl
 );
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn hyperloglog_union<'input>(
+pub fn hyperloglog_union(
     state: Internal,
-    other: HyperLogLog<'input>,
+    other: HyperLogLog,
     fc: pg_sys::FunctionCallInfo,
 ) -> Internal {
     hyperloglog_union_inner(unsafe{ state.to_inner() }, other, fc).internal()
 }
-pub fn hyperloglog_union_inner<'input>(
+pub fn hyperloglog_union_inner(
     state: Option<Inner<HyperLogLogTrans>>,
-    other: HyperLogLog<'input>,
+    other: HyperLogLog,
     fc: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<HyperLogLogTrans>> {
     unsafe {
@@ -264,8 +266,8 @@ requires = [hyperloglog_union, hyperloglog_final, hyperloglog_combine, hyperlogl
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_hyperloglog_count<'input>(
-    sketch: HyperLogLog<'input>,
+pub fn arrow_hyperloglog_count(
+    sketch: HyperLogLog,
     accessor: toolkit_experimental::AccessorDistinctCount,
 ) -> i64 {
     let _ = accessor;
@@ -273,8 +275,8 @@ pub fn arrow_hyperloglog_count<'input>(
 }
 
 #[pg_extern(name="distinct_count", immutable, parallel_safe)]
-pub fn hyperloglog_count<'input>(
-    hyperloglog: HyperLogLog<'input>
+pub fn hyperloglog_count(
+    hyperloglog: HyperLogLog
 ) -> i64 {
     // count does not depend on the type parameters
     let log = match &hyperloglog.log {
@@ -289,8 +291,8 @@ pub fn hyperloglog_count<'input>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_hyperloglog_error<'input>(
-    sketch: HyperLogLog<'input>,
+pub fn arrow_hyperloglog_error(
+    sketch: HyperLogLog,
     accessor: toolkit_experimental::AccessorStdError,
 ) -> f64 {
     let _ = accessor;
@@ -298,8 +300,8 @@ pub fn arrow_hyperloglog_error<'input>(
 }
 
 #[pg_extern(name="stderror", immutable, parallel_safe)]
-pub fn hyperloglog_error<'input>(
-    hyperloglog: HyperLogLog<'input>
+pub fn hyperloglog_error(
+    hyperloglog: HyperLogLog
 ) -> f64 {
     let precision = match hyperloglog.log {
         Storage::Sparse { precision, .. } => precision,
@@ -339,8 +341,8 @@ fn flatten_log(hyperloglog: &mut HLL<Datum, DatumHashBuilder>)
         HyperLogLogStorage::Sparse(sparse) => unsafe {
             flatten!(HyperLogLog {
                 log: Storage::Sparse {
-                    element_type: element_type,
-                    collation: collation,
+                    element_type,
+                    collation,
                     num_compressed: sparse.num_compressed,
                     precision: sparse.precision,
                     compressed_bytes: sparse.compressed.num_bytes() as u32,
@@ -352,18 +354,18 @@ fn flatten_log(hyperloglog: &mut HLL<Datum, DatumHashBuilder>)
             // TODO check that precision and length match?
             flatten!(HyperLogLog {
                 log: Storage::Dense {
-                    element_type: element_type,
-                    collation: collation,
+                    element_type,
+                    collation,
                     precision: dense.precision,
                     registers: dense.registers.bytes().into(),
                 }
             })
         },
     };
-    flat.into()
+    flat
 }
 
-fn unflatten_log<'i>(hyperloglog: HyperLogLog<'i>) -> HLL<'i, Datum, DatumHashBuilder> {
+fn unflatten_log(hyperloglog: HyperLogLog) -> HLL<Datum, DatumHashBuilder> {
     match &hyperloglog.log {
         Storage::Sparse {
             num_compressed,
@@ -481,9 +483,7 @@ impl Hasher for DatumHashBuilder {
         }
 
         let mut b = [0; size_of::<usize>()];
-        for i in 0..size_of::<usize>() {
-            b[i] = bytes[i]
-        }
+        b[..size_of::<usize>()].clone_from_slice(&bytes[..size_of::<usize>()]);
         self.write_usize(usize::from_ne_bytes(b))
     }
 
@@ -622,7 +622,7 @@ mod tests {
             let new_state = hyperloglog_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
 
             control.logger.merge_all();  // Sparse representation buffers always merged on serialization
-            assert!(&*new_state == &control);
+            assert!(*new_state == control);
 
             // Now generate a dense represenataion and validate that
             for i in 0..500 {
@@ -639,7 +639,7 @@ mod tests {
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
             let new_state = hyperloglog_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
 
-            assert!(&*new_state == &control);
+            assert!(*new_state == control);
         }
     }
 

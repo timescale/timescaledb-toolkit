@@ -579,9 +579,10 @@ impl TDigest {
         let centroid_weight = (rank - t as f64) / self.centroids[pos].weight() as f64;
 
         // Now we use that location to interpolate the desired value between the centroid mean and the weighted midpoint between the next centroid in the direction of the target rank.
-        return if centroid_weight == 0.5 {
+        let diff = centroid_weight - 0.5;
+        return if diff.abs() < f64::EPSILON {
             self.centroids[pos].mean()
-        } else if centroid_weight < 0.5 {
+        } else if diff.is_sign_negative() {
             let weighted_lower_bound = if pos == 0 {
                 weighted_average(
                     self.min(),

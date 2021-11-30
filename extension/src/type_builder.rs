@@ -12,6 +12,16 @@ impl PartialEq for CachedDatum<'_> {
     }
 }
 
+/// This macro takes a struct definition and creates a PostgresType struct with the corresponding fields, appropriate for use in pgx postgresql functions.
+/// 
+/// The new struct is actually a tuple struct containing a rust struct with the data fields and a byte array which PostgresQL is able to use as a normal Datum type.
+/// However, it implements the deref trait in such a way that the data fields can be directly accessed through the tuple struct.
+/// 
+/// Additional functions provided on the new struct are:
+///     in_current_context      - returns a copy of the struct in the current memory context
+///     cached_datum_or_flatten - create a cached datum for the struct if not present, then return the cached_datum
+/// 
+/// In order to create a new instance of this type, use the build! macro (preferred), or the flatten! macro to also create the underlying datum.
 #[macro_export]
 macro_rules! pg_type {
     // base case, all fields are collected into $vals
@@ -244,6 +254,10 @@ macro_rules! pg_type_impl {
     }
 }
 
+/// This implements the pgx InOutFuncs trait for a type using the Rust Object Notation (RON).
+/// This trait provides text serialization functions for an object and is necessary to create a postgres type.
+/// 
+/// RON is used here instead of JSON as it can handle complicated float point values like NaNs and infinities.
 #[macro_export]
 macro_rules! ron_inout_funcs {
     ($name:ident) => {
@@ -272,6 +286,9 @@ macro_rules! ron_inout_funcs {
     };
 }
 
+/// This creates a new instance of the corresponding struct from a pg_type! declaration.
+/// 
+/// Note that this form will also create the backing datum for the data.  If this is not needed, prefer the build! macro.
 #[macro_export]
 macro_rules! flatten {
     ($typ:ident { $($field:ident$(: $value:expr)?),* $(,)? }) => {
@@ -291,6 +308,7 @@ macro_rules! flatten {
     }
 }
 
+/// Given a type and block of field definitions, build a struct matching the pg_type! declartion with matching fields.
 #[macro_export]
 macro_rules! build {
     ($typ:ident { $($field:ident$(: $value:expr)?),* $(,)? }) => {
@@ -314,6 +332,7 @@ pub enum SerializationType {
     Default = 1,
 }
 
+/// Given an object and an optional version (defaults to 1) this will create a pgx bytea representation of the object.
 #[macro_export]
 macro_rules! do_serialize {
     ($state: ident) => {
@@ -364,6 +383,10 @@ macro_rules! do_serialize {
         }
     };
 }
+
+/// Takes a pgx bytea structure and a type.
+/// 
+/// Will construct an object of the given type from the bytes contained in the bytea.
 #[macro_export]
 macro_rules! do_deserialize {
     ($bytes: expr, $t: ty) => {

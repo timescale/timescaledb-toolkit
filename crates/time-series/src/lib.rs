@@ -137,7 +137,7 @@ impl<'de> Deserialize<'de> for TSPoint {
                 Ok(TSPoint{ ts, val })
             }
         }
-        const FIELDS: &'static [&'static str] = &["ts", "val"];
+        const FIELDS: &[&str] = &["ts", "val"];
 
         let visitor = TsPointVisitor { text_timestamp: deserializer.is_human_readable() };
         deserializer.deserialize_struct("TSPoint", FIELDS, visitor)
@@ -327,7 +327,7 @@ impl GappyNormalTimevector {
         let outer = index / 64;
         let inner = index % 64;
 
-        return self.present[outer as usize] & ((1 as u64) << inner) != 0;
+        self.present[outer as usize] & ((1_u64) << inner) != 0
     }
 
     fn add_gap(&mut self) {

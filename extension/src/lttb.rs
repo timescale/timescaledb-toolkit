@@ -54,7 +54,7 @@ pub fn lttb_trans_inner(
 
             state.series.push(TSPoint {
                 ts: time.into(),
-                val: val,
+                val,
             });
             Some(state)
         })
@@ -83,7 +83,7 @@ pub fn lttb_final_inner(
             let downsampled = lttb(&*series, state.resolution);
             flatten!(
                 Timevector {
-                    series: SeriesType::SortedSeries {
+                    series: SeriesType::Sorted {
                         num_points: downsampled.len() as u64,
                         points: (&*downsampled).into(),
                     }
@@ -189,11 +189,11 @@ pub fn lttb_on_timevector(
 }
 
 // based on https://github.com/jeromefroe/lttb-rs version 0.2.0
-pub fn lttb_ts<'s>(
-    data: crate::time_series::toolkit_experimental::Timevector<'s>,
+pub fn lttb_ts(
+    data: crate::time_series::toolkit_experimental::Timevector,
     threshold: usize
 )
--> crate::time_series::toolkit_experimental::Timevector<'s>
+-> crate::time_series::toolkit_experimental::Timevector
 {
     if !data.is_sorted() {
         panic!("lttb requires sorted timevector");
@@ -272,7 +272,7 @@ pub fn lttb_ts<'s>(
 
     crate::build! {
         Timevector {
-            series: SeriesType::SortedSeries {
+            series: SeriesType::Sorted {
                 num_points: sampled.len() as _,
                 points: sampled.into(),
             }

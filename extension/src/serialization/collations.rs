@@ -27,7 +27,7 @@ impl PgCollationId {
         self.0 == pg_sys::InvalidOid
     }
 
-    pub fn to_option_oid(&self) -> Option<Oid> {
+    pub fn to_option_oid(self) -> Option<Oid> {
         if self.is_invalid() {
             None
         } else {
@@ -164,7 +164,7 @@ impl<'de> Deserialize<'de> for PgCollationId {
             let name = pg_sys::pg_any_to_server(name.as_ptr(), name_len as _, pg_sys::pg_enc_PG_UTF8 as _);
             let name = CStr::from_ptr(name);
 
-            let namespace_id = pg_sys::LookupExplicitNamespace(namespace.as_ptr(), true as _);
+            let namespace_id = pg_sys::LookupExplicitNamespace(namespace.as_ptr(), true);
             if namespace_id == pg_sys::InvalidOid {
                 return Err(D::Error::custom(format!(
                     "invalid namespace {:?}",
@@ -207,7 +207,7 @@ impl<'de> Deserialize<'de> for PgCollationId {
                 )));
             }
 
-            return Ok(PgCollationId(collation_id));
+            Ok(PgCollationId(collation_id))
         }
     }
 }

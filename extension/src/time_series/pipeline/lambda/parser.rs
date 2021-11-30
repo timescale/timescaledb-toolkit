@@ -83,22 +83,22 @@ fn parse_primary<'a>(
     match pair.as_rule() {
         num => {
             let val: f64 = pair.as_str().parse().unwrap();
-            DoubleConstant(val).into()
+            DoubleConstant(val)
         },
 
-        val_var => ValueVar.into(),
-        time_var => TimeVar.into(),
+        val_var => ValueVar,
+        time_var => TimeVar,
 
         time => {
             let s = pair.as_str();
             let parsed_time = parse_timestamptz(&s[1..s.len()-2]);
-            TimeConstant(parsed_time).into()
+            TimeConstant(parsed_time)
         },
 
         interval => {
             let s = pair.as_str();
             let parsed_interval = parse_interval(&s[1..s.len()-2]);
-            IntervalConstant(parsed_interval).into()
+            IntervalConstant(parsed_interval)
         },
 
         var => {
@@ -111,9 +111,8 @@ fn parse_primary<'a>(
         function => {
             let mut pairs = pair.into_inner();
             let func_name = pairs.next().unwrap();
-            let (num_args, func_id) = BUILTIN_FUNCTION.get(func_name.as_str())
-                .unwrap_or_else(|| panic!("unknown function: {}", func_name.as_str()))
-                .clone();
+            let (num_args, func_id) = *BUILTIN_FUNCTION.get(func_name.as_str())
+                .unwrap_or_else(|| panic!("unknown function: {}", func_name.as_str()));
 
             let args: Vec<_> = pairs.map(|p| parse_primary(p, var_expressions, known_vars))
                 .collect();

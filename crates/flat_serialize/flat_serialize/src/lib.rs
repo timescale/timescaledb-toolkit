@@ -18,6 +18,7 @@ pub unsafe trait FlatSerializable<'input>: Sized + 'input {
     type OWNED: 'static;
 
 
+    #[allow(clippy::missing_safety_doc)]
     unsafe fn try_ref(input: &'input [u8]) -> Result<(Self, &'input [u8]), WrapErr>;
     fn fill_vec(&self, input: &mut Vec<u8>) {
         let start = input.len();
@@ -39,6 +40,7 @@ pub unsafe trait FlatSerializable<'input>: Sized + 'input {
         }
     }
     #[must_use]
+    #[allow(clippy::missing_safety_doc)]
     unsafe fn fill_slice<'out>(&self, input: &'out mut [MaybeUninit<u8>])
     -> &'out mut [MaybeUninit<u8>];
     fn num_bytes(&self) -> usize;
@@ -124,15 +126,13 @@ where T: FlatSerializable<'i> + 'i {
     unsafe fn try_ref(mut input: &'i [u8])
     -> Result<(Self, &'i [u8]), WrapErr> {
         // TODO can we simplify based on T::TRIVIAL_COPY?
-        if T::TRIVIAL_COPY {
-            if input.len() < (T::MIN_LEN * N) {
-                return Err(WrapErr::NotEnoughBytes(T::MIN_LEN * N))
-            }
+        if T::TRIVIAL_COPY && input.len() < (T::MIN_LEN * N) {
+            return Err(WrapErr::NotEnoughBytes(T::MIN_LEN * N))
         }
         let mut output: [MaybeUninit<T>; N] = MaybeUninit::uninit().assume_init();
-        for i in 0..N {
+        for item in output.iter_mut() {
             let (val, rem) = T::try_ref(input)?;
-            output[i] = MaybeUninit::new(val);
+            *item = MaybeUninit::new(val);
             input = rem;
         }
         let output = (&output as * const [MaybeUninit<T>; N])
@@ -240,7 +240,7 @@ where T: FlatSerializable<'input> + Clone {
                 let additional_len = aligning_len(rem.as_ptr() as _, T::REQUIRED_ALIGNMENT);
 
                 i.slice = &rem[additional_len..];
-                return Some(val)
+                Some(val)
             },
             Self::Slice(s) => {
                 let val = s.first().cloned();
@@ -263,9 +263,9 @@ where T: FlatSerializable<'input> + Clone {
             },
             Self::Slice(s) => {
                 *s = s.get(n..)?;
-                return self.next()
+                self.next()
             },
-            Self::Owned(i) => return i.nth(n),
+            Self::Owned(i) => i.nth(n),
         }
     }
 }
@@ -274,9 +274,17 @@ impl<'input, 'borrow, T: 'input> Iter<'input, 'borrow, T>
 where T: FlatSerializable<'input> + Clone {
     pub fn len(&self) -> usize {
         match self {
-            Self::Unflatten(i) => i.clone().count(),
+            Self::Unflatten(i) => (*i).count(),
             Self::Slice(s) => s.len(),
             Self::Owned(i) => i.as_slice().len(),
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Self::Unflatten(i) => (*i).count() == 0,
+            Self::Slice(s) => s.is_empty(),
+            Self::Owned(i) => i.as_slice().is_empty(),
         }
     }
 }
@@ -305,6 +313,7 @@ pub struct Unflatten<'input, T: 'input> {
 }
 
 impl<'input, T: 'input> Slice<'input, T> {
+    #[allow(clippy::missing_safety_doc)]
     pub unsafe fn from_bytes(bytes: &'input [u8]) -> Self {
         Slice::Iter(Unflatten {
             slice: bytes,
@@ -321,6 +330,15 @@ impl<'input, T: 'input> Slice<'input, T> {
         }
     }
 
+    pub fn is_empty(&self) -> bool
+    where T: Clone + FlatSerializable<'input> {
+        match self {
+            Slice::Iter(..) => self.iter().count() == 0,
+            Slice::Slice(s) => s.is_empty(),
+            Slice::Owned(o) => o.is_empty(),
+        }
+    }
+
     pub fn make_owned(&mut self)
     where T: Clone + FlatSerializable<'input> {
         self.as_owned();
@@ -332,7 +350,7 @@ impl<'input, T: 'input> Slice<'input, T> {
             Slice::Iter(_) =>
                 self.iter().map(|t| t.into_owned()).collect(),
             Slice::Slice(s) =>
-                s.into_iter().map(|t| t.clone().into_owned()).collect(),
+                s.iter().map(|t| t.clone().into_owned()).collect(),
             Slice::Owned(v) =>
                 v.into_iter().map(|t| t.into_owned()).collect(),
         }
@@ -367,7 +385,7 @@ impl<'input, T: 'input> Slice<'input, T> {
         match self {
             Slice::Iter(_) =>
                 panic!("cannot convert iterator to slice without mutating"),
-            Slice::Slice(s) => &*s,
+            Slice::Slice(s) => *s,
             Slice::Owned(o) => &*o,
         }
     }
@@ -375,7 +393,7 @@ impl<'input, T: 'input> Slice<'input, T> {
     pub fn slice(&self) -> &'input [T]
     where T: Clone + FlatSerializable<'input> {
         match self {
-            Slice::Slice(s) => &*s,
+            Slice::Slice(s) => *s,
             _ =>
                 panic!("cannot convert to slice without mutating"),
         }
@@ -394,7 +412,7 @@ where T: FlatSerializable<'input> {
             <T>::try_ref(self.slice).unwrap()
         };
         self.slice = rem;
-        return Some(val)
+        Some(val)
     }
 }
 
@@ -415,7 +433,7 @@ where T: Clone {
     fn clone(&self) -> Self {
         match self {
             Slice::Iter(i) => Slice::Iter(*i),
-            Slice::Slice(s) => Slice::Slice(&*s),
+            Slice::Slice(s) => Slice::Slice(*s),
             Slice::Owned(v) => Slice::Owned(Vec::clone(v)),
         }
     }
@@ -456,8 +474,10 @@ impl<'input, T: 'input> Copy for Unflatten<'input, T> {}
 
 #[doc(hidden)]
 pub unsafe trait VariableLen<'input>: Sized {
+    #[allow(clippy::missing_safety_doc)]
     unsafe fn try_ref(input: &'input [u8], count: usize) -> Result<(Self, &'input [u8]), WrapErr>;
     #[must_use]
+    #[allow(clippy::missing_safety_doc)]
     unsafe fn fill_slice<'out>(&self, count: usize, input: &'out mut [MaybeUninit<u8>])
     -> &'out mut [MaybeUninit<u8>];
     fn num_bytes(&self, count: usize) -> usize;
@@ -476,8 +496,8 @@ where T: FlatSerializable<'i> {
         let bytes = bytes.as_ptr();
         let field = ::std::slice::from_raw_parts(bytes.cast::<T>(), count);
         debug_assert_eq!(
-            bytes.offset(byte_len as isize) as usize,
-            field.as_ptr().offset(count as isize) as usize
+            bytes.add(byte_len) as usize,
+            field.as_ptr().add(count) as usize
         );
         Ok((field, rem))
     }

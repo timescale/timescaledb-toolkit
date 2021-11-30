@@ -121,6 +121,7 @@ macro_rules! pg_type_impl {
                     unsafe { self.0.flatten() }
                 }
 
+                #[allow(clippy::missing_safety_doc)]
                 pub unsafe fn cached_datum_or_flatten(&mut self) -> pgx::pg_sys::Datum {
                     use $crate::type_builder::CachedDatum::*;
                     match self.1 {
@@ -134,6 +135,7 @@ macro_rules! pg_type_impl {
             }
 
             impl<$lifetemplate> [<$name Data>] $(<$inlife>)? {
+                #[allow(clippy::missing_safety_doc)]
                 pub unsafe fn flatten<'any>(&self) -> $name<'any> {
                     use $crate::type_builder::CachedDatum::Flattened;
                     // if we already have a CachedDatum::Flattened can just
@@ -272,7 +274,7 @@ macro_rules! ron_inout_funcs {
 
 #[macro_export]
 macro_rules! flatten {
-    ($typ:ident { $($field:ident: $value:expr),* $(,)? }) => {
+    ($typ:ident { $($field:ident$(: $value:expr)?),* $(,)? }) => {
         {
             let data = ::paste::paste! {
                 [<$typ Data>] {
@@ -280,7 +282,7 @@ macro_rules! flatten {
                     version: 1,
                     padding: [0; 3],
                     $(
-                        $field: $value
+                        $field$(: $value)?
                     ),*
                 }
             };
@@ -291,7 +293,7 @@ macro_rules! flatten {
 
 #[macro_export]
 macro_rules! build {
-    ($typ:ident { $($field:ident: $value:expr),* $(,)? }) => {
+    ($typ:ident { $($field:ident$(: $value:expr)?),* $(,)? }) => {
         {
             <$typ>::from(::paste::paste! {
                 [<$typ Data>] {
@@ -299,7 +301,7 @@ macro_rules! build {
                     version: 1,
                     padding: [0; 3],
                     $(
-                        $field: $value
+                        $field$(: $value)?
                     ),*
                 }
             })

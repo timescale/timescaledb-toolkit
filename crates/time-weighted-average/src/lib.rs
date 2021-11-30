@@ -31,7 +31,7 @@ pub enum TimeWeightError {
 impl TimeWeightSummary {
     pub fn new(pt: TSPoint, method: TimeWeightMethod) -> Self {
         TimeWeightSummary {
-            method: method,
+            method,
             first: pt,
             last: pt,
             w_sum: 0.0,

@@ -179,7 +179,7 @@ pub fn time_weight_summary_trans_inner(
                 TimeWeightTransState {
                     summary_buffer: vec![next.internal()],
                     point_buffer: vec![],
-                    method: next.method.clone(),
+                    method: next.method,
                 }
                 .into(),
             ),
@@ -191,7 +191,7 @@ pub fn time_weight_summary_trans_inner(
                     method: next.method,
                 };
                 state.push_summary(&next);
-                Some(state.into())
+                Some(state)
             }
         })
     }
@@ -260,18 +260,12 @@ fn time_weight_final_inner(
             };
             state.combine_summaries();
             debug_assert!(state.summary_buffer.len() <= 1);
-            match state.summary_buffer.pop() {
-                None => None,
-                Some(st) => Some(
-                    flatten!(TimeWeightSummary {
-                        method: st.method,
-                        first: st.first,
-                        last: st.last,
-                        weighted_sum: st.w_sum,
-                    })
-                    .into(),
-                ),
-            }
+            state.summary_buffer.pop().map(|st| flatten!(TimeWeightSummary {                                        
+                method: st.method,                                         
+                first: st.first,                                         
+                last: st.last,                                         
+                weighted_sum: st.w_sum,
+            }))
         })
     }
 }
@@ -361,18 +355,18 @@ mod tests {
 
             // test basic with 2 points
             let stmt = "SELECT average(time_weight('Linear', ts, val)) FROM test";
-            assert_eq!(select_one!(client, stmt, f64), 15.0);
+            assert!((select_one!(client, stmt, f64) - 15.0).abs() < f64::EPSILON);
             let stmt = "SELECT average(time_weight('LOCF', ts, val)) FROM test";
-            assert_eq!(select_one!(client, stmt, f64), 10.0);
+            assert!((select_one!(client, stmt, f64) - 10.0).abs() < f64::EPSILON);
 
             // more values evenly spaced
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)";
             client.select(stmt, None, None);
 
             let stmt = "SELECT average(time_weight('Linear', ts, val)) FROM test";
-            assert_eq!(select_one!(client, stmt, f64), 15.0);
+            assert!((select_one!(client, stmt, f64) - 15.0).abs() < f64::EPSILON);
             let stmt = "SELECT average(time_weight('LOCF', ts, val)) FROM test";
-            assert_eq!(select_one!(client, stmt, f64), 15.0);
+            assert!((select_one!(client, stmt, f64) - 15.0).abs() < f64::EPSILON);
 
             //non-evenly spaced values
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:08:00+00', 30.0), ('2020-01-01 00:10:00+00', 10.0), ('2020-01-01 00:10:30+00', 20.0), ('2020-01-01 00:20:00+00', 30.0)";
@@ -380,28 +374,28 @@ mod tests {
 
             let stmt = "SELECT average(time_weight('Linear', ts, val)) FROM test";
             // expected =(15 +15 +15 +15 + 20*4 + 20*2 +15*.5 + 25*9.5) / 20 = 21.25 just taking the midpoints between each point and multiplying by minutes and dividing by total
-            assert_eq!(select_one!(client, stmt, f64), 21.25);
+            assert!((select_one!(client, stmt, f64) - 21.25).abs() < f64::EPSILON);
             let stmt = "SELECT time_weight('Linear', ts, val) \
                 ->toolkit_experimental.average() \
             FROM test";
             // arrow syntax should be the same
-            assert_eq!(select_one!(client, stmt, f64), 21.25);
+            assert!((select_one!(client, stmt, f64) - 21.25).abs() < f64::EPSILON);
 
             let stmt = "SELECT average(time_weight('LOCF', ts, val)) FROM test";
             // expected = (10 + 20 + 10 + 20 + 10*4 + 30*2 +10*.5 + 20*9.5) / 20 = 17.75 using last value and carrying for each point
-            assert_eq!(select_one!(client, stmt, f64), 17.75);
+            assert!((select_one!(client, stmt, f64) - 17.75).abs() < f64::EPSILON);
 
             //make sure this works with whatever ordering we throw at it
             let stmt = "SELECT average(time_weight('Linear', ts, val ORDER BY random())) FROM test";
-            assert_eq!(select_one!(client, stmt, f64), 21.25);
+            assert!((select_one!(client, stmt, f64) - 21.25).abs() < f64::EPSILON);
             let stmt = "SELECT average(time_weight('LOCF', ts, val ORDER BY random())) FROM test";
-            assert_eq!(select_one!(client, stmt, f64), 17.75);
+            assert!((select_one!(client, stmt, f64) - 17.75).abs() < f64::EPSILON);
 
             // make sure we get the same result if we do multi-level aggregation
             let stmt = "WITH t AS (SELECT date_trunc('minute', ts), time_weight('Linear', ts, val) AS tws FROM test GROUP BY 1) SELECT average(rollup(tws)) FROM t";
-            assert_eq!(select_one!(client, stmt, f64), 21.25);
+            assert!((select_one!(client, stmt, f64) - 21.25).abs() < f64::EPSILON);
             let stmt = "WITH t AS (SELECT date_trunc('minute', ts), time_weight('LOCF', ts, val) AS tws FROM test GROUP BY 1) SELECT average(rollup(tws)) FROM t";
-            assert_eq!(select_one!(client, stmt, f64), 17.75);
+            assert!((select_one!(client, stmt, f64) - 17.75).abs() < f64::EPSILON);
         });
     }
 
@@ -429,7 +423,7 @@ mod tests {
                 method:Linear\
             )";
             assert_eq!(select_one!(client, linear_time_weight, String), expected);
-            assert_eq!(select_one!(client, &*avg(expected), f64), 15.0);
+            assert!((select_one!(client, &*avg(expected), f64) - 15.0).abs() < f64::EPSILON);
 
             let expected = "(\
                 version:1,\
@@ -439,7 +433,7 @@ mod tests {
                 method:LOCF\
             )";
             assert_eq!(select_one!(client, locf_time_weight, String), expected);
-            assert_eq!(select_one!(client, &*avg(expected), f64), 10.0);
+            assert!((select_one!(client, &*avg(expected), f64) - 10.0).abs() < f64::EPSILON);
 
             // more values evenly spaced
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)";
@@ -453,7 +447,7 @@ mod tests {
                 method:Linear\
             )";
             assert_eq!(select_one!(client, linear_time_weight, String), expected);
-            assert_eq!(select_one!(client, &*avg(expected), f64), 15.0);
+            assert!((select_one!(client, &*avg(expected), f64) - 15.0).abs() < f64::EPSILON);
             let expected = "(\
                 version:1,\
                 first:(ts:\"2020-01-01 00:00:00+00\",val:10),\
@@ -462,7 +456,7 @@ mod tests {
                 method:LOCF\
             )";
             assert_eq!(select_one!(client, locf_time_weight, String), expected);
-            assert_eq!(select_one!(client, &*avg(expected), f64), 15.0);
+            assert!((select_one!(client, &*avg(expected), f64) - 15.0).abs() < f64::EPSILON);
 
             //non-evenly spaced values
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:08:00+00', 30.0), ('2020-01-01 00:10:00+00', 10.0), ('2020-01-01 00:10:30+00', 20.0), ('2020-01-01 00:20:00+00', 30.0)";
@@ -476,7 +470,7 @@ mod tests {
                 method:Linear\
             )";
             assert_eq!(select_one!(client, linear_time_weight, String), expected);
-            assert_eq!(select_one!(client, &*avg(expected), f64), 21.25);
+            assert!((select_one!(client, &*avg(expected), f64) - 21.25).abs() < f64::EPSILON);
             let expected = "(\
                 version:1,\
                 first:(ts:\"2020-01-01 00:00:00+00\",val:10),\
@@ -485,7 +479,7 @@ mod tests {
                 method:LOCF\
             )";
             assert_eq!(select_one!(client, locf_time_weight, String), expected);
-            assert_eq!(select_one!(client, &*avg(expected), f64), 17.75);
+            assert!((select_one!(client, &*avg(expected), f64) - 17.75).abs() < f64::EPSILON);
         });
     }
 
@@ -496,7 +490,7 @@ mod tests {
             const BASE: i64 = 631152000000000;
             const MIN: i64 = 60000000;
             let state = time_weight_trans_inner(None, "linear".to_string(), Some(BASE.into()), Some(10.0), ptr::null_mut());
-            let state = time_weight_trans_inner(state, "linear".to_string(), Some((BASE + 1 * MIN).into()), Some(20.0), ptr::null_mut());
+            let state = time_weight_trans_inner(state, "linear".to_string(), Some((BASE + MIN).into()), Some(20.0), ptr::null_mut());
             let state = time_weight_trans_inner(state, "linear".to_string(), Some((BASE + 2 * MIN).into()), Some(30.0), ptr::null_mut());
             let state = time_weight_trans_inner(state, "linear".to_string(), Some((BASE + 3 * MIN).into()), Some(10.0), ptr::null_mut());
             let state = time_weight_trans_inner(state, "linear".to_string(), Some((BASE + 4 * MIN).into()), Some(20.0), ptr::null_mut());

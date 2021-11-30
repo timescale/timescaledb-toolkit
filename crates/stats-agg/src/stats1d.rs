@@ -12,6 +12,12 @@ pub struct StatsSummary1D {
     pub sx4: f64,
 }
 
+impl Default for StatsSummary1D {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl StatsSummary1D{
     fn n64(&self) -> f64 {
         self.n as f64
@@ -114,7 +120,7 @@ impl StatsSummary1D{
         }
         
         // we can't have an initial value of n = 0 if we're removing something...
-        if self.n <= 0 {
+        if self.n == 0 {
             panic!(); //perhaps we should do error handling here, but I think this is reasonable as we are assuming that the removal is of an already-added item in the rest of this
         }
 
@@ -164,7 +170,7 @@ impl StatsSummary1D{
         let tmp = self.sx / self.n64() - other.sx / other.n64();
         let n = self.n + other.n;
         let r = StatsSummary1D {
-            n: n,
+            n,
             sx: self.sx + other.sx,
             sx2: self.sx2 + other.sx2 + self.n64() * other.n64() * tmp * tmp / n as f64,
             sx3: M3::combine(self.n64(), other.n64(), self.sx, other.sx, self.sx2, other.sx2, self.sx3, other.sx3),
@@ -187,10 +193,7 @@ impl StatsSummary1D{
             return Some(StatsSummary1D::new());
         }  else if remove.n == 0 {
             return Some(*self);
-        } else if combined.n == 0 {
-            // if we've gotten here remove.n != 0, this should never occur, we can't subtract from nothing
-            panic!(); 
-        } else if  combined.n < remove.n {
+        } else if combined.n < remove.n {
             panic!(); // given that we're always removing things that we've previously added, we shouldn't be able to get a case where we're removing an n that's larger. 
         }
         // if the sum we're removing is very large compared to the overall value we need to recalculate, see note on the remove function

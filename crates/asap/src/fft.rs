@@ -9,7 +9,6 @@ pub fn transform(real: &mut Vec<f64>, imag: &mut Vec<f64>) {
 
     let n = real.len();
     if n == 0 {
-         return;
     }
     else if n & (n-1) == 0 { // Is power of 2
         transform_radix2(real, imag);
@@ -58,12 +57,8 @@ fn transform_radix2(real: &mut Vec<f64>, imag: &mut Vec<f64>) {
     for i in 0..n {
         let j = reverse_bits(i as u32, levels) as usize;
         if j > i {
-            let mut temp = real[i];
-            real[i] = real[j];
-            real[j] = temp;
-            temp = imag[i];
-            imag[i] = imag[j];
-            imag[j] = temp;
+            real.swap(i, j);
+            imag.swap(i, j);
         }
     }
 
@@ -97,7 +92,7 @@ fn transform_radix2(real: &mut Vec<f64>, imag: &mut Vec<f64>) {
             y = (y << 1) | (x & 1);
             x >>= 1;
         }
-        return y;
+        y
     }
 }
 

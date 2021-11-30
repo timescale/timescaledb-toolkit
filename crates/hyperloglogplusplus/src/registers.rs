@@ -25,7 +25,7 @@ pub struct Registers<'s>(Cow<'s, [u8]>);
 impl<'s> Registers<'s> {
     /// allocate a new Registers of size `2^exponent`
     pub fn new(exponent: u8) -> Self {
-        assert!(exponent >= 4 && exponent <= 64);
+        assert!((4..=64).contains(&exponent));
         let num_registers: i128 = 1 << exponent;
         let num_bits = num_registers * 6;
         // store an additional byte at the end so we can always use 16-bit reads
@@ -35,7 +35,9 @@ impl<'s> Registers<'s> {
         let mut bytes = vec![0u8; num_bytes as usize];
 
         // set the extra byte to 0xff so we don't count it as 0
-        bytes.last_mut().map(|l| *l = 0xff);
+        if let Some(byte) = bytes.last_mut() {
+            *byte = 0xff;
+        }
 
         Self(bytes.into())
     }
@@ -61,7 +63,7 @@ impl<'s> Registers<'s> {
         let block_num = idx / 4;
         let idx_in_block = idx % 4;
         // TODO switch chunks_exact_mut() to as_chunks_mut() once stable?
-        let (a, b, c) = match self.0.to_mut().chunks_exact_mut(3).skip(block_num).next() {
+        let (a, b, c) = match self.0.to_mut().chunks_exact_mut(3).nth(block_num) {
             Some([a, b, c, ..]) => (a, b, c),
             _ => panic!(
                 "index {} out of bounds of {} registers",

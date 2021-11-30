@@ -17,7 +17,7 @@ extern crate quickcheck_macros;
 // This is used to index the buckets of the UddSketch.  In particular, because UddSketch stores values
 // based on a logarithmic scale, we need to track negative values separately from positive values, and
 // zero also needs special casing.
-#[derive(Serialize, Deserialize, Hash, PartialEq, Eq, Copy, Clone, Ord, Debug)]
+#[derive(Serialize, Deserialize, Hash, PartialEq, Eq, Copy, Clone, Debug)]
 pub enum SketchHashKey {
     Negative(i64),
     Zero,
@@ -57,7 +57,7 @@ impl SketchHashKey {
             Positive(i64::MAX) => *self,
             Negative(x) => Negative(if x > 0 { x + 1 } else { x } / 2),
             Positive(x) => Positive(if x > 0 { x + 1 } else { x } / 2),
-            x => x.clone(), // Zero and Invalid don't compact
+            x => x, // Zero and Invalid don't compact
         }
     }
 }
@@ -120,7 +120,7 @@ impl SketchHashMap {
 
     fn iter(&self) -> SketchHashIterator {
         SketchHashIterator {
-            container: &self,
+            container: self,
             next_key: self.head,
         }
     }
@@ -155,7 +155,7 @@ impl SketchHashMap {
     fn compact(&mut self) {
         let mut target = self.head;
         // TODO can we do without this additional map?
-        let old_map = std::mem::replace(&mut self.map, HashMap::new());
+        let old_map = std::mem::take(&mut self.map);
 
         self.head = self.head.compact_key();
 
@@ -197,13 +197,13 @@ pub struct UDDSketch {
 
 impl UDDSketch {
     pub fn new(max_buckets: u64, initial_error: f64) -> Self {
-        assert!(initial_error >= 1e-12 && initial_error < 1.0);
+        assert!((1e-12..1.0).contains(&initial_error));
         UDDSketch {
             buckets: SketchHashMap::new(),
             alpha: initial_error,
             gamma: (1.0 + initial_error) / (1.0 - initial_error),
             compactions: 0,
-            max_buckets: max_buckets,
+            max_buckets,
             num_values: 0,
             values_sum: 0.0,
         }
@@ -224,7 +224,7 @@ impl UDDSketch {
             alpha: current_error,
             gamma: gamma(current_error),
             compactions: compactions as u32,
-            max_buckets: max_buckets,
+            max_buckets,
             num_values: values,
             values_sum: sum,
         };
@@ -288,11 +288,9 @@ impl UDDSketch {
     pub fn merge_sketch(&mut self, other: &UDDSketch) {
         // Require matching initial parameters
         assert!(
-            self.gamma
-                .powf(1.0 / f64::powi(2.0, self.compactions as i32))
-                == other
-                    .gamma
-                    .powf(1.0 / f64::powi(2.0, other.compactions as i32))
+            (self.gamma.powf(1.0 / f64::powi(2.0, self.compactions as i32)) - 
+             other.gamma.powf(1.0 / f64::powi(2.0, other.compactions as i32))
+            ).abs() < f64::EPSILON
         );
         assert!(self.max_buckets == other.max_buckets);
 
@@ -380,7 +378,7 @@ pub fn estimate_quantile(
     num_values: u64,
     buckets: impl Iterator<Item=(SketchHashKey, u64)>,
 ) -> f64  {
-    assert!(quantile >= 0.0 && quantile <= 1.0);
+    assert!((0.0..=1.0).contains(&quantile));
 
     let mut remaining = (num_values as f64 * quantile) as u64 + 1;
     if remaining >= num_values {

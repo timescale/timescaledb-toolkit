@@ -33,7 +33,7 @@ impl<'s> Storage<'s> {
     pub fn new(precision: u8) -> Self {
         // TODO what is max precision
         assert!(
-            precision >= 4 && precision <= 18,
+            (4..=18).contains(&precision),
             "invalid value for precision: {}; must be within [4, 18]",
             precision,
         );
@@ -48,7 +48,7 @@ impl<'s> Storage<'s> {
     pub fn from_parts(bytes: &'s[u8], num_compressed: u64, precision: u8) -> Self {
         // TODO what is max precision
         assert!(
-            precision >= 4 && precision <= 18,
+            (4..=18).contains(&precision),
             "invalid value for precision: {}; must be within [4, 18]",
             precision,
         );
@@ -63,7 +63,7 @@ impl<'s> Storage<'s> {
     pub fn into_owned(&self) -> Storage<'static> {
         Storage {
             to_merge: self.to_merge.clone(),
-            compressed: self.compressed.into_owned(),
+            compressed: self.compressed.make_owned(),
             num_compressed: self.num_compressed,
             precision: self.precision,
         }
@@ -260,7 +260,7 @@ impl Ord for Encoded {
                 (true, true) => self.extract_count().cmp(&other.extract_count()).reverse(),
             };
         }
-        return idx_cmp;
+        idx_cmp
     }
 }
 

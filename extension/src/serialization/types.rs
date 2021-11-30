@@ -41,6 +41,7 @@ impl<'de> Deserialize<'de> for ShortTypeId {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[allow(clippy::upper_case_acronyms)]
 enum ShortTypIdSerializer {
     BOOL,
     BYTEA,
@@ -252,7 +253,7 @@ impl<'de> Deserialize<'de> for PgTypId {
             let name = pg_sys::pg_any_to_server(name.as_ptr(), name_len as _, pg_sys::pg_enc_PG_UTF8 as _);
             let name = CStr::from_ptr(name);
 
-            let namespace_id = pg_sys::LookupExplicitNamespace(namespace.as_ptr(), true as _);
+            let namespace_id = pg_sys::LookupExplicitNamespace(namespace.as_ptr(), true);
             if namespace_id == pg_sys::InvalidOid {
                 return Err(D::Error::custom(format!(
                     "invalid namespace {:?}",
@@ -275,7 +276,7 @@ impl<'de> Deserialize<'de> for PgTypId {
                 )));
             }
 
-            return Ok(PgTypId(type_id));
+            Ok(PgTypId(type_id))
         }
     }
 }

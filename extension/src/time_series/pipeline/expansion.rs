@@ -1,5 +1,5 @@
 
-use std::{iter::Iterator, mem::replace};
+use std::{iter::Iterator, mem::take};
 
 use pgx::*;
 
@@ -49,7 +49,7 @@ pub mod toolkit_experimental {
     name="unnest",
     schema="toolkit_experimental"
 )]
-pub fn pipeline_unnest<'e>() -> toolkit_experimental::PipelineThenUnnest<'e> {
+pub fn pipeline_unnest() -> toolkit_experimental::PipelineThenUnnest<'static> {
     build! {
         PipelineThenUnnest {
             num_elements: 0,
@@ -74,7 +74,7 @@ pub fn arrow_finalize_with_unnest<'p>(
         }}
     }
 
-    let mut elements = replace(pipeline.elements.as_owned(), vec![]);
+    let mut elements = take(pipeline.elements.as_owned());
     elements.extend(then_stats_agg.elements.iter());
     build! {
         PipelineThenUnnest {
@@ -87,9 +87,9 @@ pub fn arrow_finalize_with_unnest<'p>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline_then_unnest<'s>(
-    timevector: toolkit_experimental::Timevector<'s>,
-    pipeline: toolkit_experimental::PipelineThenUnnest<'s>,
+pub fn arrow_run_pipeline_then_unnest(
+    timevector: toolkit_experimental::Timevector,
+    pipeline: toolkit_experimental::PipelineThenUnnest,
 ) -> impl Iterator<Item = (name!(time,crate::raw::TimestampTz),name!(value,f64))>
 {
     let series = run_pipeline_elements(timevector, pipeline.elements.iter())
@@ -103,7 +103,7 @@ pub fn arrow_run_pipeline_then_unnest<'s>(
     name="materialize",
     schema="toolkit_experimental"
 )]
-pub fn pipeline_series<'e>() -> toolkit_experimental::PipelineForceMaterialize<'e> {
+pub fn pipeline_series() -> toolkit_experimental::PipelineForceMaterialize<'static> {
     build! {
         PipelineForceMaterialize {
             num_elements: 0,
@@ -128,7 +128,7 @@ pub fn arrow_force_materialize<'e>(
         }}
     }
 
-    let mut elements = replace(pipeline.elements.as_owned(), vec![]);
+    let mut elements = take(pipeline.elements.as_owned());
     elements.extend(then_stats_agg.elements.iter());
     build! {
         PipelineForceMaterialize {
@@ -140,9 +140,9 @@ pub fn arrow_force_materialize<'e>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline_then_materialize<'s, 'p>(
-    timevector: toolkit_experimental::Timevector<'s>,
-    pipeline: toolkit_experimental::PipelineForceMaterialize<'p>,
+pub fn arrow_run_pipeline_then_materialize(
+    timevector: toolkit_experimental::Timevector,
+    pipeline: toolkit_experimental::PipelineForceMaterialize,
 ) -> toolkit_experimental::Timevector<'static>
 {
     run_pipeline_elements(timevector, pipeline.elements.iter())
@@ -256,8 +256,8 @@ mod tests {
                 -> abs() -> round();",
                 None,
                 None
-            ).skip(1)
-                .next().unwrap()
+            ).nth(1)
+                .unwrap()
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: \

@@ -139,7 +139,7 @@ impl Parse for FlatSerializeField {
             .attrs
             .into_iter()
             .filter(|attr| {
-                let is_flatten = &attr.path == &path;
+                let is_flatten = attr.path == path;
                 if is_flatten {
                     use_trait = true;
                     return false;
@@ -272,7 +272,7 @@ impl Parse for PerFieldsAttr {
 
 fn has_self_field(expr: &Expr) -> bool {
     let mut has_self = FindSelf(false);
-    has_self.visit_expr(&expr);
+    has_self.visit_expr(expr);
     has_self.0
 }
 
@@ -317,8 +317,8 @@ fn validate_self_field<'a>(
     expr: &Expr,
     seen_fields: &HashSet<&'a Ident>,
 ) -> std::result::Result<(), TokenStream2> {
-    let mut validate_fields = ValidateLenFields(None, &seen_fields);
-    validate_fields.visit_expr(&expr);
+    let mut validate_fields = ValidateLenFields(None, seen_fields);
+    validate_fields.visit_expr(expr);
     match validate_fields.0 {
         Some(error) => Err(error),
         None => Ok(()),

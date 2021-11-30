@@ -67,7 +67,7 @@ pub fn map_lambda_over_series(
     use SeriesType::*;
 
     match &mut series.series {
-        SortedSeries { points, .. } => if only_val {
+        Sorted { points, .. } => if only_val {
             let points = points.as_owned();
             for point in points {
                 let (_, new_val) = func(point.ts, point.val);
@@ -77,14 +77,14 @@ pub fn map_lambda_over_series(
                 }
             }
         },
-        // NormalSeries { values, .. } => if only_val {
+        // Normal { values, .. } => if only_val {
         //     // TODO
         //     let values = values.as_owned();
         //     for value in values {
         //         *value = func(*value)
         //     }
         // },
-        ExplicitSeries { points, .. } => {
+        Explicit { points, .. } => {
             let points = points.as_owned();
             // FIXME ensure sorted
             for point in points {
@@ -95,7 +95,7 @@ pub fn map_lambda_over_series(
                 }
             }
         },
-        // GappyNormalSeries { values, .. } => if only_val {
+        // GappyNormal { values, .. } => if only_val {
         //     // TODO
         //     let values = values.as_owned();
         //     //FIXME add setjmp guard around loop
@@ -113,7 +113,7 @@ pub fn map_lambda_over_series(
             }).collect();
             *series = build! {
                 Timevector {
-                    series: ExplicitSeries {
+                    series: Explicit {
                         num_points: new_points.len() as _,
                         points: new_points.into(),
                     },
@@ -267,7 +267,7 @@ pub fn map_series(series: &mut Timevector<'_>, mut func: impl FnMut(f64) -> f64)
     use std::panic::AssertUnwindSafe;
 
     match &mut series.series {
-        SortedSeries { points, .. } => {
+        Sorted { points, .. } => {
             let points = points.as_owned().iter_mut();
             // setjump guard around the loop to reduce the amount we have to
             // call it
@@ -282,7 +282,7 @@ pub fn map_series(series: &mut Timevector<'_>, mut func: impl FnMut(f64) -> f64)
                 }
             }))
         },
-        NormalSeries { values, .. } => {
+        Normal { values, .. } => {
             let values = values.as_owned().iter_mut();
             // setjump guard around the loop to reduce the amount we have to
             // call it
@@ -294,7 +294,7 @@ pub fn map_series(series: &mut Timevector<'_>, mut func: impl FnMut(f64) -> f64)
                 }
             }))
         },
-        ExplicitSeries { points, .. } => {
+        Explicit { points, .. } => {
             let points = points.as_owned().iter_mut();
             // setjump guard around the loop to reduce the amount we have to
             // call it
@@ -309,7 +309,7 @@ pub fn map_series(series: &mut Timevector<'_>, mut func: impl FnMut(f64) -> f64)
                 }
             }))
         },
-        GappyNormalSeries { values, .. } => {
+        GappyNormal { values, .. } => {
             let values = values.as_owned().iter_mut();
             // setjump guard around the loop to reduce the amount we have to
             // call it

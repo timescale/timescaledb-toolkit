@@ -143,9 +143,9 @@ pub mod toolkit_experimental {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline<'s, 'p>(
-    timevector: toolkit_experimental::Timevector<'s>,
-    pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
+pub fn arrow_run_pipeline(
+    timevector: toolkit_experimental::Timevector,
+    pipeline: toolkit_experimental::UnstableTimevectorPipeline,
 ) -> toolkit_experimental::Timevector<'static> {
     run_pipeline_elements(timevector, pipeline.elements.iter())
         .in_current_context()
@@ -161,33 +161,33 @@ pub fn run_pipeline_elements<'s, 'j, 'i>(
     timevector
 }
 
-pub fn execute_pipeline_element<'s, 'e>(
+pub fn execute_pipeline_element<'s>(
     timevector: Timevector<'s>,
     element: &Element
 ) -> Timevector<'s> {
     match element {
         Element::LTTB{resolution} =>
-            return crate::lttb::lttb_ts(timevector, *resolution as _),
+            crate::lttb::lttb_ts(timevector, *resolution as _),
         Element::ResampleToRate{..} =>
-            return resample_to_rate(&timevector, &element),
+            resample_to_rate(&timevector, element),
         Element::FillHoles{..} =>
-            return fill_holes(timevector, &element),
+            fill_holes(timevector, element),
         Element::Sort{..} =>
-            return sort_timevector(timevector),
+            sort_timevector(timevector),
         Element::Delta{..} =>
-            return timevector_delta(&timevector),
+            timevector_delta(&timevector),
         Element::MapData { function } =>
-            return map::apply_to(timevector, function.0),
+            map::apply_to(timevector, function.0),
         Element::MapSeries { function } =>
-            return map::apply_to_series(timevector, function.0),
+            map::apply_to_series(timevector, function.0),
         Element::MapLambda{ lambda } =>
-            return map::apply_lambda_to(timevector, lambda),
+            map::apply_lambda_to(timevector, lambda),
         Element::FilterLambda{ lambda } =>
-            return filter::apply_lambda_to(timevector, lambda),
+            filter::apply_lambda_to(timevector, lambda),
         Element::Arithmetic{ function, rhs } =>
-            return arithmetic::apply(timevector, *function, *rhs),
+            arithmetic::apply(timevector, *function, *rhs),
         Element::FillTo{..} =>
-            return fill_to(timevector, &element),
+            fill_to(timevector, element),
     }
 }
 
@@ -325,8 +325,8 @@ requires= [pipeline_support],
 );
 
 #[pg_extern(stable, parallel_safe, schema="toolkit_experimental")]
-pub fn run_user_pipeline_element<'s, 'p>(
-    timevector: toolkit_experimental::Timevector<'s>,
+pub fn run_user_pipeline_element(
+    timevector: toolkit_experimental::Timevector,
     function: crate::raw::regproc,
 ) -> toolkit_experimental::Timevector<'static> {
     check_user_function_type(function.0.try_into().unwrap());
@@ -334,7 +334,7 @@ pub fn run_user_pipeline_element<'s, 'p>(
 }
 
 #[pg_extern(stable, parallel_safe, schema="toolkit_experimental")]
-pub fn build_unstable_user_pipeline<'s, 'p>(
+pub fn build_unstable_user_pipeline(
     first: crate::raw::regproc,
     second: crate::raw::regproc,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
@@ -351,10 +351,10 @@ pub fn build_unstable_user_pipeline<'s, 'p>(
 }
 
 #[pg_extern(stable, parallel_safe, schema="toolkit_experimental")]
-pub fn add_user_pipeline_element<'p, 'e>(
-    pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
+pub fn add_user_pipeline_element(
+    pipeline: toolkit_experimental::UnstableTimevectorPipeline,
     function: crate::raw::regproc,
-) -> toolkit_experimental::UnstableTimevectorPipeline<'p> {
+) -> toolkit_experimental::UnstableTimevectorPipeline {
     let elements: Vec<_> = pipeline.elements.iter()
         .chain(Some(map_series_element(function.0.try_into().unwrap())))
         .collect();
@@ -406,9 +406,9 @@ requires= [Timevector, run_user_pipeline_element, build_unstable_user_pipeline, 
     name="lttb",
     schema="toolkit_experimental"
 )]
-pub fn lttb_pipeline_element<'p, 'e>(
+pub fn lttb_pipeline_element(
     resolution: i32,
-) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     Element::LTTB {
         resolution: resolution.try_into().unwrap(),
     }.flatten()
@@ -544,8 +544,8 @@ mod tests {
                 "EXPLAIN (verbose) SELECT timevector('2021-01-01'::timestamptz, 0.1) -> round() -> abs() -> round();",
                 None,
                 None
-            ).skip(1)
-                .next().unwrap()
+            ).nth(1)
+                .unwrap()
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
             // check that it's executing as if we had input `timevector -> (round() -> abs())`

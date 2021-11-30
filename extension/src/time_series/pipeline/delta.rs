@@ -43,7 +43,7 @@ pub fn timevector_delta<'s>(
 
     build!(
         Timevector {
-            series: SeriesType::SortedSeries {
+            series: SeriesType::Sorted {
                 num_points: delta_points.len() as u64,
                 points: delta_points.into(),
             }

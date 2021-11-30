@@ -11,7 +11,7 @@ use super::*;
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug, FlatSerializable)]
 #[repr(u64)]
 pub enum FillToMethod {
-    LOCF,
+    Locf,
     Interpolate,
     Nearest,
 }
@@ -19,7 +19,7 @@ pub enum FillToMethod {
 impl FillToMethod {
     pub fn fill_point(&self, lhs: &TSPoint, rhs: &TSPoint, target_ts: i64) -> TSPoint {
         match *self {
-            FillToMethod::LOCF => TSPoint{ts: target_ts, val: lhs.val},
+            FillToMethod::Locf => TSPoint{ts: target_ts, val: lhs.val},
             FillToMethod::Interpolate => {
                 let interval = rhs.ts as f64 - lhs.ts as f64;
                 let left_wt = 1. - (target_ts - lhs.ts) as f64 / interval;
@@ -53,7 +53,7 @@ pub fn fillto_pipeline_element<'e> (
         let interval = ((*interval).month as i64 * 30 + (*interval).day as i64) * 24 * 60 * 60 * 1000000 + (*interval).time;
 
         let fill_method = match fill_method.to_lowercase().as_str() {
-            "locf" => FillToMethod::LOCF,
+            "locf" => FillToMethod::Locf,
             "interpolate" => FillToMethod::Interpolate,
             "linear" => FillToMethod::Interpolate,
             "nearest" => FillToMethod::Nearest,
@@ -77,8 +77,8 @@ pub fn fill_to<'s>(
     };
 
     match series.series {
-        SeriesType::ExplicitSeries{..} => panic!("Timeseries must be sorted prior to passing to fill_to"),
-        SeriesType::NormalSeries{step_interval, ..} => if step_interval <= interval { return series; },
+        SeriesType::Explicit{..} => panic!("Timeseries must be sorted prior to passing to fill_to"),
+        SeriesType::Normal{step_interval, ..} => if step_interval <= interval { return series; },
         _ => ()
     }
 
@@ -90,7 +90,7 @@ pub fn fill_to<'s>(
         if rhs.ts - lhs.ts > interval {
             let mut target = lhs.ts + interval;
             while target < rhs.ts {
-                result.push(method.fill_point(&lhs, &rhs, target));
+                result.push(method.fill_point(&lhs, rhs, target));
                 target += interval;
             }
         }
@@ -106,7 +106,7 @@ pub fn fill_to<'s>(
     result.sort_by_key(|p| p.ts);
     build!{
         Timevector {
-            series: SeriesType::SortedSeries{
+            series: SeriesType::Sorted{
                 num_points: result.len() as _,
                 points: result.into(),
             }

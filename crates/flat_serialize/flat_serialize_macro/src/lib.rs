@@ -1248,6 +1248,7 @@ impl FlatSerializeField {
         }
     }
 
+    #[allow(clippy::wrong_self_convention)]
     fn into_owned(&self) -> TokenStream2 {
         let ident = self.ident.as_ref().unwrap();
         match &self.length_info {
@@ -1429,7 +1430,7 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
         syn::Data::Struct(s) => s,
     };
 
-    let repr: Vec<_> = input.attrs.iter().flat_map(|attr| {
+    let num_reprs = input.attrs.iter().flat_map(|attr| {
         let meta = match attr.parse_meta() {
             Ok(meta) => meta,
             _ => return None,
@@ -1444,8 +1445,8 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
             }
             None
         })
-    }).collect();
-    if repr.len() != 1 {
+    }).count();
+    if num_reprs != 1 {
         return quote_spanned! {s.struct_token.span()=>
             compile_error!{"FlatSerializable only allowed on #[repr(C)] structs"}
         }.into()
@@ -1454,7 +1455,7 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
     let s = FlatSerializeStruct {
         per_field_attrs: Default::default(),
         attrs: Default::default(),
-        ident: name.clone(),
+        ident: name,
         lifetime: None,
         fields: s.fields.into_iter().map(|f| FlatSerializeField {
             field: f,

@@ -115,7 +115,7 @@ pub fn uddsketch_serialize(
     state: Internal,
 ) -> bytea {
     let serializable = &SerializedUddSketch::from(unsafe { state.get().unwrap() });
-    crate::do_serialize!(serializable).into()
+    crate::do_serialize!(serializable)
 }
 
 #[pg_extern(strict, immutable, parallel_safe)]
@@ -158,9 +158,9 @@ impl From<&UddSketchInternal> for SerializedUddSketch {
     }
 }
 
-impl Into<UddSketchInternal> for SerializedUddSketch {
-    fn into(self) -> UddSketchInternal {
-        UddSketchInternal::new_from_data(self.max_buckets as u64, self.alpha, self.compactions as u64, self.count, self.sum, self.keys(), self.counts())
+impl From<SerializedUddSketch> for UddSketchInternal {
+    fn from(sketch: SerializedUddSketch) -> Self {
+        UddSketchInternal::new_from_data(sketch.max_buckets as u64, sketch.alpha, sketch.compactions as u64, sketch.count, sketch.sum, sketch.keys(), sketch.counts())
     }
 }
 
@@ -244,7 +244,7 @@ impl<'a, 'b> From<&'a ReadableUddSketch> for UddSketch<'b> {
                     compactions: sketch.compactions,
                     count: sketch.count,
                     sum: sketch.sum,
-                    zero_bucket_count: zero_bucket_count,
+                    zero_bucket_count,
                     neg_indexes_bytes: (negative_indexes.len() as u32),
                     neg_buckets_bytes: (negative_counts.len() as u32),
                     pos_indexes_bytes: (positive_indexes.len() as u32),
@@ -297,14 +297,6 @@ impl<'input> UddSketch<'input> {
         UddSketchInternal::new_from_data(self.max_buckets as u64, self.alpha, self.compactions, self.count, self.sum, self.keys(), self.counts())
     }
 
-    pub fn from_iter(iter: impl Iterator<Item=f64>) -> Self {
-        let mut sketch = UddSketchInternal::new(PERCENTILE_AGG_DEFAULT_SIZE.into(), PERCENTILE_AGG_DEFAULT_ERROR);
-        for value in iter {
-            sketch.add_value(value);
-        }
-        Self::from_internal(&sketch)
-    }
-
     fn from_internal(state: &UddSketchInternal) -> Self {
         let CompressedBuckets {
             negative_indexes,
@@ -326,7 +318,7 @@ impl<'input> UddSketch<'input> {
                     compactions: state.times_compacted() as u64,
                     count: state.count(),
                     sum: state.sum(),
-                    zero_bucket_count: zero_bucket_count,
+                    zero_bucket_count,
                     neg_indexes_bytes: negative_indexes.len() as u32,
                     neg_buckets_bytes: negative_counts.len() as u32,
                     pos_indexes_bytes: positive_indexes.len() as u32,
@@ -336,8 +328,18 @@ impl<'input> UddSketch<'input> {
                     positive_indexes: positive_indexes.into(),
                     positive_counts: positive_counts.into(),
                 }
-            ).into()
+            )
         }
+    }
+}
+
+impl<'input> FromIterator<f64> for UddSketch<'input> {
+    fn from_iter<T: IntoIterator<Item = f64>>(iter: T) -> Self {
+        let mut sketch = UddSketchInternal::new(PERCENTILE_AGG_DEFAULT_SIZE.into(), PERCENTILE_AGG_DEFAULT_ERROR);
+        for value in iter {
+            sketch.add_value(value);
+        }
+        Self::from_internal(&sketch)
     }
 }
 
@@ -865,14 +867,14 @@ mod tests {
 
             client.select("CREATE VIEW sketch AS SELECT uddsketch(10, 0.01, value) FROM io_test", None, None).first().get_one::<String>();
 
-            for cmd in vec!["mean(" , "num_vals(", "error(", "approx_percentile(0.1,", "approx_percentile(0.25,", "approx_percentile(0.5,", "approx_percentile(0.6,", "approx_percentile(0.8,"] {
+            for cmd in ["mean(" , "num_vals(", "error(", "approx_percentile(0.1,", "approx_percentile(0.25,", "approx_percentile(0.5,", "approx_percentile(0.6,", "approx_percentile(0.8,"] {
                 let sql1 = format!("SELECT {}uddsketch) FROM sketch", cmd);
                 let sql2 = format!("SELECT {}'{}'::uddsketch) FROM sketch", cmd, expected);
 
                 let expected = client.select(&sql1, None, None).first().get_one::<f64>().unwrap();
                 let test = client.select(&sql2, None, None).first().get_one::<f64>().unwrap();
 
-                assert_eq!(expected, test);
+                assert!((expected - test).abs() < f64::EPSILON);
             }
         });
     }

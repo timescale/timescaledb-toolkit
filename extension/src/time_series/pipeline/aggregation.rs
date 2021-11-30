@@ -1,5 +1,5 @@
 
-use std::mem::replace;
+use std::mem::take;
 
 use pgx::*;
 
@@ -118,9 +118,9 @@ pub mod toolkit_experimental {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline_then_stats_agg<'s, 'p>(
-    mut timevector: toolkit_experimental::Timevector<'s>,
-    pipeline: toolkit_experimental::PipelineThenStatsAgg<'p>,
+pub fn arrow_run_pipeline_then_stats_agg(
+    mut timevector: toolkit_experimental::Timevector,
+    pipeline: toolkit_experimental::PipelineThenStatsAgg,
 ) -> StatsSummary1D<'static> {
     timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
     let mut stats = InternalStatsSummary1D::new();
@@ -145,7 +145,7 @@ pub fn finalize_with_stats_agg<'e>(
         }}
     }
 
-    let mut elements = replace(pipeline.elements.as_owned(), vec![]);
+    let mut elements = take(pipeline.elements.as_owned());
     elements.extend(then_stats_agg.elements.iter());
     build! {
         PipelineThenStatsAgg {
@@ -161,7 +161,7 @@ pub fn finalize_with_stats_agg<'e>(
     name="stats_agg",
     schema="toolkit_experimental"
 )]
-pub fn pipeline_stats_agg<'e>() -> toolkit_experimental::PipelineThenStatsAgg<'e> {
+pub fn pipeline_stats_agg() -> toolkit_experimental::PipelineThenStatsAgg<'static> {
     build! {
         PipelineThenStatsAgg {
             num_elements: 0,
@@ -200,9 +200,9 @@ requires= [pipeline_stats_agg_support],
     name="sum_cast",
     schema="toolkit_experimental"
 )]
-pub fn sum_pipeline_element<'p, 'e>(
-    accessor: toolkit_experimental::AccessorSum<'p>,
-) -> toolkit_experimental::PipelineThenSum<'e> {
+pub fn sum_pipeline_element(
+    accessor: toolkit_experimental::AccessorSum,
+) -> toolkit_experimental::PipelineThenSum {
     let _ = accessor;
     build ! {
         PipelineThenSum {
@@ -223,9 +223,9 @@ requires= [AccessorSum, PipelineThenSum, sum_pipeline_element],
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_pipeline_then_sum<'s, 'p>(
-    timevector: toolkit_experimental::Timevector<'s>,
-    pipeline: toolkit_experimental::PipelineThenSum<'p>,
+pub fn arrow_pipeline_then_sum(
+    timevector: toolkit_experimental::Timevector,
+    pipeline: toolkit_experimental::PipelineThenSum,
 ) -> Option<f64> {
     let pipeline = pipeline.0;
     let pipeline = build! {
@@ -254,7 +254,7 @@ pub fn finalize_with_sum<'e>(
         }}
     }
 
-    let mut elements = replace(pipeline.elements.as_owned(), vec![]);
+    let mut elements = take(pipeline.elements.as_owned());
     elements.extend(then_stats_agg.elements.iter());
     build! {
         PipelineThenSum {
@@ -293,9 +293,9 @@ requires= [pipeline_sum_support],
     parallel_safe,
     schema="toolkit_experimental"
 )]
-pub fn average_pipeline_element<'p, 'e>(
-    accessor: toolkit_experimental::AccessorAverage<'p>,
-) -> toolkit_experimental::PipelineThenAverage<'e> {
+pub fn average_pipeline_element(
+    accessor: toolkit_experimental::AccessorAverage,
+) -> toolkit_experimental::PipelineThenAverage {
     let _ = accessor;
     build ! {
         PipelineThenAverage {
@@ -316,9 +316,9 @@ requires= [AccessorAverage, PipelineThenAverage, average_pipeline_element],
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_pipeline_then_average<'s, 'p>(
-    timevector: toolkit_experimental::Timevector<'s>,
-    pipeline: toolkit_experimental::PipelineThenAverage<'p>,
+pub fn arrow_pipeline_then_average(
+    timevector: toolkit_experimental::Timevector,
+    pipeline: toolkit_experimental::PipelineThenAverage,
 ) -> Option<f64> {
     let pipeline = pipeline.0;
     let pipeline = build! {
@@ -347,7 +347,7 @@ pub fn finalize_with_average<'e>(
         }}
     }
 
-    let mut elements = replace(pipeline.elements.as_owned(), vec![]);
+    let mut elements = take(pipeline.elements.as_owned());
     elements.extend(then_stats_agg.elements.iter());
     build! {
         PipelineThenAverage {
@@ -386,9 +386,9 @@ requires= [pipeline_average_support],
     name="num_vals_cast",
     schema="toolkit_experimental"
 )]
-pub fn num_vals_pipeline_element<'p, 'e>(
-    accessor: toolkit_experimental::AccessorNumVals<'p>,
-) -> toolkit_experimental::PipelineThenNumVals<'e> {
+pub fn num_vals_pipeline_element(
+    accessor: toolkit_experimental::AccessorNumVals,
+) -> toolkit_experimental::PipelineThenNumVals {
     let _ = accessor;
     build ! {
         PipelineThenNumVals {
@@ -409,9 +409,9 @@ requires= [AccessorNumVals, PipelineThenNumVals, num_vals_pipeline_element],
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_pipeline_then_num_vals<'s, 'p>(
-    timevector: toolkit_experimental::Timevector<'s>,
-    pipeline: toolkit_experimental::PipelineThenNumVals<'p>,
+pub fn arrow_pipeline_then_num_vals(
+    timevector: toolkit_experimental::Timevector,
+    pipeline: toolkit_experimental::PipelineThenNumVals,
 ) -> i64 {
     run_pipeline_elements(timevector, pipeline.elements.iter())
         .num_vals() as _
@@ -433,7 +433,7 @@ pub fn finalize_with_num_vals<'e>(
         }}
     }
 
-    let mut elements = replace(pipeline.elements.as_owned(), vec![]);
+    let mut elements = take(pipeline.elements.as_owned());
     elements.extend(then_stats_agg.elements.iter());
     build! {
         PipelineThenNumVals {
@@ -467,9 +467,9 @@ requires= [pipeline_num_vals_support],
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline_then_counter_agg<'s, 'p>(
-    mut timevector: toolkit_experimental::Timevector<'s>,
-    pipeline: toolkit_experimental::PipelineThenCounterAgg<'p>,
+pub fn arrow_run_pipeline_then_counter_agg(
+    mut timevector: toolkit_experimental::Timevector,
+    pipeline: toolkit_experimental::PipelineThenCounterAgg,
 ) -> Option<CounterSummary<'static>> {
     timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
     if timevector.num_points() == 0 {
@@ -498,7 +498,7 @@ pub fn finalize_with_counter_agg<'e>(
         }}
     }
 
-    let mut elements = replace(pipeline.elements.as_owned(), vec![]);
+    let mut elements = take(pipeline.elements.as_owned());
     elements.extend(then_counter_agg.elements.iter());
     build! {
         PipelineThenCounterAgg {
@@ -514,7 +514,7 @@ pub fn finalize_with_counter_agg<'e>(
     name="counter_agg",
     schema="toolkit_experimental"
 )]
-pub fn pipeline_counter_agg<'e>() -> toolkit_experimental::PipelineThenCounterAgg<'e> {
+pub fn pipeline_counter_agg() -> toolkit_experimental::PipelineThenCounterAgg<'static> {
     build! {
         PipelineThenCounterAgg {
             num_elements: 0,
@@ -550,9 +550,9 @@ requires= [pipeline_counter_agg_support],
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline_then_hyperloglog<'s, 'p>(
-    mut timevector: toolkit_experimental::Timevector<'s>,
-    pipeline: toolkit_experimental::PipelineThenHyperLogLog<'p>,
+pub fn arrow_run_pipeline_then_hyperloglog(
+    mut timevector: toolkit_experimental::Timevector,
+    pipeline: toolkit_experimental::PipelineThenHyperLogLog,
 ) -> HyperLogLog<'static> {
     timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
     HyperLogLog::build_from(pipeline.hll_size as i32,
@@ -578,7 +578,7 @@ pub fn finalize_with_hyperloglog<'e>(
         }}
     }
 
-    let mut elements = replace(pipeline.elements.as_owned(), vec![]);
+    let mut elements = take(pipeline.elements.as_owned());
     elements.extend(then_hyperloglog.elements.iter());
     build! {
         PipelineThenHyperLogLog {
@@ -595,7 +595,7 @@ pub fn finalize_with_hyperloglog<'e>(
     name="hyperloglog",
     schema="toolkit_experimental"
 )]
-pub fn pipeline_hyperloglog<'e>(size: i32) -> toolkit_experimental::PipelineThenHyperLogLog<'e> {
+pub fn pipeline_hyperloglog(size: i32) -> toolkit_experimental::PipelineThenHyperLogLog<'static> {
     build! {
         PipelineThenHyperLogLog {
             hll_size: size as u64,
@@ -633,9 +633,9 @@ requires= [pipeline_hyperloglog_support],
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline_then_percentile_agg<'s, 'p>(
-    mut timevector: toolkit_experimental::Timevector<'s>,
-    pipeline: toolkit_experimental::PipelineThenPercentileAgg<'p>,
+pub fn arrow_run_pipeline_then_percentile_agg(
+    mut timevector: toolkit_experimental::Timevector,
+    pipeline: toolkit_experimental::PipelineThenPercentileAgg,
 ) -> UddSketch<'static> {
     timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
     UddSketch::from_iter(timevector.into_iter().map(|p| p.val))
@@ -656,7 +656,7 @@ pub fn finalize_with_percentile_agg<'e>(
         }}
     }
 
-    let mut elements = replace(pipeline.elements.as_owned(), vec![]);
+    let mut elements = take(pipeline.elements.as_owned());
     elements.extend(then_hyperloglog.elements.iter());
     build! {
         PipelineThenPercentileAgg {
@@ -672,7 +672,7 @@ pub fn finalize_with_percentile_agg<'e>(
     name="percentile_agg",
     schema="toolkit_experimental"
 )]
-pub fn pipeline_percentile_agg<'e>() -> toolkit_experimental::PipelineThenPercentileAgg<'e> {
+pub fn pipeline_percentile_agg() -> toolkit_experimental::PipelineThenPercentileAgg<'static> {
     build! {
         PipelineThenPercentileAgg {
             num_elements: 0,
@@ -758,8 +758,8 @@ mod tests {
                 -> stats_agg() -> average();",
                 None,
                 None
-            ).skip(1)
-                .next().unwrap()
+            ).nth(1)
+                .unwrap()
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: (\
@@ -821,8 +821,8 @@ mod tests {
                 -> sum();",
                 None,
                 None
-            ).skip(1)
-                .next().unwrap()
+            ).nth(1)
+                .unwrap()
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: \
@@ -883,8 +883,8 @@ mod tests {
                 -> average();",
                 None,
                 None
-            ).skip(1)
-                .next().unwrap()
+            ).nth(1)
+                .unwrap()
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: \
@@ -945,8 +945,8 @@ mod tests {
                 -> num_vals();",
                 None,
                 None
-            ).skip(1)
-                .next().unwrap()
+            ).nth(1)
+                .unwrap()
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: \
@@ -995,7 +995,7 @@ mod tests {
             )
                 .first()
                 .get_one::<f64>().unwrap();
-            assert_eq!(val, 67.5);
+            assert!((val - 67.5).abs() < f64::EPSILON);
 
 
             let output = client.select(
@@ -1005,8 +1005,8 @@ mod tests {
                 -> counter_agg();",
                 None,
                 None
-            ).skip(1)
-                .next().unwrap()
+            ).nth(1)
+                .unwrap()
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: \
@@ -1069,8 +1069,8 @@ mod tests {
                 -> hyperloglog(100);",
                 None,
                 None
-            ).skip(1)
-                .next().unwrap()
+            ).nth(1)
+                .unwrap()
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: \
@@ -1148,8 +1148,8 @@ mod tests {
                 -> percentile_agg();",
                 None,
                 None
-            ).skip(1)
-                .next().unwrap()
+            ).nth(1)
+                .unwrap()
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: \

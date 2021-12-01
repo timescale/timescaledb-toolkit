@@ -28,7 +28,7 @@ fn main() {
         database: matches.value_of("DB"),
     };
 
-    let root_connection_config = connection_config.to_config_string();
+    let root_connection_config = connection_config.config_string();
     let root_connection_config = &root_connection_config;
 
     let db_name = "_ta_temp_testrunner_db";
@@ -54,7 +54,7 @@ fn main() {
     let start = Instant::now();
 
     println!("{}", "Connecting to DB".bold().green());
-    let mut client = Client::connect(&test_connection_config.to_config_string(), NoTls)
+    let mut client = Client::connect(&test_connection_config.config_string(), NoTls)
         .expect("could not connect to test DB");
 
     println!("{}", "Creating Extension".bold().green());
@@ -79,7 +79,7 @@ fn main() {
         .collect();
 
     println!("{} {} tests\n", "Running".bold().green(), tests.len());
-    let connector = || Client::connect(&test_connection_config.to_config_string(), NoTls)
+    let connector = || Client::connect(&test_connection_config.config_string(), NoTls)
         .expect("could not connect to test DB");
     tests.par_iter_mut().for_each_init(connector, |client, (test, passed)| {
 
@@ -163,7 +163,7 @@ pub struct ConnectionConfig<'s> {
 }
 
 impl<'s> ConnectionConfig<'s> {
-    fn to_config_string(&self) -> Cow<'s, str> {
+    fn config_string(&self) -> Cow<'s, str> {
         use std::fmt::Write;
 
         let ConnectionConfig {

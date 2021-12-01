@@ -74,7 +74,7 @@ pub fn extract_tests_from_string(s: &str, file_stem: &str) -> TestFile {
                     )
                 }
 
-                assert!(matches!(code_block_info.kind, BlockKind::SQL));
+                assert!(matches!(code_block_info.kind, BlockKind::Sql));
 
                 stateless &= code_block_info.transactional;
                 let mut test = Test {
@@ -104,7 +104,7 @@ pub fn extract_tests_from_string(s: &str, file_stem: &str) -> TestFile {
                             let code_block_info = parse_code_block_info(info);
                             match code_block_info.kind {
                                 // non-output, continue at the top
-                                BlockKind::SQL | BlockKind::Other => {
+                                BlockKind::Sql | BlockKind::Other => {
                                     tests.push(test);
                                     continue 'block_hunt;
                                 }
@@ -178,7 +178,7 @@ struct CodeBlockInfo {
 
 #[derive(Clone, Copy)]
 enum BlockKind {
-    SQL,
+    Sql,
     Output,
     Other,
 }
@@ -196,14 +196,14 @@ fn parse_code_block_info(info: &str) -> CodeBlockInfo {
     for token in tokens {
         match token.trim() {
             "ignore" => {
-                if let BlockKind::SQL = info.kind {
+                if let BlockKind::Sql = info.kind {
                     info.kind = BlockKind::Other;
                 }
             }
             "non-transactional" => info.transactional = false,
             "ignore-output" => info.ignore_output = true,
             "output" => info.kind = BlockKind::Output,
-            s if s.to_ascii_lowercase() == "sql" => info.kind = BlockKind::SQL,
+            s if s.to_ascii_lowercase() == "sql" => info.kind = BlockKind::Sql,
             p if p.starts_with("precision") => {
                 // syntax `precision(col: bytes)`
                 let precision_err = || -> ! {

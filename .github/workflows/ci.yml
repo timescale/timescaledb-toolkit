@@ -59,7 +59,7 @@ jobs:
     - name: Run post-install tests
       run: |
         sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg12 && /usr/local/cargo/bin/cargo pgx start pg12"
-        RUST_BACKTRACE=short cargo run --manifest-path ./tools/post-install/Cargo.toml /home/postgres/.pgx/12.8/pgx-install/bin/pg_config
+        RUST_BACKTRACE=short cargo run --manifest-path ./tools/post-install/Cargo.toml /home/postgres/.pgx/12.9/pgx-install/bin/pg_config
         cargo run --manifest-path ./tools/testrunner/Cargo.toml -- -h localhost -p 28812
 
     - name: Run Doc Tests
@@ -115,7 +115,7 @@ jobs:
     - name: Run post-install tests
       run: |
         sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg13 && /usr/local/cargo/bin/cargo pgx start pg13"
-        RUST_BACKTRACE=short cargo run --manifest-path ./tools/post-install/Cargo.toml /home/postgres/.pgx/13.4/pgx-install/bin/pg_config
+        RUST_BACKTRACE=short cargo run --manifest-path ./tools/post-install/Cargo.toml /home/postgres/.pgx/13.5/pgx-install/bin/pg_config
         cargo run --manifest-path ./tools/testrunner/Cargo.toml -- -h localhost -p 28813
 
     - name: Run Doc Tests
@@ -170,7 +170,7 @@ jobs:
     - name: Run post-install tests
       run: |
         sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg14 && /usr/local/cargo/bin/cargo pgx start pg14"
-        RUST_BACKTRACE=short cargo run --manifest-path ./tools/post-install/Cargo.toml /home/postgres/.pgx/14.0/pgx-install/bin/pg_config
+        RUST_BACKTRACE=short cargo run --manifest-path ./tools/post-install/Cargo.toml /home/postgres/.pgx/14.1/pgx-install/bin/pg_config
         cargo run --manifest-path ./tools/testrunner/Cargo.toml -- -h localhost -p 28814
 
     - name: Run Doc Tests

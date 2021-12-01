@@ -39,7 +39,7 @@ jobs:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
-        key: ${{ runner.os }}-cargo-build-target-clippy-cargo
+        key: ${{ runner.os }}-cargo-clippy-cargo
         restore-keys: |
           ${{ runner.os }}-cargo-build-target-clippy-cargo-0
 
@@ -81,8 +81,9 @@ jobs:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
-        key: ${{ runner.os }}-cargo-pg12-3
+        key: ${{ runner.os }}-cargo-pg12-cargo
         restore-keys: |
+          ${{ runner.os }}-cargo-pg12-3
           ${{ runner.os }}-cargo-pg12-2
           ${{ runner.os }}-cargo-pg12
 
@@ -90,8 +91,9 @@ jobs:
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-cargo-build-target-pg12-3
+        key: ${{ runner.os }}-cargo-build-target-pg12-4
         restore-keys: |
+          ${{ runner.os }}-cargo-build-target-pg12-3
           ${{ runner.os }}-cargo-build-target-pg12-2
           ${{ runner.os }}-cargo-build-target-pg12
 
@@ -137,8 +139,9 @@ jobs:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
-        key: ${{ runner.os }}-cargo-build-target-pg13-3
+        key: ${{ runner.os }}-cargo-build-cargo-pg13
         restore-keys: |
+          ${{ runner.os }}-cargo-build-target-pg13-3
           ${{ runner.os }}-cargo-build-target-pg13-2
           ${{ runner.os }}-cargo-pg13
 
@@ -146,8 +149,9 @@ jobs:
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-cargo-build-target-pg13-3
+        key: ${{ runner.os }}-cargo-build-target-pg13-4
         restore-keys: |
+          ${{ runner.os }}-cargo-build-target-pg13-3
           ${{ runner.os }}-cargo-build-target-pg13-2
           ${{ runner.os }}-cargo-build-target-pg13
 
@@ -192,8 +196,9 @@ jobs:
         path: |
           ~/.cargo/registry
           ~/.cargo/git
-        key: ${{ runner.os }}-cargo-build-target-pg14-3
+        key: ${{ runner.os }}-cargo-build-cargo-pg14
         restore-keys: |
+          ${{ runner.os }}-cargo-build-target-pg14-3
           ${{ runner.os }}-cargo-build-target-pg14-2
           ${{ runner.os }}-cargo-pg14
 
@@ -201,8 +206,9 @@ jobs:
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-cargo-build-target-pg14-3
+        key: ${{ runner.os }}-cargo-build-target-pg14-4
         restore-keys: |
+          ${{ runner.os }}-cargo-build-target-pg14-3
           ${{ runner.os }}-cargo-build-target-pg14-2
           ${{ runner.os }}-cargo-build-target-pg14
 

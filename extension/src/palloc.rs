@@ -16,6 +16,14 @@ pub unsafe fn in_memory_context<T, F: FnOnce() -> T>(
 
 pub use pgx::Internal;
 
+/// Extension trait to translate postgres-understood `pgx::Internal` type into
+/// the well-typed pointer type `Option<Inner<T>>`.
+///
+/// # Safety
+///
+/// This trait should only ever be implemented for `pgx::Internal`
+/// There is an lifetime constraint on the returned pointer, though this is
+/// currently implicit.
 pub unsafe trait InternalAsValue {
     // unsafe fn value_or<T, F: FnOnce() -> T>(&mut self) -> &mut T;
     unsafe fn to_inner<T>(self) -> Option<Inner<T>>;
@@ -36,6 +44,11 @@ unsafe impl InternalAsValue for Internal {
     }
 }
 
+/// Extension trait to turn the typed pointers `Inner<...>` and
+/// `Option<Inner<...>>` into the postgres-understood `pgx::Internal` type.
+///
+/// # Safety
+/// The value input must live as long as postgres expects. TODO more info
 pub unsafe trait ToInternal {
     fn internal(self) -> Internal;
 }

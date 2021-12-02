@@ -6,9 +6,18 @@ pub enum WrapErr {
     InvalidTag(usize),
 }
 
+/// Trait marking that a type can be translated to and from a flat buffer
+/// without copying or allocation.
+///
+/// # Safety
 /// For a type to be `FlatSerializable` it must contain no pointers, have no
-/// interior padding, must have a `size >= alignmen` and must have
-/// `size % align = 0`. Use `#[derive(FlatSerializable)]` to implement this.
+/// interior padding, must have a `size >= alignment` and must have
+/// `size % align = 0`. In general this should not be implemented manually, and
+/// you should only use `#[derive(FlatSerializable)]` or `flat_serialize!{}` to
+/// implement this.
+/// **NOTE** we currently allow types with invalid bit patterns, such as `bool`
+/// to be `FlatSerializable` making this trait inappropriate to use on untrusted
+/// input.
 pub unsafe trait FlatSerializable<'input>: Sized + 'input {
     const MIN_LEN: usize;
     const REQUIRED_ALIGNMENT: usize;

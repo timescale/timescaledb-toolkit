@@ -23,6 +23,7 @@ pub fn flat_serialize(input: TokenStream) -> TokenStream {
     expanded.into()
 }
 
+#[allow(clippy::large_enum_variant)] // only one of these are created, and it's on the stack
 enum FlatSerialize {
     Enum(FlatSerializeEnum),
     Struct(FlatSerializeStruct),
@@ -941,8 +942,12 @@ impl FlatSerializeField {
             None => {
                 let ty = self.ty_without_lifetime();
                 quote_spanned!{self.ty.span()=>
-                    let _alignment_check: () = [()][(#current_size) % <#ty as flat_serialize::FlatSerializable>::REQUIRED_ALIGNMENT];
-                    let _alignment_check2: () = [()][(<#ty as flat_serialize::FlatSerializable>::REQUIRED_ALIGNMENT > #min_align) as u8 as usize];
+                    if (#current_size) % <#ty as flat_serialize::FlatSerializable>::REQUIRED_ALIGNMENT != 0 {
+                        panic!("unaligned field: the current size of the data is not a multiple of this type's alignment")
+                    }
+                    if <#ty as flat_serialize::FlatSerializable>::REQUIRED_ALIGNMENT > #min_align {
+                        panic!("unaligned field: an earlier variable-length field could mis-align this field")
+                    }
                     #current_size += <#ty as flat_serialize::FlatSerializable>::MIN_LEN;
                     #min_align = match <#ty as flat_serialize::FlatSerializable>::MAX_PROVIDED_ALIGNMENT {
                         Some(align) if align < #min_align => align,
@@ -953,8 +958,12 @@ impl FlatSerializeField {
             Some(info) => {
                 let ty = info.ty_without_lifetime();
                 quote_spanned!{self.ty.span()=>
-                    let _alignment_check: () = [()][(#current_size) % <#ty as flat_serialize::FlatSerializable>::REQUIRED_ALIGNMENT];
-                    let _alignment_check2: () = [()][(<#ty as flat_serialize::FlatSerializable>::REQUIRED_ALIGNMENT > #min_align) as u8 as usize];
+                    if (#current_size) % <#ty as flat_serialize::FlatSerializable>::REQUIRED_ALIGNMENT != 0 {
+                        panic!("unaligned field: the current size of the data is not a multiple of this type's alignment")
+                    }
+                    if <#ty as flat_serialize::FlatSerializable>::REQUIRED_ALIGNMENT > #min_align {
+                        panic!("unaligned field: an earlier variable-length field could mis-align this field")
+                    }
                     if <#ty as flat_serialize::FlatSerializable>::REQUIRED_ALIGNMENT < #min_align {
                         #min_align = <#ty as flat_serialize::FlatSerializable>::REQUIRED_ALIGNMENT
                     }

@@ -37,8 +37,7 @@ For Ubuntu you can follow the [postgres install instructions](https://www.postgr
 ```bash
 sudo apt-get install make gcc pkg-config clang postgresql-server-dev-13 libssl-dev
 ```
-and finally, the toolkit uses a [fork](https://github.com/JLockerman/pgx/tree/timescale)
-of [pgx](https://github.com/zombodb/pgx) while our patches are being upstreamed. It can be installed with
+and finally, [pgx](https://github.com/zombodb/pgx), which can be installed with
 ```bash
 cargo install cargo-pgx && cargo pgx init --pg13 pg_config
 ```
@@ -56,6 +55,11 @@ cargo pgx install --release && \
 cargo run --manifest-path ../tools/post-install/Cargo.toml -- pg_config
 ```
 
+To initialize the extension afer installation, star enter the following into `psql`:
+```
+CREATE EXTENSION timescaledb_toolkit;
+```
+
 ## ✏️ Get Involved ##
 
 The TimescaleDB Toolkit project is still in the initial planning stage as we
@@ -65,32 +69,15 @@ to help shape the project's direction! Have a look at the
 and feel free to comment on the features, expand the list, or
 hop on the [Discussions forum](https://github.com/timescale/timescaledb-toolkit/discussions) for more in-depth discussions.
 
-### 🔨 Building ###
+### 🔨 Testing ###
 
-Building the extension requires a valid rust install see [the website](https://www.rust-lang.org/tools/install) for instructions.
+See above for prerequisites and installation instructions.
 
-The extension is built using a [fork](https://github.com/JLockerman/pgx/tree/timescale)
-of [pgx](https://github.com/zombodb/pgx). To install pgx use
-
-```bash
-cargo install cargo-pgx && cargo pgx init
-```
-
-Once you have `pgx` installed, clone this repo and swich into the extension directory, e.g
-```bash
-cd timescaledb_toolkit/extension
-```
-you can run tests against a postgres version
+You can run tests against a postgres version
 `pg12`, or `pg13` using
 
 ```
 cargo pgx test ${postgres_version}
-```
-
-to install the extension to a postgres install locatable using `pg_config` use
-
-```bash
-cargo pgx install --release
 ```
 
 

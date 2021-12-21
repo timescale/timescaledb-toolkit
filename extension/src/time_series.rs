@@ -1,7 +1,5 @@
 #![allow(clippy::identity_op)] // clippy gets confused by pg_type! enums
 
-use std::{slice};
-
 use pgx::*;
 
 use crate::{

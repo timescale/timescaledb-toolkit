@@ -59,6 +59,11 @@ use crate::{
     fn deserialize(bytes: bytea) -> Inner<State> {
         crate::do_deserialize!(bytes, State)
     }
+
+    fn combine(a: Option<Inner<State>>, b: Option<Inner<State>>)
+    -> Option<Inner<State>> {
+        a.or(b).map(|i| i.clone().into())
+    }
 }
 
 #[aggregate] impl toolkit_experimental::parallel_anything {
@@ -86,6 +91,11 @@ use crate::{
 
     fn deserialize(bytes: bytea) -> Inner<State> {
         crate::do_deserialize!(bytes, State)
+    }
+
+    fn combine(a: Option<Inner<State>>, b: Option<Inner<State>>)
+    -> Option<Inner<State>> {
+        a.or(b).map(|i| i.clone().into())
     }
 }
 
@@ -130,6 +140,7 @@ mod tests {
                     toolkit_experimental.anything_transition_fn_outer,\
                     toolkit_experimental.anything_finally_fn_outer,\
                     -,\
+                    -,\
                     -\
                 )"
             );
@@ -157,7 +168,8 @@ mod tests {
                     toolkit_experimental.cagg_anything_transition_fn_outer,\
                     toolkit_experimental.cagg_anything_finally_fn_outer,\
                     toolkit_experimental.cagg_anything_serialize_fn_outer,\
-                    toolkit_experimental.cagg_anything_deserialize_fn_outer\
+                    toolkit_experimental.cagg_anything_deserialize_fn_outer,\
+                    toolkit_experimental.cagg_anything_combine_fn_outer\
                 )"
             );
         });
@@ -184,7 +196,8 @@ mod tests {
                     toolkit_experimental.parallel_anything_transition_fn_outer,\
                     toolkit_experimental.parallel_anything_finally_fn_outer,\
                     toolkit_experimental.parallel_anything_serialize_fn_outer,\
-                    toolkit_experimental.parallel_anything_deserialize_fn_outer\
+                    toolkit_experimental.parallel_anything_deserialize_fn_outer,\
+                    toolkit_experimental.parallel_anything_combine_fn_outer\
                 )"
             );
         });
@@ -206,7 +219,8 @@ mod tests {
                 aggtransfn,
                 aggfinalfn,
                 aggserialfn,
-                aggdeserialfn)::TEXT
+                aggdeserialfn,
+                aggcombinefn)::TEXT
             FROM pg_proc, pg_aggregate
             WHERE proname = '{}'
               AND pg_proc.oid = aggfnoid;"#, aggregate_name),

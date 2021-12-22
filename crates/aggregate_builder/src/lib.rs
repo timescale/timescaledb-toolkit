@@ -20,6 +20,10 @@ pub fn aggregate(_attr: TokenStream, item: TokenStream) -> TokenStream {
     expanded.into()
 }
 
+//
+// Parser
+//
+
 // like ItemImpl except that we allow `name: Type "SqlType"` for `fn transition`
 struct Aggregate {
     schema: Option<syn::Ident>,
@@ -341,8 +345,7 @@ fn take_attr(attrs: &mut Vec<syn::Attribute>, path: &syn::Path)
 }
 
 //
-//
-//
+// Expander
 //
 
 fn expand(agg: Aggregate) -> TokenStream2 {
@@ -401,7 +404,35 @@ fn expand(agg: Aggregate) -> TokenStream2 {
             } else {
                 "unsafe"
             });
-        quote!(pub const PARALLEL_SAFE: bool = #value;)
+        let serialize_fn_check = value.then(||
+            serialize_fn.as_ref().is_none().then(||
+                quote_spanned!(p.span()=>
+                    compile_error!("parallel safety requires a `fn serialize()` also");
+                )
+            )
+        ).flatten();
+        let deserialize_fn_check = value.then(||
+            deserialize_fn.as_ref().is_none().then(||
+                quote_spanned!(p.span()=>
+                    compile_error!("parallel safety requires a `fn deserialize()` also");
+                )
+            )
+        ).flatten();
+        let combine_fn_check = value.then(||
+            combine_fn.as_ref().is_none().then(||
+                quote_spanned!(p.span()=>
+                    compile_error!("parallel safety requires a `fn combine()` also");
+                )
+            )
+        ).flatten();
+        quote_spanned!(p.span()=>
+            #serialize_fn_check
+            #deserialize_fn_check
+            #combine_fn_check
+
+            #[allow(dead_code)]
+            pub const PARALLEL_SAFE: bool = #value;
+        )
     });
 
     let mut add_function =
@@ -418,6 +449,49 @@ fn expand(agg: Aggregate) -> TokenStream2 {
             );
             make_tokens(&f, &schema, &name)
     };
+
+    let serialize_fns_check = serialize_fn.as_ref().xor(deserialize_fn.as_ref()).map(|_| {
+        let s = serialize_fn.as_ref().map(|f|
+            quote_spanned!(f.ident.span()=>
+                compile_error!("`fn deserialize()` is also required");
+            )
+        );
+        let d = deserialize_fn.as_ref().map(|f|
+            quote_spanned!(f.ident.span()=>
+                compile_error!("`fn serialize()` is also required");
+            )
+        );
+        quote!(#s #d)
+    });
+
+    let combine_fns_check1 = serialize_fn.as_ref().xor(combine_fn.as_ref()).map(|_| {
+        let s = serialize_fn.as_ref().map(|f|
+            quote_spanned!(f.ident.span()=>
+                compile_error!("`fn combine()` is also required");
+            )
+        );
+        let c = combine_fn.as_ref().map(|f|
+            quote_spanned!(f.ident.span()=>
+                compile_error!("`fn serialize()` is also required");
+            )
+        );
+        quote!(#s #c)
+    });
+
+    let combine_fns_check2 = combine_fn.as_ref().xor(deserialize_fn.as_ref()).map(|_| {
+        let s = combine_fn.as_ref().map(|f|
+            quote_spanned!(f.ident.span()=>
+                compile_error!("`fn deserialize()` is also required");
+            )
+        );
+        let d = deserialize_fn.as_ref().map(|f|
+            quote_spanned!(f.ident.span()=>
+                compile_error!("`fn combine()` is also required");
+            )
+        );
+        quote!(#s #d)
+    });
+
     let serialize_fns = serialize_fn.map(|f| add_function(f, "serialfunc", AggregateFn::serialize_fn_tokens));
     let deserialize_fns = deserialize_fn.map(|f| add_function(f, "deserialfunc", AggregateFn::deserialize_fn_tokens));
     let combine_fns = combine_fn.map(|f| add_function(f, "combinefunc", AggregateFn::combine_fn_tokens));
@@ -431,6 +505,12 @@ fn expand(agg: Aggregate) -> TokenStream2 {
             use super::*;
 
             pub type State = #state_ty;
+
+            #serialize_fns_check
+
+            #combine_fns_check1
+
+            #combine_fns_check2
 
             #parallel_safe
 

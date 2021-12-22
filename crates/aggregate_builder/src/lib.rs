@@ -600,7 +600,12 @@ impl AggregateFn {
             quote!(, schema = #s)
         });
 
-        let state_type_check = state_type_check_tokens(&*args[0].rust.ty, Some(()));
+        let state_type_check = type_check_tokens(
+            &*args[0].rust.ty,
+            parse_quote!(Option<&mut State>),
+            parse_quote!(None)
+        );
+
         let arg_vals: Punctuated<syn::Pat, Comma> = args.iter()
             .skip(1)
             .map(arg_ident)
@@ -618,7 +623,7 @@ impl AggregateFn {
             ) #ret {
                 use crate::palloc::{InternalAsValue, ToInternal};
                 unsafe {
-                    #ident(__internal.to_inner(), #arg_vals)
+                    #ident(__internal.to_inner().as_deref_mut(), #arg_vals)
                 }
             }
 
@@ -642,7 +647,7 @@ impl AggregateFn {
             quote!(, schema = #s)
         });
 
-        let state_type_check = state_type_check_tokens(&*args[0].rust.ty, None);
+        let state_type_check = refstate_type_check_tokens(&*args[0].rust.ty, None);
 
         let return_type_check = bytea_type_check_tokens(&*ret_type(ret));
 
@@ -659,7 +664,7 @@ impl AggregateFn {
             ) -> bytea {
                 use crate::palloc::InternalAsValue;
                 unsafe {
-                    #ident(__internal.to_inner().unwrap())
+                    #ident(&mut *__internal.to_inner().unwrap())
                 }
             }
 
@@ -731,8 +736,8 @@ impl AggregateFn {
         let a_name = arg_ident(&args[0]);
         let b_name = arg_ident(&args[1]);
 
-        let state_type_check_a = state_type_check_tokens(&*args[0].rust.ty, Some(()));
-        let state_type_check_b = state_type_check_tokens(&*args[1].rust.ty, Some(()));
+        let state_type_check_a = refstate_type_check_tokens(&*args[0].rust.ty, Some(()));
+        let state_type_check_b = refstate_type_check_tokens(&*args[1].rust.ty, Some(()));
 
         let return_type_check = state_type_check_tokens(&*ret_type(ret), Some(()));
 
@@ -752,7 +757,10 @@ impl AggregateFn {
                 use crate::palloc::{InternalAsValue, ToInternal};
                 unsafe {
                     crate::aggregate_utils::in_aggregate_context(__fcinfo, ||
-                        #ident(#a_name.to_inner(), #b_name.to_inner()).internal()
+                        #ident(
+                            #a_name.to_inner().as_deref(),
+                            #b_name.to_inner().as_deref(),
+                        ).internal()
                     )
                 }
             }
@@ -807,6 +815,34 @@ fn state_type_check_tokens(ty: &syn::Type, optional: Option<()>) -> TokenStream2
                 parse_quote!(crate::palloc::Inner<State>),
                 parse_quote!(crate::palloc::Inner(std::ptr::NonNull::dangling()))
             )
+        },
+    }
+}
+
+fn refstate_type_check_tokens(ty: &syn::Type, optional: Option<()>) -> TokenStream2 {
+    match optional {
+        Some(..) => {
+            type_check_tokens(
+                ty,
+                parse_quote!(Option<&State>),
+                parse_quote!(None)
+            )
+        },
+        None => {
+            // we cannot synthesize an &State from nothing at compile time, and
+            // we need to allow both &State and &mut State anyway, so we use a
+            // different equality-checker for this case than the others
+            quote_spanned!{ty.span()=>
+                const _: () = {
+                    trait RefType {
+                        type Referenced;
+                    }
+                    impl<'a, T> RefType for &'a T { type Referenced = T; }
+                    impl<'a, T> RefType for &'a mut T { type Referenced = T; }
+                    fn check<T: RefType<Referenced=State>>() {}
+                    let _checked = check::<#ty>;
+                };
+            }
         },
     }
 }

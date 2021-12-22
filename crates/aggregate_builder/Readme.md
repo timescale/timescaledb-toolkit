@@ -19,7 +19,7 @@ Current syntax looks something like like
         // transition function function body goes here
     }
 
-    fn finally(state: Option<Inner<State>>) -> Option<ResultType> {
+    fn finally(state: Option<&mut State>) -> Option<ResultType> {
         // final function function body goes here
     }
 
@@ -28,7 +28,7 @@ Current syntax looks something like like
     // parallel-safety marker if desireable
     const PARALLEL_SAFE: bool = true;
 
-    fn serialize(state: Inner<State>) -> bytea {
+    fn serialize(state: &State) -> bytea {
         // serialize function body goes here
     }
 
@@ -36,7 +36,7 @@ Current syntax looks something like like
         // deserialize function body goes here
     }
 
-    fn combine(state1: Option<Inner<State>>, state2: Option<Inner<State>>) -> Option<Inner<State>> {
+    fn combine(state1: Option<&State>, state2: Option<&State>) -> Option<Inner<State>> {
         // combine function body goes here
     }
 }
@@ -72,7 +72,7 @@ the aggregated values.
         }
     }
 
-    fn finally(mut state: Option<Inner<State>>) -> Option<String> {
+    fn finally(mut state: Option<&State>) -> Option<String> {
         match &mut state {
             None => None,
             Some(state) => Some(state.clone()),

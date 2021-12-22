@@ -30,7 +30,7 @@ use crate::{
         }
     }
 
-    fn finally(state: Option<Inner<State>>) -> Option<String> {
+    fn finally(state: Option<&mut State>) -> Option<String> {
         state.as_deref().cloned()
     }
 }
@@ -48,11 +48,11 @@ use crate::{
         }
     }
 
-    fn finally(state: Option<Inner<State>>) -> Option<String> {
+    fn finally(state: Option<&mut State>) -> Option<String> {
         state.as_deref().cloned()
     }
 
-    fn serialize(state: Inner<State>) -> bytea {
+    fn serialize(state: &State) -> bytea {
         crate::do_serialize!(state)
     }
 
@@ -60,8 +60,7 @@ use crate::{
         crate::do_deserialize!(bytes, State)
     }
 
-    fn combine(a: Option<Inner<State>>, b: Option<Inner<State>>)
-    -> Option<Inner<State>> {
+    fn combine(a: Option<&State>, b: Option<&State>) -> Option<Inner<State>> {
         a.or(b).map(|i| i.clone().into())
     }
 }
@@ -79,13 +78,13 @@ use crate::{
         }
     }
 
-    fn finally(state: Option<Inner<State>>) -> Option<String> {
+    fn finally(state: Option<&mut State>) -> Option<String> {
         state.as_deref().cloned()
     }
 
     const PARALLEL_SAFE: bool = true;
 
-    fn serialize(state: Inner<State>) -> bytea {
+    fn serialize(state: &State) -> bytea {
         crate::do_serialize!(state)
     }
 
@@ -93,8 +92,7 @@ use crate::{
         crate::do_deserialize!(bytes, State)
     }
 
-    fn combine(a: Option<Inner<State>>, b: Option<Inner<State>>)
-    -> Option<Inner<State>> {
+    fn combine(a: Option<&State>, b: Option<&State>) -> Option<Inner<State>> {
         a.or(b).map(|i| i.clone().into())
     }
 }

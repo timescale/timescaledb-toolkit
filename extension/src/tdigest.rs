@@ -79,7 +79,7 @@ impl TDigestTransState {
     }
 
     #[sql_name("tdigest_final")]
-    fn finally(mut state: Option<Inner<State>>) -> Option<TDigest<'static>> {
+    fn finally(mut state: Option<&mut State>) -> Option<TDigest<'static>> {
         let state = match &mut state {
             None => return None,
             Some(state) => state,
@@ -90,7 +90,7 @@ impl TDigestTransState {
     }
 
     #[sql_name("tdigest_serialize")]
-    fn serialize(mut state: Inner<State>) -> bytea {
+    fn serialize(state: &mut State) -> bytea {
         state.digest();
         crate::do_serialize!(state)
     }
@@ -101,7 +101,7 @@ impl TDigestTransState {
     }
 
     #[sql_name("tdigest_combine")]
-    fn combine(state1: Option<Inner<State>>, state2: Option<Inner<State>>) -> Option<Inner<State>> {
+    fn combine(state1: Option<&State>, state2: Option<&State>) -> Option<Inner<State>> {
         match (state1, state2) {
             (None, None) => None,
             (None, Some(state2)) => Some(state2.clone().into()),
@@ -576,7 +576,7 @@ mod tests {
             let state = super::tdigest::transition(state, 100, Some(-43.0));
 
             let mut control = state.unwrap();
-            let buffer = super::tdigest::serialize(Inner::from(control.clone()));
+            let buffer = super::tdigest::serialize(&mut control.clone());
             let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
 
             let expected = [1, 1, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 69, 192, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 44, 64, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 64, 1, 0, 0, 0, 0, 0, 0, 0, 51, 51, 51, 51, 51, 179, 54, 64, 1, 0, 0, 0, 0, 0, 0, 0, 246, 40, 92, 143, 194, 181, 67, 64, 1, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0, 0, 0, 0, 0, 0, 144, 194, 245, 40, 92, 143, 73, 64, 5, 0, 0, 0, 0, 0, 0, 0, 246, 40, 92, 143, 194, 181, 67, 64, 0, 0, 0, 0, 0, 128, 69, 192];

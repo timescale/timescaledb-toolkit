@@ -21,13 +21,10 @@ use crate::{
     type State = String;
 
     fn transition(
-        state: Option<Inner<State>>,
+        state: Option<State>,
         #[sql_type("text")] value: String,
-    ) -> Option<Inner<State>> {
-        match state {
-            Some(value) => Some(value),
-            None => Some(value.into()),
-        }
+    ) -> Option<State> {
+        state.or(Some(value))
     }
 
     fn finally(state: Option<&mut State>) -> Option<String> {
@@ -39,13 +36,10 @@ use crate::{
     type State = String;
 
     fn transition(
-        state: Option<Inner<State>>,
+        state: Option<State>,
         #[sql_type("text")] value: String,
-    ) -> Option<Inner<State>> {
-        match state {
-            Some(value) => Some(value),
-            None => Some(value.into()),
-        }
+    ) -> Option<State> {
+        state.or(Some(value))
     }
 
     fn finally(state: Option<&mut State>) -> Option<String> {
@@ -56,12 +50,12 @@ use crate::{
         crate::do_serialize!(state)
     }
 
-    fn deserialize(bytes: bytea) -> Inner<State> {
+    fn deserialize(bytes: bytea) -> State {
         crate::do_deserialize!(bytes, State)
     }
 
-    fn combine(a: Option<&State>, b: Option<&State>) -> Option<Inner<State>> {
-        a.or(b).map(|i| i.clone().into())
+    fn combine(a: Option<&State>, b: Option<&State>) -> Option<State> {
+        a.or(b).cloned()
     }
 }
 
@@ -69,13 +63,10 @@ use crate::{
     type State = String;
 
     fn transition(
-        state: Option<Inner<State>>,
+        state: Option<State>,
         #[sql_type("text")] value: String,
-    ) -> Option<Inner<State>> {
-        match state {
-            Some(value) => Some(value),
-            None => Some(value.into()),
-        }
+    ) -> Option<State> {
+        state.or(Some(value))
     }
 
     fn finally(state: Option<&mut State>) -> Option<String> {
@@ -88,12 +79,12 @@ use crate::{
         crate::do_serialize!(state)
     }
 
-    fn deserialize(bytes: bytea) -> Inner<State> {
+    fn deserialize(bytes: bytea) -> State {
         crate::do_deserialize!(bytes, State)
     }
 
-    fn combine(a: Option<&State>, b: Option<&State>) -> Option<Inner<State>> {
-        a.or(b).map(|i| i.clone().into())
+    fn combine(a: Option<&State>, b: Option<&State>) -> Option<State> {
+        a.or(b).cloned()
     }
 }
 

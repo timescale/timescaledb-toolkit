@@ -531,7 +531,11 @@ fn expand(agg: Aggregate) -> TokenStream2 {
 }
 
 impl AggregateFn {
-    fn transition_fn_tokens(&self, schema: &Option<syn::Ident>, aggregate_name: &syn::Ident) -> TokenStream2 {
+    fn transition_fn_tokens(
+        &self,
+        schema: &Option<syn::Ident>,
+        aggregate_name: &syn::Ident,
+    ) -> TokenStream2 {
         let outer_ident = self.outer_ident(aggregate_name);
         let Self {
             ident,
@@ -546,7 +550,9 @@ impl AggregateFn {
             quote!(, schema = #s)
         });
 
-        let state_type_check = state_type_check_tokens(&*args[0].rust.ty, Some(()));
+        let input_ty = &*args[0].rust.ty;
+
+        let state_type_check = state_type_check_tokens(input_ty, Some(()));
 
         let arg_signatures = args.iter()
             .skip(1)
@@ -560,23 +566,55 @@ impl AggregateFn {
 
         let return_type_check = state_type_check_tokens(&*ret_type(ret), Some(()));
 
+        // use different variables for these to ensure the type-check is called
+        let input_var = syn::Ident::new("__inner", input_ty.span());
+        let input_state_var = syn::Ident::new("state", input_ty.span());
+
+        let input_type_check = quote_spanned!(input_ty.span()=>
+            let inner: Option<State> = match &mut #input_var {
+                None => None,
+                Some(inner) => Option::take(&mut **inner),
+            };
+            let #input_state_var: #input_ty = inner;
+        );
+
+        // use different variables for these to ensure the type-check is called
+        let result_var = syn::Ident::new("result", ret_type(ret).span());
+        let state_var = syn::Ident::new("state", ret_type(ret).span());
+        let result_type_check = quote_spanned!(state_var.span()=>
+            let #state_var: Option<State> = #result_var;
+        );
+
         quote! {
-
             #state_type_check
-
             #return_type_check
 
             #[pgx::pg_extern(immutable, parallel_safe #schema)]
             pub fn #outer_ident(
-                __internal: pgx::Internal,
+                #input_var: pgx::Internal,
                 #(#arg_signatures,)*
                 __fcinfo: pg_sys::FunctionCallInfo
             ) -> Internal {
-                use crate::palloc::{InternalAsValue, ToInternal};
+                use crate::palloc::{Inner, InternalAsValue, ToInternal};
                 unsafe {
-                    crate::aggregate_utils::in_aggregate_context(__fcinfo, ||
-                        #ident(__internal.to_inner(), #arg_vals).internal()
-                    )
+                    let mut #input_var: Option<Inner<Option<State>>> = #input_var.to_inner();
+                    #input_type_check
+                    crate::aggregate_utils::in_aggregate_context(__fcinfo, || {
+                        let #result_var = #ident(#input_state_var, #arg_vals);
+                        #result_type_check
+
+                        #input_var = match (#input_var, state) {
+                            (None, None) => None,
+                            (None, state @ Some(..)) => {
+                                Some(state.into())
+                            },
+                            (Some(mut inner), state) => {
+                                *inner = state;
+                                Some(inner)
+                            },
+                        };
+                        #input_var.internal()
+                    })
                 }
             }
 
@@ -600,10 +638,11 @@ impl AggregateFn {
             quote!(, schema = #s)
         });
 
+        let input_ty = &*args[0].rust.ty;
+
         let state_type_check = type_check_tokens(
-            &*args[0].rust.ty,
+            input_ty,
             parse_quote!(Option<&mut State>),
-            parse_quote!(None)
         );
 
         let arg_vals: Punctuated<syn::Pat, Comma> = args.iter()
@@ -613,6 +652,13 @@ impl AggregateFn {
 
         let inner_arg_signatures = args.iter().map(|arg| &arg.rust);
 
+        // use different variables for these to ensure the type-check is called
+        let input_var = syn::Ident::new("input", input_ty.span());
+        let state_var = syn::Ident::new("state", input_ty.span());
+        let input_type_check = quote_spanned!(input_ty.span()=>
+            let #state_var: #input_ty = #input_var;
+        );
+
         quote! {
             #state_type_check
 
@@ -621,9 +667,13 @@ impl AggregateFn {
                 __internal: pgx::Internal,
                 __fcinfo: pg_sys::FunctionCallInfo
             ) #ret {
-                use crate::palloc::{InternalAsValue, ToInternal};
+                use crate::palloc::InternalAsValue;
                 unsafe {
-                    #ident(__internal.to_inner().as_deref_mut(), #arg_vals)
+                    let mut #input_var: Option<Inner<Option<State>>> = __internal.to_inner();
+                    let #input_var: Option<&mut State> = #input_var.as_deref_mut()
+                        .map(|i| i.as_mut()).flatten();
+                    #input_type_check
+                    #ident(#state_var, #arg_vals)
                 }
             }
 
@@ -647,11 +697,19 @@ impl AggregateFn {
             quote!(, schema = #s)
         });
 
-        let state_type_check = refstate_type_check_tokens(&*args[0].rust.ty, None);
+        let input_ty = &*args[0].rust.ty;
+        let state_type_check = refstate_type_check_tokens(input_ty, None);
 
         let return_type_check = bytea_type_check_tokens(&*ret_type(ret));
 
         let inner_arg_signatures = args.iter().map(|arg| &arg.rust);
+
+        // use different variables for these to ensure the type-check is called
+        let input_var = syn::Ident::new("input", input_ty.span());
+        let state_var = syn::Ident::new("state", input_ty.span());
+        let input_type_check = quote_spanned!(input_ty.span()=>
+            let #state_var: #input_ty = #input_var;
+        );
 
         quote! {
             #state_type_check
@@ -662,12 +720,17 @@ impl AggregateFn {
             pub fn #outer_ident(
                 __internal: pgx::Internal,
             ) -> bytea {
-                use crate::palloc::InternalAsValue;
-                unsafe {
-                    #ident(&mut *__internal.to_inner().unwrap())
-                }
+                use crate::palloc::{Inner, InternalAsValue};
+                let #input_var: Option<Inner<Option<State>>> = unsafe {
+                    __internal.to_inner()
+                };
+                let mut #input_var: Inner<Option<State>> = #input_var.unwrap();
+                let #input_var: &mut State = #input_var.as_mut().unwrap();
+                #input_type_check
+                #ident(#state_var)
             }
 
+            #[allow(clippy::ptr_arg)]
             pub fn #ident(#(#inner_arg_signatures,)*)
             -> bytea
                 #body
@@ -695,6 +758,13 @@ impl AggregateFn {
 
         let return_type_check = state_type_check_tokens(&*ret_type(ret), None);
 
+        // use different variables for these to ensure the type-check is called
+        let result_var = syn::Ident::new("result", ret_type(ret).span());
+        let state_var = syn::Ident::new("state", ret_type(ret).span());
+        let result_type_check = quote_spanned!(state_var.span()=>
+            let #state_var: State = #result_var;
+        );
+
         // int8_avg_deserialize allocates in CurrentMemoryContext, so we do the same
         // https://github.com/postgres/postgres/blob/f920f7e799c587228227ec94356c760e3f3d5f2b/src/backend/utils/adt/numeric.c#L5728-L5770
         quote! {
@@ -708,8 +778,11 @@ impl AggregateFn {
                 _internal: Internal
             ) -> Internal {
                 use crate::palloc::ToInternal;
+                let #result_var = #ident(bytes);
+                #result_type_check
+                let state: Inner<Option<State>> = Some(state).into();
                 unsafe {
-                    #ident(bytes).internal()
+                    Some(state).internal()
                 }
             }
 
@@ -740,8 +813,15 @@ impl AggregateFn {
         let state_type_check_b = refstate_type_check_tokens(&*args[1].rust.ty, Some(()));
 
         let return_type_check = state_type_check_tokens(&*ret_type(ret), Some(()));
-
         let inner_arg_signatures = args.iter().map(|arg| &arg.rust);
+
+        // use different variables for these to ensure the type-check is called
+        let result_var = syn::Ident::new("result", ret_type(ret).span());
+        let state_var = syn::Ident::new("state", ret_type(ret).span());
+        let result_type_check = quote_spanned!(state_var.span()=>
+            let #state_var: Option<State> = #result_var;
+        );
+
 
         quote! {
             #state_type_check_a
@@ -754,17 +834,27 @@ impl AggregateFn {
                 #b_name: Internal,
                 __fcinfo: pg_sys::FunctionCallInfo
             ) -> Internal {
-                use crate::palloc::{InternalAsValue, ToInternal};
+                use crate::palloc::{Inner, InternalAsValue, ToInternal};
                 unsafe {
-                    crate::aggregate_utils::in_aggregate_context(__fcinfo, ||
-                        #ident(
+                    crate::aggregate_utils::in_aggregate_context(__fcinfo, || {
+                        let #result_var = #ident(
                             #a_name.to_inner().as_deref(),
                             #b_name.to_inner().as_deref(),
-                        ).internal()
-                    )
+                        );
+                        #result_type_check
+                        let state = match #state_var {
+                            None => None,
+                            state @ Some(..) => {
+                                let state: Inner<Option<State>> = state.into();
+                                Some(state)
+                            },
+                        };
+                        state.internal()
+                    })
                 }
             }
 
+            #[allow(clippy::ptr_arg)]
             pub fn #ident(#(#inner_arg_signatures,)*) #ret
                 #body
         }
@@ -805,15 +895,13 @@ fn state_type_check_tokens(ty: &syn::Type, optional: Option<()>) -> TokenStream2
         Some(..) => {
             type_check_tokens(
                 ty,
-                parse_quote!(Option<crate::palloc::Inner<State>>),
-                parse_quote!(None)
+                parse_quote!(Option<State>),
             )
         },
         None => {
             type_check_tokens(
                 ty,
-                parse_quote!(crate::palloc::Inner<State>),
-                parse_quote!(crate::palloc::Inner(std::ptr::NonNull::dangling()))
+                parse_quote!(State),
             )
         },
     }
@@ -825,12 +913,10 @@ fn refstate_type_check_tokens(ty: &syn::Type, optional: Option<()>) -> TokenStre
             type_check_tokens(
                 ty,
                 parse_quote!(Option<&State>),
-                parse_quote!(None)
             )
         },
         None => {
-            // we cannot synthesize an &State from nothing at compile time, and
-            // we need to allow both &State and &mut State anyway, so we use a
+            // we need to allow both &State and &mut State, so we use a
             // different equality-checker for this case than the others
             quote_spanned!{ty.span()=>
                 const _: () = {
@@ -848,18 +934,21 @@ fn refstate_type_check_tokens(ty: &syn::Type, optional: Option<()>) -> TokenStre
 }
 
 fn bytea_type_check_tokens(ty: &syn::Type) -> TokenStream2 {
-    type_check_tokens(ty, parse_quote!(bytea), parse_quote!(crate::raw::bytea(0)))
+    type_check_tokens(ty, parse_quote!(bytea))
 }
 
 fn type_check_tokens(
     user_ty: &syn::Type,
     expected_type: syn::Type,
-    initializer: syn::Expr,
 ) -> TokenStream2 {
     quote_spanned!{user_ty.span()=>
         const _: () = {
-            let _user: #user_ty = #initializer;
-            let _expected: #expected_type = _user;
+            trait SameType {
+                type This;
+            }
+            impl<T> SameType for T { type This = Self; }
+            fn check_type<T, U: SameType<This=T>>() {}
+            let _checked = check_type::<#expected_type, #user_ty>;
         };
     }
 }

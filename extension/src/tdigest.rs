@@ -59,9 +59,10 @@ impl TDigestTransState {
 
     #[sql_name("tdigest_trans")]
     fn transition(
-        state: Option<Inner<State>>,
+        state: Option<State>,
         #[sql_type("int")] size: i32,
-        #[sql_type("DOUBLE PRECISION")] value: Option<f64>) -> Option<Inner<State>> {
+        #[sql_type("DOUBLE PRECISION")] value: Option<f64>
+    ) -> Option<State> {
         let value = match value {
             None => return state,
             // NaNs are nonsensical in the context of a percentile, so exclude them
@@ -71,7 +72,7 @@ impl TDigestTransState {
             None => TDigestTransState{
                 buffer: vec![],
                 digested: InternalTDigest::new_with_size(size.try_into().unwrap()),
-            }.into(),
+            },
             Some(state) => state,
         };
         state.push(value);
@@ -96,16 +97,16 @@ impl TDigestTransState {
     }
 
     #[sql_name("tdigest_deserialize")]
-    fn deserialize(bytes: bytea) -> Inner<State> {
+    fn deserialize(bytes: bytea) -> State {
         crate::do_deserialize!(bytes, TDigestTransState)
     }
 
     #[sql_name("tdigest_combine")]
-    fn combine(state1: Option<&State>, state2: Option<&State>) -> Option<Inner<State>> {
+    fn combine(state1: Option<&State>, state2: Option<&State>) -> Option<State> {
         match (state1, state2) {
             (None, None) => None,
-            (None, Some(state2)) => Some(state2.clone().into()),
-            (Some(state1), None) => Some(state1.clone().into()),
+            (None, Some(state2)) => Some(state2.clone()),
+            (Some(state1), None) => Some(state1.clone()),
             (Some(state1), Some(state2)) => {
                 assert_eq!(state1.digested.max_size(), state2.digested.max_size());
                 let digvec = vec![state1.digested.clone(), state2.digested.clone()];
@@ -117,10 +118,9 @@ impl TDigestTransState {
                 }
 
                 Some(TDigestTransState {
-                        buffer: vec![],
-                        digested: InternalTDigest::merge_digests(digvec),
-                    }.into()
-                )
+                    buffer: vec![],
+                    digested: InternalTDigest::merge_digests(digvec),
+                })
             }
         }
     }
@@ -586,7 +586,7 @@ mod tests {
             let new_state = super::tdigest::deserialize(bytea(&*expected as *const pg_sys::varlena as _));
 
             control.digest();  // Serialized form is always digested
-            assert_eq!(&*new_state, &*control);
+            assert_eq!(new_state, control);
         }
     }
 

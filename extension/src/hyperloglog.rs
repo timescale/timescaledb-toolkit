@@ -4,7 +4,6 @@ use std::{
     convert::TryInto,
     hash::{BuildHasher, Hasher},
     mem::size_of,
-    slice,
 };
 
 use serde::{Deserialize, Serialize};

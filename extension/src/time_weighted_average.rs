@@ -1,7 +1,6 @@
 #![allow(non_camel_case_types)]
 
 use serde::{Deserialize, Serialize};
-use std::slice;
 
 use crate::{
     aggregate_utils::in_aggregate_context, flatten, ron_inout_funcs, palloc::{Internal, InternalAsValue, Inner, ToInternal}, pg_type,
@@ -260,10 +259,10 @@ fn time_weight_final_inner(
             };
             state.combine_summaries();
             debug_assert!(state.summary_buffer.len() <= 1);
-            state.summary_buffer.pop().map(|st| flatten!(TimeWeightSummary {                                        
-                method: st.method,                                         
-                first: st.first,                                         
-                last: st.last,                                         
+            state.summary_buffer.pop().map(|st| flatten!(TimeWeightSummary {
+                method: st.method,
+                first: st.first,
+                last: st.last,
                 weighted_sum: st.w_sum,
             }))
         })

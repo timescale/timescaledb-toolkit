@@ -1,0 +1,12 @@
+[package]
+name = "aggregate_builder"
+version = "0.1.0"
+edition = "2018"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = {version="1.0", features=["extra-traits", "visit", "visit-mut", "full"]}
+quote = "1.0"
+proc-macro2 = "1.0"

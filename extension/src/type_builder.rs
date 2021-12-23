@@ -376,7 +376,7 @@ macro_rules! do_deserialize {
                 let detoasted = pg_sys::pg_detoast_datum_packed(input as *mut _);
                 let len = pgx::varsize_any_exhdr(detoasted);
                 let data = pgx::vardata_any(detoasted);
-                let bytes = slice::from_raw_parts(data as *mut u8, len);
+                let bytes = std::slice::from_raw_parts(data as *mut u8, len);
                 if bytes.len() < 1 {
                     pgx::error!("deserialization error, no bytes")
                 }

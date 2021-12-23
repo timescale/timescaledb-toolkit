@@ -1,9 +1,5 @@
 use serde::{Serialize, Deserialize};
 
-use std::{
-    slice,
-};
-
 use pgx::*;
 
 use flat_serialize::*;

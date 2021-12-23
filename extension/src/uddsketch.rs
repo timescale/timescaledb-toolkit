@@ -1,6 +1,4 @@
 
-use std::slice;
-
 use pgx::*;
 
 use flat_serialize::*;

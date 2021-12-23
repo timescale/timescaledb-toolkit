@@ -1,6 +1,3 @@
-use std::{
-    slice,
-};
 
 use pgx::*;
 

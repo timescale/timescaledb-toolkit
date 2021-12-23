@@ -19,6 +19,7 @@ members = [
     "crates/counter-agg",
     "crates/time-series",
     "crates/stats-agg",
+    "crates/aggregate_builder"
 ]
 
 [profile.dev]

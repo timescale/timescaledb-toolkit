@@ -185,7 +185,7 @@ impl Parse for Aggregate {
             } else {
                 error!(
                     f.ident.span(),
-                    "unexpected `fn {}`, expected one of `transition`, `final`, `serialize`, or `deserialize`",
+                    "unexpected `fn {}`, expected one of `transition`, `finally`, `serialize`, `deserialize`, or `combine`",
                     f.ident
                 )
             }

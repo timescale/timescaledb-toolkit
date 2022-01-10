@@ -284,7 +284,6 @@ mod tests {
     use super::*;
 
     struct WeightedGen {
-        seed: u64,
         gen: SmallRng,
         min: i32,
         max: i32,
@@ -303,7 +302,6 @@ mod tests {
             let min = max - num_vals as i32;
 
             WeightedGen {
-                seed,
                 gen: SmallRng::seed_from_u64(seed),
                 min,
                 max,
@@ -451,14 +449,6 @@ mod tests {
         assert_eq!((test.value, test.count, test.overcount), (10, 5, 4));
         assert!(it.next().is_none());
         assert_eq!(ss.total_vals, 18);
-    }
-
-    fn absolute_counts(values: &Vec<i32>) -> HashMap<i32, i32> {
-        let mut result = HashMap::new();
-        for v in values {
-            *result.entry(*v).or_insert(0) += 1;
-        }
-        result
     }
 
     #[test]

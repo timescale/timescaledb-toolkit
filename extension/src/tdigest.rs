@@ -425,7 +425,7 @@ mod tests {
             client.select("INSERT INTO test SELECT generate_series(0.01, 100, 0.01)", None, None);
 
             let sanity = client
-                .select("SELECT COUNT(*) FROM test", None, None)
+                .select("SET force_parallel_mode TO regress; SELECT COUNT(*) FROM test", None, None)
                 .first()
                 .get_one::<i32>();
             assert_eq!(10000, sanity.unwrap());
@@ -437,7 +437,7 @@ mod tests {
             );
 
             let (min, max, count) = client
-                .select("SELECT \
+                .select("SET force_parallel_mode TO regress; SELECT \
                     min_val(tdigest), \
                     max_val(tdigest), \
                     num_vals(tdigest) \
@@ -453,7 +453,7 @@ mod tests {
             apx_eql(count.unwrap(), 10000.0, 0.000001);
 
             let (min2, max2, count2) = client
-                .select("SELECT \
+                .select("SET force_parallel_mode TO regress; SELECT \
                     tdigest->toolkit_experimental.min_val(), \
                     tdigest->toolkit_experimental.max_val(), \
                     tdigest->toolkit_experimental.num_vals() \
@@ -469,7 +469,7 @@ mod tests {
             assert_eq!(count2, count);
 
             let (mean, mean2) = client
-                .select("SELECT \
+                .select("SET force_parallel_mode TO regress; SELECT \
                     mean(tdigest), \
                     tdigest -> toolkit_experimental.mean()
                     FROM digest",
@@ -488,7 +488,7 @@ mod tests {
 
                 let (est_val, est_quant) = client
                     .select(
-                        &format!("SELECT
+                        &format!("SET force_parallel_mode TO regress; SELECT
                             approx_percentile({}, tdigest), \
                             approx_percentile_rank({}, tdigest) \
                             FROM digest",
@@ -509,7 +509,7 @@ mod tests {
 
                 let (est_val2, est_quant2) = client
                     .select(
-                        &format!("SELECT
+                        &format!("SET force_parallel_mode TO regress; SELECT
                             tdigest->toolkit_experimental.approx_percentile({}), \
                             tdigest->toolkit_experimental.approx_percentile_rank({}) \
                             FROM digest",
@@ -528,7 +528,7 @@ mod tests {
     #[pg_test]
     fn test_tdigest_small_count() {
         Spi::execute(|client| {
-            let estimate = client.select("SELECT \
+            let estimate = client.select("SET force_parallel_mode TO regress; SELECT \
                     approx_percentile(\
                         0.99, \
                         tdigest(100, data)) \
@@ -545,7 +545,7 @@ mod tests {
     #[pg_test]
     fn test_tdigest_io() {
         Spi::execute(|client| {
-            let output = client.select("SELECT \
+            let output = client.select("SET force_parallel_mode TO regress; SELECT \
                 tdigest(100, data)::text \
                 FROM generate_series(1, 100) data;",
                 None,
@@ -559,7 +559,7 @@ mod tests {
 
             let estimate = client.select(
                 &format!(
-                    "SELECT approx_percentile(0.90, '{}'::tdigest)",
+                    "SET force_parallel_mode TO regress; SELECT approx_percentile(0.90, '{}'::tdigest)",
                     expected
                 ), None, None)
                 .first()
@@ -599,7 +599,7 @@ mod tests {
             client.select("INSERT INTO new_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
 
             let sanity = client
-                .select("SELECT COUNT(*) FROM new_test", None, None)
+                .select("SET force_parallel_mode TO regress; SELECT COUNT(*) FROM new_test", None, None)
                 .first()
                 .get_one::<i32>();
             assert_eq!(Some(1010), sanity);
@@ -618,14 +618,14 @@ mod tests {
                 FROM new_test", None, None);
 
             let value= client
-                .select("SELECT \
+                .select("SET force_parallel_mode TO regress; SELECT \
                     approx_percentile(0.9, tdigest) \
                     FROM base", None, None)
                 .first()
                 .get_one::<f64>();
 
             let test_value = client
-                .select("SELECT \
+                .select("SET force_parallel_mode TO regress; SELECT \
                 approx_percentile(0.9, tdigest) \
                     FROM composite", None, None)
                 .first()

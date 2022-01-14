@@ -545,7 +545,7 @@ mod tests {
         Spi::execute(|client| {
             let text = client
                 .select(
-                    "SELECT \
+                    "SET force_parallel_mode TO regress; SELECT \
                         hyperloglog(32, v::float)::TEXT \
                         FROM generate_series(1, 100) v",
                     None,
@@ -569,7 +569,7 @@ mod tests {
             assert_eq!(text.unwrap(), expected);
 
             let (count, arrow_count) = client
-                .select("SELECT \
+                .select("SET force_parallel_mode TO regress; SELECT \
                     distinct_count(\
                         hyperloglog(32, v::float)\
                     ), \
@@ -583,7 +583,7 @@ mod tests {
             let count2 = client
                 .select(
                     &format!(
-                        "SELECT distinct_count('{}')",
+                        "SET force_parallel_mode TO regress; SELECT distinct_count('{}')",
                         expected
                     ),
                     None,
@@ -648,7 +648,7 @@ mod tests {
         Spi::execute(|client| {
             let text = client
                 .select(
-                    "SELECT hyperloglog(32, v::int)::TEXT
+                    "SET force_parallel_mode TO regress; SELECT hyperloglog(32, v::int)::TEXT
                     FROM generate_series(1, 100) v",
                     None,
                     None,
@@ -671,7 +671,7 @@ mod tests {
             assert_eq!(text.unwrap(), expected);
 
             let count = client
-                .select("SELECT \
+                .select("SET force_parallel_mode TO regress; SELECT \
                 distinct_count(\
                     hyperloglog(32, v::int)\
                 ) FROM generate_series(1, 100) v", None, None)
@@ -681,7 +681,7 @@ mod tests {
 
             let count2 = client
                 .select(
-                    &format!("SELECT distinct_count('{}')", expected),
+                    &format!("SET force_parallel_mode TO regress; SELECT distinct_count('{}')", expected),
                     None,
                     None,
                 )
@@ -698,7 +698,7 @@ mod tests {
 
             let text = client
                 .select(
-                    "SELECT \
+                    "SET force_parallel_mode TO regress; SELECT \
                         hyperloglog(32, v::text)::TEXT \
                     FROM generate_series(1, 100) v",
                     None,
@@ -723,7 +723,7 @@ mod tests {
             assert_eq!(text.unwrap(), expected);
 
             let count = client
-                .select("SELECT distinct_count(\
+                .select("SET force_parallel_mode TO regress; SELECT distinct_count(\
                     hyperloglog(32, v::text)\
                 ) FROM generate_series(1, 100) v", None, None)
                 .first()
@@ -732,7 +732,7 @@ mod tests {
 
             let count2 = client
                 .select(
-                    &format!("SELECT distinct_count('{}')", expected),
+                    &format!("SET force_parallel_mode TO regress; SELECT distinct_count('{}')", expected),
                     None,
                     None,
                 )
@@ -749,7 +749,7 @@ mod tests {
                 // self-union should be a nop
                 let expected = client
                     .select(
-                        "SELECT \
+                        "SET force_parallel_mode TO regress; SELECT \
                                 hyperloglog(32, v::text)::TEXT \
                             FROM generate_series(1, 100) v",
                         None,
@@ -761,7 +761,7 @@ mod tests {
 
                 let text = client
                     .select(
-                        "SELECT rollup(logs)::text \
+                        "SET force_parallel_mode TO regress; SELECT rollup(logs)::text \
                         FROM (\
                             (SELECT hyperloglog(32, v::text) logs \
                              FROM generate_series(1, 100) v\
@@ -781,7 +781,7 @@ mod tests {
             {
                 // differing unions should be a sum of the distinct counts
                 let query =
-                    "SELECT distinct_count(rollup(logs)) \
+                    "SET force_parallel_mode TO regress; SELECT distinct_count(rollup(logs)) \
                     FROM (\
                         (SELECT hyperloglog(32, v::text) logs \
                          FROM generate_series(1, 100) v) \

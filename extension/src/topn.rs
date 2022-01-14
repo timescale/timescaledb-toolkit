@@ -308,7 +308,7 @@ mod tests {
     fn test_topn_aggregate() {
         Spi::execute(|client| {
             // using the search path trick for this test to make it easier to stabilize later on
-            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            let sp = client.select("SET force_parallel_mode TO regress; SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
             client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
@@ -329,7 +329,7 @@ mod tests {
             }
 
             let test =
-                client.select("SELECT max_ordered_n(agg) FROM aggs WHERE size=100", None, None)
+                client.select("SET force_parallel_mode TO regress; SELECT max_ordered_n(agg) FROM aggs WHERE size=100", None, None)
                     .first().get_one::<i32>().unwrap();
             assert_eq!(test, 99);
             for i in 1..100 {
@@ -338,40 +338,40 @@ mod tests {
 
             // not having any real outliers makes it hard to guarantee a topn
             let test =
-                client.select("SELECT max_ordered_n(agg) FROM aggs WHERE size=75", None, None)
+                client.select("SET force_parallel_mode TO regress; SELECT max_ordered_n(agg) FROM aggs WHERE size=75", None, None)
                     .first().get_one::<i32>().unwrap();
             assert_eq!(test, 0);
-            assert!(!client.select("SELECT guaranteed_topn(5, agg) FROM aggs WHERE size=75", None, None).first().get_one::<bool>().unwrap());
+            assert!(!client.select("SET force_parallel_mode TO regress; SELECT guaranteed_topn(5, agg) FROM aggs WHERE size=75", None, None).first().get_one::<bool>().unwrap());
 
             // Test top result for each size
             let test =
-                client.select("SELECT value, min_freq, max_freq FROM topn(10, (SELECT agg FROM aggs WHERE size=100))", None, None)
+                client.select("SET force_parallel_mode TO regress; SELECT value, min_freq, max_freq FROM topn(10, (SELECT agg FROM aggs WHERE size=100))", None, None)
                     .first().get_three::<i64, f64, f64>();
             assert_eq!(test, (Some(99), Some(100./5050.), Some(100./5050.)));
 
             let test =
-                client.select("SELECT value, min_freq, max_freq FROM topn(10, (SELECT agg FROM aggs WHERE size=75))", None, None)
+                client.select("SET force_parallel_mode TO regress; SELECT value, min_freq, max_freq FROM topn(10, (SELECT agg FROM aggs WHERE size=75))", None, None)
                     .first().get_three::<i64, f64, f64>();
             assert_eq!(test, (Some(99), Some(76./5050.), Some(105./5050.)));
 
             let test =
-                client.select("SELECT value, min_freq, max_freq FROM topn(10, (SELECT agg FROM aggs WHERE size=50))", None, None)
+                client.select("SET force_parallel_mode TO regress; SELECT value, min_freq, max_freq FROM topn(10, (SELECT agg FROM aggs WHERE size=50))", None, None)
                     .first().get_three::<i64, f64, f64>();
             assert_eq!(test, (Some(99), Some(51./5050.), Some(126./5050.)));
 
             let test =
-                client.select("SELECT value, min_freq, max_freq FROM topn(10, (SELECT agg FROM aggs WHERE size=25))", None, None)
+                client.select("SET force_parallel_mode TO regress; SELECT value, min_freq, max_freq FROM topn(10, (SELECT agg FROM aggs WHERE size=25))", None, None)
                     .first().get_three::<i64, f64, f64>();
             assert_eq!(test, (Some(99), Some(26./5050.), Some(214./5050.)));
 
 
             let test =
-                client.select("SELECT num_vals(rollup(agg)) FROM aggs", None, None)
+                client.select("SET force_parallel_mode TO regress; SELECT num_vals(rollup(agg)) FROM aggs", None, None)
                     .first().get_one::<i32>().unwrap();
             assert_eq!(test, 20200);
 
             let test =
-                client.select("SELECT value, min_freq, max_freq FROM topn(10, (SELECT rollup(agg) FROM aggs))", None, None)
+                client.select("SET force_parallel_mode TO regress; SELECT value, min_freq, max_freq FROM topn(10, (SELECT rollup(agg) FROM aggs))", None, None)
                     .first().get_three::<i64, f64, f64>();
             assert_eq!(test, (Some(99), Some(253./20200.), Some(545./20200.)));
         });

@@ -768,45 +768,45 @@ mod tests {
         Spi::execute(|client| {
             client.select("CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)", None, None);
             // set search_path after defining our table so we don't pollute the wrong schema
-            let stmt = "SELECT format('toolkit_experimental, %s',current_setting('search_path'))";
+            let stmt = "SET force_parallel_mode TO regress; SELECT format('toolkit_experimental, %s',current_setting('search_path'))";
             let search_path = select_one!(client, stmt, String);
             client.select(&format!("SET LOCAL search_path TO {}", search_path), None, None);
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:00:00+00', 10.0), ('2020-01-01 00:01:00+00', 20.0)";
             client.select(stmt, None, None);
 
             // NULL bounds are equivalent to none provided
-            let stmt = "SELECT counter_agg(ts, val) FROM test";
+            let stmt = "SET force_parallel_mode TO regress; SELECT counter_agg(ts, val) FROM test";
             let a = select_one!(client,stmt, CounterSummary);
-            let stmt = "SELECT counter_agg(ts, val, NULL::tstzrange) FROM test";
+            let stmt = "SET force_parallel_mode TO regress; SELECT counter_agg(ts, val, NULL::tstzrange) FROM test";
             let b = select_one!(client,stmt, CounterSummary);
             assert_close_enough(&a.to_internal_counter_summary(), &b.to_internal_counter_summary());
 
-            let stmt = "SELECT \
+            let stmt = "SET force_parallel_mode TO regress; SELECT \
                 delta(counter_agg(ts, val)), \
                 counter_agg(ts, val)->delta() \
             FROM test";
             assert_relative_eq!(select_and_check_one!(client, stmt, f64), 10.0);
 
-            let stmt = "SELECT \
+            let stmt = "SET force_parallel_mode TO regress; SELECT \
                 time_delta(counter_agg(ts, val)), \
                 counter_agg(ts, val)->time_delta() \
             FROM test";
             assert_relative_eq!(select_and_check_one!(client, stmt, f64), 60.0);
 
             // have to add 1 ms to right bounds to get full range and simple values because prometheus subtracts a ms
-            let stmt = "SELECT \
+            let stmt = "SET force_parallel_mode TO regress; SELECT \
                 extrapolated_delta(counter_agg(ts, val, '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00.001+00)'), 'prometheus'), \
                 counter_agg(ts, val, '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00.001+00)') -> extrapolated_delta('prometheus')  \
             FROM test";
             assert_relative_eq!(select_and_check_one!(client, stmt, f64), 20.0);
             // doesn't matter if we set the bounds before or after
-            let stmt = "SELECT \
+            let stmt = "SET force_parallel_mode TO regress; SELECT \
                 extrapolated_delta(with_bounds(counter_agg(ts, val), '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00.001+00)'), 'prometheus'), \
                 counter_agg(ts, val)->with_bounds('[2020-01-01 00:00:00+00, 2020-01-01 00:02:00.001+00)')-> extrapolated_delta('prometheus') \
             FROM test";
             assert_relative_eq!(select_and_check_one!(client, stmt, f64), 20.0);
 
-            let stmt = "SELECT \
+            let stmt = "SET force_parallel_mode TO regress; SELECT \
                 extrapolated_rate(counter_agg(ts, val, '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00.001+00)'), 'prometheus'), \
                 counter_agg(ts, val, '[2020-01-01 00:00:00+00, 2020-01-01 00:02:00.001+00)')->extrapolated_rate('prometheus') \
             FROM test";
@@ -815,55 +815,55 @@ mod tests {
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)";
             client.select(stmt, None, None);
 
-            let stmt = "SELECT \
+            let stmt = "SET force_parallel_mode TO regress; SELECT \
                 slope(counter_agg(ts, val)), \
                 counter_agg(ts, val)->slope() \
             FROM test";
             assert_relative_eq!(select_and_check_one!(client, stmt, f64), 10.0 / 60.0);
 
-            let stmt = "SELECT \
+            let stmt = "SET force_parallel_mode TO regress; SELECT \
                 intercept(counter_agg(ts, val)), \
                 counter_agg(ts, val)->intercept() \
             FROM test";
             assert_relative_eq!(select_and_check_one!(client, stmt, f64), -105191990.0);
 
-            let stmt = "SELECT \
+            let stmt = "SET force_parallel_mode TO regress; SELECT \
                 corr(counter_agg(ts, val)), \
                 counter_agg(ts, val)->corr() \
             FROM test";
             assert_relative_eq!(select_and_check_one!(client, stmt, f64), 1.0);
 
-            let stmt = "SELECT \
+            let stmt = "SET force_parallel_mode TO regress; SELECT \
                 counter_zero_time(counter_agg(ts, val)), \
                 counter_agg(ts, val)->counter_zero_time() \
             FROM test";
             let zp = select_and_check_one!(client, stmt, i64);
-            let real_zp = select_one!(client, "SELECT '2019-12-31 23:59:00+00'::timestamptz", i64);
+            let real_zp = select_one!(client, "SET force_parallel_mode TO regress; SELECT '2019-12-31 23:59:00+00'::timestamptz", i64);
             assert_eq!(zp, real_zp);
 
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:08:00+00', 30.0), ('2020-01-01 00:10:00+00', 30.0), ('2020-01-01 00:10:30+00', 10.0), ('2020-01-01 00:20:00+00', 40.0)";
             client.select(stmt, None, None);
 
-            let stmt = "SELECT \
+            let stmt = "SET force_parallel_mode TO regress; SELECT \
                 num_elements(counter_agg(ts, val)), \
                 counter_agg(ts, val)->num_elements() \
             FROM test";
             assert_eq!(select_and_check_one!(client, stmt, i64), 9);
 
-            let stmt = "SELECT \
+            let stmt = "SET force_parallel_mode TO regress; SELECT \
                 num_resets(counter_agg(ts, val)), \
                 counter_agg(ts, val)->num_resets() \
             FROM test";
             assert_eq!(select_and_check_one!(client, stmt, i64), 3);
 
-            let stmt = "SELECT \
+            let stmt = "SET force_parallel_mode TO regress; SELECT \
                 num_changes(counter_agg(ts, val)), \
                 counter_agg(ts, val)->num_changes() \
             FROM test";
             assert_eq!(select_and_check_one!(client, stmt, i64), 7);
 
             //combine function works as expected
-            let stmt = "SELECT counter_agg(ts, val) FROM test";
+            let stmt = "SET force_parallel_mode TO regress; SELECT counter_agg(ts, val) FROM test";
             let a = select_one!(client,stmt, CounterSummary);
             let stmt = "WITH t as (SELECT date_trunc('minute', ts), counter_agg(ts, val) as agg FROM test group by 1 ) SELECT rollup(agg) FROM t";
             let b = select_one!(client,stmt, CounterSummary);
@@ -919,25 +919,25 @@ mod tests {
                 )\
             )";
 
-            let stmt = "SELECT counter_agg(ts, val)::TEXT FROM test";
+            let stmt = "SET force_parallel_mode TO regress; SELECT counter_agg(ts, val)::TEXT FROM test";
             let test = select_one!(client, stmt, String);
             assert_eq!(test, expected);
 
-            let stmt = format!("SELECT '{}'::CounterSummary::TEXT", expected);
+            let stmt = format!("SET force_parallel_mode TO regress; SELECT '{}'::CounterSummary::TEXT", expected);
             let round_trip = select_one!(client, &stmt, String);
             assert_eq!(expected, round_trip);
 
-            let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
+            let stmt = "SET force_parallel_mode TO regress; SELECT delta(counter_agg(ts, val)) FROM test";
             let delta = select_one!(client, stmt, f64);
             assert!((delta - 100.).abs() < f64::EPSILON);
-            let stmt = format!("SELECT delta('{}')", expected);
+            let stmt = format!("SET force_parallel_mode TO regress; SELECT delta('{}')", expected);
             let delta_test = select_one!(client, &stmt, f64);
             assert!((delta - delta_test).abs() < f64::EPSILON);
 
-            let stmt = "SELECT num_resets(counter_agg(ts, val)) FROM test";
+            let stmt = "SET force_parallel_mode TO regress; SELECT num_resets(counter_agg(ts, val)) FROM test";
             let resets = select_one!(client, stmt, i64);
             assert_eq!(resets, 4);
-            let stmt = format!("SELECT num_resets('{}')", expected);
+            let stmt = format!("SET force_parallel_mode TO regress; SELECT num_resets('{}')", expected);
             let resets_test = select_one!(client, &stmt, i64);
             assert_eq!(resets, resets_test);
         });

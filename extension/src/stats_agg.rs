@@ -1317,7 +1317,7 @@ mod tests {
             );
 
             let test = client.select(
-                "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
+                "SET force_parallel_mode TO regress; SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
                 None,
                 None
             )
@@ -1332,7 +1332,7 @@ mod tests {
             );
 
             let test = client.select(
-                "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
+                "SET force_parallel_mode TO regress; SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
                 None,
                 None
             )
@@ -1347,7 +1347,7 @@ mod tests {
                 None
             );
             let test = client.select(
-                "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
+                "SET force_parallel_mode TO regress; SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
                 None,
                 None
             )
@@ -1358,15 +1358,15 @@ mod tests {
             assert_eq!(test, expected);
 
             // Test a few functions to see that the text serialized object behave the same as the constructed one
-            assert_eq!(client.select("SELECT skewness_x(stats_agg(test_y, test_x)) FROM test_table", None, None).first().get_one::<f64>(),
-                       client.select(&format!("SELECT skewness_x('{}'::StatsSummary2D)", expected), None, None).first().get_one::<f64>());
-            assert_eq!(client.select("SELECT kurtosis_y(stats_agg(test_y, test_x)) FROM test_table", None, None).first().get_one::<f64>(),
-                       client.select(&format!("SELECT kurtosis_y('{}'::StatsSummary2D)", expected), None, None).first().get_one::<f64>());
-            assert_eq!(client.select("SELECT covariance(stats_agg(test_y, test_x)) FROM test_table", None, None).first().get_one::<f64>(),
-                       client.select(&format!("SELECT covariance('{}'::StatsSummary2D)", expected), None, None).first().get_one::<f64>());
+            assert_eq!(client.select("SET force_parallel_mode TO regress; SELECT skewness_x(stats_agg(test_y, test_x)) FROM test_table", None, None).first().get_one::<f64>(),
+                       client.select(&format!("SET force_parallel_mode TO regress; SELECT skewness_x('{}'::StatsSummary2D)", expected), None, None).first().get_one::<f64>());
+            assert_eq!(client.select("SET force_parallel_mode TO regress; SELECT kurtosis_y(stats_agg(test_y, test_x)) FROM test_table", None, None).first().get_one::<f64>(),
+                       client.select(&format!("SET force_parallel_mode TO regress; SELECT kurtosis_y('{}'::StatsSummary2D)", expected), None, None).first().get_one::<f64>());
+            assert_eq!(client.select("SET force_parallel_mode TO regress; SELECT covariance(stats_agg(test_y, test_x)) FROM test_table", None, None).first().get_one::<f64>(),
+                       client.select(&format!("SET force_parallel_mode TO regress; SELECT covariance('{}'::StatsSummary2D)", expected), None, None).first().get_one::<f64>());
 
             // Test text round trip
-            assert_eq!(client.select(&format!("SELECT '{}'::StatsSummary2D::TEXT", expected), None, None).first().get_one::<String>().unwrap(), expected);
+            assert_eq!(client.select(&format!("SET force_parallel_mode TO regress; SELECT '{}'::StatsSummary2D::TEXT", expected), None, None).first().get_one::<String>().unwrap(), expected);
 
             client.select(
                 "INSERT INTO test_table VALUES ('NaN', 30);",
@@ -1374,7 +1374,7 @@ mod tests {
                 None
             );
             let test = client.select(
-                "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
+                "SET force_parallel_mode TO regress; SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
                 None,
                 None
             )
@@ -1389,7 +1389,7 @@ mod tests {
                 None
             );
             let test = client.select(
-                "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
+                "SET force_parallel_mode TO regress; SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
                 None,
                 None
             )
@@ -1529,40 +1529,40 @@ mod tests {
     }
 
     fn pg1d_aggx(agg: &str) -> String {
-        format!("SELECT {}(test_x) FROM test_table", agg)
+        format!("SET force_parallel_mode TO regress; SELECT {}(test_x) FROM test_table", agg)
     }
 
     fn pg1d_aggy(agg: &str) -> String {
-        format!("SELECT {}(test_y) FROM test_table", agg)
+        format!("SET force_parallel_mode TO regress; SELECT {}(test_y) FROM test_table", agg)
     }
 
     fn pg2d_agg(agg: &str) -> String {
-        format!("SELECT {}(test_y, test_x) FROM test_table", agg)
+        format!("SET force_parallel_mode TO regress; SELECT {}(test_y, test_x) FROM test_table", agg)
     }
 
     fn tk1d_agg(agg: &str) -> String {
-        format!("SELECT \
+        format!("SET force_parallel_mode TO regress; SELECT \
             {agg}(stats_agg(test_x)), \
             stats_agg(test_x)->toolkit_experimental.{agg}() \
         FROM test_table", agg=agg)
     }
 
     fn tk1d_agg_arg(agg: &str, arg: &str) -> String {
-        format!("SELECT \
+        format!("SET force_parallel_mode TO regress; SELECT \
             {agg}(stats_agg(test_x), '{arg}'), \
             stats_agg(test_x)->toolkit_experimental.{agg}('{arg}') \
         FROM test_table", agg=agg, arg=arg)
     }
 
     fn tk2d_agg(agg: &str) -> String {
-        format!("SELECT \
+        format!("SET force_parallel_mode TO regress; SELECT \
             {agg}(stats_agg(test_y, test_x)), \
             stats_agg(test_y, test_x)->toolkit_experimental.{agg}() \
         FROM test_table", agg=agg)
     }
 
     fn tk2d_agg_arg(agg: &str, arg: &str) -> String {
-        format!("SELECT \
+        format!("SET force_parallel_mode TO regress; SELECT \
             {agg}(stats_agg(test_y, test_x), '{arg}'), \
             stats_agg(test_y, test_x)->toolkit_experimental.{agg}('{arg}') \
         FROM test_table", agg=agg, arg=arg)

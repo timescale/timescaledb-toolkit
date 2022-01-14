@@ -354,41 +354,41 @@ mod tests {
             client.select(stmt, None, None);
 
             // test basic with 2 points
-            let stmt = "SELECT average(time_weight('Linear', ts, val)) FROM test";
+            let stmt = "SET force_parallel_mode TO regress; SELECT average(time_weight('Linear', ts, val)) FROM test";
             assert!((select_one!(client, stmt, f64) - 15.0).abs() < f64::EPSILON);
-            let stmt = "SELECT average(time_weight('LOCF', ts, val)) FROM test";
+            let stmt = "SET force_parallel_mode TO regress; SELECT average(time_weight('LOCF', ts, val)) FROM test";
             assert!((select_one!(client, stmt, f64) - 10.0).abs() < f64::EPSILON);
 
             // more values evenly spaced
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)";
             client.select(stmt, None, None);
 
-            let stmt = "SELECT average(time_weight('Linear', ts, val)) FROM test";
+            let stmt = "SET force_parallel_mode TO regress; SELECT average(time_weight('Linear', ts, val)) FROM test";
             assert!((select_one!(client, stmt, f64) - 15.0).abs() < f64::EPSILON);
-            let stmt = "SELECT average(time_weight('LOCF', ts, val)) FROM test";
+            let stmt = "SET force_parallel_mode TO regress; SELECT average(time_weight('LOCF', ts, val)) FROM test";
             assert!((select_one!(client, stmt, f64) - 15.0).abs() < f64::EPSILON);
 
             //non-evenly spaced values
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:08:00+00', 30.0), ('2020-01-01 00:10:00+00', 10.0), ('2020-01-01 00:10:30+00', 20.0), ('2020-01-01 00:20:00+00', 30.0)";
             client.select(stmt, None, None);
 
-            let stmt = "SELECT average(time_weight('Linear', ts, val)) FROM test";
+            let stmt = "SET force_parallel_mode TO regress; SELECT average(time_weight('Linear', ts, val)) FROM test";
             // expected =(15 +15 +15 +15 + 20*4 + 20*2 +15*.5 + 25*9.5) / 20 = 21.25 just taking the midpoints between each point and multiplying by minutes and dividing by total
             assert!((select_one!(client, stmt, f64) - 21.25).abs() < f64::EPSILON);
-            let stmt = "SELECT time_weight('Linear', ts, val) \
+            let stmt = "SET force_parallel_mode TO regress; SELECT time_weight('Linear', ts, val) \
                 ->toolkit_experimental.average() \
             FROM test";
             // arrow syntax should be the same
             assert!((select_one!(client, stmt, f64) - 21.25).abs() < f64::EPSILON);
 
-            let stmt = "SELECT average(time_weight('LOCF', ts, val)) FROM test";
+            let stmt = "SET force_parallel_mode TO regress; SELECT average(time_weight('LOCF', ts, val)) FROM test";
             // expected = (10 + 20 + 10 + 20 + 10*4 + 30*2 +10*.5 + 20*9.5) / 20 = 17.75 using last value and carrying for each point
             assert!((select_one!(client, stmt, f64) - 17.75).abs() < f64::EPSILON);
 
             //make sure this works with whatever ordering we throw at it
-            let stmt = "SELECT average(time_weight('Linear', ts, val ORDER BY random())) FROM test";
+            let stmt = "SET force_parallel_mode TO regress; SELECT average(time_weight('Linear', ts, val ORDER BY random())) FROM test";
             assert!((select_one!(client, stmt, f64) - 21.25).abs() < f64::EPSILON);
-            let stmt = "SELECT average(time_weight('LOCF', ts, val ORDER BY random())) FROM test";
+            let stmt = "SET force_parallel_mode TO regress; SELECT average(time_weight('LOCF', ts, val ORDER BY random())) FROM test";
             assert!((select_one!(client, stmt, f64) - 17.75).abs() < f64::EPSILON);
 
             // make sure we get the same result if we do multi-level aggregation
@@ -406,9 +406,9 @@ mod tests {
             let stmt = "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)";
             client.select(stmt, None, None);
 
-            let linear_time_weight = "SELECT time_weight('Linear', ts, val)::TEXT FROM test";
-            let locf_time_weight =  "SELECT time_weight('LOCF', ts, val)::TEXT FROM test";
-            let avg = |text: &str| format!("SELECT average('{}'::TimeWeightSummary)", text);
+            let linear_time_weight = "SET force_parallel_mode TO regress; SELECT time_weight('Linear', ts, val)::TEXT FROM test";
+            let locf_time_weight =  "SET force_parallel_mode TO regress; SELECT time_weight('LOCF', ts, val)::TEXT FROM test";
+            let avg = |text: &str| format!("SET force_parallel_mode TO regress; SELECT average('{}'::TimeWeightSummary)", text);
 
             // add a couple points
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:00:00+00', 10.0), ('2020-01-01 00:01:00+00', 20.0)";

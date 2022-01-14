@@ -659,7 +659,7 @@ mod tests {
             client.select("INSERT INTO test SELECT generate_series(0.01, 100, 0.01)", None, None);
 
             let sanity = client
-                .select("SELECT COUNT(*) FROM test", None, None)
+                .select("SET force_parallel_mode TO regress; SELECT COUNT(*) FROM test", None, None)
                 .first()
                 .get_one::<i32>();
             assert_eq!(Some(10000), sanity);
@@ -669,13 +669,13 @@ mod tests {
                 FROM test", None, None);
 
             let sanity = client
-                .select("SELECT COUNT(*) FROM sketch", None, None)
+                .select("SET force_parallel_mode TO regress; SELECT COUNT(*) FROM sketch", None, None)
                 .first()
                 .get_one::<i32>();
             assert!(sanity.unwrap_or(0) > 0);
 
             let (mean, count) = client
-                .select("SELECT \
+                .select("SET force_parallel_mode TO regress; SELECT \
                     mean(uddsketch), \
                     num_vals(uddsketch) \
                     FROM sketch", None, None)
@@ -686,7 +686,7 @@ mod tests {
             apx_eql(count.unwrap(), 10000.0, 0.000001);
 
             let (mean2, count2) = client
-                .select("SELECT \
+                .select("SET force_parallel_mode TO regress; SELECT \
                     uddsketch -> toolkit_experimental.mean(), \
                     uddsketch -> toolkit_experimental.num_vals() \
                     FROM sketch", None, None)
@@ -696,7 +696,7 @@ mod tests {
             assert_eq!(count, count2);
 
             let (error, error2) = client
-                .select("SELECT \
+                .select("SET force_parallel_mode TO regress; SELECT \
                     error(uddsketch), \
                     uddsketch -> toolkit_experimental.error() \
                     FROM sketch", None, None)
@@ -748,7 +748,7 @@ mod tests {
             client.select("INSERT INTO new_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
 
             let sanity = client
-                .select("SELECT COUNT(*) FROM new_test", None, None)
+                .select("SET force_parallel_mode TO regress; SELECT COUNT(*) FROM new_test", None, None)
                 .first()
                 .get_one::<i32>();
             assert_eq!(Some(1010), sanity);
@@ -768,7 +768,7 @@ mod tests {
                 FROM new_test", None, None);
 
             let (value, error) = client
-                .select("SELECT \
+                .select("SET force_parallel_mode TO regress; SELECT \
                     approx_percentile(0.9, uddsketch), \
                     error(uddsketch) \
                     FROM base", None, None)
@@ -776,7 +776,7 @@ mod tests {
                 .get_two::<f64, f64>();
 
             let (test_value, test_error) = client
-                .select("SELECT \
+                .select("SET force_parallel_mode TO regress; SELECT \
                     approx_percentile(0.9, uddsketch), \
                     error(uddsketch) \
                     FROM composite", None, None)
@@ -796,7 +796,7 @@ mod tests {
             client.select("INSERT INTO pa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
 
             let sanity = client
-                .select("SELECT COUNT(*) FROM pa_test", None, None)
+                .select("SET force_parallel_mode TO regress; SELECT COUNT(*) FROM pa_test", None, None)
                 .first()
                 .get_one::<i32>();
             assert_eq!(Some(1010), sanity);
@@ -812,7 +812,7 @@ mod tests {
 
 
             let (value, error) = client
-                .select("SELECT \
+                .select("SET force_parallel_mode TO regress; SELECT \
                     approx_percentile(0.9, approx), \
                     error(approx) \
                     FROM uddsketch_test", None, None)
@@ -820,7 +820,7 @@ mod tests {
                 .get_two::<f64, f64>();
 
             let (test_value, test_error) = client
-                .select("SELECT \
+                .select("SET force_parallel_mode TO regress; SELECT \
                     approx_percentile(0.9, approx), \
                     error(approx) \
                     FROM percentile_agg", None, None)
@@ -839,7 +839,7 @@ mod tests {
             client.select("CREATE TABLE io_test (value DOUBLE PRECISION)", None, None);
             client.select("INSERT INTO io_test VALUES (-1000), (-100), (-10), (-1), (-0.1), (-0.01), (-0.001), (0), (0.001), (0.01), (0.1), (1), (10), (100), (1000)", None, None);
 
-            let sketch = client.select("SELECT uddsketch(10, 0.01, value)::text FROM io_test", None, None).first().get_one::<String>();
+            let sketch = client.select("SET force_parallel_mode TO regress; SELECT uddsketch(10, 0.01, value)::text FROM io_test", None, None).first().get_one::<String>();
 
             let expected = "(\
                 version:1,\

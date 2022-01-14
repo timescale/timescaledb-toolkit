@@ -434,6 +434,7 @@ pub fn stats1d_combine_inner<'s, 'v>(
     state2: Option<Inner<StatsSummary1D<'v>>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<StatsSummary1D<'s>>> {
+    todo!();
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state1, state2) {
@@ -472,6 +473,7 @@ pub fn stats2d_combine_inner<'s, 'v>(
     state2: Option<Inner<StatsSummary2D<'v>>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<StatsSummary2D<'s>>> {
+    todo!();
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state1, state2) {

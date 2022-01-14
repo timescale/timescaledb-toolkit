@@ -362,6 +362,7 @@ pub fn inner_combine<'a, 'b> (
     state2: Option<Inner<Timevector<'b>>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<Timevector<'static>>> {
+    todo!();
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state1, state2) {

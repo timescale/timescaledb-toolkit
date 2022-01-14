@@ -268,6 +268,7 @@ pub fn counter_agg_combine_inner(
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<CounterSummaryTransState>> {
     unsafe {
+        todo!();
         in_aggregate_context(fcinfo, || {
             match (state1, state2) {
                 (None, None) => None,

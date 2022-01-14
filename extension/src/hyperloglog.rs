@@ -91,6 +91,7 @@ pub fn hyperloglog_combine_inner(
     state2: Option<Inner<HyperLogLogTrans>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<HyperLogLogTrans>> {
+    todo!();
     unsafe {
         in_aggregate_context(fcinfo, || match (state1, state2) {
             (None, None) => None,

@@ -103,6 +103,7 @@ impl TDigestTransState {
 
     #[sql_name("tdigest_combine")]
     fn combine(state1: Option<&State>, state2: Option<&State>) -> Option<State> {
+        todo!();
         match (state1, state2) {
             (None, None) => None,
             (None, Some(state2)) => Some(state2.clone()),
@@ -221,6 +222,7 @@ pub fn tdigest_compound_combine_inner(
     state2: Option<Inner<InternalTDigest>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<InternalTDigest>> {
+    todo!();
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state1, state2) {

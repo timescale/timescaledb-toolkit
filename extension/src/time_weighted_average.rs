@@ -212,6 +212,7 @@ pub fn time_weight_combine_inner(
     state2: Option<Inner<TimeWeightTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<TimeWeightTransState>> {
+    todo!();
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state1, state2) {

@@ -134,6 +134,7 @@ pub fn topn_combine_inner(
     state2: Option<Inner<InternalTopN>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<InternalTopN>> {
+    todo!();
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state1, state2) {

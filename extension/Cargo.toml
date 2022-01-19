@@ -29,7 +29,6 @@ stats_agg = {path="../crates/stats-agg"}
 time_weighted_average = {path="../crates/time-weighted-average"}
 time_series = {path="../crates/time-series"}
 asap = {path="../crates/asap"}
-spacesaving = {path="../crates/spacesaving"}
 
 aggregate_builder = {path="../crates/aggregate_builder"}
 

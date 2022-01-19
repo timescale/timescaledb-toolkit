@@ -2001,15 +2001,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "spacesaving"
-version = "0.1.0"
-dependencies = [
- "rand 0.8.4",
- "serde",
- "zipf",
-]
-
-[[package]]
 name = "spin"
 version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2228,7 +2219,6 @@ dependencies = [
  "rand_distr",
  "ron",
  "serde",
- "spacesaving",
  "stats_agg",
  "tdigest",
  "time_series",
@@ -2634,12 +2624,3 @@ name = "xshell-macros"
 version = "0.1.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4916a4a3cad759e499a3620523bf9545cc162d7a06163727dde97ce9aaa4cf39"
-
-[[package]]
-name = "zipf"
-version = "7.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "835688a7a1b5d2dfaeb5b7e1b4cfb979e7095a70cd1c72fe083f4904ef3e995e"
-dependencies = [
- "rand 0.8.4",
-]

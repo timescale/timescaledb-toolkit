@@ -13,13 +13,25 @@ use pgx::*;
 
 /// Possibly a premature optimization, `ShortTypId` provides the ability to
 /// serialize and deserialize type Oids as `(namespace, name)` pairs, special
-/// casing a number of types with hadcoded Oids that we expect to be common so
+/// casing a number of types with hardcoded Oids that we expect to be common so
 /// that these types can be stored more compactly if desired.
 #[derive(Debug, Clone, Copy)]
 #[repr(transparent)]
 pub struct ShortTypeId(pub u32);
 
 impl_flat_serializable!(ShortTypeId);
+
+impl From<u32> for ShortTypeId {
+    fn from(id: u32) -> Self {
+        Self(id)
+    }
+}
+
+impl From<ShortTypeId> for u32 {
+    fn from(id: ShortTypeId) -> Self {
+        id.0
+    }
+}
 
 impl Serialize for ShortTypeId {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>

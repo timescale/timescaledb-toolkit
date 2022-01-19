@@ -13,7 +13,7 @@ pub mod range;
 pub mod stats_agg;
 pub mod utilities;
 pub mod time_series;
-pub mod topn;
+pub mod frequency;
 
 mod palloc;
 mod aggregate_utils;
@@ -21,6 +21,7 @@ mod type_builder;
 mod serialization;
 mod schema_test;
 mod raw;
+mod datum_utils;
 
 #[cfg(any(test, feature = "pg_test"))]
 mod aggregate_builder_tests;

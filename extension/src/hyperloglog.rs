@@ -2,8 +2,6 @@
 
 use std::{
     convert::TryInto,
-    hash::{BuildHasher, Hasher},
-    mem::size_of,
 };
 
 use serde::{Deserialize, Serialize};
@@ -15,6 +13,7 @@ use flat_serialize::*;
 
 use crate::{
     aggregate_utils::{get_collation, in_aggregate_context},
+    datum_utils::DatumHashBuilder,
     flatten, ron_inout_funcs,
     palloc::{Internal, InternalAsValue, Inner, ToInternal},
     pg_type,
@@ -385,150 +384,6 @@ fn unflatten_log(hyperloglog: HyperLogLog) -> HLL<Datum, DatumHashBuilder> {
                 *precision,
                 unsafe { DatumHashBuilder::from_type_id(element_type.0, Some(collation.0)) }
             ),
-    }
-}
-
-// TODO move to it's own mod if we reuse it
-struct DatumHashBuilder {
-    info: pg_sys::FunctionCallInfo,
-    type_id: pg_sys::Oid,
-    collation: pg_sys::Oid,
-}
-
-impl DatumHashBuilder {
-    unsafe fn from_type_id(type_id: pg_sys::Oid, collation: Option<Oid>) -> Self {
-        let entry =
-            pg_sys::lookup_type_cache(type_id, pg_sys::TYPECACHE_HASH_EXTENDED_PROC_FINFO as _);
-        Self::from_type_cache_entry(entry, collation)
-    }
-
-    unsafe fn from_type_cache_entry(
-        tentry: *const pg_sys::TypeCacheEntry,
-        collation: Option<Oid>,
-    ) -> Self {
-        let flinfo = if (*tentry).hash_extended_proc_finfo.fn_addr.is_some() {
-            &(*tentry).hash_extended_proc_finfo
-        } else {
-            pgx::error!("no hash function");
-        };
-
-        // 1 argument for the key, 1 argument for the seed
-        let size =
-            size_of::<pg_sys::FunctionCallInfoBaseData>() + size_of::<pg_sys::NullableDatum>() * 2;
-        let mut info = pg_sys::palloc0(size) as pg_sys::FunctionCallInfo;
-
-        (*info).flinfo = flinfo as *const pg_sys::FmgrInfo as *mut pg_sys::FmgrInfo;
-        (*info).context = std::ptr::null_mut();
-        (*info).resultinfo = std::ptr::null_mut();
-        (*info).fncollation = (*tentry).typcollation;
-        (*info).isnull = false;
-        (*info).nargs = 1;
-
-        let collation = match collation {
-            Some(collation) => collation,
-            None => (*tentry).typcollation,
-        };
-
-        Self {
-            info,
-            type_id: (*tentry).type_id,
-            collation,
-        }
-    }
-}
-
-impl Clone for DatumHashBuilder {
-    fn clone(&self) -> Self {
-        Self {
-            info: self.info,
-            type_id: self.type_id,
-            collation: self.collation,
-        }
-    }
-}
-
-impl BuildHasher for DatumHashBuilder {
-    type Hasher = DatumHashBuilder;
-
-    fn build_hasher(&self) -> Self::Hasher {
-        Self {
-            info: self.info,
-            type_id: self.type_id,
-            collation: self.collation,
-        }
-    }
-}
-
-impl Hasher for DatumHashBuilder {
-    fn finish(&self) -> u64 {
-        //FIXME ehhh, this is wildly unsafe, should at least have a separate hash
-        //      buffer for each, probably should have separate args
-        let value = unsafe {
-            let value = (*(*self.info).flinfo).fn_addr.unwrap()(self.info);
-            (*self.info).args.as_mut_slice(1)[0] = pg_sys::NullableDatum {
-                value: 0,
-                isnull: true,
-            };
-            (*self.info).isnull = false;
-            //FIXME 32bit vs 64 bit get value from datum on 32b arch
-            value
-        };
-        value as u64
-    }
-
-    fn write(&mut self, bytes: &[u8]) {
-        if bytes.len() != size_of::<usize>() {
-            panic!("invalid datum hash")
-        }
-
-        let mut b = [0; size_of::<usize>()];
-        b[..size_of::<usize>()].clone_from_slice(&bytes[..size_of::<usize>()]);
-        self.write_usize(usize::from_ne_bytes(b))
-    }
-
-    fn write_usize(&mut self, i: usize) {
-        unsafe {
-            (*self.info).args.as_mut_slice(1)[0] = pg_sys::NullableDatum {
-                value: i,
-                isnull: false,
-            };
-            (*self.info).isnull = false;
-        }
-    }
-}
-
-impl PartialEq for DatumHashBuilder {
-    fn eq(&self, other: &Self) -> bool {
-        self.type_id.eq(&other.type_id)
-    }
-}
-
-impl Eq for DatumHashBuilder {}
-
-impl Serialize for DatumHashBuilder {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let collation = if self.collation == 0 {
-            None
-        } else {
-            Some(PgCollationId(self.collation))
-        };
-        (ShortTypeId(self.type_id), collation).serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for DatumHashBuilder {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let (type_id, collation) =
-            <(ShortTypeId, Option<PgCollationId>)>::deserialize(deserializer)?;
-        //FIXME no collation?
-        let deserialized = unsafe { Self::from_type_id(type_id.0, collation.map(|c| c.0)) };
-        Ok(deserialized)
     }
 }
 

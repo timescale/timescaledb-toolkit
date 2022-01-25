@@ -10,6 +10,7 @@ pub mod asap;
 pub mod lttb;
 pub mod counter_agg;
 pub mod range;
+pub mod state_aggregate;
 pub mod stats_agg;
 pub mod utilities;
 pub mod time_series;

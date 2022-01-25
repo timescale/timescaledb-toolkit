@@ -118,7 +118,7 @@ impl CounterSummaryTransState {
         let mut iter = self.point_buffer.iter();
         let mut summary = InternalCounterSummary::new( iter.next().unwrap(), self.bounds);
         for p in iter {
-            summary.add_point(p).unwrap();
+            summary.add_point(p).unwrap_or_else(|e| pgx::error!("{}", e));
         }
         self.point_buffer.clear();
         // check bounds only after we've combined all the points, so we aren't doing it all the time.
@@ -145,7 +145,7 @@ impl CounterSummaryTransState {
         let mut sum_iter = self.summary_buffer.iter();
         let mut new_summary = sum_iter.next().unwrap().clone();
         for sum in sum_iter {
-            new_summary.combine(sum).unwrap();
+            new_summary.combine(sum).unwrap_or_else(|e| pgx::error!("{}", e));
         }
         self.summary_buffer = vec![new_summary];
     }
@@ -969,7 +969,6 @@ mod tests {
             assert_eq!(&*new_state, &*control);
         }
     }
-
 
     // #[pg_test]
     // fn test_combine_aggregate(){

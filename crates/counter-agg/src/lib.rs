@@ -2,6 +2,7 @@
 use time_series::TSPoint;
 use stats_agg::{XYPair, stats2d::StatsSummary2D};
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 
 pub mod range;
@@ -26,8 +27,8 @@ pub struct CounterSummary {
     pub bounds: Option<range::I64Range>,
 }
 
-// Note that this can lose fidelity with the timestamp, but it would only lose it in the microseconds, 
-// this is likely okay in most applications. However, if you need better regression analysis at the subsecond level, 
+// Note that this can lose fidelity with the timestamp, but it would only lose it in the microseconds,
+// this is likely okay in most applications. However, if you need better regression analysis at the subsecond level,
 // you can always subtract a common near value from all your times, then add it back in, the regression analysis will be unchanged.
 // Note that convert the timestamp into seconds rather than microseconds here so that the slope and any other regression analysis, is done on a per-second basis.
 // For instance, the slope will be the per-second slope, not the per-microsecond slope. The x intercept value will need to be converted back to microseconds so you get a timestamp out.
@@ -43,7 +44,7 @@ fn to_seconds(t: f64)-> f64{
 }
 
 /// CounterSummary tracks monotonically increasing counters that may reset, ie every time the value decreases
-/// it is treated as a reset of the counter and the previous value is added to the "true value" of the 
+/// it is treated as a reset of the counter and the previous value is added to the "true value" of the
 /// counter at that timestamp.
 impl CounterSummary {
     pub fn new(pt: &TSPoint, bounds:Option<range::I64Range>) -> CounterSummary {
@@ -62,7 +63,7 @@ impl CounterSummary {
         n
     }
 
-    // expects time-ordered input 
+    // expects time-ordered input
     pub fn add_point(&mut self, incoming: &TSPoint) -> Result<(), CounterError>{
 
         if incoming.ts < self.last.ts {
@@ -98,7 +99,7 @@ impl CounterSummary {
         self.last == self.first
     }
 
-    // combining can only happen for disjoint time ranges 
+    // combining can only happen for disjoint time ranges
     pub fn combine(&mut self, incoming: &CounterSummary) -> Result<(), CounterError> {
         // this requires that self comes before incoming in time order
         if self.last.ts >= incoming.first.ts {
@@ -113,7 +114,7 @@ impl CounterSummary {
                 self.num_resets += 1;
             }
         }
-        
+
         if incoming.single_value() {
             self.penultimate = self.last;
         } else {
@@ -129,18 +130,18 @@ impl CounterSummary {
         self.reset_sum += incoming.reset_sum;
         self.num_resets += incoming.num_resets;
         self.num_changes += incoming.num_changes;
-        
+
         self.stats = self.stats.combine(stats).unwrap();
         self.bounds_extend(incoming.bounds);
         Ok(())
     }
-    
+
     pub fn time_delta(&self) -> f64{
         to_seconds((self.last.ts - self.first.ts) as f64)
     }
 
     pub fn delta(&self) -> f64 {
-        self.last.val + self.reset_sum - self.first.val 
+        self.last.val + self.reset_sum - self.first.val
     }
 
     pub fn rate(&self) -> Option<f64> {
@@ -149,7 +150,7 @@ impl CounterSummary {
         }
         Some(self.delta() / self.time_delta())
     }
-    
+
     pub fn idelta_left(&self) -> f64 {
         //check for counter reset
         if self.second.val >= self.first.val {
@@ -175,7 +176,7 @@ impl CounterSummary {
             Some(self.idelta_left() / to_seconds((self.second.ts - self.first.ts) as f64))
         }
     }
-    
+
     pub fn irate_right(&self) -> Option<f64>{
         if self.single_value() {
             None
@@ -183,7 +184,7 @@ impl CounterSummary {
             Some(self.idelta_right() / to_seconds((self.last.ts - self.penultimate.ts) as f64))
         }
     }
-    
+
     pub fn bounds_valid(&self) -> bool {
         match self.bounds{
             None => true,  // unbounded contains everything
@@ -202,7 +203,7 @@ impl CounterSummary {
         };
     }
 
-    // based on:  https://github.com/timescale/promscale_extension/blob/d51a0958442f66cb78d38b584a10100f0d278298/src/lib.rs#L208, 
+    // based on:  https://github.com/timescale/promscale_extension/blob/d51a0958442f66cb78d38b584a10100f0d278298/src/lib.rs#L208,
     // which is based on:     // https://github.com/prometheus/prometheus/blob/e5ffa8c9a08a5ee4185271c8c26051ddc1388b7a/promql/functions.go#L59
     pub fn prometheus_delta(&self) -> Result<Option<f64>, CounterError>{
         if self.bounds.is_none() || !self.bounds_valid() ||  self.bounds.unwrap().has_infinite() {
@@ -223,7 +224,7 @@ impl CounterSummary {
         let duration_to_end = to_seconds((self.bounds.unwrap().right.unwrap() - self.last.ts - 1_000) as f64);
         let sampled_interval = self.time_delta();
         let avg_duration_between_samples = sampled_interval / (self.stats.n - 1) as f64; // don't have to worry about divide by zero because we know we have at least 2 values from the above.
-        
+
         // we don't want to extrapolate to negative counter values, so we calculate the duration to the zero point of the counter (based on what we know here) and set that as duration_to_start if it's smaller than duration_to_start
         if result_val > 0.0 && self.first.val >= 0.0 {
             let duration_to_zero = sampled_interval * (self.first.val / result_val);
@@ -265,10 +266,22 @@ impl CounterSummary {
         let delta = delta.unwrap();
         let bounds = self.bounds.unwrap() ; // if we got through delta without error then we have bounds
         /* bounds stores [L,H), but Prom takes the duration using the inclusive range [L, H-1ms]. So subtract an extra ms from the duration*/
-        let duration = bounds.duration().unwrap() - 1_000; 
+        let duration = bounds.duration().unwrap() - 1_000;
         if duration <= 0 {
-            return Ok(None); // if we have a total duration under a ms, it's less than prom could deal with so we return none. 
+            return Ok(None); // if we have a total duration under a ms, it's less than prom could deal with so we return none.
         }
         Ok(Some(delta / to_seconds(duration as f64))) // don't have to deal with 0 case because that is checked in delta as well (singleton)
+    }
+}
+
+impl fmt::Display for CounterError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>)
+    -> Result<(), fmt::Error> {
+        match self {
+            CounterError::OrderError =>
+                write!(f, "out of order points: points must be submitted in time-order"),
+            CounterError::BoundsInvalid =>
+                write!(f, "cannot calculate delta without valid bounds"),
+        }
     }
 }

@@ -1,8 +1,6 @@
 
 use std::{convert::TryInto, mem::take, ops::Deref};
 
-use aggregate_builder::aggregate;
-
 use serde::{Serialize, Deserialize};
 
 use pgx::*;
@@ -14,11 +12,10 @@ use crate::{
     ron_inout_funcs,
     flatten,
     palloc::{Internal, InternalAsValue, Inner, ToInternal}, pg_type,
-    raw::bytea,
     accessors::toolkit_experimental,
 };
 
-use ::tdigest::{
+use tdigest::{
     TDigest as InternalTDigest,
     Centroid,
 };
@@ -52,78 +49,110 @@ impl TDigestTransState {
     }
 }
 
-#[aggregate] impl tdigest {
-    type State = TDigestTransState;
-
-    const PARALLEL_SAFE: bool = true;
-
-    #[sql_name("tdigest_trans")]
-    fn transition(
-        state: Option<State>,
-        #[sql_type("int")] size: i32,
-        #[sql_type("DOUBLE PRECISION")] value: Option<f64>
-    ) -> Option<State> {
-        let value = match value {
-            None => return state,
-            // NaNs are nonsensical in the context of a percentile, so exclude them
-            Some(value) => if value.is_nan() {return state} else {value},
-        };
-        let mut state = match state {
-            None => TDigestTransState{
-                buffer: vec![],
-                digested: InternalTDigest::new_with_size(size.try_into().unwrap()),
-            },
-            Some(state) => state,
-        };
-        state.push(value);
-        Some(state)
-    }
-
-    #[sql_name("tdigest_final")]
-    fn finally(mut state: Option<&mut State>) -> Option<TDigest<'static>> {
-        let state = match &mut state {
-            None => return None,
-            Some(state) => state,
-        };
-        state.digest();
-
-        TDigest::from_internal_tdigest(&state.digested).into()
-    }
-
-    #[sql_name("tdigest_serialize")]
-    fn serialize(state: &mut State) -> bytea {
-        state.digest();
-        crate::do_serialize!(state)
-    }
-
-    #[sql_name("tdigest_deserialize")]
-    fn deserialize(bytes: bytea) -> State {
-        crate::do_deserialize!(bytes, TDigestTransState)
-    }
-
-    #[sql_name("tdigest_combine")]
-    fn combine(state1: Option<&State>, state2: Option<&State>) -> Option<State> {
-        match (state1, state2) {
-            (None, None) => None,
-            (None, Some(state2)) => Some(state2.clone()),
-            (Some(state1), None) => Some(state1.clone()),
-            (Some(state1), Some(state2)) => {
-                assert_eq!(state1.digested.max_size(), state2.digested.max_size());
-                let digvec = vec![state1.digested.clone(), state2.digested.clone()];
-                if !state1.buffer.is_empty() {
-                    digvec[0].merge_unsorted(state1.buffer.clone());  // merge_unsorted should take a reference
-                }
-                if !state2.buffer.is_empty() {
-                    digvec[1].merge_unsorted(state2.buffer.clone());
-                }
-
-                Some(TDigestTransState {
+// PG function for adding values to a digest.
+// Null values are ignored.
+#[pg_extern(immutable, parallel_safe)]
+pub fn tdigest_trans(
+    state: Internal,
+    size: i32,
+    value: Option<f64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Internal {
+    tdigest_trans_inner(unsafe{ state.to_inner() }, size, value, fcinfo).internal()
+}
+pub fn tdigest_trans_inner(
+    state: Option<Inner<TDigestTransState>>,
+    size: i32,
+    value: Option<f64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<TDigestTransState>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            let value = match value {
+                None => return state,
+                // NaNs are nonsensical in the context of a percentile, so exclude them
+                Some(value) => if value.is_nan() {return state} else {value},
+            };
+            let mut state = match state {
+                None => TDigestTransState{
                     buffer: vec![],
-                    digested: InternalTDigest::merge_digests(digvec),
-                })
-            }
-        }
+                    digested: InternalTDigest::new_with_size(size.try_into().unwrap()),
+                }.into(),
+                Some(state) => state,
+            };
+            state.push(value);
+            Some(state)
+        })
     }
+}
+
+// PG function for merging digests.
+#[pg_extern(immutable, parallel_safe)]
+pub fn tdigest_combine(
+    state1: Internal,
+    state2: Internal,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Internal {
+    unsafe {
+        tdigest_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
+    }
+
+}
+
+pub fn tdigest_combine_inner(
+    state1: Option<Inner<TDigestTransState>>,
+    state2: Option<Inner<TDigestTransState>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<TDigestTransState>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            match (state1, state2) {
+                (None, None) => None,
+                (None, Some(state2)) => Some(state2.clone().into()),
+                (Some(state1), None) => Some(state1.clone().into()),
+                (Some(state1), Some(state2)) => {
+                    assert_eq!(state1.digested.max_size(), state2.digested.max_size());
+                    let digvec = vec![state1.digested.clone(), state2.digested.clone()];
+                    if !state1.buffer.is_empty() {
+                        digvec[0].merge_unsorted(state1.buffer.clone());  // merge_unsorted should take a reference
+                    }
+                    if !state2.buffer.is_empty() {
+                        digvec[1].merge_unsorted(state2.buffer.clone());
+                    }
+
+                    Some(TDigestTransState {
+                            buffer: vec![],
+                            digested: InternalTDigest::merge_digests(digvec),
+                        }.into()
+                    )
+                }
+            }
+        })
+    }
+}
+
+use crate::raw::bytea;
+
+#[pg_extern(immutable, parallel_safe)]
+pub fn tdigest_serialize(
+    state: Internal,
+) -> bytea {
+    let state: &mut TDigestTransState = unsafe { state.get_mut().unwrap() };
+    state.digest();
+    crate::do_serialize!(state)
+}
+
+#[pg_extern(strict, immutable, parallel_safe)]
+pub fn tdigest_deserialize(
+    bytes: bytea,
+    _internal: Internal,
+) -> Internal {
+    tdigest_deserialize_inner(bytes).internal()
+}
+pub fn tdigest_deserialize_inner(
+    bytes: bytea,
+) -> Inner<TDigestTransState> {
+    crate::do_deserialize!(bytes, TDigestTransState)
 }
 
 // PG object for the digest.
@@ -176,6 +205,42 @@ impl<'input> TDigest<'input> {
         }
     }
 }
+
+// PG function to generate a user-facing TDigest object from an internal TDigestTransState.
+#[pg_extern(immutable, parallel_safe)]
+fn tdigest_final(
+    state: Internal,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<TDigest<'static>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            let state: &mut TDigestTransState = match state.get_mut() {
+                None => return None,
+                Some(state) => state,
+            };
+            state.digest();
+
+            TDigest::from_internal_tdigest(&state.digested).into()
+        })
+    }
+}
+
+
+extension_sql!("\n\
+    CREATE AGGREGATE tdigest(size int, value DOUBLE PRECISION)\n\
+    (\n\
+        sfunc = tdigest_trans,\n\
+        stype = internal,\n\
+        finalfunc = tdigest_final,\n\
+        combinefunc = tdigest_combine,\n\
+        serialfunc = tdigest_serialize,\n\
+        deserialfunc = tdigest_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+name = "tdigest_agg",
+requires = [tdigest_trans, tdigest_final, tdigest_combine, tdigest_serialize, tdigest_deserialize],
+);
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn tdigest_compound_trans(
@@ -569,24 +634,25 @@ mod tests {
     #[pg_test]
     fn test_tdigest_byte_io() {
         unsafe {
-            let state = super::tdigest::transition(None,  100, Some(14.0));
-            let state = super::tdigest::transition(state, 100, Some(18.0));
-            let state = super::tdigest::transition(state, 100, Some(22.7));
-            let state = super::tdigest::transition(state, 100, Some(39.42));
-            let state = super::tdigest::transition(state, 100, Some(-43.0));
+            use std::ptr;
+            let state = tdigest_trans_inner(None, 100, Some(14.0), ptr::null_mut());
+            let state = tdigest_trans_inner(state, 100, Some(18.0), ptr::null_mut());
+            let state = tdigest_trans_inner(state, 100, Some(22.7), ptr::null_mut());
+            let state = tdigest_trans_inner(state, 100, Some(39.42), ptr::null_mut());
+            let state = tdigest_trans_inner(state, 100, Some(-43.0), ptr::null_mut());
 
             let mut control = state.unwrap();
-            let buffer = super::tdigest::serialize(&mut control.clone());
+            let buffer = tdigest_serialize(Inner::from(control.clone()).internal());
             let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
 
             let expected = [1, 1, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 69, 192, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 44, 64, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 64, 1, 0, 0, 0, 0, 0, 0, 0, 51, 51, 51, 51, 51, 179, 54, 64, 1, 0, 0, 0, 0, 0, 0, 0, 246, 40, 92, 143, 194, 181, 67, 64, 1, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0, 0, 0, 0, 0, 0, 144, 194, 245, 40, 92, 143, 73, 64, 5, 0, 0, 0, 0, 0, 0, 0, 246, 40, 92, 143, 194, 181, 67, 64, 0, 0, 0, 0, 0, 128, 69, 192];
             assert_eq!(buffer, expected);
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
-            let new_state = super::tdigest::deserialize(bytea(&*expected as *const pg_sys::varlena as _));
+            let new_state = tdigest_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
 
             control.digest();  // Serialized form is always digested
-            assert_eq!(new_state, control);
+            assert_eq!(&*new_state, &*control);
         }
     }
 

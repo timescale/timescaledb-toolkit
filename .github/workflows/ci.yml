@@ -58,13 +58,13 @@ jobs:
         path: |
           /usr/local/cargo/registry
           /usr/local/cargo/git
-        key: TESTING6-${{ runner.os }}-clippy-cargo
+        key: TESTING8-${{ runner.os }}-clippy-cargo
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: TESTING6-${{ runner.os }}-clippy-target
+        key: TESTING8-${{ runner.os }}-clippy-target
 
     - name: Run Clippy
       # Github captures stdout and stderr separately and then intermingles them
@@ -72,7 +72,7 @@ jobs:
       # stderr to stdout so we get the proper order.
       run: su postgres -c 'sh tools/build clippy 2>&1'
 
-  test12:
+  testpg12:
     name: Test PG 12
     runs-on: ubuntu-latest
     container:
@@ -102,27 +102,65 @@ jobs:
         path: |
           /usr/local/cargo/registry
           /usr/local/cargo/git
-        key: TESTING6-${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo
+        key: TESTING8-${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: TESTING6-${{ runner.os }}-test-pg${{ env.PGVERSION }}-target
+        key: TESTING8-${{ runner.os }}-test-pg${{ env.PGVERSION }}-target
 
     - name: Run pgx tests
       run: su postgres -c 'sh tools/build -pg$PGVERSION test-extension 2>&1'
 
-    # TODO post-install + doc test adds a good 90s.  We could probably put
-    # them together run serially in a separate job to shave that 90s off the
-    # long pole.
+  testpost12:
+    name: Test post-install and doc 12
+    runs-on: ubuntu-latest
+    container:
+      image: timescaledev/rust-pgx:latest
+
+    env:
+      PGVERSION: 12
+      CARGO_TARGET_DIR_NAME: target
+      CARGO_INCREMENTAL: 0
+      CARGO_NET_RETRY: 10
+      CI: 1
+      RUST_BACKTRACE: short
+      RUSTUP_MAX_RETRIES: 10
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    - name: chown Repository
+      run: chown -R postgres .
+
+    - name: Cache cargo directories
+      uses: actions/cache@v2
+      with:
+        path: |
+          /usr/local/cargo/registry
+          /usr/local/cargo/git
+        key: TESTING8-${{ runner.os }}-test-post${{ env.PGVERSION }}-cargo
+
+    - name: Cache cargo target dir
+      uses: actions/cache@v2
+      with:
+        path: target
+        key: TESTING8-${{ runner.os }}-test-post${{ env.PGVERSION }}-target
+
+    - name: Install extension
+      run: su postgres -c 'sh tools/build -pg$PGVERSION install 2>&1'
+
     - name: Run post-install tests
       run: su postgres -c 'sh tools/build -pg$PGVERSION test-post-install 2>&1'
 
     - name: Run doc tests
       run: su postgres -c 'sh tools/build -pg$PGVERSION test-doc 2>&1'
 
-  test13:
+  testpg13:
     name: Test PG 13
     runs-on: ubuntu-latest
     container:
@@ -152,16 +190,57 @@ jobs:
         path: |
           /usr/local/cargo/registry
           /usr/local/cargo/git
-        key: TESTING6-${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo
+        key: TESTING8-${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: TESTING6-${{ runner.os }}-test-pg${{ env.PGVERSION }}-target
+        key: TESTING8-${{ runner.os }}-test-pg${{ env.PGVERSION }}-target
 
     - name: Run pgx tests
-      run: su postgres -c "sh tools/build -pg$PGVERSION test-extension 2>&1"
+      run: su postgres -c 'sh tools/build -pg$PGVERSION test-extension 2>&1'
+
+  testpost13:
+    name: Test post-install and doc 13
+    runs-on: ubuntu-latest
+    container:
+      image: timescaledev/rust-pgx:latest
+
+    env:
+      PGVERSION: 13
+      CARGO_TARGET_DIR_NAME: target
+      CARGO_INCREMENTAL: 0
+      CARGO_NET_RETRY: 10
+      CI: 1
+      RUST_BACKTRACE: short
+      RUSTUP_MAX_RETRIES: 10
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    - name: chown Repository
+      run: chown -R postgres .
+
+    - name: Cache cargo directories
+      uses: actions/cache@v2
+      with:
+        path: |
+          /usr/local/cargo/registry
+          /usr/local/cargo/git
+        key: TESTING8-${{ runner.os }}-test-post${{ env.PGVERSION }}-cargo
+
+    - name: Cache cargo target dir
+      uses: actions/cache@v2
+      with:
+        path: target
+        key: TESTING8-${{ runner.os }}-test-post${{ env.PGVERSION }}-target
+
+    - name: Install extension
+      run: su postgres -c 'sh tools/build -pg$PGVERSION install 2>&1'
 
     - name: Run post-install tests
       run: su postgres -c 'sh tools/build -pg$PGVERSION test-post-install 2>&1'
@@ -169,7 +248,7 @@ jobs:
     - name: Run doc tests
       run: su postgres -c 'sh tools/build -pg$PGVERSION test-doc 2>&1'
 
-  test14:
+  testpg14:
     name: Test PG 14
     runs-on: ubuntu-latest
     container:
@@ -199,16 +278,57 @@ jobs:
         path: |
           /usr/local/cargo/registry
           /usr/local/cargo/git
-        key: TESTING6-${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo
+        key: TESTING8-${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: TESTING6-${{ runner.os }}-test-pg${{ env.PGVERSION }}-target
+        key: TESTING8-${{ runner.os }}-test-pg${{ env.PGVERSION }}-target
 
     - name: Run pgx tests
-      run: su postgres -c "sh tools/build -pg$PGVERSION test-extension 2>&1"
+      run: su postgres -c 'sh tools/build -pg$PGVERSION test-extension 2>&1'
+
+  testpost14:
+    name: Test post-install and doc 14
+    runs-on: ubuntu-latest
+    container:
+      image: timescaledev/rust-pgx:latest
+
+    env:
+      PGVERSION: 14
+      CARGO_TARGET_DIR_NAME: target
+      CARGO_INCREMENTAL: 0
+      CARGO_NET_RETRY: 10
+      CI: 1
+      RUST_BACKTRACE: short
+      RUSTUP_MAX_RETRIES: 10
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    - name: chown Repository
+      run: chown -R postgres .
+
+    - name: Cache cargo directories
+      uses: actions/cache@v2
+      with:
+        path: |
+          /usr/local/cargo/registry
+          /usr/local/cargo/git
+        key: TESTING8-${{ runner.os }}-test-post${{ env.PGVERSION }}-cargo
+
+    - name: Cache cargo target dir
+      uses: actions/cache@v2
+      with:
+        path: target
+        key: TESTING8-${{ runner.os }}-test-post${{ env.PGVERSION }}-target
+
+    - name: Install extension
+      run: su postgres -c 'sh tools/build -pg$PGVERSION install 2>&1'
 
     - name: Run post-install tests
       run: su postgres -c 'sh tools/build -pg$PGVERSION test-post-install 2>&1'
@@ -244,13 +364,13 @@ jobs:
         path: |
           /usr/local/cargo/registry
           /usr/local/cargo/git
-        key: TESTING6-${{ runner.os }}-test-crates-cargo
+        key: TESTING8-${{ runner.os }}-test-crates-cargo
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: TESTING6-${{ runner.os }}-test-crates-target
+        key: TESTING8-${{ runner.os }}-test-crates-target
 
     - name: Run Crates Tests
       run: su postgres -c 'sh tools/build test-crates 2>&1'

@@ -1,18 +1,20 @@
 use std::{
+    fmt,
     hash::{BuildHasher, Hasher},
     mem::size_of,
     slice,
-    fmt,
 };
 
-use serde::{Deserialize, Serialize, de::{Visitor, SeqAccess}, ser::SerializeSeq};
+use serde::{
+    de::{SeqAccess, Visitor},
+    ser::SerializeSeq,
+    Deserialize, Serialize,
+};
 
 use pg_sys::{Datum, Oid};
 use pgx::*;
 
-use crate::{
-    serialization::{PgCollationId, ShortTypeId},
-};
+use crate::serialization::{PgCollationId, ShortTypeId};
 
 pub(crate) unsafe fn deep_copy_datum(datum: Datum, typoid: Oid) -> Datum {
     let tentry = pg_sys::lookup_type_cache(typoid, 0_i32);
@@ -26,6 +28,70 @@ pub(crate) unsafe fn deep_copy_datum(datum: Datum, typoid: Oid) -> Datum {
         copy as Datum
     } else {
         pg_sys::pg_detoast_datum_copy(datum as _) as _
+    }
+}
+
+pub struct TextSerializableDatumWriter {
+    flinfo: pg_sys::FmgrInfo,
+}
+
+impl TextSerializableDatumWriter {
+    pub fn from_oid(typoid: Oid) -> Self {
+        let mut type_output = 0;
+        let mut typ_is_varlena = false;
+        let mut flinfo = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
+
+        unsafe {
+            pg_sys::getTypeOutputInfo(typoid, &mut type_output, &mut typ_is_varlena);
+            pg_sys::fmgr_info(type_output, &mut flinfo);
+        }
+
+        TextSerializableDatumWriter { flinfo }
+    }
+
+    pub fn make_serializable(&mut self, datum: Datum) -> TextSerializeableDatum {
+        TextSerializeableDatum(datum, &mut self.flinfo)
+    }
+}
+
+pub struct DatumFromSerializedTextReader {
+    flinfo: pg_sys::FmgrInfo,
+    typ_io_param: u32,
+}
+
+impl DatumFromSerializedTextReader {
+    pub fn from_oid(typoid: Oid) -> Self {
+        let mut type_input = 0;
+        let mut typ_io_param = 0;
+        let mut flinfo = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
+        unsafe {
+            pg_sys::getTypeInputInfo(typoid, &mut type_input, &mut typ_io_param);
+            pg_sys::fmgr_info(type_input, &mut flinfo);
+        }
+
+        DatumFromSerializedTextReader {
+            flinfo,
+            typ_io_param,
+        }
+    }
+
+    pub fn read_datum(&mut self, datum_str: &str) -> Datum {
+        let cstr = std::ffi::CString::new(datum_str).unwrap(); // TODO: error handling
+        let cstr_ptr = cstr.as_ptr() as *mut std::os::raw::c_char;
+        unsafe { pg_sys::InputFunctionCall(&mut self.flinfo, cstr_ptr, self.typ_io_param, -1) }
+    }
+}
+
+pub struct TextSerializeableDatum(Datum, *mut pg_sys::FmgrInfo);
+
+impl Serialize for TextSerializeableDatum {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        let chars = unsafe { pg_sys::OutputFunctionCall(self.1, self.0) };
+        let cstr = unsafe { std::ffi::CStr::from_ptr(chars) };
+        serializer.serialize_str(cstr.to_str().unwrap())
     }
 }
 
@@ -183,11 +249,10 @@ fn round_to_multiple(value: usize, multiple: usize) -> usize {
 }
 
 #[inline]
-fn padded_va_len(ptr : *const pg_sys::varlena) -> usize {
+fn padded_va_len(ptr: *const pg_sys::varlena) -> usize {
     unsafe { round_to_multiple(varsize_any(ptr), 8) }
 }
 
-// FIXME - JOSH this should use the types text format for text IO
 flat_serialize_macro::flat_serialize! {
     #[derive(Debug)]
     struct DatumStore<'input> {
@@ -199,32 +264,20 @@ flat_serialize_macro::flat_serialize! {
 }
 
 impl<'a> Serialize for DatumStore<'a> {
-    // TODO currently this always serializes inner data as text. When we start 
+    // TODO currently this always serializes inner data as text. When we start
     // working on more-efficient network serialization, or we start using this
-    // in a transition state, we should use the binary format if we don't need 
+    // in a transition state, we should use the binary format if we don't need
     // human-readable output.
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serde::Serializer
+        S: serde::Serializer,
     {
-        let mut type_output = 0;
-        let mut typ_is_varlena = false;
-        let mut flinfo = unsafe {
-            std::mem::MaybeUninit::zeroed().assume_init()
-        };
-        unsafe {
-            pg_sys::getTypeOutputInfo(self.type_oid.0, &mut type_output, &mut typ_is_varlena);
-            pg_sys::fmgr_info(type_output, &mut flinfo);
-        }
+        let mut writer = TextSerializableDatumWriter::from_oid(self.type_oid.0);
         let count = self.iter().count();
         let mut seq = serializer.serialize_seq(Some(count + 1))?;
         seq.serialize_element(&self.type_oid.0)?;
         for element in self.iter() {
-            let chars = unsafe{pg_sys::OutputFunctionCall(&mut flinfo, element)};
-            let cstr = unsafe {
-                std::ffi::CStr::from_ptr(chars)
-            };
-            seq.serialize_element(cstr.to_str().unwrap())?;
+            seq.serialize_element(&writer.make_serializable(element))?;
         }
         seq.end()
     }
@@ -233,7 +286,7 @@ impl<'a> Serialize for DatumStore<'a> {
 impl<'a, 'de> Deserialize<'de> for DatumStore<'a> {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serde::Deserializer<'de>
+        D: serde::Deserializer<'de>,
     {
         struct DatumStoreVisitor<'a>(std::marker::PhantomData<core::cell::Cell<&'a ()>>);
 
@@ -248,23 +301,14 @@ impl<'a, 'de> Deserialize<'de> for DatumStore<'a> {
             where
                 A: SeqAccess<'de>,
             {
-                let oid = seq.next_element::<Oid>().unwrap().unwrap();  // TODO: error handling
+                let oid = seq.next_element::<Oid>().unwrap().unwrap(); // TODO: error handling
 
-                let mut type_input = 0;
-                let mut typ_io_param = 0;
-                let mut flinfo = unsafe {
-                    std::mem::MaybeUninit::zeroed().assume_init()
-                };
-                unsafe {
-                    pg_sys::getTypeInputInfo(oid, &mut type_input, &mut typ_io_param);
-                    pg_sys::fmgr_info(type_input, &mut flinfo);
-                }
+                // TODO seperate human-readable and binary forms
+                let mut reader = DatumFromSerializedTextReader::from_oid(oid);
 
                 let mut data = vec![];
                 while let Some(next) = seq.next_element::<&str>()? {
-                    let next = std::ffi::CString::new(next).unwrap();  // TODO: error handling
-                    let next_ptr = next.as_ptr() as *mut i8;
-                    data.push(unsafe{pg_sys::InputFunctionCall(&mut flinfo, next_ptr, typ_io_param, -1)})
+                    data.push(reader.read_datum(next));
                 }
 
                 Ok((oid, data).into())
@@ -315,14 +359,18 @@ impl From<(Oid, Vec<Datum>)> for DatumStore<'_> {
                     total_data_bytes += round_to_multiple(va_len, 8); // Round up to 8 byte boundary
                 }
             }
-                    
+
             let mut buffer = vec![0u8; total_data_bytes];
 
             let mut target_byte = 0;
             for ptr in ptrs {
-                unsafe {   
+                unsafe {
                     let va_len = varsize_any(ptr);
-                    std::ptr::copy(ptr as *const u8, std::ptr::addr_of_mut!(buffer[target_byte]), va_len);
+                    std::ptr::copy(
+                        ptr as *const u8,
+                        std::ptr::addr_of_mut!(buffer[target_byte]),
+                        va_len,
+                    );
                     target_byte += round_to_multiple(va_len, 8);
                 }
             }
@@ -341,10 +389,16 @@ impl From<(Oid, Vec<Datum>)> for DatumStore<'_> {
             // Round size to multiple of 8 bytes
             let len = round_to_multiple(tlen as usize, 8);
             let total_length = len * datums.len();
-            
+
             let mut buffer = vec![0u8; total_length];
             for (i, datum) in datums.iter().enumerate() {
-                unsafe {std::ptr::copy(*datum as *const u8, std::ptr::addr_of_mut!(buffer[i * len]), tlen as usize)};
+                unsafe {
+                    std::ptr::copy(
+                        *datum as *const u8,
+                        std::ptr::addr_of_mut!(buffer[i * len]),
+                        tlen as usize,
+                    )
+                };
             }
 
             DatumStore {
@@ -362,13 +416,13 @@ pub enum DatumStoreIterator<'a, 'b> {
     },
     Varlena {
         store: &'b DatumStore<'a>,
-        next_offset : u32,
+        next_offset: u32,
     },
     FixedSize {
         store: &'b DatumStore<'a>,
         next_index: u32,
         datum_size: u32,
-    }
+    },
 }
 
 impl<'a, 'b> Iterator for DatumStoreIterator<'a, 'b> {
@@ -381,22 +435,27 @@ impl<'a, 'b> Iterator for DatumStoreIterator<'a, 'b> {
                 if *next_offset >= store.data_len {
                     None
                 } else {
-                    unsafe {                    
-                        let va = store.data.slice().as_ptr().offset(*next_offset as _) as *const pg_sys::varlena;
+                    unsafe {
+                        let va = store.data.slice().as_ptr().offset(*next_offset as _)
+                            as *const pg_sys::varlena;
                         *next_offset += padded_va_len(va) as u32;
                         Some(va as pg_sys::Datum)
                     }
                 }
-            },
-            DatumStoreIterator::FixedSize { store, next_index, datum_size } => {
+            }
+            DatumStoreIterator::FixedSize {
+                store,
+                next_index,
+                datum_size,
+            } => {
                 let idx = *next_index * *datum_size;
                 if idx >= store.data_len {
                     None
                 } else {
                     *next_index += 1;
-                    Some(unsafe {store.data.slice().as_ptr().offset(idx as _)} as pg_sys::Datum)
+                    Some(unsafe { store.data.slice().as_ptr().offset(idx as _) } as pg_sys::Datum)
                 }
-            },
+            }
         }
     }
 }
@@ -409,7 +468,11 @@ impl<'a> DatumStore<'a> {
                 // Datum by value
                 DatumStoreIterator::Value {
                     // SAFETY `data` is guaranteed to be 8-byte aligned, so it should be safe to use as a slice
-                    iter: std::slice::from_raw_parts(self.data.as_slice().as_ptr() as *const Datum, self.data_len as usize / 8).iter(),
+                    iter: std::slice::from_raw_parts(
+                        self.data.as_slice().as_ptr() as *const Datum,
+                        self.data_len as usize / 8,
+                    )
+                    .iter(),
                 }
             } else if (*tentry).typlen == -1 {
                 // Varlena
@@ -441,13 +504,13 @@ pub enum DatumStoreIntoIterator<'a> {
     },
     Varlena {
         store: DatumStore<'a>,
-        next_offset : u32,
+        next_offset: u32,
     },
     FixedSize {
         store: DatumStore<'a>,
         next_index: u32,
         datum_size: u32,
-    }
+    },
 }
 
 // iterate over the set of values in the datum store
@@ -462,22 +525,27 @@ impl<'a> Iterator for DatumStoreIntoIterator<'a> {
                 if *next_offset >= store.data_len {
                     None
                 } else {
-                    unsafe {                    
-                        let va = store.data.slice().as_ptr().offset(*next_offset as _) as *const pg_sys::varlena;
+                    unsafe {
+                        let va = store.data.slice().as_ptr().offset(*next_offset as _)
+                            as *const pg_sys::varlena;
                         *next_offset += padded_va_len(va) as u32;
                         Some(va as pg_sys::Datum)
                     }
                 }
-            },
-            DatumStoreIntoIterator::FixedSize { store, next_index, datum_size } => {
+            }
+            DatumStoreIntoIterator::FixedSize {
+                store,
+                next_index,
+                datum_size,
+            } => {
                 let idx = *next_index * *datum_size;
                 if idx >= store.data_len {
                     None
                 } else {
                     *next_index += 1;
-                    Some(unsafe {store.data.slice().as_ptr().offset(idx as _)} as pg_sys::Datum)
+                    Some(unsafe { store.data.slice().as_ptr().offset(idx as _) } as pg_sys::Datum)
                 }
-            },
+            }
         }
     }
 }
@@ -493,7 +561,11 @@ impl<'a> IntoIterator for DatumStore<'a> {
                 // Datum by value
                 DatumStoreIntoIterator::Value {
                     // SAFETY `data` is guaranteed to be 8-byte aligned, so it should be safe to use as a slice
-                    iter: std::slice::from_raw_parts(self.data.as_slice().as_ptr() as *const Datum, self.data_len as usize / 8).iter(),
+                    iter: std::slice::from_raw_parts(
+                        self.data.as_slice().as_ptr() as *const Datum,
+                        self.data_len as usize / 8,
+                    )
+                    .iter(),
                 }
             } else if (*tentry).typlen == -1 {
                 // Varlena
@@ -521,15 +593,10 @@ impl<'a> IntoIterator for DatumStore<'a> {
 #[pg_schema]
 mod tests {
     use super::*;
-    use pgx_macros::pg_test;
-    use crate::{
-        ron_inout_funcs,
-        pg_type,
-        build,
-        palloc::Inner,
-    };
-    use flat_serialize::*;
+    use crate::{build, palloc::Inner, pg_type, ron_inout_funcs};
     use aggregate_builder::*;
+    use flat_serialize::*;
+    use pgx_macros::pg_test;
 
     #[pg_schema]
     pub mod toolkit_experimental {
@@ -542,7 +609,8 @@ mod tests {
         }
         ron_inout_funcs!(DatumStoreTester);
 
-        #[aggregate] impl toolkit_experimental::datum_test_agg {
+        #[aggregate]
+        impl toolkit_experimental::datum_test_agg {
             type State = (Oid, Vec<Datum>);
 
             fn transition(
@@ -551,19 +619,24 @@ mod tests {
             ) -> Option<State> {
                 match state {
                     Some((oid, mut vector)) => {
-                        unsafe {vector.push(deep_copy_datum(value.datum(),oid))};
+                        unsafe { vector.push(deep_copy_datum(value.datum(), oid)) };
                         Some((oid, vector))
                     }
-                    None => Some((value.oid(), vec!(unsafe {deep_copy_datum(value.datum(),value.oid())}))),
+                    None => Some((
+                        value.oid(),
+                        vec![unsafe { deep_copy_datum(value.datum(), value.oid()) }],
+                    )),
                 }
             }
 
             fn finally(state: Option<&mut State>) -> Option<DatumStoreTester<'static>> {
-                state.map(|state| build!{
-                                DatumStoreTester {
-                                    datums: DatumStore::from(std::mem::take(state)),
-                                }
-                            })
+                state.map(|state| {
+                    build! {
+                        DatumStoreTester {
+                            datums: DatumStore::from(std::mem::take(state)),
+                        }
+                    }
+                })
             }
         }
     }
@@ -573,7 +646,7 @@ mod tests {
         Spi::execute(|client| {
             let test = client.select("SELECT toolkit_experimental.datum_test_agg(r.data)::TEXT FROM (SELECT generate_series(10, 100, 10) as data) r", None, None)
                 .first()
-                .get_one::<String>().unwrap();                
+                .get_one::<String>().unwrap();
             let expected = "(version:1,datums:[23,\"10\",\"20\",\"30\",\"40\",\"50\",\"60\",\"70\",\"80\",\"90\",\"100\"])";
             assert_eq!(test, expected);
         });
@@ -584,7 +657,7 @@ mod tests {
         Spi::execute(|client| {
             let test = client.select("SELECT toolkit_experimental.datum_test_agg(r.data)::TEXT FROM (SELECT generate_series(10, 100, 10)::TEXT as data) r", None, None)
                 .first()
-                .get_one::<String>().unwrap();                
+                .get_one::<String>().unwrap();
             let expected = "(version:1,datums:[25,\"10\",\"20\",\"30\",\"40\",\"50\",\"60\",\"70\",\"80\",\"90\",\"100\"])";
             assert_eq!(test, expected);
         });
@@ -595,7 +668,7 @@ mod tests {
         Spi::execute(|client| {
             let test = client.select("SELECT toolkit_experimental.datum_test_agg(r.data)::TEXT FROM (SELECT (generate_series(10, 100, 10)::TEXT || ' seconds')::INTERVAL as data) r", None, None)
                 .first()
-                .get_one::<String>().unwrap();                
+                .get_one::<String>().unwrap();
             let expected = "(version:1,datums:[1186,\"00:00:10\",\"00:00:20\",\"00:00:30\",\"00:00:40\",\"00:00:50\",\"00:01:00\",\"00:01:10\",\"00:01:20\",\"00:01:30\",\"00:01:40\"])";
             assert_eq!(test, expected);
         });

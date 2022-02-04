@@ -63,8 +63,10 @@ struct AggregateFn {
     args: Punctuated<AggregateArg, Comma>,
     ret: syn::ReturnType,
     body: syn::Block,
+    fcinfo: Option<AggregateArg>,
 }
 
+#[derive(Clone)]
 struct AggregateArg {
     rust: syn::PatType,
     sql: Option<syn::LitStr>,
@@ -268,6 +270,17 @@ impl Parse for AggregateParallelSafe {
     }
 }
 
+fn is_fcinfo(arg : &AggregateArg) -> bool {
+    if let syn::Type::Path(p) = &*arg.rust.ty {
+        for id in p.path.segments.iter() {
+            if id.ident == "FunctionCallInfo" {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 impl Parse for AggregateFn {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         let mut attributes = input.call(syn::Attribute::parse_outer)?;
@@ -278,8 +291,17 @@ impl Parse for AggregateFn {
         let parens = syn::parenthesized!(contents in input);
 
         let mut args = Punctuated::new();
+        let mut fcinfo = None;
         while !contents.is_empty() {
-            let arg = contents.parse()?;
+            let arg : AggregateArg = contents.parse()?;
+            if is_fcinfo(&arg) {
+                fcinfo = Some(arg);
+                if contents.is_empty() {
+                    break
+                }
+                let _comma: Token![,] = contents.parse()?;
+                continue;
+            }
             args.push(arg);
             if contents.is_empty() {
                 break
@@ -306,6 +328,7 @@ impl Parse for AggregateFn {
             args,
             ret,
             body,
+            fcinfo
         })
     }
 }
@@ -542,6 +565,7 @@ impl AggregateFn {
             args,
             body,
             ret,
+            fcinfo,
             ..
         } = self;
 
@@ -554,15 +578,37 @@ impl AggregateFn {
 
         let state_type_check = state_type_check_tokens(input_ty, Some(()));
 
+        let fcinfo_arg = if let Some(fcinfo) = fcinfo {
+            fcinfo.clone()
+        } else {
+            syn::parse_str::<AggregateArg>("__fcinfo: pg_sys::FunctionCallInfo").unwrap()
+        };
+
+        let mut expanded_args = args.clone();
+        if let Some(fcinfo) = fcinfo {
+            let trailing = expanded_args.trailing_punct();
+            if !trailing {
+                expanded_args.push_punct(Comma::default());
+            }
+            expanded_args.push_value(fcinfo.clone());
+            if trailing {
+                expanded_args.push_punct(Comma::default());
+            }
+        }
+
+        let fcinfo_ident = arg_ident(&fcinfo_arg);
+
         let arg_signatures = args.iter()
+            .chain(std::iter::once(&fcinfo_arg))
             .skip(1)
             .map(|arg| &arg.rust);
-        let arg_vals: Punctuated<syn::Pat, Comma> = args.iter()
+
+        let arg_vals: Punctuated<syn::Pat, Comma> = expanded_args.iter()
             .skip(1)
             .map(arg_ident)
             .collect();
 
-        let inner_arg_signatures = args.iter().map(|arg| &arg.rust);
+        let inner_arg_signatures = expanded_args.iter().map(|arg| &arg.rust);
 
         let return_type_check = state_type_check_tokens(&*ret_type(ret), Some(()));
 
@@ -593,13 +639,12 @@ impl AggregateFn {
             pub fn #outer_ident(
                 #input_var: pgx::Internal,
                 #(#arg_signatures,)*
-                __fcinfo: pg_sys::FunctionCallInfo
             ) -> Internal {
                 use crate::palloc::{Inner, InternalAsValue, ToInternal};
                 unsafe {
                     let mut #input_var: Option<Inner<Option<State>>> = #input_var.to_inner();
                     #input_type_check
-                    crate::aggregate_utils::in_aggregate_context(__fcinfo, || {
+                    crate::aggregate_utils::in_aggregate_context(#fcinfo_ident, || {
                         let #result_var = #ident(#input_state_var, #arg_vals);
                         #result_type_check
 

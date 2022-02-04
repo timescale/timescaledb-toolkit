@@ -23,6 +23,7 @@ mod serialization;
 mod schema_test;
 mod raw;
 mod datum_utils;
+mod pg_any_element;
 
 #[cfg(any(test, feature = "pg_test"))]
 mod aggregate_builder_tests;

@@ -913,10 +913,13 @@ impl AggregateFn {
             let #state_var: Option<State> = #result_var;
         );
 
+        let mod_counters = make_mod_counters();
+
         quote! {
             #state_type_check_a
             #state_type_check_b
             #return_type_check
+            #mod_counters
 
             #[pgx::pg_extern(immutable, parallel_safe #schema)]
             pub fn #outer_ident(
@@ -927,9 +930,13 @@ impl AggregateFn {
                 use crate::palloc::{Inner, InternalAsValue, ToInternal};
                 unsafe {
                     crate::aggregate_utils::in_aggregate_context(__fcinfo, || {
+                        let a: Option<Inner<State>> = #a_name.to_inner();
+                        let b: Option<Inner<State>> = #b_name.to_inner();
+                        #[cfg(any(test, feature = "pg_test"))]
+                        #aggregate_name::counters::increment_combine(&a, &b);
                         let #result_var = #ident(
-                            #a_name.to_inner().as_deref(),
-                            #b_name.to_inner().as_deref(),
+                            a.as_deref(),
+                            b.as_deref(),
                         );
                         #result_type_check
                         let state = match #state_var {
@@ -971,6 +978,43 @@ impl AggregateFn {
 
 fn arg_ident(arg: &AggregateArg) -> syn::Pat {
     syn::Pat::clone(&*arg.rust.pat)
+}
+
+fn make_mod_counters() -> TokenStream2 {
+    quote! {
+        #[cfg(any(test, feature = "pg_test"))]
+        pub mod counters {
+            use ::std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
+            use crate::palloc::Inner;
+
+            pub static COMBINE_NONE: AtomicUsize = AtomicUsize::new(0);
+            pub static COMBINE_A: AtomicUsize = AtomicUsize::new(0);
+            pub static COMBINE_B: AtomicUsize = AtomicUsize::new(0);
+            pub static COMBINE_BOTH: AtomicUsize = AtomicUsize::new(0);
+
+            // Works as long as only one pg_test is run at a time.  If we have two
+            // running in the same process, need a mutex to ensure only one test is
+            // using the counters at a time.  Otherwise, a test may see non-zero
+            // counters because of another test's work rather than its own.
+            pub fn reset() {
+                COMBINE_NONE.store(0, Relaxed);
+                COMBINE_A.store(0, Relaxed);
+                COMBINE_B.store(0, Relaxed);
+                COMBINE_BOTH.store(0, Relaxed);
+            }
+
+            pub fn increment_combine<T>(a: &Option<Inner<T>>, b: &Option<Inner<T>>) {
+                match (a, b) {
+                    // TODO Remove COMBINE_NONE?  We suspect postgres never calls with (None, None); what would be the point?
+                    (None, None) => COMBINE_NONE.fetch_add(1, Relaxed),
+                    // TODO Remove COMBIINE_A?  We suspect postgres never calls with (Some, None), only (None, Some).
+                    (Some(_), None) => COMBINE_A.fetch_add(1, Relaxed),
+                    (None, Some(_)) => COMBINE_B.fetch_add(1, Relaxed),
+                    (Some(_), Some(_)) => COMBINE_BOTH.fetch_add(1, Relaxed),
+                };
+            }
+        }
+    }
 }
 
 fn ret_type(ret: &syn::ReturnType) -> Cow<'_, syn::Type> {

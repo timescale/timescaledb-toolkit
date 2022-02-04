@@ -93,23 +93,10 @@ impl toolkit_experimental::state_agg {
     }
 
     fn combine(a: Option<&State>, b: Option<&State>) -> Option<State> {
-        #[cfg(any(test, feature = "pg_test"))]
-        {
-            use std::sync::atomic::Ordering::Relaxed;
-            use tests::counters::*;
-            match (a, b) {
-                (None, None) => COMBINE_NONE.fetch_add(1, Relaxed),
-                (Some(_), None) => COMBINE_A.fetch_add(1, Relaxed),
-                (None, Some(_)) => COMBINE_B.fetch_add(1, Relaxed),
-                (Some(_), Some(_)) => COMBINE_BOTH.fetch_add(1, Relaxed),
-            };
-        }
         match (a, b) {
-            (None, None) => None,                     // TODO untested
-            (Some(only), None) => Some(only.clone()), // TODO untested
-            (None, Some(only)) => Some(only.clone()), // tested
+            (None, None) => None,
+            (None, Some(only)) | (Some(only), None) => Some(only.clone()),
             (Some(a), Some(b)) => {
-                // tested
                 let (mut a, mut b) = (a.clone(), b.clone());
                 a.append(&mut b);
                 Some(a)
@@ -248,29 +235,10 @@ struct Record {
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
+    use std::sync::atomic::Ordering::Relaxed;
+
     use super::*;
     use pgx_macros::pg_test;
-
-    pub mod counters {
-        use std::sync::atomic::AtomicUsize;
-        use std::sync::atomic::Ordering::Relaxed;
-
-        pub static COMBINE_NONE: AtomicUsize = AtomicUsize::new(0);
-        pub static COMBINE_A: AtomicUsize = AtomicUsize::new(0);
-        pub static COMBINE_B: AtomicUsize = AtomicUsize::new(0);
-        pub static COMBINE_BOTH: AtomicUsize = AtomicUsize::new(0);
-
-        // Works as long as only one pg_test is run at a time.  If we have two
-        // running in the same process, need a mutex to ensure only one test is
-        // using the counters at a time.  Otherwise, a test may see non-zero
-        // counters because of another test's work rather than its own.
-        pub fn reset() {
-            COMBINE_NONE.store(0, Relaxed);
-            COMBINE_A.store(0, Relaxed);
-            COMBINE_B.store(0, Relaxed);
-            COMBINE_BOTH.store(0, Relaxed);
-        }
-    }
 
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {
@@ -487,7 +455,7 @@ mod tests {
 
     #[pg_test]
     fn combine_using_muchos_data() {
-        counters::reset();
+        state_agg::counters::reset();
         Spi::execute(|client| {
             client.select("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
             client.select(
@@ -511,11 +479,10 @@ insert into test select '2020-01-02 UTC'::timestamptz + make_interval(days=>v), 
                 .unwrap();
             assert_eq!(172800000000, result);
         });
-        use std::sync::atomic::Ordering::Relaxed;
-        assert!(counters::COMBINE_NONE.load(Relaxed) == 0); // TODO untested
-        assert!(counters::COMBINE_A.load(Relaxed) == 0); // TODO untested
-        assert!(counters::COMBINE_B.load(Relaxed) > 0); // tested
-        assert!(counters::COMBINE_BOTH.load(Relaxed) > 0); // tested
+        assert!(state_agg::counters::COMBINE_NONE.load(Relaxed) == 0); // TODO untested
+        assert!(state_agg::counters::COMBINE_A.load(Relaxed) == 0); // TODO untested
+        assert!(state_agg::counters::COMBINE_B.load(Relaxed) > 0); // tested
+        assert!(state_agg::counters::COMBINE_BOTH.load(Relaxed) > 0); // tested
     }
 
     // TODO This doesn't work under github actions.  Do we run with multiple
@@ -524,7 +491,7 @@ insert into test select '2020-01-02 UTC'::timestamptz + make_interval(days=>v), 
     // #[pg_test]
     #[allow(dead_code)]
     fn combine_using_settings() {
-        counters::reset();
+        state_agg::counters::reset();
         Spi::execute(|client| {
             client.select("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
             client.select(
@@ -558,11 +525,10 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
                 .unwrap();
             assert_eq!(172800000000, result);
         });
-        use std::sync::atomic::Ordering::Relaxed;
-        assert!(counters::COMBINE_NONE.load(Relaxed) == 0); // TODO untested
-        assert!(counters::COMBINE_A.load(Relaxed) == 0); // TODO untested
-        assert!(counters::COMBINE_B.load(Relaxed) > 0); // tested
-        assert!(counters::COMBINE_BOTH.load(Relaxed) > 0); // tested
+        assert!(state_agg::counters::COMBINE_NONE.load(Relaxed) == 0); // TODO untested
+        assert!(state_agg::counters::COMBINE_A.load(Relaxed) == 0); // TODO untested
+        assert!(state_agg::counters::COMBINE_B.load(Relaxed) > 0); // tested
+        assert!(state_agg::counters::COMBINE_BOTH.load(Relaxed) > 0); // tested
     }
 
     // the sample query from the ticket

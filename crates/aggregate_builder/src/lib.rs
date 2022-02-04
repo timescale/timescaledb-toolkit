@@ -1,13 +1,19 @@
-
 use std::borrow::Cow;
 
-use proc_macro::{TokenStream};
+use proc_macro::TokenStream;
 
 use proc_macro2::{Span, TokenStream as TokenStream2};
 
 use quote::{quote, quote_spanned};
 
-use syn::{Token, parse::{Parse, ParseStream}, parse_macro_input, punctuated::Punctuated, spanned::Spanned, token::Comma, parse_quote};
+use syn::{
+    parse::{Parse, ParseStream},
+    parse_macro_input, parse_quote,
+    punctuated::Punctuated,
+    spanned::Spanned,
+    token::Comma,
+    Token,
+};
 
 #[proc_macro_attribute]
 pub fn aggregate(_attr: TokenStream, item: TokenStream) -> TokenStream {
@@ -94,13 +100,12 @@ impl Parse for Aggregate {
         let _: Token![impl] = input.parse()?;
 
         let first_path_segment = input.parse()?;
-        let (schema, name): (_, syn::Ident) =
-            if input.peek(Token![::]) {
-                let _: Token![::] = input.parse()?;
-                (Some(first_path_segment), input.parse()?)
-            } else {
-                (None, first_path_segment)
-            };
+        let (schema, name): (_, syn::Ident) = if input.peek(Token![::]) {
+            let _: Token![::] = input.parse()?;
+            (Some(first_path_segment), input.parse()?)
+        } else {
+            (None, first_path_segment)
+        };
 
         let body;
         let _brace_token = syn::braced!(body in input);
@@ -115,17 +120,20 @@ impl Parse for Aggregate {
             match item {
                 State(ty) => {
                     if ty.ident != "State" {
-                        error!(ty.ident.span(), "unexpected `type {}`, expected `State`", ty.ident)
+                        error!(
+                            ty.ident.span(),
+                            "unexpected `type {}`, expected `State`", ty.ident
+                        )
                     }
                     if state_ty.is_some() {
                         error!(ty.ident.span(), "duplicate `type State`")
                     }
                     state_ty = Some(ty);
-                },
+                }
                 ParallelSafe(safe) => parallel_safe = Some(safe.value),
                 Fn(f) => {
                     fns.push(f);
-                },
+                }
             }
         }
 
@@ -138,7 +146,10 @@ impl Parse for Aggregate {
             if f.ident == "transition" {
                 check_duplicate!(transition_fn, f.ident.span(), "`fn transition`");
                 if f.args.is_empty() {
-                    error!(f.parens.span, "transition function must have at least one argument")
+                    error!(
+                        f.parens.span,
+                        "transition function must have at least one argument"
+                    )
                 }
                 for arg in f.args.iter().skip(1) {
                     if arg.sql.is_none() {
@@ -149,28 +160,46 @@ impl Parse for Aggregate {
             } else if f.ident == "finally" {
                 check_duplicate!(final_fn, f.ident.span(), "`fn finally`");
                 if f.args.len() != 1 {
-                    error!(f.parens.span, "final function must have at one argument of type `Option<Inner<State>>`")
+                    error!(
+                        f.parens.span,
+                        "final function must have at one argument of type `Option<Inner<State>>`"
+                    )
                 }
                 if f.args[0].sql.is_some() {
-                    error!(f.args[0].sql.span(), "should not have SQL type, will be inferred")
+                    error!(
+                        f.args[0].sql.span(),
+                        "should not have SQL type, will be inferred"
+                    )
                 }
                 final_fn = Some(f);
             } else if f.ident == "serialize" {
                 check_duplicate!(serialize_fn, f.ident.span(), "`fn serialize`");
                 if f.args.len() != 1 {
-                    error!(f.parens.span, "serialize function must have at one argument of type `Inner<State>`")
+                    error!(
+                        f.parens.span,
+                        "serialize function must have at one argument of type `Inner<State>`"
+                    )
                 }
                 if f.args[0].sql.is_some() {
-                    error!(f.args[0].sql.span(), "should not have SQL type, will be inferred")
+                    error!(
+                        f.args[0].sql.span(),
+                        "should not have SQL type, will be inferred"
+                    )
                 }
                 serialize_fn = Some(f);
             } else if f.ident == "deserialize" {
                 check_duplicate!(deserialize_fn, f.ident.span(), "`fn deserialize`");
                 if f.args.len() != 1 {
-                    error!(f.parens.span, "deserialize function must have at one argument of type `bytea`")
+                    error!(
+                        f.parens.span,
+                        "deserialize function must have at one argument of type `bytea`"
+                    )
                 }
                 if f.args[0].sql.is_some() {
-                    error!(f.args[0].sql.span(), "should not have SQL type, will be inferred")
+                    error!(
+                        f.args[0].sql.span(),
+                        "should not have SQL type, will be inferred"
+                    )
                 }
                 deserialize_fn = Some(f);
             } else if f.ident == "combine" {
@@ -193,18 +222,17 @@ impl Parse for Aggregate {
             }
         }
 
-
-        let state_ty = match state_ty  {
+        let state_ty = match state_ty {
             Some(state_ty) => state_ty,
             None => error!(name.span(), "missing `type State = ...;`"),
         };
 
-        let transition_fn = match transition_fn  {
+        let transition_fn = match transition_fn {
             Some(transition_fn) => transition_fn,
             None => error!(name.span(), "missing `fn transition`"),
         };
 
-        let final_fn = match final_fn  {
+        let final_fn = match final_fn {
             Some(final_fn) => final_fn,
             None => error!(name.span(), "missing `fn final`"),
         };
@@ -256,7 +284,10 @@ impl Parse for AggregateParallelSafe {
         let _: Token![const] = input.parse()?;
         let name: syn::Ident = input.parse()?;
         if name != "PARALLEL_SAFE" {
-            error!(name.span(), "unexpected const `{}` expected `PARALLEL_SAFE`", name)
+            error!(
+                name.span(),
+                "unexpected const `{}` expected `PARALLEL_SAFE`", name
+            )
         }
         let _: Token![:] = input.parse()?;
         let ty: syn::Ident = input.parse()?;
@@ -270,7 +301,7 @@ impl Parse for AggregateParallelSafe {
     }
 }
 
-fn is_fcinfo(arg : &AggregateArg) -> bool {
+fn is_fcinfo(arg: &AggregateArg) -> bool {
     if let syn::Type::Path(p) = &*arg.rust.ty {
         for id in p.path.segments.iter() {
             if id.ident == "FunctionCallInfo" {
@@ -293,22 +324,22 @@ impl Parse for AggregateFn {
         let mut args = Punctuated::new();
         let mut fcinfo = None;
         while !contents.is_empty() {
-            let arg : AggregateArg = contents.parse()?;
+            let arg: AggregateArg = contents.parse()?;
             if is_fcinfo(&arg) {
                 fcinfo = Some(arg);
                 if contents.is_empty() {
-                    break
+                    break;
                 }
                 let _comma: Token![,] = contents.parse()?;
                 continue;
             }
             args.push(arg);
             if contents.is_empty() {
-                break
+                break;
             }
             let comma: Token![,] = contents.parse()?;
             args.push_punct(comma);
-        };
+        }
 
         let ret = input.parse()?;
         let body = input.parse()?;
@@ -316,7 +347,7 @@ impl Parse for AggregateFn {
         let expected_path = parse_quote!(sql_name);
         let sql_name = match take_attr(&mut attributes, &expected_path) {
             None => None,
-            Some(attribute) => attribute.parse_args()?
+            Some(attribute) => attribute.parse_args()?,
         };
         if !attributes.is_empty() {
             error!(attributes[0].span(), "unexpected attribute")
@@ -328,7 +359,7 @@ impl Parse for AggregateFn {
             args,
             ret,
             body,
-            fcinfo
+            fcinfo,
         })
     }
 }
@@ -345,18 +376,14 @@ impl Parse for AggregateArg {
             let attribute = take_attr(&mut rust.attrs, &expected_path);
             match attribute {
                 None => None,
-                Some(attribute) => attribute.parse_args()?
+                Some(attribute) => attribute.parse_args()?,
             }
         };
-        Ok(Self {
-            rust,
-            sql,
-        })
+        Ok(Self { rust, sql })
     }
 }
 
-fn take_attr(attrs: &mut Vec<syn::Attribute>, path: &syn::Path)
--> Option<syn::Attribute> {
+fn take_attr(attrs: &mut Vec<syn::Attribute>, path: &syn::Path) -> Option<syn::Attribute> {
     let idx = attrs.iter().enumerate().find(|(_, a)| &a.path == path);
     match idx {
         None => None,
@@ -415,39 +442,46 @@ fn expand(agg: Aggregate) -> TokenStream2 {
             stype = internal,\n    \
             sfunc = {}{},\n    \
             finalfunc = {}{}",
-        schema_qualifier, transition_fn.outer_ident(&name),
-        schema_qualifier, final_fn.outer_ident(&name),
+        schema_qualifier,
+        transition_fn.outer_ident(&name),
+        schema_qualifier,
+        final_fn.outer_ident(&name),
     );
 
     let parallel_safe = parallel_safe.map(|p| {
         let value = p.value();
-        let _ = write!(&mut create, ",\n    parallel = {}",
-            if value {
-                "safe"
-            } else {
-                "unsafe"
-            });
-        let serialize_fn_check = value.then(||
-            serialize_fn.as_ref().is_none().then(||
-                quote_spanned!(p.span()=>
-                    compile_error!("parallel safety requires a `fn serialize()` also");
-                )
-            )
-        ).flatten();
-        let deserialize_fn_check = value.then(||
-            deserialize_fn.as_ref().is_none().then(||
-                quote_spanned!(p.span()=>
-                    compile_error!("parallel safety requires a `fn deserialize()` also");
-                )
-            )
-        ).flatten();
-        let combine_fn_check = value.then(||
-            combine_fn.as_ref().is_none().then(||
-                quote_spanned!(p.span()=>
-                    compile_error!("parallel safety requires a `fn combine()` also");
-                )
-            )
-        ).flatten();
+        let _ = write!(
+            &mut create,
+            ",\n    parallel = {}",
+            if value { "safe" } else { "unsafe" }
+        );
+        let serialize_fn_check = value
+            .then(|| {
+                serialize_fn.as_ref().is_none().then(|| {
+                    quote_spanned!(p.span()=>
+                        compile_error!("parallel safety requires a `fn serialize()` also");
+                    )
+                })
+            })
+            .flatten();
+        let deserialize_fn_check = value
+            .then(|| {
+                deserialize_fn.as_ref().is_none().then(|| {
+                    quote_spanned!(p.span()=>
+                        compile_error!("parallel safety requires a `fn deserialize()` also");
+                    )
+                })
+            })
+            .flatten();
+        let combine_fn_check = value
+            .then(|| {
+                combine_fn.as_ref().is_none().then(|| {
+                    quote_spanned!(p.span()=>
+                        compile_error!("parallel safety requires a `fn combine()` also");
+                    )
+                })
+            })
+            .flatten();
         quote_spanned!(p.span()=>
             #serialize_fn_check
             #deserialize_fn_check
@@ -460,8 +494,8 @@ fn expand(agg: Aggregate) -> TokenStream2 {
 
     let mut add_function =
         |f: AggregateFn,
-        field: &str,
-        make_tokens: fn(&AggregateFn, &Option<syn::Ident>, &syn::Ident) -> TokenStream2| {
+         field: &str,
+         make_tokens: fn(&AggregateFn, &Option<syn::Ident>, &syn::Ident) -> TokenStream2| {
             extension_sql_reqs.push(f.outer_ident(&name));
             let _ = write!(
                 &mut create,
@@ -471,53 +505,56 @@ fn expand(agg: Aggregate) -> TokenStream2 {
                 f.outer_ident(&name)
             );
             make_tokens(&f, &schema, &name)
-    };
+        };
 
     let serialize_fns_check = serialize_fn.as_ref().xor(deserialize_fn.as_ref()).map(|_| {
-        let s = serialize_fn.as_ref().map(|f|
+        let s = serialize_fn.as_ref().map(|f| {
             quote_spanned!(f.ident.span()=>
                 compile_error!("`fn deserialize()` is also required");
             )
-        );
-        let d = deserialize_fn.as_ref().map(|f|
+        });
+        let d = deserialize_fn.as_ref().map(|f| {
             quote_spanned!(f.ident.span()=>
                 compile_error!("`fn serialize()` is also required");
             )
-        );
+        });
         quote!(#s #d)
     });
 
     let combine_fns_check1 = serialize_fn.as_ref().xor(combine_fn.as_ref()).map(|_| {
-        let s = serialize_fn.as_ref().map(|f|
+        let s = serialize_fn.as_ref().map(|f| {
             quote_spanned!(f.ident.span()=>
                 compile_error!("`fn combine()` is also required");
             )
-        );
-        let c = combine_fn.as_ref().map(|f|
+        });
+        let c = combine_fn.as_ref().map(|f| {
             quote_spanned!(f.ident.span()=>
                 compile_error!("`fn serialize()` is also required");
             )
-        );
+        });
         quote!(#s #c)
     });
 
     let combine_fns_check2 = combine_fn.as_ref().xor(deserialize_fn.as_ref()).map(|_| {
-        let s = combine_fn.as_ref().map(|f|
+        let s = combine_fn.as_ref().map(|f| {
             quote_spanned!(f.ident.span()=>
                 compile_error!("`fn deserialize()` is also required");
             )
-        );
-        let d = deserialize_fn.as_ref().map(|f|
+        });
+        let d = deserialize_fn.as_ref().map(|f| {
             quote_spanned!(f.ident.span()=>
                 compile_error!("`fn combine()` is also required");
             )
-        );
+        });
         quote!(#s #d)
     });
 
-    let serialize_fns = serialize_fn.map(|f| add_function(f, "serialfunc", AggregateFn::serialize_fn_tokens));
-    let deserialize_fns = deserialize_fn.map(|f| add_function(f, "deserialfunc", AggregateFn::deserialize_fn_tokens));
-    let combine_fns = combine_fn.map(|f| add_function(f, "combinefunc", AggregateFn::combine_fn_tokens));
+    let serialize_fns =
+        serialize_fn.map(|f| add_function(f, "serialfunc", AggregateFn::serialize_fn_tokens));
+    let deserialize_fns =
+        deserialize_fn.map(|f| add_function(f, "deserialfunc", AggregateFn::deserialize_fn_tokens));
+    let combine_fns =
+        combine_fn.map(|f| add_function(f, "combinefunc", AggregateFn::combine_fn_tokens));
 
     let _ = write!(&mut create, "\n);\n");
 
@@ -598,15 +635,14 @@ impl AggregateFn {
 
         let fcinfo_ident = arg_ident(&fcinfo_arg);
 
-        let arg_signatures = args.iter()
+        let arg_signatures = args
+            .iter()
             .chain(std::iter::once(&fcinfo_arg))
             .skip(1)
             .map(|arg| &arg.rust);
 
-        let arg_vals: Punctuated<syn::Pat, Comma> = expanded_args.iter()
-            .skip(1)
-            .map(arg_ident)
-            .collect();
+        let arg_vals: Punctuated<syn::Pat, Comma> =
+            expanded_args.iter().skip(1).map(arg_ident).collect();
 
         let inner_arg_signatures = expanded_args.iter().map(|arg| &arg.rust);
 
@@ -668,7 +704,11 @@ impl AggregateFn {
         }
     }
 
-    fn final_fn_tokens(&self, schema: &Option<syn::Ident>, aggregate_name: &syn::Ident) -> TokenStream2 {
+    fn final_fn_tokens(
+        &self,
+        schema: &Option<syn::Ident>,
+        aggregate_name: &syn::Ident,
+    ) -> TokenStream2 {
         let outer_ident = self.outer_ident(aggregate_name);
         let Self {
             ident,
@@ -685,15 +725,9 @@ impl AggregateFn {
 
         let input_ty = &*args[0].rust.ty;
 
-        let state_type_check = type_check_tokens(
-            input_ty,
-            parse_quote!(Option<&mut State>),
-        );
+        let state_type_check = type_check_tokens(input_ty, parse_quote!(Option<&mut State>));
 
-        let arg_vals: Punctuated<syn::Pat, Comma> = args.iter()
-            .skip(1)
-            .map(arg_ident)
-            .collect();
+        let arg_vals: Punctuated<syn::Pat, Comma> = args.iter().skip(1).map(arg_ident).collect();
 
         let inner_arg_signatures = args.iter().map(|arg| &arg.rust);
 
@@ -727,7 +761,11 @@ impl AggregateFn {
         }
     }
 
-    fn serialize_fn_tokens(&self, schema: &Option<syn::Ident>, aggregate_name: &syn::Ident) -> TokenStream2 {
+    fn serialize_fn_tokens(
+        &self,
+        schema: &Option<syn::Ident>,
+        aggregate_name: &syn::Ident,
+    ) -> TokenStream2 {
         let outer_ident = self.outer_ident(aggregate_name);
         let Self {
             ident,
@@ -782,7 +820,11 @@ impl AggregateFn {
         }
     }
 
-    fn deserialize_fn_tokens(&self, schema: &Option<syn::Ident>, aggregate_name: &syn::Ident) -> TokenStream2 {
+    fn deserialize_fn_tokens(
+        &self,
+        schema: &Option<syn::Ident>,
+        aggregate_name: &syn::Ident,
+    ) -> TokenStream2 {
         let outer_ident = self.outer_ident(aggregate_name);
         let Self {
             ident,
@@ -836,7 +878,11 @@ impl AggregateFn {
         }
     }
 
-    fn combine_fn_tokens(&self, schema: &Option<syn::Ident>, aggregate_name: &syn::Ident) -> TokenStream2 {
+    fn combine_fn_tokens(
+        &self,
+        schema: &Option<syn::Ident>,
+        aggregate_name: &syn::Ident,
+    ) -> TokenStream2 {
         let outer_ident = self.outer_ident(aggregate_name);
         let Self {
             ident,
@@ -867,11 +913,13 @@ impl AggregateFn {
             let #state_var: Option<State> = #result_var;
         );
 
+        let mod_counters = make_mod_counters();
 
         quote! {
             #state_type_check_a
             #state_type_check_b
             #return_type_check
+            #mod_counters
 
             #[pgx::pg_extern(immutable, parallel_safe #schema)]
             pub fn #outer_ident(
@@ -882,9 +930,13 @@ impl AggregateFn {
                 use crate::palloc::{Inner, InternalAsValue, ToInternal};
                 unsafe {
                     crate::aggregate_utils::in_aggregate_context(__fcinfo, || {
+                        let a: Option<Inner<State>> = #a_name.to_inner();
+                        let b: Option<Inner<State>> = #b_name.to_inner();
+                        #[cfg(any(test, feature = "pg_test"))]
+                        #aggregate_name::counters::increment_combine(&a, &b);
                         let #result_var = #ident(
-                            #a_name.to_inner().as_deref(),
-                            #b_name.to_inner().as_deref(),
+                            a.as_deref(),
+                            b.as_deref(),
                         );
                         #result_type_check
                         let state = match #state_var {
@@ -913,7 +965,7 @@ impl AggregateFn {
         syn::Ident::new(&name, Span::call_site())
     }
 
-    fn sql_args(&self) -> impl Iterator<Item=(Option<&syn::Ident>, String)> {
+    fn sql_args(&self) -> impl Iterator<Item = (Option<&syn::Ident>, String)> {
         self.args.iter().skip(1).map(|arg| {
             let ident = match &*arg.rust.pat {
                 syn::Pat::Ident(id) => Some(&id.ident),
@@ -928,6 +980,43 @@ fn arg_ident(arg: &AggregateArg) -> syn::Pat {
     syn::Pat::clone(&*arg.rust.pat)
 }
 
+fn make_mod_counters() -> TokenStream2 {
+    quote! {
+        #[cfg(any(test, feature = "pg_test"))]
+        pub mod counters {
+            use ::std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
+            use crate::palloc::Inner;
+
+            pub static COMBINE_NONE: AtomicUsize = AtomicUsize::new(0);
+            pub static COMBINE_A: AtomicUsize = AtomicUsize::new(0);
+            pub static COMBINE_B: AtomicUsize = AtomicUsize::new(0);
+            pub static COMBINE_BOTH: AtomicUsize = AtomicUsize::new(0);
+
+            // Works as long as only one pg_test is run at a time.  If we have two
+            // running in the same process, need a mutex to ensure only one test is
+            // using the counters at a time.  Otherwise, a test may see non-zero
+            // counters because of another test's work rather than its own.
+            pub fn reset() {
+                COMBINE_NONE.store(0, Relaxed);
+                COMBINE_A.store(0, Relaxed);
+                COMBINE_B.store(0, Relaxed);
+                COMBINE_BOTH.store(0, Relaxed);
+            }
+
+            pub fn increment_combine<T>(a: &Option<Inner<T>>, b: &Option<Inner<T>>) {
+                match (a, b) {
+                    // TODO Remove COMBINE_NONE?  We suspect postgres never calls with (None, None); what would be the point?
+                    (None, None) => COMBINE_NONE.fetch_add(1, Relaxed),
+                    // TODO Remove COMBIINE_A?  We suspect postgres never calls with (Some, None), only (None, Some).
+                    (Some(_), None) => COMBINE_A.fetch_add(1, Relaxed),
+                    (None, Some(_)) => COMBINE_B.fetch_add(1, Relaxed),
+                    (Some(_), Some(_)) => COMBINE_BOTH.fetch_add(1, Relaxed),
+                };
+            }
+        }
+    }
+}
+
 fn ret_type(ret: &syn::ReturnType) -> Cow<'_, syn::Type> {
     match ret {
         syn::ReturnType::Default => Cow::Owned(parse_quote!(())),
@@ -937,33 +1026,18 @@ fn ret_type(ret: &syn::ReturnType) -> Cow<'_, syn::Type> {
 
 fn state_type_check_tokens(ty: &syn::Type, optional: Option<()>) -> TokenStream2 {
     match optional {
-        Some(..) => {
-            type_check_tokens(
-                ty,
-                parse_quote!(Option<State>),
-            )
-        },
-        None => {
-            type_check_tokens(
-                ty,
-                parse_quote!(State),
-            )
-        },
+        Some(..) => type_check_tokens(ty, parse_quote!(Option<State>)),
+        None => type_check_tokens(ty, parse_quote!(State)),
     }
 }
 
 fn refstate_type_check_tokens(ty: &syn::Type, optional: Option<()>) -> TokenStream2 {
     match optional {
-        Some(..) => {
-            type_check_tokens(
-                ty,
-                parse_quote!(Option<&State>),
-            )
-        },
+        Some(..) => type_check_tokens(ty, parse_quote!(Option<&State>)),
         None => {
             // we need to allow both &State and &mut State, so we use a
             // different equality-checker for this case than the others
-            quote_spanned!{ty.span()=>
+            quote_spanned! {ty.span()=>
                 const _: () = {
                     trait RefType {
                         type Referenced;
@@ -974,7 +1048,7 @@ fn refstate_type_check_tokens(ty: &syn::Type, optional: Option<()>) -> TokenStre
                     let _checked = check::<#ty>;
                 };
             }
-        },
+        }
     }
 }
 
@@ -982,11 +1056,8 @@ fn bytea_type_check_tokens(ty: &syn::Type) -> TokenStream2 {
     type_check_tokens(ty, parse_quote!(bytea))
 }
 
-fn type_check_tokens(
-    user_ty: &syn::Type,
-    expected_type: syn::Type,
-) -> TokenStream2 {
-    quote_spanned!{user_ty.span()=>
+fn type_check_tokens(user_ty: &syn::Type, expected_type: syn::Type) -> TokenStream2 {
+    quote_spanned! {user_ty.span()=>
         const _: () = {
             trait SameType {
                 type This;

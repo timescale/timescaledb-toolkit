@@ -1,8 +1,8 @@
 comment = 'Library of analytical hyperfunctions, time-series pipelining, and other SQL utilities'
-default_version = '1.5'
+default_version = '1.5.1'
 relocatable = false
 superuser = false
 module_pathname = '$libdir/timescaledb_toolkit' # only for testing, will be removed for real installs
 # comma-separated list of previous versions this version can be upgraded from
 # directly. This is used to generate upgrade scripts.
-# upgradeable_from = '1.0, 1.1, 1.2, 1.3, 1.3.1, 1.4'
+# upgradeable_from = '1.0, 1.1, 1.2, 1.3, 1.3.1, 1.4, 1.5'

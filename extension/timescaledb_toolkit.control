@@ -5,4 +5,4 @@ superuser = false
 module_pathname = '$libdir/timescaledb_toolkit' # only for testing, will be removed for real installs
 # comma-separated list of previous versions this version can be upgraded from
 # directly. This is used to generate upgrade scripts.
-# upgradeable_from = '1.4, 1.5'
+# upgradeable_from = '1.4, 1.5, 1.5.1, 1.5.2'

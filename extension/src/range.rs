@@ -138,7 +138,7 @@ impl I64RangeWrapper {
 
 // this introduces a timescaledb dependency, but only kind of,
 extension_sql!("\n\
-CREATE OR REPLACE FUNCTION toolkit_experimental.time_bucket_range( bucket_width interval, ts timestamptz)\n\
+CREATE FUNCTION toolkit_experimental.time_bucket_range( bucket_width interval, ts timestamptz)\n\
 RETURNS tstzrange as $$\n\
 SELECT tstzrange(time_bucket(bucket_width, ts), time_bucket(bucket_width, ts + bucket_width), '[)');\n\
 $$\n\

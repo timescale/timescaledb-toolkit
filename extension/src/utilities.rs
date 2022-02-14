@@ -75,7 +75,7 @@ pub fn generate_periodic_normal_series(
 
 // Convert a timestamp to a double precision unix epoch
 extension_sql!("\n\
-CREATE OR REPLACE FUNCTION toolkit_experimental.to_epoch(timestamptz) RETURNS DOUBLE PRECISION LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS $$\n\
+CREATE FUNCTION toolkit_experimental.to_epoch(timestamptz) RETURNS DOUBLE PRECISION LANGUAGE SQL IMMUTABLE PARALLEL SAFE AS $$\n\
 SELECT EXTRACT(EPOCH FROM $1);\n\
 $$;\n\
 ",

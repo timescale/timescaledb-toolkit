@@ -9,19 +9,6 @@ mod tests {
     use pgx::*;
     use pgx_macros::pg_test;
 
-    #[pg_extern(schema="toolkit_experimental")]
-    fn expected_failure() -> i32 { 1 }
-
-    #[pg_test(error = "features in toolkit_experimental are unstable, and objects depending on them will be deleted on extension update (there will be a DROP SCHEMA toolkit_experimental CASCADE), which on Forge can happen at any time.")]
-    fn should_fail_blocks_view() {
-        Spi::execute(|client| {
-            let _ = client.select(
-                "CREATE VIEW failed AS SELECT toolkit_experimental.expected_failure();",
-               None,
-                None);
-        })
-    }
-
     // Test that any new features are added to the the experimental schema
     #[pg_test]
     fn test_schema_qualification() {

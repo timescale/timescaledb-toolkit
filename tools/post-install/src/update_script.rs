@@ -42,6 +42,12 @@ pub (crate) fn generate_from_install(
             if line.trim_start().starts_with("CREATE AGGREGATE") {
                 return line.replace("CREATE AGGREGATE", "CREATE OR REPLACE AGGREGATE")
             }
+            if line.trim_start().starts_with("CREATE FUNCTION toolkit_experimental.") {
+                return line
+            }
+            if line.trim_start().starts_with("CREATE FUNCTION") {
+                return line.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION")
+            }
             line
         })
         .peekable();

@@ -46,6 +46,13 @@ pub extern "C" fn _PG_init() {
     );
 }
 
+extension_sql!(r#"
+GRANT USAGE ON SCHEMA toolkit_experimental TO PUBLIC;"#,
+name = "final_grant",
+finalize,
+);
+
+
 #[cfg(test)]
 pub mod pg_test {
     pub fn setup(_options: Vec<&str>) {

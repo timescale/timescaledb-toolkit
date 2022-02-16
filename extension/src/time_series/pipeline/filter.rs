@@ -52,7 +52,7 @@ pub fn filter_lambda_over_series(
     use SeriesType::*;
 
     match &mut series.series {
-        SortedSeries { points, num_points } | ExplicitSeries { points, num_points } => {
+        Sorted { points, num_points } | Explicit { points, num_points } => {
             points.as_owned().retain(|p| func(p.ts, p.val));
             *num_points = points.len() as _;
         },
@@ -60,7 +60,7 @@ pub fn filter_lambda_over_series(
             let new_points: Vec<_> = series.iter().filter(|p| func(p.ts, p.val)).collect();
             *series = build! {
                 Timevector {
-                    series: ExplicitSeries {
+                    series: Explicit {
                         num_points: new_points.len() as _,
                         points: new_points.into(),
                     },
@@ -71,8 +71,10 @@ pub fn filter_lambda_over_series(
 }
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
+    use pgx_macros::pg_test;
 
     #[pg_test]
     fn test_pipeline_filter_lambda() {

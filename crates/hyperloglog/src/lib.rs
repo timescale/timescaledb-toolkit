@@ -106,12 +106,12 @@ where
     /// Same as `new` but with a specific `BuildHasher`.
     pub fn with_hash(b: usize, buildhasher: B) -> Self {
         assert!(
-            (b >= 4) & (b <= 18),
+            (4..=18).contains(&b),
             "b ({}) must be larger or equal than 4 and smaller or equal than 18",
             b
         );
 
-        let m = (1 as usize) << b;
+        let m = 1_usize << b;
         let registers = vec![0; m].into_boxed_slice();
         Self {
             registers,
@@ -193,6 +193,7 @@ where
         );
 
         let other_registers = &other.registers[..self.registers.len()];
+        #[allow(clippy::needless_range_loop)]
         for i in 0..self.registers.len() {
             self.registers[i] = cmp::max(self.registers[i], other_registers[i])
         }
@@ -367,6 +368,7 @@ where
     }
 
     /// Guess the number of unique elements seen by the HyperLogLog.
+    #[allow(clippy::many_single_char_names)] // names are from the paper
     pub fn count(&self) -> i64 {
         let m = self.registers.len() as f64;
 
@@ -385,7 +387,7 @@ where
             e
         };
 
-        let v = bytecount::count(&self.registers, 0);
+        let v = bytecount::count(self.registers, 0);
         let h = if v != 0 {
             self.linear_counting(v)
         } else {
@@ -427,11 +429,10 @@ where
             "buildhasher must be equal"
         );
 
-        let a_registers = &a.registers[..];
-        let b_registers = &b.registers[..a_registers.len()];
+        let b_registers = &b.registers[..a.registers.len()];
 
         HyperLogLogger {
-            registers: a_registers
+            registers: a.registers
                 .iter()
                 .zip(b_registers.iter())
                 .map(|x| cmp::max(x.0, x.1))

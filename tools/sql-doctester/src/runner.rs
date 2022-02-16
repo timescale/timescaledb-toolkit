@@ -19,7 +19,7 @@ pub struct ConnectionConfig<'s> {
 }
 
 impl<'s> ConnectionConfig<'s> {
-    fn to_config_string(&self) -> Cow<'s, str> {
+    fn config_string(&self) -> Cow<'s, str> {
         use std::fmt::Write;
 
         let ConnectionConfig {
@@ -56,8 +56,8 @@ pub fn run_tests<OnErr: FnMut(Test, TestError)>(
     all_tests: Vec<TestFile>,
     mut on_error: OnErr,
 ) {
-    let startup_script = startup_script.as_ref().map(|s| &**s);
-    let root_connection_config = connection_config.to_config_string();
+    let startup_script = startup_script.as_deref();
+    let root_connection_config = connection_config.config_string();
     let root_connection_config = &*root_connection_config;
     eprintln!("running {} test files", all_tests.len());
 
@@ -95,7 +95,7 @@ pub fn run_tests<OnErr: FnMut(Test, TestError)>(
             database: Some(&*db),
             ..connection_config
         };
-        let mut client = Client::connect(&stateless_connection_config.to_config_string(), NoTls)
+        let mut client = Client::connect(&stateless_connection_config.config_string(), NoTls)
             .expect("could not connect to test DB");
         let _ = client
             .simple_query(startup_script)
@@ -119,10 +119,10 @@ pub fn run_tests<OnErr: FnMut(Test, TestError)>(
             };
 
             let test_connection_config = ConnectionConfig {
-                database: db_name.as_ref().map(|n| &**n),
+                database: db_name.as_deref(),
                 ..connection_config
             };
-            let mut client = Client::connect(&test_connection_config.to_config_string(), NoTls)
+            let mut client = Client::connect(&test_connection_config.config_string(), NoTls)
                 .expect("could not connect to test DB");
 
             if let (false, Some(startup_script)) = (tests.stateless, startup_script) {
@@ -166,8 +166,7 @@ fn run_transactional_test(client: &mut Client, test: &Test) -> Result<(), TestEr
 
 fn run_nontransactional_test(client: &mut Client, test: &Test) -> Result<(), TestError> {
     let output = client.simple_query(&test.text)?;
-    let res = validate_output(output, test);
-    res
+    validate_output(output, test)
 }
 
 fn validate_output(output: Vec<SimpleQueryMessage>, test: &Test) -> Result<(), TestError> {
@@ -234,7 +233,7 @@ fn validate_output(output: Vec<SimpleQueryMessage>, test: &Test) -> Result<(), T
     Ok(())
 }
 
-fn stringify_table(table: &Vec<Vec<String>>) -> String {
+fn stringify_table(table: &[Vec<String>]) -> String {
     use std::{cmp::max, fmt::Write};
     if table.is_empty() {
         return "---".to_string();
@@ -264,7 +263,8 @@ fn stringify_table(table: &Vec<Vec<String>>) -> String {
     output
 }
 
-fn stringify_delta(left: &Vec<Vec<String>>, right: &Vec<Vec<String>>) -> String {
+#[allow(clippy::needless_range_loop)]
+fn stringify_delta(left: &[Vec<String>], right: &[Vec<String>]) -> String {
     use std::{cmp::max, fmt::Write};
 
     static EMPTY_ROW: Vec<String> = vec![];

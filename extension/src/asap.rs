@@ -4,7 +4,7 @@ use asap::*;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    aggregate_utils::in_aggregate_context, palloc::Internal,
+    aggregate_utils::in_aggregate_context, palloc::{Internal, InternalAsValue, Inner, ToInternal},
 };
 
 use time_series::{TSPoint, GapfillMethod};
@@ -34,18 +34,27 @@ pub struct ASAPTransState {
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn asap_trans(
-    state: Option<Internal<ASAPTransState>>,
-    ts: Option<pg_sys::TimestampTz>,
+    state: Internal,
+    ts: Option<crate::raw::TimestampTz>,
     val: Option<f64>,
     resolution: i32,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<ASAPTransState>> {
+) -> Internal {
+    asap_trans_internal(unsafe{ state.to_inner() }, ts, val, resolution, fcinfo).internal()
+}
+pub fn asap_trans_internal(
+    state: Option<Inner<ASAPTransState>>,
+    ts: Option<crate::raw::TimestampTz>,
+    val: Option<f64>,
+    resolution: i32,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<ASAPTransState>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let p = match (ts, val) {
                 (_, None) => return state,
                 (None, _) => return state,
-                (Some(ts), Some(val)) => TSPoint { ts, val },
+                (Some(ts), Some(val)) => TSPoint { ts: ts.into(), val },
             };
 
             match state {
@@ -91,14 +100,20 @@ fn find_downsample_interval(points: &[TSPoint], resolution: i64) -> i64 {
     for i in 1..points.len() as usize {
         diffs[i-1] = points[i].ts - points[i-1].ts;
     }
-    diffs.sort();
+    diffs.sort_unstable();
     let median = diffs[diffs.len() / 2];
     candidate / median * median  // Truncate candidate to a multiple of median
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 fn asap_final(
-    state: Option<Internal<ASAPTransState>>,
+    state: Internal,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
+    asap_final_inner(unsafe{ state.to_inner() }, fcinfo)
+}
+fn asap_final_inner(
+    state: Option<Inner<ASAPTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
     unsafe {
@@ -115,15 +130,12 @@ fn asap_final(
             // In following the ASAP reference implementation, we only downsample if the number
             // of points is at least twice the resolution.  Otherwise we keep the number of
             // points, but still normalize them to equal sized buckets.
-            let downsample_interval;
-            let mut normal = if points.len() >= 2 * state.resolution as usize {
-                downsample_interval = find_downsample_interval(&points, state.resolution as i64);
-                downsample_and_gapfill_to_normal_form(&points, downsample_interval, GapfillMethod::Linear)
+            let downsample_interval = if points.len() >= 2 * state.resolution as usize {
+                find_downsample_interval(&points, state.resolution as i64)
             } else {
-                downsample_interval = (points.last().unwrap().ts - points.first().unwrap().ts)
-                    / points.len() as i64;
-                downsample_and_gapfill_to_normal_form(&points, downsample_interval, GapfillMethod::Linear)
+                (points.last().unwrap().ts - points.first().unwrap().ts) / points.len() as i64
             };
+            let mut normal = downsample_and_gapfill_to_normal_form(&points, downsample_interval, GapfillMethod::Linear);
             let start_ts = points.first().unwrap().ts;
 
             // Drop the last value to match the reference implementation
@@ -132,8 +144,8 @@ fn asap_final(
 
             Some(crate::build! {
                 Timevector {
-                    series: SeriesType::NormalSeries {
-                        start_ts: start_ts,
+                    series: SeriesType::Normal {
+                        start_ts,
                         // Set the step interval for the asap result so that it covers the same interval
                         // as the passed in data
                         step_interval: downsample_interval * normal.len() as i64 / values.len() as i64,
@@ -152,32 +164,31 @@ pub fn asap_on_timevector(
     resolution: i32
 ) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
     // TODO: implement this using zero copy (requires sort, find_downsample_interval, and downsample_and_gapfill on Timevector)
-    let needs_sort = matches!(&series.series, SeriesType::ExplicitSeries{..});
+    let needs_sort = matches!(&series.series, SeriesType::Explicit{..});
     let start_ts;
     let downsample_interval;
     let mut normal = match &mut series.series {
-        SeriesType::ExplicitSeries { points, .. } | SeriesType::SortedSeries { points, .. }
+        SeriesType::Explicit { points, .. } | SeriesType::Sorted { points, .. }
         => {
             if needs_sort {
                 points.as_owned().sort_by_key(|p| p.ts);
             }
             // TODO points.make_slice()?
-            let normal = if points.len() >= 2 * resolution as usize {
-                downsample_interval = find_downsample_interval(points.as_slice(), resolution as i64);
-                downsample_and_gapfill_to_normal_form(points.as_slice(), downsample_interval, GapfillMethod::Linear)
+            downsample_interval = if points.len() >= 2 * resolution as usize {
+                find_downsample_interval(points.as_slice(), resolution as i64)
             } else {
-                downsample_interval = (points.as_slice().last().unwrap().ts - points.as_slice().first().unwrap().ts) / points.len() as i64;
-                downsample_and_gapfill_to_normal_form(points.as_slice(), downsample_interval, GapfillMethod::Linear)
+                (points.as_slice().last().unwrap().ts - points.as_slice().first().unwrap().ts) / points.len() as i64
             };
+            let normal = downsample_and_gapfill_to_normal_form(points.as_slice(), downsample_interval, GapfillMethod::Linear);
             start_ts = points.as_slice().first().unwrap().ts;
             normal
         },
-        SeriesType::NormalSeries { start_ts: start, step_interval, values, .. } => {
+        SeriesType::Normal { start_ts: start, step_interval, values, .. } => {
             start_ts = *start;
             downsample_interval = *step_interval;
             values.clone().into_vec()
         },
-        SeriesType::GappyNormalSeries { .. } =>
+        SeriesType::GappyNormal { .. } =>
             panic!("Series must be gapfilled before running asap smoothing"),
     };
 
@@ -188,8 +199,8 @@ pub fn asap_on_timevector(
 
     Some(crate::build! {
         Timevector {
-            series: SeriesType::NormalSeries {
-                start_ts: start_ts,
+            series: SeriesType::Normal {
+                start_ts,
                 // Set the step interval for the asap result so that it covers the same interval
                 // as the passed in data
                 step_interval: downsample_interval * normal.len() as i64 / result.len() as i64,
@@ -251,17 +262,22 @@ fn downsample_and_gapfill_to_normal_form(
 }
 
 // Aggregate on only values (assumes aggregation over ordered normalized timestamp)
-extension_sql!(r#"
-CREATE AGGREGATE toolkit_experimental.asap_smooth(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution INT) (
-    sfunc = toolkit_experimental.asap_trans,
-    stype = internal,
-    finalfunc = toolkit_experimental.asap_final
+extension_sql!("\n\
+    CREATE AGGREGATE toolkit_experimental.asap_smooth(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution INT)\n\
+    (\n\
+        sfunc = toolkit_experimental.asap_trans,\n\
+        stype = internal,\n\
+        finalfunc = toolkit_experimental.asap_final\n\
+    );\n",
+name = "asap_agg",
+requires = [asap_trans, asap_final],
 );
-"#);
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
+    use pgx_macros::pg_test;
 
     #[pg_test]
     fn test_asap() {

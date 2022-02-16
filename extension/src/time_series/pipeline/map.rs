@@ -67,7 +67,7 @@ pub fn map_lambda_over_series(
     use SeriesType::*;
 
     match &mut series.series {
-        SortedSeries { points, .. } => if only_val {
+        Sorted { points, .. } => if only_val {
             let points = points.as_owned();
             for point in points {
                 let (_, new_val) = func(point.ts, point.val);
@@ -77,14 +77,14 @@ pub fn map_lambda_over_series(
                 }
             }
         },
-        // NormalSeries { values, .. } => if only_val {
+        // Normal { values, .. } => if only_val {
         //     // TODO
         //     let values = values.as_owned();
         //     for value in values {
         //         *value = func(*value)
         //     }
         // },
-        ExplicitSeries { points, .. } => {
+        Explicit { points, .. } => {
             let points = points.as_owned();
             // FIXME ensure sorted
             for point in points {
@@ -95,7 +95,7 @@ pub fn map_lambda_over_series(
                 }
             }
         },
-        // GappyNormalSeries { values, .. } => if only_val {
+        // GappyNormal { values, .. } => if only_val {
         //     // TODO
         //     let values = values.as_owned();
         //     //FIXME add setjmp guard around loop
@@ -113,7 +113,7 @@ pub fn map_lambda_over_series(
             }).collect();
             *series = build! {
                 Timevector {
-                    series: ExplicitSeries {
+                    series: Explicit {
                         num_points: new_points.len() as _,
                         points: new_points.into(),
                     },
@@ -130,12 +130,13 @@ pub fn map_lambda_over_series(
     schema="toolkit_experimental"
 )]
 pub fn map_series_pipeline_element<'e>(
-    function: pg_sys::regproc,
+    function: crate::raw::regproc,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
-    map_series_element(function).flatten()
+    map_series_element(function.0.try_into().unwrap()).flatten()
 }
 
-pub fn map_series_element<'a>(function: pg_sys::regproc) -> Element<'a> {
+pub fn map_series_element<'a>(function: crate::raw::regproc) -> Element<'a> {
+    let function: pg_sys::regproc = function.0.try_into().unwrap();
     check_user_function_type(function);
     Element::MapSeries { function: PgProcId(function) }
 }
@@ -192,12 +193,12 @@ pub fn apply_to_series(mut series: Timevector<'_>, func: pg_sys::RegProcedure)
     schema="toolkit_experimental"
 )]
 pub fn map_data_pipeline_element<'e>(
-    function: pg_sys::regproc,
+    function: crate::raw::regproc,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     let mut argtypes: *mut pg_sys::Oid = ptr::null_mut();
     let mut nargs: ::std::os::raw::c_int = 0;
     let rettype = unsafe {
-        pg_sys::get_func_signature(function, &mut argtypes, &mut nargs)
+        pg_sys::get_func_signature(function.0.try_into().unwrap(), &mut argtypes, &mut nargs)
     };
 
     if nargs != 1 {
@@ -212,7 +213,7 @@ pub fn map_data_pipeline_element<'e>(
         error!("invalid return type, expected fn(double precision) RETURNS double precision")
     }
 
-    Element::MapData { function: PgProcId(function) }.flatten()
+    Element::MapData { function: PgProcId(function.0.try_into().unwrap()) }.flatten()
 }
 
 pub fn apply_to(mut series: Timevector<'_>, func: pg_sys::RegProcedure)
@@ -266,7 +267,7 @@ pub fn map_series(series: &mut Timevector<'_>, mut func: impl FnMut(f64) -> f64)
     use std::panic::AssertUnwindSafe;
 
     match &mut series.series {
-        SortedSeries { points, .. } => {
+        Sorted { points, .. } => {
             let points = points.as_owned().iter_mut();
             // setjump guard around the loop to reduce the amount we have to
             // call it
@@ -281,7 +282,7 @@ pub fn map_series(series: &mut Timevector<'_>, mut func: impl FnMut(f64) -> f64)
                 }
             }))
         },
-        NormalSeries { values, .. } => {
+        Normal { values, .. } => {
             let values = values.as_owned().iter_mut();
             // setjump guard around the loop to reduce the amount we have to
             // call it
@@ -293,7 +294,7 @@ pub fn map_series(series: &mut Timevector<'_>, mut func: impl FnMut(f64) -> f64)
                 }
             }))
         },
-        ExplicitSeries { points, .. } => {
+        Explicit { points, .. } => {
             let points = points.as_owned().iter_mut();
             // setjump guard around the loop to reduce the amount we have to
             // call it
@@ -308,7 +309,7 @@ pub fn map_series(series: &mut Timevector<'_>, mut func: impl FnMut(f64) -> f64)
                 }
             }))
         },
-        GappyNormalSeries { values, .. } => {
+        GappyNormal { values, .. } => {
             let values = values.as_owned().iter_mut();
             // setjump guard around the loop to reduce the amount we have to
             // call it
@@ -324,8 +325,10 @@ pub fn map_series(series: &mut Timevector<'_>, mut func: impl FnMut(f64) -> f64)
 }
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
+    use pgx_macros::pg_test;
 
     #[pg_test]
     fn test_pipeline_map_lambda() {

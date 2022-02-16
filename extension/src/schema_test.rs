@@ -1,9 +1,13 @@
+#[cfg(any(test, feature = "pg_test"))]
+use pgx::*;
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use std::collections::HashSet;
 
     use pgx::*;
+    use pgx_macros::pg_test;
 
     #[pg_extern(schema="toolkit_experimental")]
     fn expected_failure() -> i32 { 1 }
@@ -90,7 +94,7 @@ mod tests {
                             return None
                     }
 
-                    return Some(val)
+                    Some(val)
                 }).collect();
 
             if unexpected_features.is_empty() {
@@ -105,7 +109,7 @@ mod tests {
     // experimental schema
     // TODO it may pay to auto-discover this list based on the previous version of
     //      the extension, once we have a released extension
-    static RELEASED_FEATURES: &[&'static str] = &[
+    static RELEASED_FEATURES: &[&str] = &[
         "event trigger disallow_experimental_deps",
         "event trigger disallow_experimental_dependencies_on_views",
         "function disallow_experimental_dependencies()",

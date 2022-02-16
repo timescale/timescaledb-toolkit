@@ -75,7 +75,7 @@ pub fn apply(
 pub fn pipeline_add<'e>(
     rhs: f64,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
-    Arithmetic { function: Add, rhs: rhs }.flatten()
+    Arithmetic { function: Add, rhs }.flatten()
 }
 
 #[pg_extern(
@@ -87,7 +87,7 @@ pub fn pipeline_add<'e>(
 pub fn pipeline_sub<'e>(
     rhs: f64,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
-    Arithmetic { function: Sub, rhs: rhs }.flatten()
+    Arithmetic { function: Sub, rhs }.flatten()
 }
 
 #[pg_extern(
@@ -99,7 +99,7 @@ pub fn pipeline_sub<'e>(
 pub fn pipeline_mul<'e>(
     rhs: f64,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
-    Arithmetic { function: Mul, rhs: rhs }.flatten()
+    Arithmetic { function: Mul, rhs }.flatten()
 }
 
 #[pg_extern(
@@ -111,7 +111,7 @@ pub fn pipeline_mul<'e>(
 pub fn pipeline_div<'e>(
     rhs: f64,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
-    Arithmetic { function: Div, rhs: rhs }.flatten()
+    Arithmetic { function: Div, rhs }.flatten()
 }
 
 #[pg_extern(
@@ -123,7 +123,7 @@ pub fn pipeline_div<'e>(
 pub fn pipeline_mod<'e>(
     rhs: f64,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
-    Arithmetic { function: Mod, rhs: rhs }.flatten()
+    Arithmetic { function: Mod, rhs }.flatten()
 }
 
 #[pg_extern(
@@ -135,20 +135,20 @@ pub fn pipeline_mod<'e>(
 pub fn pipeline_power<'e>(
     rhs: f64,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
-    Arithmetic { function: Power, rhs: rhs }.flatten()
+    Arithmetic { function: Power, rhs }.flatten()
 }
 
 // log(double) already exists as the log base 10 so we need a new name
 #[pg_extern(
     immutable,
     parallel_safe,
-    name="logN",
+    name="logn",
     schema="toolkit_experimental"
 )]
 pub fn pipeline_log_n<'e>(
     rhs: f64,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
-    Arithmetic { function: LogN, rhs: rhs }.flatten()
+    Arithmetic { function: LogN, rhs }.flatten()
 }
 
 //
@@ -267,8 +267,10 @@ pub fn pipeline_trunc<'e>()
 }
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
+    use pgx_macros::pg_test;
 
     #[pg_test]
     fn test_simple_arith_binops() {
@@ -380,7 +382,7 @@ mod tests {
 
 
             let val = client.select(
-                &format!("SELECT (series -> logN(10.0))::TEXT FROM ({}) s", create_series),
+                &format!("SELECT (series -> logn(10.0))::TEXT FROM ({}) s", create_series),
                 None,
                 None
             )

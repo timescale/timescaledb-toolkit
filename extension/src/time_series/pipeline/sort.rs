@@ -19,16 +19,16 @@ pub fn sort_timevector(
     mut series: toolkit_experimental::Timevector<'_>,
 ) -> toolkit_experimental::Timevector<'_> {
     match &mut series.series {
-        SeriesType::GappyNormalSeries{..} | SeriesType::NormalSeries{..} | SeriesType::SortedSeries{..} => series,
-        SeriesType::ExplicitSeries{points, ..} => {
+        SeriesType::GappyNormal{..} | SeriesType::Normal{..} | SeriesType::Sorted{..} => series,
+        SeriesType::Explicit{points, ..} => {
             let points = points.as_owned();
-            let mut points = std::mem::replace(points, vec![]);
+            let mut points = std::mem::take(points);
             points.sort_by(|a, b| a.ts.cmp(&b.ts));
             TimevectorData {
                 header: 0,
                 version: 1,
                 padding: [0; 3],
-                series: SeriesType::SortedSeries {
+                series: SeriesType::Sorted {
                     num_points: points.len() as u64,
                     points: points.into(),
                 },
@@ -38,8 +38,10 @@ pub fn sort_timevector(
 }
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
+    use pgx_macros::pg_test;
 
     #[pg_test]
     fn test_pipeline_sort() {

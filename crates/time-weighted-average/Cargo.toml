@@ -2,7 +2,7 @@
 name = "time_weighted_average"
 version = "0.1.0"
 authors = ["David Kohn <david@timescale.com>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

@@ -1,3 +1,5 @@
+#![allow(clippy::modulo_one)]   // flat_serialize! alignment checks hit this for any single byte field (of which all pg_types! have two by default)
+#![allow(clippy::extra_unused_lifetimes)]  // some disagreement between clippy and the rust compiler about when lifetime are and are not needed
 
 pub mod accessors;
 pub mod tdigest;
@@ -8,16 +10,23 @@ pub mod asap;
 pub mod lttb;
 pub mod counter_agg;
 pub mod range;
+pub mod state_aggregate;
 pub mod stats_agg;
 pub mod utilities;
 pub mod time_series;
-pub mod topn;
+pub mod frequency;
 
 mod palloc;
 mod aggregate_utils;
 mod type_builder;
 mod serialization;
 mod schema_test;
+mod raw;
+mod datum_utils;
+mod pg_any_element;
+
+#[cfg(any(test, feature = "pg_test"))]
+mod aggregate_builder_tests;
 
 // This should be last so we don't run our warning trigger on when
 // installing this extension

@@ -8,6 +8,7 @@ fn timescaledb_toolkit_probe() {
 }
 
 extension_sql!(r#"
+GRANT USAGE ON SCHEMA toolkit_experimental TO PUBLIC;
 CREATE OR REPLACE FUNCTION disallow_experimental_dependencies()
   RETURNS event_trigger
  LANGUAGE plpgsql
@@ -102,4 +103,6 @@ CREATE EVENT TRIGGER disallow_experimental_deps ON ddl_command_end
 CREATE EVENT TRIGGER disallow_experimental_dependencies_on_views ON ddl_command_end
   WHEN tag IN ('CREATE MATERIALIZED VIEW', 'CREATE VIEW')
   EXECUTE FUNCTION disallow_experimental_view_dependencies();
-"#);
+name = "warning_trigger",
+finalize,
+);

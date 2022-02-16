@@ -1,7 +1,7 @@
 [package]
 name = "tdigest"
 version = "0.2.2"
-edition = "2018"
+edition = "2021"
 # based on: https://github.com/MnO2/t-digest"
 
 [dependencies]

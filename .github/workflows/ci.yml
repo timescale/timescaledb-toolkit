@@ -9,19 +9,88 @@ on:
   schedule:
     # we build at 8am UTC, 3am Eastern, midnight Pacific
     - cron:  '0 8 * * 1-4'
+  workflow_dispatch:
 
 jobs:
+  clippy:
+    name: Clippy Test
+    runs-on: ubuntu-latest
+    container:
+      image: timescaledev/rust-pgx:latest
+      env:
+        # Must keep in sync with `path: target` in cache entry below
+        CARGO_TARGET_DIR_NAME: target
+        # TODO Why?  Cargo default is to pass `-C incremental` to rustc; why don't we want that?
+        #   https://doc.rust-lang.org/rustc/codegen-options/index.html#incremental
+        #   Well turning it off takes the extension target size down from 3G to 2G...
+        CARGO_INCREMENTAL: 0
+        # TODO Why?  If we're concerned about trouble fetching crates, why not
+        #  just fetch them once at the time we select a dependency?
+        #  Errors fetching crates are probably rare enough that we don't see the
+        #  need to bother, but then why not just let the build fail?
+        CARGO_NET_RETRY: 10
+        # TODO What reads this?  It's not listed on
+        #  https://doc.rust-lang.org/cargo/reference/environment-variables.html
+        CI: 1
+        RUST_BACKTRACE: short
+        # TODO We don't seem to run rustup, nor does it seem like we should.
+        RUSTUP_MAX_RETRIES: 10
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    # ~postgres/.pgx/config.toml comes in on the image.
+    # Setting HOME=~postgres (which is /home/postgres) in cargo's environment
+    # would work, but sticking with this approach for now.
+    - name: chown Repository
+      run: chown -R postgres .
+
+    # CARGO_HOME is /usr/local/cargo which looks like something we'd need to
+    # stay root to update, but the parts we need to update (.crates.toml,
+    # .crates2.json, .package-cache, git, registry) are already owned by
+    # `postgres` in the image.
+    - name: Cache cargo directories
+      uses: actions/cache@v2
+      with:
+        path: |
+          /usr/local/cargo/registry
+          /usr/local/cargo/git
+        key: ${{ runner.os }}-clippy-cargo-1.5
+        # TODO Commented out because we have no working keys yet.
+        #  At release time, we should increment the number above and put the old below.
+        #  Not commented-out from that point on, of course.
+        #restore-keys: ${{ runner.os }}-clippy-cargo-PREVIOUS
+
+    - name: Cache cargo target dir
+      uses: actions/cache@v2
+      with:
+        path: target
+        key: ${{ runner.os }}-clippy-target-1.5
+        #restore-keys: ${{ runner.os }}-clippy-target-PREVIOUS
+
+    - name: Run Clippy
+      # Github captures stdout and stderr separately and then intermingles them
+      # in the wrong order.  We don't actually care to distinguish, so redirect
+      # stderr to stdout so we get the proper order.
+      run: su postgres -c 'sh tools/build clippy 2>&1'
+
   test12:
     name: Test PG 12
     runs-on: ubuntu-latest
     container:
       image: timescaledev/rust-pgx:latest
-      env:
-        CARGO_INCREMENTAL: 0
-        CARGO_NET_RETRY: 10
-        CI: 1
-        RUST_BACKTRACE: short
-        RUSTUP_MAX_RETRIES: 10
+
+    env:
+      PGVERSION: 12
+      CARGO_TARGET_DIR_NAME: target
+      CARGO_INCREMENTAL: 0
+      CARGO_NET_RETRY: 10
+      CI: 1
+      RUST_BACKTRACE: short
+      RUSTUP_MAX_RETRIES: 10
 
     steps:
     - name: Checkout Repository
@@ -36,41 +105,135 @@ jobs:
       uses: actions/cache@v2
       with:
         path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-        key: ${{ runner.os }}-cargo-pg12-2
-        restore-keys: |
-          ${{ runner.os }}-cargo-pg12
+          /usr/local/cargo/registry
+          /usr/local/cargo/git
+        key: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo-1.5
+        #restore-keys: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo-PREVIOUS
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-cargo-build-target-pg12-2
-        restore-keys: |
-          ${{ runner.os }}-cargo-build-target-pg12
+        key: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-target-1.5
+        #restore-keys: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-target-PREVIOUS
 
-    - name: Run PG 12 Tests
-      run: sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo test --workspace --features 'pg12 pg_test'"
+    - name: Run pgx tests
+      run: su postgres -c 'sh tools/build -pg$PGVERSION test-extension 2>&1'
 
+    # TODO post-install + doc test adds a good 90s.  We could probably put
+    # them together run serially in a separate job to shave that 90s off the
+    # long pole.
     - name: Run post-install tests
-      run: |
-        sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg12 && /usr/local/cargo/bin/cargo pgx start pg12"
-        RUST_BACKTRACE=short cargo run --manifest-path ./tools/post-install/Cargo.toml /home/postgres/.pgx/12.6/pgx-install/bin/pg_config
-        cargo run --manifest-path ./tools/testrunner/Cargo.toml -- -h localhost -p 28812
+      run: su postgres -c 'sh tools/build -pg$PGVERSION test-post-install 2>&1'
 
-    - name: Run Doc Tests
-      run: |
-        sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg12 && /usr/local/cargo/bin/cargo pgx start pg12"
-        sql-doctester -h localhost -s "CREATE EXTENSION timescaledb; CREATE EXTENSION timescaledb_toolkit; SET SESSION TIMEZONE TO 'UTC'" -p 28812 docs
-
+    - name: Run doc tests
+      run: su postgres -c 'sh tools/build -pg$PGVERSION test-doc 2>&1'
 
   test13:
     name: Test PG 13
     runs-on: ubuntu-latest
     container:
       image: timescaledev/rust-pgx:latest
+
+    env:
+      PGVERSION: 13
+      CARGO_TARGET_DIR_NAME: target
+      CARGO_INCREMENTAL: 0
+      CARGO_NET_RETRY: 10
+      CI: 1
+      RUST_BACKTRACE: short
+      RUSTUP_MAX_RETRIES: 10
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    - name: chown Repository
+      run: chown -R postgres .
+
+    - name: Cache cargo directories
+      uses: actions/cache@v2
+      with:
+        path: |
+          /usr/local/cargo/registry
+          /usr/local/cargo/git
+        key: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo-1.5
+        #restore-keys: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo-PREVIOUS
+
+    - name: Cache cargo target dir
+      uses: actions/cache@v2
+      with:
+        path: target
+        key: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-target-1.5
+        #restore-keys: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-target-PREVIOUS
+
+    - name: Run pgx tests
+      run: su postgres -c "sh tools/build -pg$PGVERSION test-extension 2>&1"
+
+    - name: Run post-install tests
+      run: su postgres -c 'sh tools/build -pg$PGVERSION test-post-install 2>&1'
+
+    - name: Run doc tests
+      run: su postgres -c 'sh tools/build -pg$PGVERSION test-doc 2>&1'
+
+  test14:
+    name: Test PG 14
+    runs-on: ubuntu-latest
+    container:
+      image: timescaledev/rust-pgx:latest
+
+    env:
+      PGVERSION: 14
+      CARGO_TARGET_DIR_NAME: target
+      CARGO_INCREMENTAL: 0
+      CARGO_NET_RETRY: 10
+      CI: 1
+      RUST_BACKTRACE: short
+      RUSTUP_MAX_RETRIES: 10
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    - name: chown Repository
+      run: chown -R postgres .
+
+    - name: Cache cargo directories
+      uses: actions/cache@v2
+      with:
+        path: |
+          /usr/local/cargo/registry
+          /usr/local/cargo/git
+        key: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo-1.5
+        #restore-keys: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo-PREVIOUS
+
+    - name: Cache cargo target dir
+      uses: actions/cache@v2
+      with:
+        path: target
+        key: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-target-1.5
+        #restore-keys: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-target-PREVIOUS
+
+    - name: Run pgx tests
+      run: su postgres -c "sh tools/build -pg$PGVERSION test-extension 2>&1"
+
+    - name: Run post-install tests
+      run: su postgres -c 'sh tools/build -pg$PGVERSION test-post-install 2>&1'
+
+    - name: Run doc tests
+      run: su postgres -c 'sh tools/build -pg$PGVERSION test-doc 2>&1'
+
+  testcrates:
+    name: Test Crates
+    runs-on: ubuntu-latest
+    container:
+      image: timescaledev/rust-pgx:latest
       env:
+        CARGO_TARGET_DIR_NAME: target
         CARGO_INCREMENTAL: 0
         CARGO_NET_RETRY: 10
         CI: 1
@@ -90,30 +253,17 @@ jobs:
       uses: actions/cache@v2
       with:
         path: |
-          ~/.cargo/registry
-          ~/.cargo/git
-        key: ${{ runner.os }}-cargo-build-target-pg13-2
-        restore-keys: |
-          ${{ runner.os }}-cargo-pg13
+          /usr/local/cargo/registry
+          /usr/local/cargo/git
+        key: ${{ runner.os }}-test-crates-cargo-1.5
+        #restore-keys: ${{ runner.os }}-test-crates-cargo-PREVIOUS
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-cargo-build-target-pg13-2
-        restore-keys: |
-          ${{ runner.os }}-cargo-build-target-pg13
+        key: ${{ runner.os }}-test-crates-target-1.5
+        #restore-keys: ${{ runner.os }}-test-crates-target-PREVIOUS
 
-    - name: Run PG 13 Tests
-      run: sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo test --workspace --features 'pg13 pg_test'"
-
-    - name: Run post-install tests
-      run: |
-        sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg13 && /usr/local/cargo/bin/cargo pgx start pg13"
-        RUST_BACKTRACE=short cargo run --manifest-path ./tools/post-install/Cargo.toml /home/postgres/.pgx/13.2/pgx-install/bin/pg_config
-        cargo run --manifest-path ./tools/testrunner/Cargo.toml -- -h localhost -p 28813
-
-    - name: Run Doc Tests
-      run: |
-        sudo -HEsu postgres sh -c "/usr/local/cargo/bin/cargo pgx stop pg13 && /usr/local/cargo/bin/cargo pgx start pg13"
-        sql-doctester -h localhost -s "CREATE EXTENSION timescaledb; CREATE EXTENSION timescaledb_toolkit; SET SESSION TIMEZONE TO 'UTC'" -p 28813 docs
+    - name: Run Crates Tests
+      run: su postgres -c 'sh tools/build test-crates 2>&1'

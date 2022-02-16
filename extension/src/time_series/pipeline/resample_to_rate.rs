@@ -7,8 +7,6 @@ use serde::{Deserialize, Serialize};
 
 use super::*;
 
-type Interval = pg_sys::Datum;
-
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug, FlatSerializable)]
 #[repr(u64)]
 pub enum ResampleMethod {
@@ -51,11 +49,15 @@ impl ResampleMethod {
                 let mut result = 0.0;
                 for TSPoint{ts, val} in vals.iter() {
                     let distance = (ts - target).abs();
-                    if distance < closest {
-                        closest = distance;
-                        result = *val;
-                    } else if distance == closest {
-                        result = (result + val) / 2.0;
+                    match distance.cmp(&closest) {
+                        std::cmp::Ordering::Less => {
+                            closest = distance;
+                            result = *val;
+                        },
+                        std::cmp::Ordering::Equal => {
+                            result = (result + val) / 2.0;
+                        },
+                        std::cmp::Ordering::Greater => (),
                     }
                 }
                 TSPoint{ts: target, val: result}
@@ -73,11 +75,11 @@ impl ResampleMethod {
 )]
 pub fn resample_pipeline_element<'p, 'e>(
     resample_method: String,
-    interval: Interval,
+    interval: crate::raw::Interval,
     snap_to_rate: bool,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     unsafe {
-        let interval = interval as *const pg_sys::Interval;
+        let interval = interval.0 as *const pg_sys::Interval;
         if (*interval).day > 0 || (*interval).month > 0 {
             panic!("downsample intervals are currently restricted to stable units (hours or smaller)");
         }
@@ -136,8 +138,8 @@ pub fn resample_to_rate<'s>(
 
         let target = (ts - offset_from_rate.unwrap()) / interval * interval + offset_from_rate.unwrap();
         if current != Some(target) {
-            if current.is_some() {
-                let TSPoint { ts, val } = method.process(&points, current.unwrap(), interval);
+            if let Some(value) = current {
+                let TSPoint { ts, val } = method.process(&points, value, interval);
                 match &mut result {
                     None => result = Some(GappyTimevectorBuilder::new(ts, interval, val)),
                     Some(series) => series.push_point(ts, val),
@@ -159,7 +161,7 @@ pub fn resample_to_rate<'s>(
     let result = result.unwrap();
     build! {
         Timevector {
-            series: SeriesType::GappyNormalSeries {
+            series: SeriesType::GappyNormal {
                 start_ts: result.start_ts,
                 step_interval: result.step_interval,
                 num_vals: result.values.len() as _,
@@ -221,8 +223,10 @@ impl GappyTimevectorBuilder {
 
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
+    use pgx_macros::pg_test;
 
     #[pg_test]
     fn test_pipeline_resample() {

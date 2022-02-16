@@ -19,7 +19,7 @@ impl<'s> Storage<'s> {
     pub fn new(precision: u8) -> Self {
         // TODO what is max precision
         assert!(
-            precision >= 4 && precision <= 18,
+            (4..=18).contains(&precision),
             "invalid value for precision: {}; must be within [4, 18]",
             precision,
         );
@@ -99,9 +99,9 @@ impl<'s> Storage<'s> {
         };
 
         if h <= self.threshold() {
-            return h as u64;
+            h as u64
         } else {
-            return e as u64;
+            e as u64
         }
     }
 
@@ -146,12 +146,12 @@ impl<'s> Storage<'s> {
             neighbors[i] = idx;
             distances[i] = distance;
         }
-        for i in 0..6 {
-            distances[i] = 1.0 / distances[i];
+        for distance in &mut distances {
+            *distance = 1.0 / *distance;
         }
         let total: f64 = distances.iter().sum();
-        for i in 0..6 {
-            distances[i] /= total;
+        for distance in &mut distances {
+            *distance /= total;
         }
 
         let mut value = 0.0;

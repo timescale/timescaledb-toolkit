@@ -13,13 +13,25 @@ use pgx::*;
 
 /// Possibly a premature optimization, `ShortTypId` provides the ability to
 /// serialize and deserialize type Oids as `(namespace, name)` pairs, special
-/// casing a number of types with hadcoded Oids that we expect to be common so
+/// casing a number of types with hardcoded Oids that we expect to be common so
 /// that these types can be stored more compactly if desired.
 #[derive(Debug, Clone, Copy)]
 #[repr(transparent)]
 pub struct ShortTypeId(pub u32);
 
 impl_flat_serializable!(ShortTypeId);
+
+impl From<u32> for ShortTypeId {
+    fn from(id: u32) -> Self {
+        Self(id)
+    }
+}
+
+impl From<ShortTypeId> for u32 {
+    fn from(id: ShortTypeId) -> Self {
+        id.0
+    }
+}
 
 impl Serialize for ShortTypeId {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -41,6 +53,7 @@ impl<'de> Deserialize<'de> for ShortTypeId {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+#[allow(clippy::upper_case_acronyms)]
 enum ShortTypIdSerializer {
     BOOL,
     BYTEA,
@@ -194,8 +207,6 @@ impl ShortTypIdSerializer {
 #[repr(transparent)]
 pub struct PgTypId(pub Oid);
 
-use super::{pg_server_to_any, pg_any_to_server, PG_UTF8};
-
 impl Serialize for PgTypId {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -216,13 +227,13 @@ impl Serialize for PgTypId {
             }
 
             let namespace_len = CStr::from_ptr(namespace).to_bytes().len();
-            let namespace = pg_server_to_any(namespace, namespace_len as _, PG_UTF8);
+            let namespace = pg_sys::pg_server_to_any(namespace, namespace_len as _, pg_sys::pg_enc_PG_UTF8 as _);
             let namespace = CStr::from_ptr(namespace);
             let namespace = namespace.to_str().unwrap();
 
             let type_name = (*type_tuple).typname.data.as_ptr();
             let type_name_len = CStr::from_ptr(type_name).to_bytes().len();
-            let type_name = pg_server_to_any(type_name, type_name_len as _, PG_UTF8);
+            let type_name = pg_sys::pg_server_to_any(type_name, type_name_len as _, pg_sys::pg_enc_PG_UTF8 as _);
             let type_name = CStr::from_ptr(type_name);
             let type_name = type_name.to_str().unwrap();
 
@@ -248,13 +259,13 @@ impl<'de> Deserialize<'de> for PgTypId {
         );
         let (namespace_len, name_len) = (namespace.to_bytes().len(), name.to_bytes().len());
         unsafe {
-            let namespace = pg_any_to_server(namespace.as_ptr(), namespace_len as _, PG_UTF8);
+            let namespace = pg_sys::pg_any_to_server(namespace.as_ptr(), namespace_len as _, pg_sys::pg_enc_PG_UTF8 as _);
             let namespace = CStr::from_ptr(namespace);
 
-            let name = pg_any_to_server(name.as_ptr(), name_len as _, PG_UTF8);
+            let name = pg_sys::pg_any_to_server(name.as_ptr(), name_len as _, pg_sys::pg_enc_PG_UTF8 as _);
             let name = CStr::from_ptr(name);
 
-            let namespace_id = pg_sys::LookupExplicitNamespace(namespace.as_ptr(), true as _);
+            let namespace_id = pg_sys::LookupExplicitNamespace(namespace.as_ptr(), true);
             if namespace_id == pg_sys::InvalidOid {
                 return Err(D::Error::custom(format!(
                     "invalid namespace {:?}",
@@ -277,7 +288,7 @@ impl<'de> Deserialize<'de> for PgTypId {
                 )));
             }
 
-            return Ok(PgTypId(type_id));
+            Ok(PgTypId(type_id))
         }
     }
 }
@@ -290,6 +301,7 @@ unsafe fn get_struct<T>(tuple: pg_sys::HeapTuple) -> *mut T {
 }
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
 
     use super::{PgTypId, ShortTypeId};

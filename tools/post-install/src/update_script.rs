@@ -3,7 +3,7 @@ use std::io::{BufRead, Write};
 
 use crate::PushLine;
 
-static ALTERABLE_PROPERTIES: [&'static str; 6] = [
+static ALTERABLE_PROPERTIES: [&str; 6] = [
     "RECEIVE",
     "SEND",
     "TYPMOD_IN",
@@ -86,14 +86,14 @@ pub (crate) fn generate_from_install(
             // );
             // ```
             create_line.push('\n');
-            while let Some(line) = lines.next() {
+            for line in &mut lines {
                 create_line.push_line(&line);
-                if line.trim_start().starts_with(")") {
+                if line.trim_start().starts_with(')') {
                     break
                 }
             }
 
-            write_guarded_create_op(&mut upgrade_file, &create_line);            
+            write_guarded_create_op(&mut upgrade_file, &create_line);
         } else {
             panic!("Unhandled CREATE statement");
         }
@@ -101,9 +101,9 @@ pub (crate) fn generate_from_install(
 }
 
 fn find_create_line(
-    mut lines: impl Iterator<Item=String>, mut upgrade_file: impl Write
+    lines: impl Iterator<Item=String>, mut upgrade_file: impl Write
 ) -> Option<String> {
-    while let Some(line) = lines.next() {
+    for line in lines {
         // search for `CREATE TYPE <name>;`
         if line.trim_start().starts_with("CREATE TYPE") || line.trim_start().starts_with("CREATE OPERATOR") {
             return Some(line)
@@ -114,10 +114,9 @@ fn find_create_line(
     None
 }
 
-fn extract_type_name(line: &String) -> String {
+fn extract_type_name(line: &str) -> String {
     let mut name: &str = line.split_ascii_whitespace()
-        .skip(2)
-        .next()
+        .nth(2)
         .expect("no type name");
     if name.ends_with(';') {
         name = &name[..name.len()-1];
@@ -154,11 +153,11 @@ $$;",
 }
 
 fn get_alterable_properties(
-    mut lines: impl Iterator<Item=String>,
+    lines: impl Iterator<Item=String>,
     create_stmt: &mut String,
 ) -> Vec<Option<String>> {
     let mut alters = vec![None; ALTERABLE_PROPERTIES.len()];
-    while let Some(line) = lines.next() {
+    for line in lines {
         create_stmt.push_line(&line);
 
         let mut split = line.split_ascii_whitespace();
@@ -173,7 +172,7 @@ fn get_alterable_properties(
         //     ...
         // );
         // ```
-        if first.starts_with(")") {
+        if first.starts_with(')') {
             break
         }
 
@@ -194,9 +193,9 @@ fn write_guarded_create_end(
     type_name: &str,
     create_stmt: &str,
     alters: &[Option<String>],
-) -> () {
+) {
     let mut alter_statement = String::new();
-    for (i, alter) in alters.into_iter().enumerate() {
+    for (i, alter) in alters.iter().enumerate() {
         use std::fmt::Write;
         let value = match alter {
             None => continue,

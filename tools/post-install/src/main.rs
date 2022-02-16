@@ -33,10 +33,10 @@ fn main() {
 }
 
 fn try_main() -> xshell::Result<()> {
-    let pg_config = env::args().skip(1).next().expect("missing /path/to/pg_config");
+    let pg_config = env::args().nth(1).expect("missing /path/to/pg_config");
     let extension_info =
         if pg_config == "--dir" {
-            let package_dir = env::args().skip(2).next().expect("missing /path/to/package_dir");
+            let package_dir = env::args().nth(2).expect("missing /path/to/package_dir");
             get_extension_info_from_dir(&package_dir)?
         } else {
             get_extension_info_from_pg_config(&pg_config)?
@@ -84,10 +84,10 @@ fn get_extension_info_from_pg_config(pg_config: &str) -> xshell::Result<Extensio
     ));
 
     let current_version = get_current_version(&control_contents);
-    eprintln!("{} {}", "Generating Version", current_version);
+    eprintln!("Generating Version {}", current_version);
 
     let upgradeable_from = get_upgradeable_from(&control_contents);
-    eprintln!("{} {:?}", "Upgradable From", upgradeable_from);
+    eprintln!("Upgradable From {:?}", upgradeable_from);
 
     let extension_info = ExtensionInfo {
         control_file,
@@ -143,16 +143,16 @@ fn get_extension_info_from_dir(root: &str) -> xshell::Result<ExtensionInfo> {
     ));
 
     let current_version = get_current_version(&control_contents);
-    eprintln!("{} {}", "Generating Version", current_version);
+    eprintln!("Generating Version {}", current_version);
 
     let upgradeable_from = get_upgradeable_from(&control_contents);
-    eprintln!("{} {:?}", "Upgradable From", upgradeable_from);
+    eprintln!("Upgradable From {:?}", upgradeable_from);
 
     let extension_info = ExtensionInfo {
         control_file,
         current_version,
         upgradeable_from,
-        bin_dir: bin_dir.into(),
+        bin_dir,
         extension_dir,
     };
     Ok(extension_info)
@@ -267,14 +267,12 @@ fn get_field_val<'a>(contents: &'a str, field: &str) -> &'a str {
 // given a `<field name> = '<field value>'` extract `<field value>`
 fn get_quoted_field(line: &str) -> &str {
     let quoted = line.split('=')
-        .skip(1)
-        .next()
+        .nth(1)
         .unwrap_or_else(|| panic!("cannot find value in line `{}`", line));
 
     quoted.trim_start()
         .split_terminator('\'')
-        .filter(|s| !s.is_empty())
-        .next()
+        .find(|s| !s.is_empty())
         .unwrap_or_else(|| panic!("unquoted value in line `{}`", line))
 }
 

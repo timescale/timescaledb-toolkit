@@ -9,17 +9,9 @@ use flat_serialize_macro::flat_serialize;
 #[allow(non_camel_case_types)]
 pub type tstzrange = *mut pg_sys::varlena;
 
-// hack to allow us to qualify names with "toolkit_experimental"
-// so that pgx generates the correct SQL
-mod toolkit_experimental {
-    pub(crate) use super::*;
-    extension_sql!(r#"
-        CREATE SCHEMA IF NOT EXISTS toolkit_experimental;
-    "#);
-}
-
 // Derived from Postgres' range_deserialize: https://github.com/postgres/postgres/blob/27e1f14563cf982f1f4d71e21ef247866662a052/src/backend/utils/adt/rangetypes.c#L1779
 // but we modify because we only allow specific types of ranges, namely [) inclusive on left and exclusive on right, as this makes a lot of logic simpler, and allows for a standard way to represent a range.
+#[allow(clippy::missing_safety_doc)]
 pub unsafe fn get_range(range: tstzrange) -> Option<I64Range> {
     let range_bytes = get_toasted_bytes(&*range);
     let mut range_bytes = &range_bytes[8..]; // don't care about the Header and Oid
@@ -145,10 +137,12 @@ impl I64RangeWrapper {
 }
 
 // this introduces a timescaledb dependency, but only kind of,
-extension_sql!(r#"
-CREATE OR REPLACE FUNCTION toolkit_experimental.time_bucket_range( bucket_width interval, ts timestamptz)
-RETURNS tstzrange as $$
-SELECT tstzrange(time_bucket(bucket_width, ts), time_bucket(bucket_width, ts + bucket_width), '[)');
-$$
-LANGUAGE SQL IMMUTABLE PARALLEL SAFE;
-"#);
+extension_sql!("\n\
+CREATE OR REPLACE FUNCTION toolkit_experimental.time_bucket_range( bucket_width interval, ts timestamptz)\n\
+RETURNS tstzrange as $$\n\
+SELECT tstzrange(time_bucket(bucket_width, ts), time_bucket(bucket_width, ts + bucket_width), '[)');\n\
+$$\n\
+LANGUAGE SQL IMMUTABLE PARALLEL SAFE;\n\
+",
+name = "time_bucket_range",
+);

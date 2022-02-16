@@ -1,5 +1,5 @@
 
-use std::mem::replace;
+use std::mem::take;
 
 use pgx::*;
 
@@ -13,36 +13,114 @@ use crate::{
     uddsketch::UddSketch,
 };
 
+use self::toolkit_experimental::{
+    PipelineThenStatsAgg,
+    PipelineThenStatsAggData,
+    PipelineThenSum,
+    PipelineThenSumData,
+    PipelineThenAverage,
+    PipelineThenAverageData,
+    PipelineThenNumVals,
+    PipelineThenNumValsData,
+    PipelineThenCounterAgg,
+    PipelineThenCounterAggData,
+    PipelineThenHyperLogLog,
+    PipelineThenHyperLogLogData,
+    PipelineThenPercentileAgg,
+    PipelineThenPercentileAggData,
+};
 
-pg_type! {
-    #[derive(Debug)]
-    struct PipelineThenStatsAgg<'input> {
-        num_elements: u64,
-        elements: [Element<'input>; self.num_elements],
-    }
-}
-
-ron_inout_funcs!(PipelineThenStatsAgg);
-
-// hack to allow us to qualify names with "toolkit_experimental"
-// so that pgx generates the correct SQL
+#[pg_schema]
 pub mod toolkit_experimental {
-    pub(crate) use super::*;
-    pub(crate) use crate::accessors::*;
-    varlena_type!(PipelineThenStatsAgg);
-    varlena_type!(PipelineThenSum);
-    varlena_type!(PipelineThenAverage);
-    varlena_type!(PipelineThenNumVals);
-    varlena_type!(PipelineThenCounterAgg);
-    varlena_type!(PipelineThenHyperLogLog);
-    varlena_type!(PipelineThenPercentileAgg);
+    use super::*;
+    pub(crate) use crate::time_series::Timevector;
+    pub(crate) use crate::time_series::pipeline::UnstableTimevectorPipeline;
+    pub(crate) use crate::accessors::toolkit_experimental::*;
+
+    pg_type! {
+        #[derive(Debug)]
+        struct PipelineThenStatsAgg<'input> {
+            num_elements: u64,
+            elements: [Element<'input>; self.num_elements],
+        }
+    }
+
+    ron_inout_funcs!(PipelineThenStatsAgg);
+
+
+    pg_type! {
+        #[derive(Debug)]
+        struct PipelineThenSum<'input> {
+            num_elements: u64,
+            elements: [Element<'input>; self.num_elements],
+        }
+    }
+
+    ron_inout_funcs!(PipelineThenSum);
+
+
+    pg_type! {
+        #[derive(Debug)]
+        struct PipelineThenAverage<'input> {
+            num_elements: u64,
+            elements: [Element<'input>; self.num_elements],
+        }
+    }
+
+    ron_inout_funcs!(PipelineThenAverage);
+
+
+    pg_type! {
+        #[derive(Debug)]
+        struct PipelineThenNumVals<'input> {
+            num_elements: u64,
+            elements: [Element<'input>; self.num_elements],
+        }
+    }
+
+    ron_inout_funcs!(PipelineThenNumVals);
+
+
+
+    pg_type! {
+        #[derive(Debug)]
+        struct PipelineThenCounterAgg<'input> {
+            num_elements: u64,
+            elements: [Element<'input>; self.num_elements],
+        }
+    }
+
+    ron_inout_funcs!(PipelineThenCounterAgg);
+
+
+    pg_type! {
+        #[derive(Debug)]
+        struct PipelineThenHyperLogLog<'input> {
+            hll_size: u64,
+            num_elements: u64,
+            elements: [Element<'input>; self.num_elements],
+        }
+    }
+
+    ron_inout_funcs!(PipelineThenHyperLogLog);
+
+
+    pg_type! {
+        #[derive(Debug)]
+        struct PipelineThenPercentileAgg<'input> {
+            num_elements: u64,
+            elements: [Element<'input>; self.num_elements],
+        }
+    }
+
+    ron_inout_funcs!(PipelineThenPercentileAgg);
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline_then_stats_agg<'s, 'p>(
-    mut timevector: toolkit_experimental::Timevector<'s>,
-    pipeline: toolkit_experimental::PipelineThenStatsAgg<'p>,
+pub fn arrow_run_pipeline_then_stats_agg(
+    mut timevector: toolkit_experimental::Timevector,
+    pipeline: toolkit_experimental::PipelineThenStatsAgg,
 ) -> StatsSummary1D<'static> {
     timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
     let mut stats = InternalStatsSummary1D::new();
@@ -67,7 +145,7 @@ pub fn finalize_with_stats_agg<'e>(
         }}
     }
 
-    let mut elements = replace(pipeline.elements.as_owned(), vec![]);
+    let mut elements = take(pipeline.elements.as_owned());
     elements.extend(then_stats_agg.elements.iter());
     build! {
         PipelineThenStatsAgg {
@@ -83,7 +161,7 @@ pub fn finalize_with_stats_agg<'e>(
     name="stats_agg",
     schema="toolkit_experimental"
 )]
-pub fn pipeline_stats_agg<'e>() -> toolkit_experimental::PipelineThenStatsAgg<'e> {
+pub fn pipeline_stats_agg() -> toolkit_experimental::PipelineThenStatsAgg<'static> {
     build! {
         PipelineThenStatsAgg {
             num_elements: 0,
@@ -92,7 +170,6 @@ pub fn pipeline_stats_agg<'e>() -> toolkit_experimental::PipelineThenStatsAgg<'e
     }
 }
 
-type Internal = usize;
 #[pg_extern(
     immutable,
     parallel_safe,
@@ -112,20 +189,10 @@ pub unsafe fn pipeline_stats_agg_support(input: Internal)
 //       need to ensure this works with out unstable warning
 extension_sql!(r#"
 ALTER FUNCTION "arrow_run_pipeline_then_stats_agg" SUPPORT toolkit_experimental.pipeline_stats_agg_support;
-"#);
-
-//
-// SUM
-//
-pg_type! {
-    #[derive(Debug)]
-    struct PipelineThenSum<'input> {
-        num_elements: u64,
-        elements: [Element<'input>; self.num_elements],
-    }
-}
-
-ron_inout_funcs!(PipelineThenSum);
+"#,
+name="pipeline_stats_agg_support",
+requires= [pipeline_stats_agg_support],
+);
 
 #[pg_extern(
     immutable,
@@ -133,9 +200,9 @@ ron_inout_funcs!(PipelineThenSum);
     name="sum_cast",
     schema="toolkit_experimental"
 )]
-pub fn sum_pipeline_element<'p, 'e>(
-    accessor: toolkit_experimental::AccessorSum<'p>,
-) -> toolkit_experimental::PipelineThenSum<'e> {
+pub fn sum_pipeline_element(
+    accessor: toolkit_experimental::AccessorSum,
+) -> toolkit_experimental::PipelineThenSum {
     let _ = accessor;
     build ! {
         PipelineThenSum {
@@ -149,13 +216,16 @@ extension_sql!(r#"
     CREATE CAST (toolkit_experimental.AccessorSum AS toolkit_experimental.PipelineThenSum)
         WITH FUNCTION toolkit_experimental.sum_cast
         AS IMPLICIT;
-"#);
+"#,
+name="sum_pipe_cast",
+requires= [AccessorSum, PipelineThenSum, sum_pipeline_element],
+);
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_pipeline_then_sum<'s, 'p>(
-    timevector: toolkit_experimental::Timevector<'s>,
-    pipeline: toolkit_experimental::PipelineThenSum<'p>,
+pub fn arrow_pipeline_then_sum(
+    timevector: toolkit_experimental::Timevector,
+    pipeline: toolkit_experimental::PipelineThenSum,
 ) -> Option<f64> {
     let pipeline = pipeline.0;
     let pipeline = build! {
@@ -184,7 +254,7 @@ pub fn finalize_with_sum<'e>(
         }}
     }
 
-    let mut elements = replace(pipeline.elements.as_owned(), vec![]);
+    let mut elements = take(pipeline.elements.as_owned());
     elements.extend(then_stats_agg.elements.iter());
     build! {
         PipelineThenSum {
@@ -210,31 +280,22 @@ pub unsafe fn pipeline_sum_support(input: Internal)
 
 extension_sql!(r#"
 ALTER FUNCTION "arrow_pipeline_then_sum" SUPPORT toolkit_experimental.pipeline_sum_support;
-"#);
+"#,
+name="arrow_then_sum_support",
+requires= [pipeline_sum_support],
+);
 
 
-//
-// AVERAGE
-//
-pg_type! {
-    #[derive(Debug)]
-    struct PipelineThenAverage<'input> {
-        num_elements: u64,
-        elements: [Element<'input>; self.num_elements],
-    }
-}
 
-ron_inout_funcs!(PipelineThenAverage);
 
 #[pg_extern(
     immutable,
     parallel_safe,
-    name="average_cast",
     schema="toolkit_experimental"
 )]
-pub fn average_pipeline_element<'p, 'e>(
-    accessor: toolkit_experimental::AccessorAverage<'p>,
-) -> toolkit_experimental::PipelineThenAverage<'e> {
+pub fn average_pipeline_element(
+    accessor: toolkit_experimental::AccessorAverage,
+) -> toolkit_experimental::PipelineThenAverage {
     let _ = accessor;
     build ! {
         PipelineThenAverage {
@@ -246,15 +307,18 @@ pub fn average_pipeline_element<'p, 'e>(
 
 extension_sql!(r#"
     CREATE CAST (toolkit_experimental.AccessorAverage AS toolkit_experimental.PipelineThenAverage)
-        WITH FUNCTION toolkit_experimental.average_cast
+        WITH FUNCTION toolkit_experimental.average_pipeline_element
         AS IMPLICIT;
-"#);
+"#,
+name="avg_pipe_cast",
+requires= [AccessorAverage, PipelineThenAverage, average_pipeline_element],
+);
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_pipeline_then_average<'s, 'p>(
-    timevector: toolkit_experimental::Timevector<'s>,
-    pipeline: toolkit_experimental::PipelineThenAverage<'p>,
+pub fn arrow_pipeline_then_average(
+    timevector: toolkit_experimental::Timevector,
+    pipeline: toolkit_experimental::PipelineThenAverage,
 ) -> Option<f64> {
     let pipeline = pipeline.0;
     let pipeline = build! {
@@ -283,7 +347,7 @@ pub fn finalize_with_average<'e>(
         }}
     }
 
-    let mut elements = replace(pipeline.elements.as_owned(), vec![]);
+    let mut elements = take(pipeline.elements.as_owned());
     elements.extend(then_stats_agg.elements.iter());
     build! {
         PipelineThenAverage {
@@ -309,21 +373,12 @@ pub unsafe fn pipeline_average_support(input: Internal)
 
 extension_sql!(r#"
 ALTER FUNCTION "arrow_pipeline_then_average" SUPPORT toolkit_experimental.pipeline_average_support;
-"#);
+"#,
+name="pipe_avg_support",
+requires= [pipeline_average_support],
+);
 
 
-//
-// NUM_VALS
-//
-pg_type! {
-    #[derive(Debug)]
-    struct PipelineThenNumVals<'input> {
-        num_elements: u64,
-        elements: [Element<'input>; self.num_elements],
-    }
-}
-
-ron_inout_funcs!(PipelineThenNumVals);
 
 #[pg_extern(
     immutable,
@@ -331,9 +386,9 @@ ron_inout_funcs!(PipelineThenNumVals);
     name="num_vals_cast",
     schema="toolkit_experimental"
 )]
-pub fn num_vals_pipeline_element<'p, 'e>(
-    accessor: toolkit_experimental::AccessorNumVals<'p>,
-) -> toolkit_experimental::PipelineThenNumVals<'e> {
+pub fn num_vals_pipeline_element(
+    accessor: toolkit_experimental::AccessorNumVals,
+) -> toolkit_experimental::PipelineThenNumVals {
     let _ = accessor;
     build ! {
         PipelineThenNumVals {
@@ -347,13 +402,16 @@ extension_sql!(r#"
     CREATE CAST (toolkit_experimental.AccessorNumVals AS toolkit_experimental.PipelineThenNumVals)
         WITH FUNCTION toolkit_experimental.num_vals_cast
         AS IMPLICIT;
-"#);
+"#,
+name="num_vals_pipe_cast",
+requires= [AccessorNumVals, PipelineThenNumVals, num_vals_pipeline_element],
+);
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_pipeline_then_num_vals<'s, 'p>(
-    timevector: toolkit_experimental::Timevector<'s>,
-    pipeline: toolkit_experimental::PipelineThenNumVals<'p>,
+pub fn arrow_pipeline_then_num_vals(
+    timevector: toolkit_experimental::Timevector,
+    pipeline: toolkit_experimental::PipelineThenNumVals,
 ) -> i64 {
     run_pipeline_elements(timevector, pipeline.elements.iter())
         .num_vals() as _
@@ -375,7 +433,7 @@ pub fn finalize_with_num_vals<'e>(
         }}
     }
 
-    let mut elements = replace(pipeline.elements.as_owned(), vec![]);
+    let mut elements = take(pipeline.elements.as_owned());
     elements.extend(then_stats_agg.elements.iter());
     build! {
         PipelineThenNumVals {
@@ -401,23 +459,17 @@ pub unsafe fn pipeline_num_vals_support(input: Internal)
 
 extension_sql!(r#"
 ALTER FUNCTION "arrow_pipeline_then_num_vals" SUPPORT toolkit_experimental.pipeline_num_vals_support;
-"#);
+"#,
+name="pipe_then_num_vals",
+requires= [pipeline_num_vals_support],
+);
 
-pg_type! {
-    #[derive(Debug)]
-    struct PipelineThenCounterAgg<'input> {
-        num_elements: u64,
-        elements: [Element<'input>; self.num_elements],
-    }
-}
-
-ron_inout_funcs!(PipelineThenCounterAgg);
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline_then_counter_agg<'s, 'p>(
-    mut timevector: toolkit_experimental::Timevector<'s>,
-    pipeline: toolkit_experimental::PipelineThenCounterAgg<'p>,
+pub fn arrow_run_pipeline_then_counter_agg(
+    mut timevector: toolkit_experimental::Timevector,
+    pipeline: toolkit_experimental::PipelineThenCounterAgg,
 ) -> Option<CounterSummary<'static>> {
     timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
     if timevector.num_points() == 0 {
@@ -446,7 +498,7 @@ pub fn finalize_with_counter_agg<'e>(
         }}
     }
 
-    let mut elements = replace(pipeline.elements.as_owned(), vec![]);
+    let mut elements = take(pipeline.elements.as_owned());
     elements.extend(then_counter_agg.elements.iter());
     build! {
         PipelineThenCounterAgg {
@@ -462,7 +514,7 @@ pub fn finalize_with_counter_agg<'e>(
     name="counter_agg",
     schema="toolkit_experimental"
 )]
-pub fn pipeline_counter_agg<'e>() -> toolkit_experimental::PipelineThenCounterAgg<'e> {
+pub fn pipeline_counter_agg() -> toolkit_experimental::PipelineThenCounterAgg<'static> {
     build! {
         PipelineThenCounterAgg {
             num_elements: 0,
@@ -490,24 +542,17 @@ pub unsafe fn pipeline_counter_agg_support(input: Internal)
 //       need to ensure this works with out unstable warning
 extension_sql!(r#"
 ALTER FUNCTION "arrow_run_pipeline_then_counter_agg" SUPPORT toolkit_experimental.pipeline_counter_agg_support;
-"#);
+"#,
+name="pipe_then_counter_agg",
+requires= [pipeline_counter_agg_support],
+);
 
-pg_type! {
-    #[derive(Debug)]
-    struct PipelineThenHyperLogLog<'input> {
-        hll_size: u64,
-        num_elements: u64,
-        elements: [Element<'input>; self.num_elements],
-    }
-}
-
-ron_inout_funcs!(PipelineThenHyperLogLog);
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline_then_hyperloglog<'s, 'p>(
-    mut timevector: toolkit_experimental::Timevector<'s>,
-    pipeline: toolkit_experimental::PipelineThenHyperLogLog<'p>,
+pub fn arrow_run_pipeline_then_hyperloglog(
+    mut timevector: toolkit_experimental::Timevector,
+    pipeline: toolkit_experimental::PipelineThenHyperLogLog,
 ) -> HyperLogLog<'static> {
     timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
     HyperLogLog::build_from(pipeline.hll_size as i32,
@@ -533,7 +578,7 @@ pub fn finalize_with_hyperloglog<'e>(
         }}
     }
 
-    let mut elements = replace(pipeline.elements.as_owned(), vec![]);
+    let mut elements = take(pipeline.elements.as_owned());
     elements.extend(then_hyperloglog.elements.iter());
     build! {
         PipelineThenHyperLogLog {
@@ -550,7 +595,7 @@ pub fn finalize_with_hyperloglog<'e>(
     name="hyperloglog",
     schema="toolkit_experimental"
 )]
-pub fn pipeline_hyperloglog<'e>(size: i32) -> toolkit_experimental::PipelineThenHyperLogLog<'e> {
+pub fn pipeline_hyperloglog(size: i32) -> toolkit_experimental::PipelineThenHyperLogLog<'static> {
     build! {
         PipelineThenHyperLogLog {
             hll_size: size as u64,
@@ -579,23 +624,18 @@ pub unsafe fn pipeline_hyperloglog_support(input: Internal)
 //       need to ensure this works with out unstable warning
 extension_sql!(r#"
 ALTER FUNCTION "arrow_run_pipeline_then_hyperloglog" SUPPORT toolkit_experimental.pipeline_hyperloglog_support;
-"#);
+"#,
+name="pipe_then_hll",
+requires= [pipeline_hyperloglog_support],
+);
 
-pg_type! {
-    #[derive(Debug)]
-    struct PipelineThenPercentileAgg<'input> {
-        num_elements: u64,
-        elements: [Element<'input>; self.num_elements],
-    }
-}
 
-ron_inout_funcs!(PipelineThenPercentileAgg);
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline_then_percentile_agg<'s, 'p>(
-    mut timevector: toolkit_experimental::Timevector<'s>,
-    pipeline: toolkit_experimental::PipelineThenPercentileAgg<'p>,
+pub fn arrow_run_pipeline_then_percentile_agg(
+    mut timevector: toolkit_experimental::Timevector,
+    pipeline: toolkit_experimental::PipelineThenPercentileAgg,
 ) -> UddSketch<'static> {
     timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
     UddSketch::from_iter(timevector.into_iter().map(|p| p.val))
@@ -616,7 +656,7 @@ pub fn finalize_with_percentile_agg<'e>(
         }}
     }
 
-    let mut elements = replace(pipeline.elements.as_owned(), vec![]);
+    let mut elements = take(pipeline.elements.as_owned());
     elements.extend(then_hyperloglog.elements.iter());
     build! {
         PipelineThenPercentileAgg {
@@ -632,7 +672,7 @@ pub fn finalize_with_percentile_agg<'e>(
     name="percentile_agg",
     schema="toolkit_experimental"
 )]
-pub fn pipeline_percentile_agg<'e>() -> toolkit_experimental::PipelineThenPercentileAgg<'e> {
+pub fn pipeline_percentile_agg() -> toolkit_experimental::PipelineThenPercentileAgg<'static> {
     build! {
         PipelineThenPercentileAgg {
             num_elements: 0,
@@ -660,12 +700,17 @@ pub unsafe fn pipeline_percentile_agg_support(input: Internal)
 //       need to ensure this works with out unstable warning
 extension_sql!(r#"
 ALTER FUNCTION "arrow_run_pipeline_then_percentile_agg" SUPPORT toolkit_experimental.pipeline_percentile_agg_support;
-"#);
+"#,
+name="pipe_then_percentile",
+requires= [pipeline_percentile_agg_support],
+);
 
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
+    use pgx_macros::pg_test;
 
     #[pg_test]
     fn test_stats_agg_finalizer() {
@@ -713,8 +758,8 @@ mod tests {
                 -> stats_agg() -> average();",
                 None,
                 None
-            ).skip(1)
-                .next().unwrap()
+            ).nth(1)
+                .unwrap()
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: (\
@@ -776,8 +821,8 @@ mod tests {
                 -> sum();",
                 None,
                 None
-            ).skip(1)
-                .next().unwrap()
+            ).nth(1)
+                .unwrap()
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: \
@@ -838,8 +883,8 @@ mod tests {
                 -> average();",
                 None,
                 None
-            ).skip(1)
-                .next().unwrap()
+            ).nth(1)
+                .unwrap()
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: \
@@ -900,8 +945,8 @@ mod tests {
                 -> num_vals();",
                 None,
                 None
-            ).skip(1)
-                .next().unwrap()
+            ).nth(1)
+                .unwrap()
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: \
@@ -950,7 +995,7 @@ mod tests {
             )
                 .first()
                 .get_one::<f64>().unwrap();
-            assert_eq!(val, 67.5);
+            assert!((val - 67.5).abs() < f64::EPSILON);
 
 
             let output = client.select(
@@ -960,8 +1005,8 @@ mod tests {
                 -> counter_agg();",
                 None,
                 None
-            ).skip(1)
-                .next().unwrap()
+            ).nth(1)
+                .unwrap()
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: \
@@ -1024,8 +1069,8 @@ mod tests {
                 -> hyperloglog(100);",
                 None,
                 None
-            ).skip(1)
-                .next().unwrap()
+            ).nth(1)
+                .unwrap()
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: \
@@ -1103,8 +1148,8 @@ mod tests {
                 -> percentile_agg();",
                 None,
                 None
-            ).skip(1)
-                .next().unwrap()
+            ).nth(1)
+                .unwrap()
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
             assert_eq!(output.trim(), "Output: \

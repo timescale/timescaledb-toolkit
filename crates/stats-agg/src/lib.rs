@@ -52,6 +52,7 @@ impl M3 {
         old_sx3 - (delta.powi(3) * (n - 1.) * (n - 2.) / n.powi(2) - (3. * delta * new_sxx / n))
     }
     // Combine two sets a and b and returns the sx3 for the combined set.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn combine(na: f64, nb: f64, sxa: f64, sxb: f64, sxxa: f64, sxxb:f64, sx3a: f64, sx3b: f64) -> f64 {
         let nx = na + nb;
         let delta = sxb / nb - sxa / na;
@@ -59,6 +60,7 @@ impl M3 {
     }
     // This removes set b from a combined set, returning the sx3 of the remaining set a.
     // Note that na, sxa, sxxa are all the values computed on the remaining set.  old_sx3 is the sx3 of the combined set.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn remove_combined(new_na: f64, nb: f64, new_sxa: f64, sxb: f64, new_sxxa: f64, sxxb:f64, old_sx3: f64, sx3b: f64) -> f64 {
         let nx = new_na + nb;
         let delta = sxb / nb - new_sxa / new_na;
@@ -85,6 +87,7 @@ impl M4 {
         old_sx4 - (delta.powi(4) * (n - 1.) * (n.powi(2) - 3. * n + 3.) / n.powi(3) + 6. * delta.powi(2) * new_sxx / n.powi(2) - 4. * delta * new_sx3 / n)
     }
     // Combine two sets a and b and returns the sx4 for the combined set.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn combine(na: f64, nb: f64, sxa: f64, sxb: f64, sxxa: f64, sxxb:f64, sx3a: f64, sx3b: f64, sx4a: f64, sx4b: f64) -> f64 {
         let nx = na + nb;
         let delta = sxb / nb - sxa / na;
@@ -92,6 +95,7 @@ impl M4 {
     }
     // This removes set b from a combined set, returning the sx4 of the remaining set a.
     // Note that na, sxa, sxxa, sx3a are all the values computed on the remaining set.  old_sx4 is the sx4 of the combined set.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn remove_combined(new_na: f64, nb: f64, new_sxa: f64, sxb: f64, new_sxxa: f64, sxxb:f64, new_sx3a: f64, sx3b: f64, old_sx4: f64, sx4b: f64) -> f64 {
         let nx = new_na + nb;
         let delta = sxb / nb - new_sxa / new_na;

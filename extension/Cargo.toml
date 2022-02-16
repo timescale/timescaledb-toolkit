@@ -1,10 +1,10 @@
 [package]
 name = "timescaledb_toolkit"
 version = "0.3.0"
-edition = "2018"
+edition = "2021"
 
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [features]
 default = []
@@ -12,11 +12,12 @@ pg10 = ["pgx/pg10", "pgx-tests/pg10"]
 pg11 = ["pgx/pg11", "pgx-tests/pg11"]
 pg12 = ["pgx/pg12", "pgx-tests/pg12"]
 pg13 = ["pgx/pg13", "pgx-tests/pg13"]
+pg14 = ["pgx/pg14", "pgx-tests/pg14"]
 pg_test = ["approx"]
 
 [dependencies]
-pgx = {git="https://github.com/JLockerman/pgx.git", branch="timescale2"}
-pgx-macros = {git="https://github.com/JLockerman/pgx.git", branch="timescale2"}
+pgx = "0.2.4"
+pgx-macros = "0.2.4"
 encodings = {path="../crates/encodings"}
 flat_serialize = {path="../crates/flat_serialize/flat_serialize"}
 flat_serialize_macro = {path="../crates/flat_serialize/flat_serialize_macro"}
@@ -28,7 +29,8 @@ stats_agg = {path="../crates/stats-agg"}
 time_weighted_average = {path="../crates/time-weighted-average"}
 time_series = {path="../crates/time-series"}
 asap = {path="../crates/asap"}
-spacesaving = {path="../crates/spacesaving"}
+
+aggregate_builder = {path="../crates/aggregate_builder"}
 
 approx = {version = "0.4.0", optional = true}
 bincode = "1.3.1"
@@ -44,5 +46,5 @@ pest = "2.1"
 pest_derive = "2.1"
 
 [dev-dependencies]
-pgx-tests = {git="https://github.com/JLockerman/pgx.git", branch="timescale2"}
+pgx-tests = "0.2.4"
 approx = "0.4.0"

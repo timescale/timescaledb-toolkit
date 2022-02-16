@@ -1,10 +1,9 @@
-
-use std::{slice};
+#![allow(clippy::identity_op)] // clippy gets confused by pg_type! enums
 
 use pgx::*;
 
 use crate::{
-    aggregate_utils::in_aggregate_context, pg_type, build, flatten, palloc::Internal,
+    aggregate_utils::in_aggregate_context, pg_type, build, flatten, palloc::{Internal, InternalAsValue, Inner, ToInternal},
 };
 
 use time_series::{
@@ -18,72 +17,77 @@ use flat_serialize::*;
 mod pipeline;
 mod iter;
 
-#[allow(non_camel_case_types)]
-type bytea = pg_sys::Datum;
+use crate::raw::bytea;
 
-pg_type! {
-    #[derive(Debug)]
-    struct Timevector<'input> {
-        series: enum SeriesType<'input> {
-            type_id: u64,
-            SortedSeries: 1 {
-                num_points: u64,  // required to be aligned
-                points: [TSPoint; self.num_points],
-            },
-            NormalSeries: 2 {
-                start_ts: i64,
-                step_interval: i64,
-                num_vals: u64,  // required to be aligned
-                values: [f64; self.num_vals],
-            },
-            // ExplicitSeries is assumed to be unordered
-            ExplicitSeries: 3 {
-                num_points: u64,  // required to be aligned
-                points: [TSPoint; self.num_points],
-            },
-            GappyNormalSeries: 4 {
-                start_ts: i64,
-                step_interval: i64,
-                num_vals: u64,  // required to be aligned
-                count: u64,
-                values: [f64; self.num_vals],
-                present: [u64; (self.count + 63) / 64]
-            },
-        },
-    }
-}
+pub use toolkit_experimental::{Timevector, TimevectorData, SeriesType};
 
-impl<'input> InOutFuncs for Timevector<'input> {
-    fn output(&self, buffer: &mut StringInfo) {
-        use crate::serialization::{EncodedStr::*, str_to_db_encoding};
-
-        // TODO remove extra allocation
-        // FIXME print timestamps as times, not integers
-        let serializer: Vec<_> = self.iter().collect();
-
-        // Extra & in the to_string call due to ron not supporting ?Sized, shouldn't affect output
-        let stringified = ron::to_string(&&*serializer).unwrap();
-        match str_to_db_encoding(&stringified) {
-            Utf8(s) => buffer.push_str(s),
-            Other(s) => buffer.push_bytes(s.to_bytes()),
+#[pg_schema]
+pub mod toolkit_experimental {
+    use super::*;
+    pg_type! {
+        #[derive(Debug)]
+        struct Timevector<'input> {
+            series: enum SeriesType<'input> {
+                type_id: u64,
+                Sorted: 1 {
+                    num_points: u64,  // required to be aligned
+                    points: [TSPoint; self.num_points],
+                },
+                Normal: 2 {
+                    start_ts: i64,
+                    step_interval: i64,
+                    num_vals: u64,  // required to be aligned
+                    values: [f64; self.num_vals],
+                },
+                // Explicit is assumed to be unordered
+                Explicit: 3 {
+                    num_points: u64,  // required to be aligned
+                    points: [TSPoint; self.num_points],
+                },
+                GappyNormal: 4 {
+                    start_ts: i64,
+                    step_interval: i64,
+                    num_vals: u64,  // required to be aligned
+                    count: u64,
+                    values: [f64; self.num_vals],
+                    present: [u64; (self.count + 63) / 64]
+                },
+            },
         }
     }
 
-    fn input(input: &std::ffi::CStr) -> Self
-    where
-        Self: Sized,
-    {
-        use crate::serialization::str_from_db_encoding;
+    impl<'input> InOutFuncs for Timevector<'input> {
+        fn output(&self, buffer: &mut StringInfo) {
+            use crate::serialization::{EncodedStr::*, str_to_db_encoding};
 
-        // TODO reduce allocation?
-        let input = str_from_db_encoding(input);
-        let series: Vec<TSPoint> = ron::from_str(input).unwrap();
-        unsafe {
-            flatten! {
-                Timevector {
-                    series: SeriesType::ExplicitSeries {
-                        num_points: series.len() as u64,
-                        points: series.into(),
+            // TODO remove extra allocation
+            // FIXME print timestamps as times, not integers
+            let serializer: Vec<_> = self.iter().collect();
+
+            // Extra & in the to_string call due to ron not supporting ?Sized, shouldn't affect output
+            let stringified = ron::to_string(&&*serializer).unwrap();
+            match str_to_db_encoding(&stringified) {
+                Utf8(s) => buffer.push_str(s),
+                Other(s) => buffer.push_bytes(s.to_bytes()),
+            }
+        }
+
+        fn input(input: &std::ffi::CStr) -> Self
+        where
+            Self: Sized,
+        {
+            use crate::serialization::str_from_db_encoding;
+
+            // TODO reduce allocation?
+            let input = str_from_db_encoding(input);
+            let series: Vec<TSPoint> = ron::from_str(input).unwrap();
+            unsafe {
+                flatten! {
+                    Timevector {
+                        series: SeriesType::Explicit {
+                            num_points: series.len() as u64,
+                            points: series.into(),
+                        }
                     }
                 }
             }
@@ -91,23 +95,16 @@ impl<'input> InOutFuncs for Timevector<'input> {
     }
 }
 
-// hack to allow us to qualify names with "toolkit_experimental"
-// so that pgx generates the correct SQL
-pub mod toolkit_experimental {
-    pub(crate) use super::*;
-    varlena_type!(Timevector);
-}
-
 impl<'input> Timevector<'input> {
     pub fn num_points(&self) -> usize {
         match &self.series {
-            SeriesType::SortedSeries{points, ..} =>
+            SeriesType::Sorted{points, ..} =>
                 points.len(),
-            SeriesType::ExplicitSeries{points, ..} =>
+            SeriesType::Explicit{points, ..} =>
                 points.len(),
-            SeriesType::NormalSeries{values, ..} =>
+            SeriesType::Normal{values, ..} =>
                 values.len(),
-            SeriesType::GappyNormalSeries{values, ..} =>
+            SeriesType::GappyNormal{values, ..} =>
                 values.len(),
         }
     }
@@ -120,26 +117,26 @@ impl<'input> Timevector<'input> {
         }
 
         match &self.series {
-            SeriesType::SortedSeries{points, ..} =>
+            SeriesType::Sorted{points, ..} =>
                 Some(points.as_slice()[index]),
-            SeriesType::ExplicitSeries{points, ..} =>
+            SeriesType::Explicit{points, ..} =>
                 Some(points.as_slice()[index]),
-            SeriesType::NormalSeries{start_ts, step_interval, values, ..} =>
+            SeriesType::Normal{start_ts, step_interval, values, ..} =>
                 Some(TSPoint{ts: start_ts + index as i64 * step_interval, val: values.as_slice()[index]}),
-            SeriesType::GappyNormalSeries{..} =>
+            SeriesType::GappyNormal{..} =>
                 panic!("Can not efficient index into the middle of a normalized timevector with gaps"),
         }
     }
 
     pub fn is_sorted(&self) -> bool {
         match self.series {
-            SeriesType::SortedSeries{..} =>
+            SeriesType::Sorted{..} =>
                 true,
-            SeriesType::ExplicitSeries{..} =>
-                false, // a sorted ExplicitSeries is written out as a SortedSeries
-            SeriesType::NormalSeries{..} =>
+            SeriesType::Explicit{..} =>
+                false, // a sorted Explicit is written out as a SortedSeries
+            SeriesType::Normal{..} =>
                 true,
-            SeriesType::GappyNormalSeries{..} =>
+            SeriesType::GappyNormal{..} =>
                 true,
         }
     }
@@ -152,36 +149,41 @@ impl<'input> Timevector<'input> {
 impl<'a> Timevector<'a> {
     pub fn iter(&self) -> Iter<'_> {
         match &self.series {
-            SeriesType::SortedSeries{points, ..} =>
+            SeriesType::Sorted{points, ..} =>
                 Iter::Slice{iter: points.iter()},
-            SeriesType::ExplicitSeries{points, ..} =>
+            SeriesType::Explicit{points, ..} =>
                 Iter::Slice{iter: points.iter()},
-            SeriesType::NormalSeries{start_ts, step_interval, values, ..} =>
+            SeriesType::Normal{start_ts, step_interval, values, ..} =>
                 Iter::Normal{idx: 0, start: *start_ts, step: *step_interval, vals: values.iter()},
-            SeriesType::GappyNormalSeries{count, start_ts, step_interval, present, values, ..} =>
+            SeriesType::GappyNormal{count, start_ts, step_interval, present, values, ..} =>
                 Iter::GappyNormal{idx: 0, count: *count, start: *start_ts, step: *step_interval, present: present.as_slice(), vals: values.iter()},
-        }
-    }
-
-    pub fn into_iter(self) -> Iter<'a> {
-        match self.0.series {
-            SeriesType::SortedSeries{points, ..} =>
-                Iter::Slice{iter: points.into_iter()},
-            SeriesType::ExplicitSeries{points, ..} =>
-                Iter::Slice{iter: points.into_iter()},
-            SeriesType::NormalSeries{start_ts, step_interval, values, ..} =>
-                Iter::Normal{idx: 0, start: start_ts, step: step_interval, vals: values.into_iter()},
-            SeriesType::GappyNormalSeries{count, start_ts, step_interval, present, values, ..} =>
-                Iter::GappyNormal{idx: 0, count: count, start: start_ts, step: step_interval, present: present.slice(), vals: values.into_iter()},
         }
     }
 
     pub fn num_vals(&self) -> usize {
         match &self.series {
-            SeriesType::SortedSeries { num_points, .. } => *num_points as _,
-            SeriesType::NormalSeries { num_vals, .. } => *num_vals as _,
-            SeriesType::ExplicitSeries { num_points, ..} => *num_points as _,
-            SeriesType::GappyNormalSeries { num_vals, .. } => *num_vals as _,
+            SeriesType::Sorted { num_points, .. } => *num_points as _,
+            SeriesType::Normal { num_vals, .. } => *num_vals as _,
+            SeriesType::Explicit { num_points, ..} => *num_points as _,
+            SeriesType::GappyNormal { num_vals, .. } => *num_vals as _,
+        }
+    }
+}
+
+impl<'a> IntoIterator for Timevector<'a> {
+    type Item = TSPoint;
+    type IntoIter = Iter<'a>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        match self.0.series {
+            SeriesType::Sorted{points, ..} =>
+                Iter::Slice{iter: points.into_iter()},
+            SeriesType::Explicit{points, ..} =>
+                Iter::Slice{iter: points.into_iter()},
+            SeriesType::Normal{start_ts, step_interval, values, ..} =>
+                Iter::Normal{idx: 0, start: start_ts, step: step_interval, vals: values.into_iter()},
+            SeriesType::GappyNormal{count, start_ts, step_interval, present, values, ..} =>
+                Iter::GappyNormal{idx: 0, count, start: start_ts, step: step_interval, present: present.slice(), vals: values.into_iter()},
         }
     }
 }
@@ -193,14 +195,15 @@ pub static TIMEVECTOR_OID: once_cell::sync::Lazy<pg_sys::Oid> = once_cell::sync:
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn unnest(
     series: toolkit_experimental::Timevector<'_>,
-) -> impl std::iter::Iterator<Item = (name!(time,pg_sys::TimestampTz),name!(value,f64))> + '_ {
-    series.into_iter().map(|points| (points.ts, points.val))
+) -> impl std::iter::Iterator<Item = (name!(time,crate::raw::TimestampTz),name!(value,f64))> + '_ {
+    series.into_iter().map(|points| (points.ts.into(), points.val))
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn timevector_serialize(
-    state: Internal<Timevector<'_>>,
+    state: Internal,
 ) -> bytea {
+    let state: &Timevector = unsafe { state.get().unwrap() };
     let series = &state.series;
     crate::do_serialize!(series)
 }
@@ -208,33 +211,44 @@ pub fn timevector_serialize(
 #[pg_extern(schema = "toolkit_experimental",strict, immutable, parallel_safe)]
 pub fn timevector_deserialize(
     bytes: bytea,
-    _internal: Option<Internal<()>>,
-) -> Internal<Timevector<'static>> {
+    _internal: Internal,
+) -> Internal {
     let data: Timevector<'static> = crate::do_deserialize!(bytes, TimevectorData);
-    data.into()
+    Inner::from(data).internal()
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn timevector_trans(
-    state: Option<Internal<Timevector<'_>>>,
-    time: Option<pg_sys::TimestampTz>,
+    state: Internal,
+    time: Option<crate::raw::TimestampTz>,
     value: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<Timevector<'_>>> {
+) -> Internal {
+    unsafe {
+        timevector_trans_inner(state.to_inner(), time, value, fcinfo).internal()
+    }
+}
+
+pub fn timevector_trans_inner(
+        state: Option<Inner<Timevector<'_>>>,
+        time: Option<crate::raw::TimestampTz>,
+        value: Option<f64>,
+        fcinfo: pg_sys::FunctionCallInfo,
+    ) -> Option<Inner<Timevector<'_>>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
-            let time = match time {
+            let time: pg_sys::TimestampTz = match time {
                 None => return state,
-                Some(time) => time,
+                Some(time) => time.into(),
             };
             let value = match value {
                 None => return state,   // Should we support NULL values?
                 Some(value) => value,
             };
             let mut state = match state {
-                None => Internal::from(build!{
+                None => Inner::from(build!{
                     Timevector {
-                        series: SeriesType::SortedSeries{
+                        series: SeriesType::Sorted{
                             num_points: 0,
                             points: vec![].into(),
                         }
@@ -243,11 +257,11 @@ pub fn timevector_trans(
                 Some(state) => state,
             };
             match &mut state.series {
-                SeriesType::ExplicitSeries { num_points, points } => {
+                SeriesType::Explicit { num_points, points } => {
                     points.as_owned().push(TSPoint{ts: time, val:value});
                     *num_points = points.len() as _;
                 },
-                SeriesType::SortedSeries { num_points, points } => {
+                SeriesType::Sorted { num_points, points } => {
                     points.as_owned().push(TSPoint{ts: time, val:value});
                     *num_points = points.len() as _;
                     if let Some(slice) = points.as_slice().windows(2).last() {
@@ -255,9 +269,9 @@ pub fn timevector_trans(
                             let points = std::mem::replace(points, vec![].into());
                             *state = build!{
                                 Timevector {
-                                    series: SeriesType::ExplicitSeries{
+                                    series: SeriesType::Explicit{
                                         num_points: points.len() as _,
-                                        points: points,
+                                        points,
                                     }
                                 }
                             };
@@ -272,12 +286,20 @@ pub fn timevector_trans(
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn timevector_compound_trans<'b>(
-    state: Option<Internal<Timevector<'static>>>,
+pub fn timevector_compound_trans(
+    state: Internal,
+    series: Option<toolkit_experimental::Timevector>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Internal {
+    inner_compound_trans(unsafe { state.to_inner() }, series, fcinfo).internal()
+}
+
+pub fn inner_compound_trans<'b>(
+    state: Option<Inner<Timevector<'static>>>,
     series: Option<toolkit_experimental::Timevector<'b>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<Timevector<'static>>> {
-    use SeriesType::{SortedSeries, ExplicitSeries};
+) -> Option<Inner<Timevector<'static>>> {
+    use SeriesType::{Sorted, Explicit};
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state, series) {
@@ -286,13 +308,13 @@ pub fn timevector_compound_trans<'b>(
                 (None, Some(series)) => Some(series.clone_owned().into()),
                 (Some(mut state), Some(series)) =>
                     match &mut state.series {
-                        ExplicitSeries { num_points, points } => {
+                        Explicit { num_points, points } => {
                             points.as_owned().extend(series.iter());
                             *num_points = points.len() as _;
                             Some(state)
                         },
-                        SortedSeries { num_points, points } => {
-                            if let SortedSeries { points: other_points, ..} = &series.series {
+                        Sorted { num_points, points } => {
+                            if let Sorted { points: other_points, ..} = &series.series {
                                 let is_ordered = || {
                                     let second = other_points.slice().get(0)?;
                                     let first = points.slice().last()?;
@@ -308,9 +330,9 @@ pub fn timevector_compound_trans<'b>(
                             let points = std::mem::replace(points, vec![].into());
                             *state = build!{
                                 Timevector {
-                                    series: SeriesType::ExplicitSeries{
+                                    series: SeriesType::Explicit{
                                         num_points: points.len() as _,
-                                        points: points,
+                                        points,
                                     }
                                 }
                             };
@@ -325,11 +347,21 @@ pub fn timevector_compound_trans<'b>(
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn timevector_combine<'a, 'b> (
-    state1: Option<Internal<Timevector<'a>>>,
-    state2: Option<Internal<Timevector<'b>>>,
+pub fn timevector_combine (
+    state1: Internal,
+    state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<Timevector<'static>>> {
+) -> Internal {
+    unsafe {
+        inner_combine(state1.to_inner(), state2.to_inner(), fcinfo).internal()
+    }
+}
+
+pub fn inner_combine<'a, 'b> (
+    state1: Option<Inner<Timevector<'a>>>,
+    state2: Option<Inner<Timevector<'b>>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<Timevector<'static>>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             match (state1, state2) {
@@ -354,15 +386,15 @@ pub fn combine(first: Timevector<'_>, second: Timevector<'_>) -> Timevector<'sta
 
     // If two explicit series are sorted and disjoint, return a sorted explicit series
     if let (
-        SortedSeries{ num_points: _, points: first_points },
-        SortedSeries{ num_points: _, points: second_points }) = (&first.series, &second.series) {
+        Sorted{ num_points: _, points: first_points },
+        Sorted{ num_points: _, points: second_points }) = (&first.series, &second.series) {
         if first_points.slice().last().unwrap().ts <= second_points.slice()[0].ts {
             let mut new_points = first_points.clone().into_owned();
             new_points.as_owned().extend(second_points.iter());
             return build! { Timevector {
-                series: SortedSeries {
+                series: Sorted {
                     num_points: new_points.len() as _,
-                    points: new_points.into(),
+                    points: new_points,
                 }
             }}
         }
@@ -371,9 +403,9 @@ pub fn combine(first: Timevector<'_>, second: Timevector<'_>) -> Timevector<'sta
             let mut new_points = second_points.clone().into_owned();
             new_points.as_owned().extend(first_points.iter());
             return build! { Timevector {
-                series: SortedSeries {
+                series: Sorted {
                     num_points: new_points.len() as _,
-                    points: new_points.into(),
+                    points: new_points,
                 }
             }}
         }
@@ -382,13 +414,13 @@ pub fn combine(first: Timevector<'_>, second: Timevector<'_>) -> Timevector<'sta
     // If the series are adjacent normal series, combine them into a larger normal series
     let mut ordered = false;
     if let (
-        NormalSeries {
+        Normal {
             start_ts: start_ts_1,
             step_interval: step_interval_1,
             num_vals: _,
             values: values_1
         },
-        NormalSeries {
+        Normal {
             start_ts: start_ts_2,
             step_interval: step_interval_2,
             num_vals: _,
@@ -400,11 +432,11 @@ pub fn combine(first: Timevector<'_>, second: Timevector<'_>) -> Timevector<'sta
                 let mut new_values = values_1.clone().into_owned();
                 new_values.as_owned().extend(values_2.iter());
                 return build!{ Timevector {
-                    series: NormalSeries {
+                    series: Normal {
                         start_ts: *start_ts_1,
                         step_interval: *step_interval_1,
                         num_vals: new_values.len() as _,
-                        values: new_values.into(),
+                        values: new_values,
                     }
                 }};
             }
@@ -413,11 +445,11 @@ pub fn combine(first: Timevector<'_>, second: Timevector<'_>) -> Timevector<'sta
                 let mut new_values = values_2.clone().into_owned();
                 new_values.as_owned().extend(values_1.iter());
                 return build!{ Timevector {
-                    series: NormalSeries {
+                    series: Normal {
                         start_ts: *start_ts_2,
                         step_interval: *step_interval_2,
                         num_vals: new_values.len() as _,
-                        values: new_values.into(),
+                        values: new_values,
                     }
                 }};
             }
@@ -430,14 +462,14 @@ pub fn combine(first: Timevector<'_>, second: Timevector<'_>) -> Timevector<'sta
     let points: Vec<_> = first.iter().chain(second.iter()).collect();
     if ordered {
         build!{ Timevector {
-            series: SortedSeries {
+            series: Sorted {
                 num_points: points.len() as _,
                 points: points.into(),
             }
         }}
     } else {
         build!{ Timevector {
-            series: ExplicitSeries {
+            series: Explicit {
                 num_points: points.len() as _,
                 points: points.into(),
             }
@@ -446,8 +478,17 @@ pub fn combine(first: Timevector<'_>, second: Timevector<'_>) -> Timevector<'sta
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn timevector_final<'a>(
-    state: Option<Internal<Timevector<'a>>>,
+pub fn timevector_final(
+    state: Internal,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
+    unsafe {
+        timevector_final_inner(state.to_inner(), fcinfo)
+    }
+}
+
+pub fn timevector_final_inner<'a>(
+    state: Option<Inner<Timevector<'a>>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
     unsafe {
@@ -461,28 +502,34 @@ pub fn timevector_final<'a>(
     }
 }
 
-extension_sql!(r#"
-CREATE AGGREGATE toolkit_experimental.timevector(ts TIMESTAMPTZ, value DOUBLE PRECISION) (
-    sfunc = toolkit_experimental.timevector_trans,
-    stype = internal,
-    finalfunc = toolkit_experimental.timevector_final,
-    combinefunc = toolkit_experimental.timevector_combine,
-    serialfunc = toolkit_experimental.timevector_serialize,
-    deserialfunc = toolkit_experimental.timevector_deserialize,
-    parallel = safe
+extension_sql!("\n\
+    CREATE AGGREGATE toolkit_experimental.timevector(ts TIMESTAMPTZ, value DOUBLE PRECISION) (\n\
+        sfunc = toolkit_experimental.timevector_trans,\n\
+        stype = internal,\n\
+        finalfunc = toolkit_experimental.timevector_final,\n\
+        combinefunc = toolkit_experimental.timevector_combine,\n\
+        serialfunc = toolkit_experimental.timevector_serialize,\n\
+        deserialfunc = toolkit_experimental.timevector_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+name="timevector_agg",
+requires= [timevector_trans, timevector_final, timevector_combine, timevector_serialize, timevector_deserialize],
 );
-"#);
 
-extension_sql!(r#"
-CREATE AGGREGATE toolkit_experimental.rollup(
-    toolkit_experimental.timevector
-) (
-    sfunc = toolkit_experimental.timevector_compound_trans,
-    stype = internal,
-    finalfunc = toolkit_experimental.timevector_final,
-    combinefunc = toolkit_experimental.timevector_combine,
-    serialfunc = toolkit_experimental.timevector_serialize,
-    deserialfunc = toolkit_experimental.timevector_deserialize,
-    parallel = safe
+extension_sql!("\n\
+CREATE AGGREGATE toolkit_experimental.rollup(\n\
+    toolkit_experimental.timevector\n\
+) (\n\
+    sfunc = toolkit_experimental.timevector_compound_trans,\n\
+    stype = internal,\n\
+    finalfunc = toolkit_experimental.timevector_final,\n\
+    combinefunc = toolkit_experimental.timevector_combine,\n\
+    serialfunc = toolkit_experimental.timevector_serialize,\n\
+    deserialfunc = toolkit_experimental.timevector_deserialize,\n\
+    parallel = safe\n\
+);\n\
+",
+name="timevector_rollup",
+requires= [timevector_compound_trans, timevector_final, timevector_combine, timevector_serialize, timevector_deserialize],
 );
-"#);

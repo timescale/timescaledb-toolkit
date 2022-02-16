@@ -101,7 +101,7 @@ macro_rules! pg_type_impl {
             $(#[$attrs])*
             #[derive(pgx::PostgresType, Clone)]
             #[inoutfuncs]
-            pub struct $name<$lifetemplate>([<$name Data>] $(<$inlife>)?, $crate::type_builder::CachedDatum<$lifetemplate>);
+            pub struct $name<$lifetemplate>(pub [<$name Data>] $(<$inlife>)?, $crate::type_builder::CachedDatum<$lifetemplate>);
 
             flat_serialize_macro::flat_serialize! {
                 $(#[$attrs])*
@@ -121,6 +121,7 @@ macro_rules! pg_type_impl {
                     unsafe { self.0.flatten() }
                 }
 
+                #[allow(clippy::missing_safety_doc)]
                 pub unsafe fn cached_datum_or_flatten(&mut self) -> pgx::pg_sys::Datum {
                     use $crate::type_builder::CachedDatum::*;
                     match self.1 {
@@ -134,6 +135,7 @@ macro_rules! pg_type_impl {
             }
 
             impl<$lifetemplate> [<$name Data>] $(<$inlife>)? {
+                #[allow(clippy::missing_safety_doc)]
                 pub unsafe fn flatten<'any>(&self) -> $name<'any> {
                     use $crate::type_builder::CachedDatum::Flattened;
                     // if we already have a CachedDatum::Flattened can just
@@ -272,7 +274,7 @@ macro_rules! ron_inout_funcs {
 
 #[macro_export]
 macro_rules! flatten {
-    ($typ:ident { $($field:ident: $value:expr),* $(,)? }) => {
+    ($typ:ident { $($field:ident$(: $value:expr)?),* $(,)? }) => {
         {
             let data = ::paste::paste! {
                 [<$typ Data>] {
@@ -280,7 +282,7 @@ macro_rules! flatten {
                     version: 1,
                     padding: [0; 3],
                     $(
-                        $field: $value
+                        $field$(: $value)?
                     ),*
                 }
             };
@@ -291,7 +293,7 @@ macro_rules! flatten {
 
 #[macro_export]
 macro_rules! build {
-    ($typ:ident { $($field:ident: $value:expr),* $(,)? }) => {
+    ($typ:ident { $($field:ident$(: $value:expr)?),* $(,)? }) => {
         {
             <$typ>::from(::paste::paste! {
                 [<$typ Data>] {
@@ -299,7 +301,7 @@ macro_rules! build {
                     version: 1,
                     padding: [0; 3],
                     $(
-                        $field: $value
+                        $field$(: $value)?
                     ),*
                 }
             })
@@ -358,21 +360,23 @@ macro_rules! do_serialize {
                 let len = writer.position().try_into().expect("serialized size too large");
                 ::pgx::set_varsize(writer.get_mut().as_mut_ptr() as *mut _, len);
             }
-            writer.into_inner().as_mut_ptr() as pg_sys::Datum
+            $crate::raw::bytea::from(writer.into_inner().as_mut_ptr() as pg_sys::Datum)
         }
     };
 }
 #[macro_export]
 macro_rules! do_deserialize {
-    ($bytes: ident, $t: ty) => {
+    ($bytes: expr, $t: ty) => {
         {
             use $crate::type_builder::SerializationType;
 
             let state: $t = unsafe {
-                let detoasted = pg_sys::pg_detoast_datum_packed($bytes as *mut _);
+                let input: $crate::raw::bytea = $bytes;
+                let input: pgx::pg_sys::Datum = input.into();
+                let detoasted = pg_sys::pg_detoast_datum_packed(input as *mut _);
                 let len = pgx::varsize_any_exhdr(detoasted);
                 let data = pgx::vardata_any(detoasted);
-                let bytes = slice::from_raw_parts(data as *mut u8, len);
+                let bytes = std::slice::from_raw_parts(data as *mut u8, len);
                 if bytes.len() < 1 {
                     pgx::error!("deserialization error, no bytes")
                 }

@@ -10,22 +10,22 @@ pub use executor::ExpressionExecutor;
 mod parser;
 mod executor;
 
-mod toolkit_experimental {
+pub use self::toolkit_experimental::{Lambda, LambdaData};
+
+#[pg_schema]
+pub mod toolkit_experimental {
     pub(crate) use super::*;
 
-    varlena_type!(Lambda);
-}
+    //
+    // lambda type
+    //
 
-
-//
-// lambda type
-//
-
-pg_type! {
-    #[derive(Debug)]
-    struct Lambda<'input> {
-        len: u32,
-        string: [u8; self.len],
+    pg_type! {
+        #[derive(Debug)]
+        struct Lambda<'input> {
+            len: u32,
+            string: [u8; self.len],
+        }
     }
 }
 
@@ -35,7 +35,7 @@ impl<'input> InOutFuncs for Lambda<'input> {
         use crate::serialization::{EncodedStr::*, str_to_db_encoding};
 
         let stringified = std::str::from_utf8(self.string.as_slice()).unwrap();
-        match str_to_db_encoding(&stringified) {
+        match str_to_db_encoding(stringified) {
             Utf8(s) => buffer.push_str(s),
             Other(s) => buffer.push_bytes(s.to_bytes()),
         }
@@ -77,9 +77,9 @@ impl<'a> LambdaData<'a> {
     parallel_safe,
     schema="toolkit_experimental"
 )]
-pub fn bool_lambda<'s>(
-    lambda: toolkit_experimental::Lambda<'s>,
-    time: pg_sys::TimestampTz,
+pub fn bool_lambda(
+    lambda: toolkit_experimental::Lambda,
+    time: crate::raw::TimestampTz,
     value: f64
 ) -> bool {
     let expression = lambda.parse();
@@ -87,7 +87,7 @@ pub fn bool_lambda<'s>(
         panic!("invalid return type, must return a BOOLEAN for {:?}", expression)
     }
     let mut executor = ExpressionExecutor::new(&expression);
-    executor.exec(value, time).bool()
+    executor.exec(value, time.into()).bool()
 }
 
 #[pg_extern(
@@ -95,9 +95,9 @@ pub fn bool_lambda<'s>(
     parallel_safe,
     schema="toolkit_experimental"
 )]
-pub fn f64_lambda<'s>(
-    lambda: toolkit_experimental::Lambda<'s>,
-    time: pg_sys::TimestampTz,
+pub fn f64_lambda(
+    lambda: toolkit_experimental::Lambda,
+    time: crate::raw::TimestampTz,
     value: f64
 ) -> f64 {
     let expression = lambda.parse();
@@ -105,7 +105,7 @@ pub fn f64_lambda<'s>(
         panic!("invalid return type, must return a DOUBLE PRECISION")
     }
     let mut executor = ExpressionExecutor::new(&expression);
-    executor.exec(value, time).float()
+    executor.exec(value, time.into()).float()
 }
 
 #[pg_extern(
@@ -113,28 +113,28 @@ pub fn f64_lambda<'s>(
     parallel_safe,
     schema="toolkit_experimental"
 )]
-pub fn ttz_lambda<'s>(
-    lambda: toolkit_experimental::Lambda<'s>,
-    time: pg_sys::TimestampTz,
+pub fn ttz_lambda(
+    lambda: toolkit_experimental::Lambda,
+    time: crate::raw::TimestampTz,
     value: f64
-) -> pg_sys::TimestampTz {
+) -> crate::raw::TimestampTz {
     let expression = lambda.parse();
     if expression.expr.ty() != &Type::Time {
         panic!("invalid return type, must return a TimestampTZ")
     }
     let mut executor = ExpressionExecutor::new(&expression);
-    executor.exec(value, time).time()
+    executor.exec(value, time.into()).time().into()
 }
 
-pub type Interval = pg_sys::Datum;
+use crate::raw::Interval;
 #[pg_extern(
     stable,
     parallel_safe,
     schema="toolkit_experimental"
 )]
-pub fn interval_lambda<'s>(
-    lambda: toolkit_experimental::Lambda<'s>,
-    time: pg_sys::TimestampTz,
+pub fn interval_lambda(
+    lambda: toolkit_experimental::Lambda,
+    time: crate::raw::TimestampTz,
     value: f64
 ) -> Interval {
     let expression = lambda.parse();
@@ -142,7 +142,7 @@ pub fn interval_lambda<'s>(
         panic!("invalid return type, must return a INTERVAL")
     }
     let mut executor = ExpressionExecutor::new(&expression);
-    executor.exec(value, time).interval() as _
+    (executor.exec(value, time.into()).interval() as pg_sys::Datum).into()
 }
 
 #[pg_extern(
@@ -150,22 +150,22 @@ pub fn interval_lambda<'s>(
     parallel_safe,
     schema="toolkit_experimental"
 )]
-pub fn point_lambda<'s>(
-    lambda: toolkit_experimental::Lambda<'s>,
-    time: pg_sys::TimestampTz,
+pub fn point_lambda(
+    lambda: toolkit_experimental::Lambda,
+    time: crate::raw::TimestampTz,
     value: f64
-) -> impl std::iter::Iterator<Item = (name!(time,pg_sys::TimestampTz),name!(value,f64))> {
+) -> impl std::iter::Iterator<Item = (name!(time,crate::raw::TimestampTz),name!(value,f64))> {
     let expression = lambda.parse();
     if !expression.expr.ty_is_ts_point() {
         panic!("invalid return type, must return a (TimestampTZ, DOUBLE PRECISION)")
     }
 
     let mut executor = ExpressionExecutor::new(&expression);
-    let columns = match executor.exec(value, time) {
+    let columns = match executor.exec(value, time.into()) {
         Value::Tuple(columns) => columns,
         _ => unreachable!(),
     };
-    Some((columns[0].time(), columns[1].float())).into_iter()
+    Some((columns[0].time().into(), columns[1].float())).into_iter()
 }
 
 #[pg_extern(
@@ -173,9 +173,9 @@ pub fn point_lambda<'s>(
     parallel_safe,
     schema="toolkit_experimental"
 )]
-pub fn trace_lambda<'s>(
-    lambda: toolkit_experimental::Lambda<'s>,
-    time: pg_sys::TimestampTz,
+pub fn trace_lambda(
+    lambda: toolkit_experimental::Lambda,
+    time: crate::raw::TimestampTz,
     value: f64
 ) -> impl std::iter::Iterator<Item = String> {
     let expression = lambda.parse();
@@ -185,7 +185,7 @@ pub fn trace_lambda<'s>(
         trace.push((e.name(), format!("{:?}", v)))
     });
 
-    let _ = executor.exec(value, time);
+    let _ = executor.exec(value, time.into());
     let col1_size = trace.iter().map(|(e, _)| e.len()).max().unwrap_or(0);
 
     trace.into_iter().map(move |(e, v)|
@@ -398,13 +398,7 @@ impl PartialOrd for Value {
                     *l0 as _,
                     *r0 as _,
                 ) as i32;
-                if res < 0 {
-                    std::cmp::Ordering::Less
-                } else if res == 0 {
-                    std::cmp::Ordering::Equal
-                } else {
-                    std::cmp::Ordering::Greater
-                }.into()
+                res.cmp(&0).into()
             },
             (_, _) => None,
         }
@@ -460,8 +454,10 @@ impl<'a> Lambda<'a> {
 }
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
+    use pgx_macros::pg_test;
 
     macro_rules! trace_lambda {
         ($client: expr, $expr:literal) => {
@@ -533,9 +529,8 @@ mod tests {
 
     macro_rules! f64_lambda_eq {
         ($client: expr, $expr:literal, $expects:expr) => {
-            assert_eq!(
-                f64_lambda!($client, $expr),
-                $expects,
+            assert!(
+                (f64_lambda!($client, $expr) - ($expects)).abs() < f64::EPSILON,
             )
         };
     }
@@ -696,7 +691,7 @@ mod tests {
             f64_lambda_eq!(client, "tanh(2.0)",   ( 2.0f64).tanh());
             f64_lambda_eq!(client, "asinh(1.0)",  ( 1.0f64).asinh());
             f64_lambda_eq!(client, "acosh(1.0)",  ( 1.0f64).acosh());
-            f64_lambda_eq!(client, "atanh(1.0)",  ( 1.0f64).atanh());
+            f64_lambda_eq!(client, "atanh(0.9)",  ( 0.9f64).atanh());
 
             f64_lambda_eq!(client, "log(2.0, 10)",   2.0f64.log(10.0));
             f64_lambda_eq!(client, "atan2(2.0, 10)", 2.0f64.atan2(10.0));

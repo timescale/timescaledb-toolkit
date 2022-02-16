@@ -46,107 +46,106 @@ use map::{
 };
 
 use crate::serialization::PgProcId;
+pub use self::toolkit_experimental::*;
 
-// TODO once we start stabilizing elements, create a type TimevectorPipeline
-//      stable elements will create a stable pipeline, but adding an unstable
-//      element to a stable pipeline will create an unstable pipeline
-pg_type! {
-    #[derive(Debug)]
-    struct UnstableTimevectorPipeline<'input> {
-        num_elements: u64,
-        elements: [Element<'input>; self.num_elements],
+#[pg_schema]
+pub mod toolkit_experimental {
+    use super::*;
+    pub use crate::time_series::Timevector;
+    pub(crate) use crate::accessors::toolkit_experimental::AccessorDelta;
+    pub(crate) use lambda::toolkit_experimental::{Lambda, LambdaData};
+    // TODO once we start stabilizing elements, create a type TimevectorPipeline
+    //      stable elements will create a stable pipeline, but adding an unstable
+    //      element to a stable pipeline will create an unstable pipeline
+    pg_type! {
+        #[derive(Debug)]
+        struct UnstableTimevectorPipeline<'input> {
+            num_elements: u64,
+            elements: [Element<'input>; self.num_elements],
+        }
     }
-}
 
-flat_serialize_macro::flat_serialize! {
-    #[derive(Debug)]
-    #[derive(serde::Serialize, serde::Deserialize)]
-    enum Element<'input> {
-        kind: u64,
-        LTTB: 1 {
-            resolution: u64,
-        },
-        ResampleToRate: 2 {
-            interval: i64,
-            resample_method: ResampleMethod,
-            snap_to_rate: i64, // padded bool
-        },
-        FillHoles: 3 {
-            fill_method: FillHolesMethod,
-        },
-        Sort: 4 {
-        },
-        Delta: 5 {
-        },
-        MapData: 6 {
-            // FIXME serialize/deserialize as `name(type)`
-            function: PgProcId,
-        },
-        MapSeries: 7 {
-            // FIXME serialize/deserialize as `name(type)`
-            function: PgProcId,
-        },
-        Arithmetic: 8 {
-            function: arithmetic::Function,
-            rhs: f64,
-        },
-        MapLambda: 9 {
-            lambda: lambda::LambdaData<'input>,
-        },
-        FilterLambda: 10 {
-            lambda: lambda::LambdaData<'input>,
-        },
-        FillTo: 11 {
-            interval: i64,
-            fill_method: FillToMethod,
-        },
+    flat_serialize_macro::flat_serialize! {
+        #[derive(Debug)]
+        #[derive(serde::Serialize, serde::Deserialize)]
+        enum Element<'input> {
+            kind: u64,
+            LTTB: 1 {
+                resolution: u64,
+            },
+            ResampleToRate: 2 {
+                interval: i64,
+                resample_method: ResampleMethod,
+                snap_to_rate: i64, // padded bool
+            },
+            FillHoles: 3 {
+                fill_method: FillHolesMethod,
+            },
+            Sort: 4 {
+            },
+            Delta: 5 {
+            },
+            MapData: 6 {
+                // FIXME serialize/deserialize as `name(type)`
+                function: PgProcId,
+            },
+            MapSeries: 7 {
+                // FIXME serialize/deserialize as `name(type)`
+                function: PgProcId,
+            },
+            Arithmetic: 8 {
+                function: arithmetic::Function,
+                rhs: f64,
+            },
+            MapLambda: 9 {
+                lambda: LambdaData<'input>,
+            },
+            FilterLambda: 10 {
+                lambda: LambdaData<'input>,
+            },
+            FillTo: 11 {
+                interval: i64,
+                fill_method: FillToMethod,
+            },
+        }
     }
-}
 
-impl<'input> Element<'input> {
-    pub fn flatten<'a>(self) -> UnstableTimevectorPipeline<'a> {
-        // TODO it'd be nice not to have to allocate a vector here but
-        //      `let slice = &[self][..];`
-        //      gives a lifetime error I don't yet know how to solve
-        let slice = vec![self].into();
-        unsafe {
-            flatten! {
-                UnstableTimevectorPipeline {
-                    num_elements: 1,
-                    elements: slice,
+    impl<'input> Element<'input> {
+        pub fn flatten<'a>(self) -> UnstableTimevectorPipeline<'a> {
+            // TODO it'd be nice not to have to allocate a vector here but
+            //      `let slice = &[self][..];`
+            //      gives a lifetime error I don't yet know how to solve
+            let slice = vec![self].into();
+            unsafe {
+                flatten! {
+                    UnstableTimevectorPipeline {
+                        num_elements: 1,
+                        elements: slice,
+                    }
                 }
             }
         }
     }
-}
 
-impl<'e> From<Element<'e>> for UnstableTimevectorPipeline<'e> {
-    fn from(element: Element<'e>) -> Self {
-        build! {
-            UnstableTimevectorPipeline {
-                num_elements: 1,
-                elements: vec![element].into(),
+    impl<'e> From<Element<'e>> for UnstableTimevectorPipeline<'e> {
+        fn from(element: Element<'e>) -> Self {
+            build! {
+                UnstableTimevectorPipeline {
+                    num_elements: 1,
+                    elements: vec![element].into(),
+                }
             }
         }
     }
-}
 
-ron_inout_funcs!(UnstableTimevectorPipeline);
-
-// hack to allow us to qualify names with "toolkit_experimental"
-// so that pgx generates the correct SQL
-pub mod toolkit_experimental {
-    pub(crate) use super::*;
-    pub(crate) use crate::accessors::AccessorDelta;
-    pub(crate) use lambda::Lambda;
-    varlena_type!(UnstableTimevectorPipeline);
+    ron_inout_funcs!(UnstableTimevectorPipeline);
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline<'s, 'p>(
-    timevector: toolkit_experimental::Timevector<'s>,
-    pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
+pub fn arrow_run_pipeline(
+    timevector: toolkit_experimental::Timevector,
+    pipeline: toolkit_experimental::UnstableTimevectorPipeline,
 ) -> toolkit_experimental::Timevector<'static> {
     run_pipeline_elements(timevector, pipeline.elements.iter())
         .in_current_context()
@@ -162,33 +161,33 @@ pub fn run_pipeline_elements<'s, 'j, 'i>(
     timevector
 }
 
-pub fn execute_pipeline_element<'s, 'e>(
+pub fn execute_pipeline_element<'s>(
     timevector: Timevector<'s>,
     element: &Element
 ) -> Timevector<'s> {
     match element {
         Element::LTTB{resolution} =>
-            return crate::lttb::lttb_ts(timevector, *resolution as _),
+            crate::lttb::lttb_ts(timevector, *resolution as _),
         Element::ResampleToRate{..} =>
-            return resample_to_rate(&timevector, &element),
+            resample_to_rate(&timevector, element),
         Element::FillHoles{..} =>
-            return fill_holes(timevector, &element),
+            fill_holes(timevector, element),
         Element::Sort{..} =>
-            return sort_timevector(timevector),
+            sort_timevector(timevector),
         Element::Delta{..} =>
-            return timevector_delta(&timevector),
+            timevector_delta(&timevector),
         Element::MapData { function } =>
-            return map::apply_to(timevector, function.0),
+            map::apply_to(timevector, function.0),
         Element::MapSeries { function } =>
-            return map::apply_to_series(timevector, function.0),
+            map::apply_to_series(timevector, function.0),
         Element::MapLambda{ lambda } =>
-            return map::apply_lambda_to(timevector, lambda),
+            map::apply_lambda_to(timevector, lambda),
         Element::FilterLambda{ lambda } =>
-            return filter::apply_lambda_to(timevector, lambda),
+            filter::apply_lambda_to(timevector, lambda),
         Element::Arithmetic{ function, rhs } =>
-            return arithmetic::apply(timevector, *function, *rhs),
+            arithmetic::apply(timevector, *function, *rhs),
         Element::FillTo{..} =>
-            return fill_to(timevector, &element),
+            fill_to(timevector, element),
     }
 }
 
@@ -204,11 +203,10 @@ pub fn arrow_add_unstable_element<'p>(
     pipeline
 }
 
-type Internal = usize;
 #[pg_extern(
     immutable,
     parallel_safe,
-    schema="toolkit_experimental"
+    schema="toolkit_experimental",
     name="toolkit_pipeline_support",
 )]
 pub unsafe fn pipeline_support(input: Internal)
@@ -226,19 +224,13 @@ pub(crate) unsafe fn pipeline_support_helper(
 ) -> Internal {
     use std::{mem::{size_of, MaybeUninit}, ptr};
 
+    let input = input.unwrap().unwrap();
     let input: *mut pg_sys::Node = input as _;
     if !pgx::is_a(input, pg_sys::NodeTag_T_SupportRequestSimplify) {
-        return 0
+        return ptr::null_mut::<pg_sys::Expr>().internal()
     }
 
-    //FIXME add include/nodes/supportnodes.h to pgx headers
-    #[repr(C)]
-    struct SupportRequestSimplify {
-        ty: pg_sys::NodeTag,
-        root: *mut pg_sys::PlannerInfo,
-        fcall: *mut pg_sys::FuncExpr,
-    }
-    let req: *mut SupportRequestSimplify = input.cast();
+    let req: *mut pg_sys::SupportRequestSimplify = input.cast();
 
     let final_executor = (*req).fcall;
     let original_args = PgList::from_pg((*final_executor).args);
@@ -254,14 +246,14 @@ pub(crate) unsafe fn pipeline_support_helper(
             let old_executor: *mut pg_sys::FuncExpr = arg1.cast();
             ((*old_executor).funcid, (*old_executor).args)
         } else {
-            return ptr::null_mut::<pg_sys::Expr>() as _
+            return ptr::null_mut::<pg_sys::Expr>().internal()
         };
 
     // check old_executor operator fn is 'run_pipeline' above
     static RUN_PIPELINE_OID: once_cell::sync::OnceCell<pg_sys::Oid> = once_cell::sync::OnceCell::new();
     match RUN_PIPELINE_OID.get() {
         Some(oid) => if executor_id != *oid {
-            return ptr::null_mut::<pg_sys::Expr>() as _
+            return ptr::null_mut::<pg_sys::Expr>().internal()
         }
         None => {
             let executor_fn = {
@@ -277,10 +269,10 @@ pub(crate) unsafe fn pipeline_support_helper(
             //       we'll fix this upstream
             let expected_executor = arrow_run_pipeline_wrapper as usize;
             match executor_fn {
-                None => return ptr::null_mut::<pg_sys::Expr>() as _,
+                None => return ptr::null_mut::<pg_sys::Expr>().internal(),
                 // FIXME the direct comparison should work
                 Some(func) if func as usize != expected_executor =>
-                    return ptr::null_mut::<pg_sys::Expr>() as _,
+                    return ptr::null_mut::<pg_sys::Expr>().internal(),
                 Some(_) => RUN_PIPELINE_OID.get_or_init(|| executor_id)
             };
         },
@@ -293,13 +285,13 @@ pub(crate) unsafe fn pipeline_support_helper(
     let old_const = lhs_args.tail().unwrap();
 
     if !is_a(old_const, pg_sys::NodeTag_T_Const) {
-        return ptr::null_mut::<pg_sys::Expr>() as _
+        return ptr::null_mut::<pg_sys::Expr>().internal()
     }
 
     let old_const: *mut pg_sys::Const = old_const.cast();
 
     if !is_a(arg2, pg_sys::NodeTag_T_Const) {
-        return ptr::null_mut::<pg_sys::Expr>() as _
+        return ptr::null_mut::<pg_sys::Expr>().internal()
     }
 
     let new_element_const: *mut pg_sys::Const = arg2.cast();
@@ -318,7 +310,7 @@ pub(crate) unsafe fn pipeline_support_helper(
     new_executor_args.push(new_const.cast());
     (*new_executor).args = new_executor_args.into_pg();
 
-    return new_executor as _
+    Internal::from(Some(new_executor as pg_sys::Datum))
 }
 
 // using this instead of pg_operator since the latter doesn't support schemas yet
@@ -327,25 +319,28 @@ pub(crate) unsafe fn pipeline_support_helper(
 extension_sql!(r#"
 ALTER FUNCTION "arrow_run_pipeline" SUPPORT toolkit_experimental.toolkit_pipeline_support;
 ALTER FUNCTION "arrow_add_unstable_element" SUPPORT toolkit_experimental.toolkit_pipeline_support;
-"#);
+"#,
+name="pipe_support",
+requires= [pipeline_support],
+);
 
 #[pg_extern(stable, parallel_safe, schema="toolkit_experimental")]
-pub fn run_user_pipeline_element<'s, 'p>(
-    timevector: toolkit_experimental::Timevector<'s>,
-    function: pg_sys::regproc,
+pub fn run_user_pipeline_element(
+    timevector: toolkit_experimental::Timevector,
+    function: crate::raw::regproc,
 ) -> toolkit_experimental::Timevector<'static> {
-    check_user_function_type(function);
-    apply_to_series(timevector, function).in_current_context()
+    check_user_function_type(function.0.try_into().unwrap());
+    apply_to_series(timevector, function.0.try_into().unwrap()).in_current_context()
 }
 
 #[pg_extern(stable, parallel_safe, schema="toolkit_experimental")]
-pub fn build_unstable_user_pipeline<'s, 'p>(
-    first: pg_sys::regproc,
-    second: pg_sys::regproc,
+pub fn build_unstable_user_pipeline(
+    first: crate::raw::regproc,
+    second: crate::raw::regproc,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     let elements: Vec<_> = vec![
-        map_series_element(first),
-        map_series_element(second),
+        map_series_element(first.0.try_into().unwrap()),
+        map_series_element(second.0.try_into().unwrap()),
     ];
     build! {
         UnstableTimevectorPipeline {
@@ -356,12 +351,12 @@ pub fn build_unstable_user_pipeline<'s, 'p>(
 }
 
 #[pg_extern(stable, parallel_safe, schema="toolkit_experimental")]
-pub fn add_user_pipeline_element<'p, 'e>(
-    pipeline: toolkit_experimental::UnstableTimevectorPipeline<'p>,
-    function: pg_sys::regproc,
-) -> toolkit_experimental::UnstableTimevectorPipeline<'p> {
+pub fn add_user_pipeline_element(
+    pipeline: toolkit_experimental::UnstableTimevectorPipeline,
+    function: crate::raw::regproc,
+) -> toolkit_experimental::UnstableTimevectorPipeline {
     let elements: Vec<_> = pipeline.elements.iter()
-        .chain(Some(map_series_element(function)))
+        .chain(Some(map_series_element(function.0.try_into().unwrap())))
         .collect();
     build! {
         UnstableTimevectorPipeline {
@@ -399,7 +394,10 @@ CREATE OPERATOR ->> (
     LEFTARG=toolkit_experimental.UnstableTimevectorPipeline,
     RIGHTARG=regproc
 );
-"#);
+"#,
+name="user_arrows",
+requires= [Timevector, run_user_pipeline_element, build_unstable_user_pipeline, add_user_pipeline_element],
+);
 
 // TODO is (immutable, parallel_safe) correct?
 #[pg_extern(
@@ -408,17 +406,19 @@ CREATE OPERATOR ->> (
     name="lttb",
     schema="toolkit_experimental"
 )]
-pub fn lttb_pipeline_element<'p, 'e>(
+pub fn lttb_pipeline_element(
     resolution: i32,
-) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     Element::LTTB {
         resolution: resolution.try_into().unwrap(),
     }.flatten()
 }
 
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
+    use pgx_macros::pg_test;
 
     #[pg_test]
     fn test_pipeline_lttb() {
@@ -544,8 +544,8 @@ mod tests {
                 "EXPLAIN (verbose) SELECT timevector('2021-01-01'::timestamptz, 0.1) -> round() -> abs() -> round();",
                 None,
                 None
-            ).skip(1)
-                .next().unwrap()
+            ).nth(1)
+                .unwrap()
                 .by_ordinal(1).unwrap()
                 .value::<String>().unwrap();
             // check that it's executing as if we had input `timevector -> (round() -> abs())`

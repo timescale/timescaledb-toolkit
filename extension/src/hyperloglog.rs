@@ -1,8 +1,7 @@
+#![allow(clippy::identity_op)] // clippy gets confused by flat_serialize! enums
+
 use std::{
     convert::TryInto,
-    hash::{BuildHasher, Hasher},
-    mem::size_of,
-    slice,
 };
 
 use serde::{Deserialize, Serialize};
@@ -14,8 +13,9 @@ use flat_serialize::*;
 
 use crate::{
     aggregate_utils::{get_collation, in_aggregate_context},
+    datum_utils::DatumHashBuilder,
     flatten, ron_inout_funcs,
-    palloc::Internal,
+    palloc::{Internal, InternalAsValue, Inner, ToInternal},
     pg_type,
     serialization::{PgCollationId, ShortTypeId},
 };
@@ -27,23 +27,31 @@ pub struct HyperLogLogTrans {
     logger: HLL<'static, Datum, DatumHashBuilder>,
 }
 
-#[allow(non_camel_case_types)]
-type int = i32;
-type AnyElement = Datum;
+use crate::raw::AnyElement;
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn hyperloglog_trans(
-    state: Option<Internal<HyperLogLogTrans>>,
-    size: int,
+    state: Internal,
+    size: i32,
+    // TODO we want to use crate::raw::AnyElement but it doesn't work for some reason...
     value: Option<AnyElement>,
     fc: pg_sys::FunctionCallInfo,
-) -> Option<Internal<HyperLogLogTrans>> {
+) -> Internal {
+    // let state: Internal = Internal::from_datum();
+    hyperloglog_trans_inner(unsafe{ state.to_inner() }, size, value, fc).internal()
+}
+pub fn hyperloglog_trans_inner(
+    state: Option<Inner<HyperLogLogTrans>>,
+    size: i32,
+    value: Option<AnyElement>,
+    fc: pg_sys::FunctionCallInfo,
+) -> Option<Inner<HyperLogLogTrans>> {
     unsafe {
         in_aggregate_context(fc, || {
             //TODO is this the right way to handle NULL?
             let value = match value {
                 None => return state,
-                Some(value) => value,
+                Some(value) => value.0,
             };
             let mut state = match state {
                 None => {
@@ -69,10 +77,19 @@ pub fn hyperloglog_trans(
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn hyperloglog_combine(
-    state1: Option<Internal<HyperLogLogTrans>>,
-    state2: Option<Internal<HyperLogLogTrans>>,
+    state1: Internal,
+    state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal<HyperLogLogTrans>> {
+) -> Internal {
+    unsafe {
+        hyperloglog_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
+    }
+}
+pub fn hyperloglog_combine_inner(
+    state1: Option<Inner<HyperLogLogTrans>>,
+    state2: Option<Inner<HyperLogLogTrans>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<HyperLogLogTrans>> {
     unsafe {
         in_aggregate_context(fcinfo, || match (state1, state2) {
             (None, None) => None,
@@ -87,11 +104,11 @@ pub fn hyperloglog_combine(
     }
 }
 
-#[allow(non_camel_case_types)]
-type bytea = pg_sys::Datum;
+use crate::raw::bytea;
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn hyperloglog_serialize(mut state: Internal<HyperLogLogTrans>) -> bytea {
+pub fn hyperloglog_serialize(state: Internal) -> bytea {
+    let state: &mut HyperLogLogTrans = unsafe { state.get_mut().unwrap() };
     state.logger.merge_all();
     crate::do_serialize!(state)
 }
@@ -99,9 +116,15 @@ pub fn hyperloglog_serialize(mut state: Internal<HyperLogLogTrans>) -> bytea {
 #[pg_extern(strict, immutable, parallel_safe)]
 pub fn hyperloglog_deserialize(
     bytes: bytea,
-    _internal: Option<Internal<()>>,
-) -> Internal<HyperLogLogTrans> {
-    crate::do_deserialize!(bytes, HyperLogLogTrans)
+    _internal: Internal,
+) -> Internal {
+    hyperloglog_deserialize_inner(bytes).internal()
+}
+pub fn hyperloglog_deserialize_inner(
+    bytes: bytea,
+) -> Inner<HyperLogLogTrans> {
+    let i: HyperLogLogTrans = crate::do_deserialize!(bytes, HyperLogLogTrans);
+    i.into()
 }
 
 pg_type! {
@@ -145,13 +168,17 @@ mod toolkit_experimental {
     pub(crate) use crate::accessors::toolkit_experimental::*;
 }
 
-varlena_type!(Hyperloglog);
-
 ron_inout_funcs!(HyperLogLog);
 
 #[pg_extern(immutable, parallel_safe)]
 fn hyperloglog_final(
-    state: Option<Internal<HyperLogLogTrans>>,
+    state: Internal,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<HyperLogLog<'static>> {
+    hyperloglog_final_inner(unsafe{ state.to_inner() }, fcinfo)
+}
+fn hyperloglog_final_inner(
+    state: Option<Inner<HyperLogLogTrans>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<HyperLogLog<'static>> {
     unsafe {
@@ -166,27 +193,35 @@ fn hyperloglog_final(
     }
 }
 
-extension_sql!(
-r#"
-CREATE AGGREGATE hyperloglog(size int, value AnyElement)
-(
-    stype = internal,
-    sfunc = hyperloglog_trans,
-    finalfunc = hyperloglog_final,
-    combinefunc = hyperloglog_combine,
-    serialfunc = hyperloglog_serialize,
-    deserialfunc = hyperloglog_deserialize,
-    parallel = safe
-);
-"#
+extension_sql!("\n\
+    CREATE AGGREGATE hyperloglog(size int, value AnyElement)\n\
+    (\n\
+        stype = internal,\n\
+        sfunc = hyperloglog_trans,\n\
+        finalfunc = hyperloglog_final,\n\
+        combinefunc = hyperloglog_combine,\n\
+        serialfunc = hyperloglog_serialize,\n\
+        deserialfunc = hyperloglog_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+name = "hll_agg",
+requires = [hyperloglog_trans, hyperloglog_final, hyperloglog_combine, hyperloglog_serialize, hyperloglog_deserialize],
 );
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn hyperloglog_union<'input>(
-    state: Option<Internal<HyperLogLogTrans>>,
-    other: HyperLogLog<'input>,
+pub fn hyperloglog_union(
+    state: Internal,
+    other: HyperLogLog,
     fc: pg_sys::FunctionCallInfo,
-) -> Option<Internal<HyperLogLogTrans>> {
+) -> Internal {
+    hyperloglog_union_inner(unsafe{ state.to_inner() }, other, fc).internal()
+}
+pub fn hyperloglog_union_inner(
+    state: Option<Inner<HyperLogLogTrans>>,
+    other: HyperLogLog,
+    fc: pg_sys::FunctionCallInfo,
+) -> Option<Inner<HyperLogLogTrans>> {
     unsafe {
         in_aggregate_context(fc, || {
             let mut state = match state {
@@ -209,27 +244,28 @@ pub fn hyperloglog_union<'input>(
     }
 }
 
-extension_sql!(
-r#"
-CREATE AGGREGATE rollup(hyperloglog Hyperloglog)
-(
-    stype = internal,
-    sfunc = hyperloglog_union,
-    finalfunc = hyperloglog_final,
-    combinefunc = hyperloglog_combine,
-    serialfunc = hyperloglog_serialize,
-    deserialfunc = hyperloglog_deserialize,
-    parallel = safe
-);
-"#
+extension_sql!("\n\
+    CREATE AGGREGATE rollup(hyperloglog Hyperloglog)\n\
+    (\n\
+        stype = internal,\n\
+        sfunc = hyperloglog_union,\n\
+        finalfunc = hyperloglog_final,\n\
+        combinefunc = hyperloglog_combine,\n\
+        serialfunc = hyperloglog_serialize,\n\
+        deserialfunc = hyperloglog_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+name = "hll_rollup",
+requires = [hyperloglog_union, hyperloglog_final, hyperloglog_combine, hyperloglog_serialize, hyperloglog_deserialize],
 );
 
 
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_hyperloglog_count<'input>(
-    sketch: HyperLogLog<'input>,
+pub fn arrow_hyperloglog_count(
+    sketch: HyperLogLog,
     accessor: toolkit_experimental::AccessorDistinctCount,
 ) -> i64 {
     let _ = accessor;
@@ -237,8 +273,8 @@ pub fn arrow_hyperloglog_count<'input>(
 }
 
 #[pg_extern(name="distinct_count", immutable, parallel_safe)]
-pub fn hyperloglog_count<'input>(
-    hyperloglog: HyperLogLog<'input>
+pub fn hyperloglog_count(
+    hyperloglog: HyperLogLog
 ) -> i64 {
     // count does not depend on the type parameters
     let log = match &hyperloglog.log {
@@ -253,17 +289,17 @@ pub fn hyperloglog_count<'input>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_hyperloglog_error<'input>(
-    sketch: HyperLogLog<'input>,
+pub fn arrow_hyperloglog_error(
+    sketch: HyperLogLog,
     accessor: toolkit_experimental::AccessorStdError,
 ) -> f64 {
     let _ = accessor;
     hyperloglog_error(sketch)
 }
 
-#[pg_extern(name="stderror" immutable, parallel_safe)]
-pub fn hyperloglog_error<'input>(
-    hyperloglog: HyperLogLog<'input>
+#[pg_extern(name="stderror", immutable, parallel_safe)]
+pub fn hyperloglog_error(
+    hyperloglog: HyperLogLog
 ) -> f64 {
     let precision = match hyperloglog.log {
         Storage::Sparse { precision, .. } => precision,
@@ -273,13 +309,13 @@ pub fn hyperloglog_error<'input>(
 }
 
 impl HyperLogLog<'_> {
-    pub fn build_from(size: int, type_id: Oid, collation: Option<Oid>, data: impl Iterator<Item=pg_sys::Datum>)
+    pub fn build_from(size: i32, type_id: Oid, collation: Option<Oid>, data: impl Iterator<Item=pg_sys::Datum>)
     -> HyperLogLog<'static> {
         unsafe {
             let b = TryInto::<usize>::try_into(size).unwrap().checked_next_power_of_two().unwrap().trailing_zeros();
             let hasher = DatumHashBuilder::from_type_id(type_id, collation);
             let mut logger: HLL<pg_sys::Datum, DatumHashBuilder> = HLL::new(b as u8, hasher);
-                
+
             for datum in data {
                 logger.add(&datum);
             }
@@ -303,8 +339,8 @@ fn flatten_log(hyperloglog: &mut HLL<Datum, DatumHashBuilder>)
         HyperLogLogStorage::Sparse(sparse) => unsafe {
             flatten!(HyperLogLog {
                 log: Storage::Sparse {
-                    element_type: element_type,
-                    collation: collation,
+                    element_type,
+                    collation,
                     num_compressed: sparse.num_compressed,
                     precision: sparse.precision,
                     compressed_bytes: sparse.compressed.num_bytes() as u32,
@@ -316,18 +352,18 @@ fn flatten_log(hyperloglog: &mut HLL<Datum, DatumHashBuilder>)
             // TODO check that precision and length match?
             flatten!(HyperLogLog {
                 log: Storage::Dense {
-                    element_type: element_type,
-                    collation: collation,
+                    element_type,
+                    collation,
                     precision: dense.precision,
                     registers: dense.registers.bytes().into(),
                 }
             })
         },
     };
-    flat.into()
+    flat
 }
 
-fn unflatten_log<'i>(hyperloglog: HyperLogLog<'i>) -> HLL<'i, Datum, DatumHashBuilder> {
+fn unflatten_log(hyperloglog: HyperLogLog) -> HLL<Datum, DatumHashBuilder> {
     match &hyperloglog.log {
         Storage::Sparse {
             num_compressed,
@@ -351,156 +387,12 @@ fn unflatten_log<'i>(hyperloglog: HyperLogLog<'i>) -> HLL<'i, Datum, DatumHashBu
     }
 }
 
-// TODO move to it's own mod if we reuse it
-struct DatumHashBuilder {
-    info: pg_sys::FunctionCallInfo,
-    type_id: pg_sys::Oid,
-    collation: pg_sys::Oid,
-}
-
-impl DatumHashBuilder {
-    unsafe fn from_type_id(type_id: pg_sys::Oid, collation: Option<Oid>) -> Self {
-        let entry =
-            pg_sys::lookup_type_cache(type_id, pg_sys::TYPECACHE_HASH_EXTENDED_PROC_FINFO as _);
-        Self::from_type_cache_entry(entry, collation)
-    }
-
-    unsafe fn from_type_cache_entry(
-        tentry: *const pg_sys::TypeCacheEntry,
-        collation: Option<Oid>,
-    ) -> Self {
-        let flinfo = if (*tentry).hash_extended_proc_finfo.fn_addr.is_some() {
-            &(*tentry).hash_extended_proc_finfo
-        } else {
-            pgx::error!("no hash function");
-        };
-
-        // 1 argument for the key, 1 argument for the seed
-        let size =
-            size_of::<pg_sys::FunctionCallInfoBaseData>() + size_of::<pg_sys::NullableDatum>() * 2;
-        let mut info = pg_sys::palloc0(size) as pg_sys::FunctionCallInfo;
-
-        (*info).flinfo = flinfo as *const pg_sys::FmgrInfo as *mut pg_sys::FmgrInfo;
-        (*info).context = std::ptr::null_mut();
-        (*info).resultinfo = std::ptr::null_mut();
-        (*info).fncollation = (*tentry).typcollation;
-        (*info).isnull = false;
-        (*info).nargs = 1;
-
-        let collation = match collation {
-            Some(collation) => collation,
-            None => (*tentry).typcollation,
-        };
-
-        Self {
-            info,
-            type_id: (*tentry).type_id,
-            collation,
-        }
-    }
-}
-
-impl Clone for DatumHashBuilder {
-    fn clone(&self) -> Self {
-        Self {
-            info: self.info,
-            type_id: self.type_id,
-            collation: self.collation,
-        }
-    }
-}
-
-impl BuildHasher for DatumHashBuilder {
-    type Hasher = DatumHashBuilder;
-
-    fn build_hasher(&self) -> Self::Hasher {
-        Self {
-            info: self.info,
-            type_id: self.type_id,
-            collation: self.collation,
-        }
-    }
-}
-
-impl Hasher for DatumHashBuilder {
-    fn finish(&self) -> u64 {
-        //FIXME ehhh, this is wildly unsafe, should at least have a separate hash
-        //      buffer for each, probably should have separate args
-        let value = unsafe {
-            let value = (*(*self.info).flinfo).fn_addr.unwrap()(self.info);
-            (*self.info).args.as_mut_slice(1)[0] = pg_sys::NullableDatum {
-                value: 0,
-                isnull: true,
-            };
-            (*self.info).isnull = false;
-            //FIXME 32bit vs 64 bit get value from datum on 32b arch
-            value
-        };
-        value as u64
-    }
-
-    fn write(&mut self, bytes: &[u8]) {
-        if bytes.len() != size_of::<usize>() {
-            panic!("invalid datum hash")
-        }
-
-        let mut b = [0; size_of::<usize>()];
-        for i in 0..size_of::<usize>() {
-            b[i] = bytes[i]
-        }
-        self.write_usize(usize::from_ne_bytes(b))
-    }
-
-    fn write_usize(&mut self, i: usize) {
-        unsafe {
-            (*self.info).args.as_mut_slice(1)[0] = pg_sys::NullableDatum {
-                value: i,
-                isnull: false,
-            };
-            (*self.info).isnull = false;
-        }
-    }
-}
-
-impl PartialEq for DatumHashBuilder {
-    fn eq(&self, other: &Self) -> bool {
-        self.type_id.eq(&other.type_id)
-    }
-}
-
-impl Eq for DatumHashBuilder {}
-
-impl Serialize for DatumHashBuilder {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        let collation = if self.collation == 0 {
-            None
-        } else {
-            Some(PgCollationId(self.collation))
-        };
-        (ShortTypeId(self.type_id), collation).serialize(serializer)
-    }
-}
-
-impl<'de> Deserialize<'de> for DatumHashBuilder {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        let (type_id, collation) =
-            <(ShortTypeId, Option<PgCollationId>)>::deserialize(deserializer)?;
-        //FIXME no collation?
-        let deserialized = unsafe { Self::from_type_id(type_id.0, collation.map(|c| c.0)) };
-        Ok(deserialized)
-    }
-}
-
 #[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
 mod tests {
     use pgx::*;
     use super::*;
+    use pgx_macros::pg_test;
 
     #[pg_test]
     fn test_hll_aggregate() {
@@ -573,15 +465,15 @@ mod tests {
             control.logger.add(&rust_str_to_text_p("second").into_datum().unwrap());
             control.logger.add(&rust_str_to_text_p("third").into_datum().unwrap());
 
-            let buffer = hyperloglog_serialize(control.clone().into());
-            let buffer = pgx::varlena::varlena_to_byte_slice(buffer as *mut pg_sys::varlena);
+            let buffer = hyperloglog_serialize(Inner::from(control.clone()).internal());
+            let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
 
             let mut expected = vec![1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 136, 136, 9, 7, 8, 74, 76, 47, 200, 231, 53, 25, 3, 0, 0, 0, 0, 0, 0, 0, 6, 9, 0, 0, 0, 1];
             bincode::serialize_into(&mut expected, &PgCollationId(100)).unwrap();
             assert_eq!(buffer, expected);
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
-            let new_state = hyperloglog_deserialize(&*expected as *const pg_sys::varlena as pg_sys::Datum, None);
+            let new_state = hyperloglog_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
 
             control.logger.merge_all();  // Sparse representation buffers always merged on serialization
             assert!(*new_state == control);
@@ -591,15 +483,15 @@ mod tests {
                 control.logger.add(&rust_str_to_text_p(&i.to_string()).into_datum().unwrap());
             }
 
-            let buffer = hyperloglog_serialize(control.clone().into());
-            let buffer = pgx::varlena::varlena_to_byte_slice(buffer as *mut pg_sys::varlena);
+            let buffer = hyperloglog_serialize(Inner::from(control.clone()).internal());
+            let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
 
             let mut expected = vec![1, 1, 1, 0, 0, 0, 49, 0, 0, 0, 0, 0, 0, 0, 20, 65, 2, 12, 48, 199, 20, 33, 4, 12, 49, 67, 16, 81, 66, 32, 145, 131, 24, 49, 4, 20, 33, 5, 8, 81, 66, 12, 81, 4, 8, 49, 2, 8, 65, 131, 24, 32, 133, 12, 50, 66, 12, 48, 197, 12, 81, 130, 255, 58, 6, 255, 255, 255, 255, 255, 255, 255, 3, 9, 0, 0, 0, 1];
             bincode::serialize_into(&mut expected, &PgCollationId(100)).unwrap();
             assert_eq!(buffer, expected);
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
-            let new_state = hyperloglog_deserialize(&*expected as *const pg_sys::varlena as pg_sys::Datum, None);
+            let new_state = hyperloglog_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
 
             assert!(*new_state == control);
         }

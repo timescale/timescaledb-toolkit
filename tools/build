@@ -121,6 +121,20 @@ while [ $# -gt 0 ]; do
                  docs
             ;;
 
+        test-updates)
+            require_pgversion
+            find_pgconfig
+            (
+                export CARGO_TARGET_DIR="$top_CARGO_TARGET_DIR"
+                $nop cargo pgx start $pg
+                $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- \
+                 -h localhost \
+                 -p $pgport \
+                 . \
+                 "$pg_config"
+            )
+            ;;
+
         *)
             usage
             ;;

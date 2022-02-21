@@ -16,6 +16,7 @@ pg14 = ["pgx/pg14", "pgx-tests/pg14"]
 pg_test = ["approx"]
 
 [dependencies]
+# Keep synchronized with `cargo install --version N.N.N cargo-pgx` in Readme.md.
 pgx = "0.2.4"
 pgx-macros = "0.2.4"
 encodings = {path="../crates/encodings"}

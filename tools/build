@@ -130,6 +130,7 @@ while [ $# -gt 0 ]; do
                 $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- \
                  -h localhost \
                  -p $pgport \
+                 --cache old-versions \
                  . \
                  "$pg_config"
             )

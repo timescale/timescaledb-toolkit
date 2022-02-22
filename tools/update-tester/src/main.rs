@@ -42,9 +42,12 @@ fn main() {
             connection should use. By default this DB will only be used \
             to spawn the individual test databases; no tests will run against \
             it.")
+        (@arg CACHE: -c --cache [cache_dir] "Directory in which to look-for/store \
+            old versions of the Toolkit.")
         (@arg ROOT_DIR: +required <dir> "Path in which to find the timescaledb-toolkit repo")
         (@arg PG_CONFIG: +required <pg_config> "Path to pg_config for the DB we are using")
-    ).get_matches();
+    )
+    .get_matches();
 
     let connection_config = ConnectionConfig {
         host: matches.value_of("HOST"),
@@ -54,25 +57,34 @@ fn main() {
         database: matches.value_of("DB"),
     };
 
+    let cache_dir = matches.value_of("CACHE");
+
     let root_dir = matches
         .value_of("ROOT_DIR")
         .expect("missing path to root of the toolkit repo");
 
     let pg_config = matches.value_of("PG_CONFIG").expect("missing pg_config");
 
-    if let Err(err) = try_main(root_dir, &connection_config, pg_config) {
+    if let Err(err) = try_main(root_dir, cache_dir, &connection_config, pg_config) {
         eprintln!("{}", err);
         process::exit(1);
     }
 }
 
-fn try_main(root_dir: &str, db_conn: &ConnectionConfig<'_>, pg_config: &str) -> xshell::Result<()> {
+fn try_main(
+    root_dir: &str,
+    cache_dir: Option<&str>,
+    db_conn: &ConnectionConfig<'_>,
+    pg_config: &str,
+) -> xshell::Result<()> {
     let (current_version, old_versions) = get_version_info(root_dir)?;
     if old_versions.is_empty() {
         panic!("no old versions to upgrade from")
     }
 
-    installer::install_all_versions(root_dir, pg_config, &old_versions)?;
+    println!("{} [{}]", "Testing".green().bold(), old_versions.join(", "));
+
+    installer::install_all_versions(root_dir, cache_dir, pg_config, &old_versions)?;
 
     testrunner::run_update_tests(db_conn, current_version, old_versions)
 }

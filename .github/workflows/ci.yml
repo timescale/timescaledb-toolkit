@@ -308,5 +308,12 @@ jobs:
         key: ${{ runner.os }}-test-updates-target-1.6_a
         #restore-keys: ${{ runner.os }}-test-crates-target-PREVIOUS
 
+    - name: Cache old versions dir
+      uses: actions/cache@v2
+      with:
+        path: old-versions
+        key: ${{ runner.os }}-test-old-versions-1.6_a
+        #restore-keys: ${{ runner.os }}-test-old-versions-PREVIOUS
+
     - name: Run Update Tests
       run: su postgres -c 'sh tools/build -pg$PGVERSION test-updates 2>&1'

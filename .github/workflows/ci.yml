@@ -267,3 +267,53 @@ jobs:
 
     - name: Run Crates Tests
       run: su postgres -c 'sh tools/build test-crates 2>&1'
+
+  testupdates:
+    name: Test Updates
+    runs-on: ubuntu-latest
+    container:
+      image: timescaledev/rust-pgx:latest
+      env:
+        PGVERSION: 14
+        CARGO_TARGET_DIR_NAME: target
+
+        CARGO_INCREMENTAL: 0
+        CARGO_NET_RETRY: 10
+        CI: 1
+        RUST_BACKTRACE: short
+        RUSTUP_MAX_RETRIES: 10
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    - name: chown Repository
+      run: chown -R postgres .
+
+    - name: Cache cargo directories
+      uses: actions/cache@v2
+      with:
+        path: |
+          /usr/local/cargo/registry
+          /usr/local/cargo/git
+        key: ${{ runner.os }}-test-updates-cargo-1.6_a
+        #restore-keys: ${{ runner.os }}-test-crates-cargo-PREVIOUS
+
+    - name: Cache cargo target dir
+      uses: actions/cache@v2
+      with:
+        path: target
+        key: ${{ runner.os }}-test-updates-target-1.6_a
+        #restore-keys: ${{ runner.os }}-test-crates-target-PREVIOUS
+
+    - name: Cache old versions dir
+      uses: actions/cache@v2
+      with:
+        path: old-versions
+        key: ${{ runner.os }}-test-old-versions-1.6_a
+        #restore-keys: ${{ runner.os }}-test-old-versions-PREVIOUS
+
+    - name: Run Update Tests
+      run: su postgres -c 'sh tools/build -pg$PGVERSION test-updates 2>&1'

@@ -1,5 +1,5 @@
 comment = 'Library of analytical hyperfunctions, time-series pipelining, and other SQL utilities'
-default_version = '1.6-dev'
+default_version = '1.6.0-dev'
 relocatable = false
 superuser = false
 module_pathname = '$libdir/timescaledb_toolkit' # only for testing, will be removed for real installs

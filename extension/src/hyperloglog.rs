@@ -106,7 +106,7 @@ pub fn hyperloglog_combine_inner(
 
 use crate::raw::bytea;
 
-#[pg_extern(immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe, strict)]
 pub fn hyperloglog_serialize(state: Internal) -> bytea {
     let state: &mut HyperLogLogTrans = unsafe { state.get_mut().unwrap() };
     state.logger.merge_all();

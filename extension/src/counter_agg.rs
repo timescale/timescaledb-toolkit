@@ -151,7 +151,7 @@ impl CounterSummaryTransState {
     }
 }
 
-#[pg_extern(immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe, strict)]
 pub fn counter_summary_trans_serialize(
     state: Internal,
 ) -> bytea {

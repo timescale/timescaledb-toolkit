@@ -108,7 +108,7 @@ pub fn uddsketch_combine_inner(
 
 use crate::raw::bytea;
 
-#[pg_extern(immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe, strict)]
 pub fn uddsketch_serialize(
     state: Internal,
 ) -> bytea {

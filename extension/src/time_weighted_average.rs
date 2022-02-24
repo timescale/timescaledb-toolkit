@@ -83,7 +83,7 @@ impl TimeWeightTransState {
     }
 }
 
-#[pg_extern(immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe, strict)]
 pub fn time_weight_trans_serialize(state: Internal) -> bytea {
     let mut state: Inner<TimeWeightTransState> = unsafe { state.to_inner().unwrap() };
     state.combine_summaries();

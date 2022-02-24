@@ -199,7 +199,7 @@ pub fn unnest(
     series.into_iter().map(|points| (points.ts.into(), points.val))
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe, strict)]
 pub fn timevector_serialize(
     state: Internal,
 ) -> bytea {

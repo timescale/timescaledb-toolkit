@@ -133,7 +133,7 @@ pub fn tdigest_combine_inner(
 
 use crate::raw::bytea;
 
-#[pg_extern(immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe, strict)]
 pub fn tdigest_serialize(
     state: Internal,
 ) -> bytea {

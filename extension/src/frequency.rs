@@ -15,32 +15,47 @@ use serde::{
 use flat_serialize::*;
 
 use crate::{
-    aggregate_utils::get_collation,
+    aggregate_utils::{get_collation, in_aggregate_context},
     build,
     datum_utils::{
         deep_copy_datum, DatumFromSerializedTextReader, DatumHashBuilder, DatumStore,
         TextSerializableDatumWriter,
     },
-    palloc::{Inner, Internal, InternalAsValue},
+    palloc::{Inner, Internal, InternalAsValue, ToInternal},
     pg_any_element::{PgAnyElement, PgAnyElementHashMap},
     pg_type,
     raw::bytea,
     ron_inout_funcs,
 };
 
-use aggregate_builder::aggregate;
+use spfunc::zeta::zeta;
+use statrs::function::harmonic::gen_harmonic;
 
-use crate::frequency::toolkit_experimental::FrequencyAggregate;
+use crate::frequency::toolkit_experimental::SpaceSavingAggregate;
 
-struct FrequencyEntry {
+// Helper functions for zeta distribution
+
+// Default s-value
+const DEFAULT_ZETA_SKEW: f64 = 1.1;
+
+// probability of the nth element of a zeta distribution
+fn zeta_eq_n(skew: f64, n: u64) -> f64 {
+    1.0 / zeta(skew) * (n as f64).powf(-1. * skew)
+}
+// cumulative distribution <= n in a zeta distribution
+fn zeta_le_n(skew: f64, n: u64) -> f64 {
+    gen_harmonic(n, skew) / zeta(skew)
+}
+
+struct SpaceSavingEntry {
     value: Datum,
     count: u64,
     overcount: u64,
 }
 
-impl FrequencyEntry {
-    fn clone(&self, typoid: Oid) -> FrequencyEntry {
-        FrequencyEntry {
+impl SpaceSavingEntry {
+    fn clone(&self, typoid: Oid) -> SpaceSavingEntry {
+        SpaceSavingEntry {
             value: unsafe { deep_copy_datum(self.value, typoid) },
             count: self.count,
             overcount: self.overcount,
@@ -48,58 +63,59 @@ impl FrequencyEntry {
     }
 }
 
-const MIN_SIZE: usize = 10;
-const MAX_NOISE_RATIO: f64 = 0.9;
-
-pub struct FrequencyTransState {
-    entries: Vec<FrequencyEntry>,
-    indicies: PgAnyElementHashMap<usize>,
+pub struct SpaceSavingTransState {
+    entries: Vec<SpaceSavingEntry>,
+    indices: PgAnyElementHashMap<usize>,
     total_vals: u64,
-    min_freq: f64,
-    complete: bool, // true if all seen values in entries
+    freq_param: f64, // This is the minimum frequency for a freq_agg or the skew for a topn_agg
+    topn: u32,       // 0 for freq_agg, creation parameter for topn_agg
+    max_size: u32,   // Maximum size for indices
 }
 
-impl Clone for FrequencyTransState {
+impl Clone for SpaceSavingTransState {
     fn clone(&self) -> Self {
         let mut new_state = Self {
             entries: vec![],
-            indicies: PgAnyElementHashMap::with_hasher(self.indicies.hasher().clone()),
+            indices: PgAnyElementHashMap::with_hasher(self.indices.hasher().clone()),
             total_vals: self.total_vals,
-            min_freq: self.min_freq,
-            complete: self.complete,
+            freq_param: self.freq_param,
+            max_size: self.max_size,
+            topn: self.topn,
         };
 
         let typoid = self.type_oid();
         for entry in &self.entries {
-            new_state.entries.push(FrequencyEntry {
+            new_state.entries.push(SpaceSavingEntry {
                 value: unsafe { deep_copy_datum(entry.value, typoid) },
                 count: entry.count,
                 overcount: entry.overcount,
             })
         }
-        new_state.update_all_map_indicies();
+        new_state.update_all_map_indices();
         new_state
     }
 }
 
-// FrequencyTransState is a little tricky to serialize due to needing the typ oid to serialize the Datums.
+// SpaceSavingTransState is a little tricky to serialize due to needing the typ oid to serialize the Datums.
 // This sort of requirement doesn't play nicely with the serde framework, so as a workaround we simply
 // serialize the object as one big sequence.  The serialized sequence should look like this:
 //   total_vals as u64
 //   min_freq as f64
-//   complete as bool
-//   indicies.hasher as DatumHashBuilder
+//   max_idx as u32
+//   topn as u32
+//   indices.hasher as DatumHashBuilder
 //   entries as repeated (str, u64, u64) tuples
-impl Serialize for FrequencyTransState {
+impl Serialize for SpaceSavingTransState {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        let mut seq = serializer.serialize_seq(Some(self.entries.len() + 4))?;
+        let mut seq = serializer.serialize_seq(Some(self.entries.len() + 5))?;
         seq.serialize_element(&self.total_vals)?;
-        seq.serialize_element(&self.min_freq)?;
-        seq.serialize_element(&self.complete)?;
-        seq.serialize_element(&self.indicies.hasher())?;
+        seq.serialize_element(&self.freq_param)?;
+        seq.serialize_element(&self.max_size)?;
+        seq.serialize_element(&self.topn)?;
+        seq.serialize_element(&self.indices.hasher())?;
 
         // TODO JOSH use a writer that switches based on whether we want binary or not
         let mut writer = TextSerializableDatumWriter::from_oid(self.type_oid());
@@ -115,7 +131,7 @@ impl Serialize for FrequencyTransState {
     }
 }
 
-impl<'de> Deserialize<'de> for FrequencyTransState {
+impl<'de> Deserialize<'de> for SpaceSavingTransState {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -123,7 +139,7 @@ impl<'de> Deserialize<'de> for FrequencyTransState {
         struct FrequencyTransStateVisitor();
 
         impl<'de> Visitor<'de> for FrequencyTransStateVisitor {
-            type Value = FrequencyTransState;
+            type Value = SpaceSavingTransState;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str("a sequence encoding a FrequencyTransState object")
@@ -135,15 +151,17 @@ impl<'de> Deserialize<'de> for FrequencyTransState {
             {
                 let total_vals = seq.next_element::<u64>()?.unwrap();
                 let min_freq = seq.next_element::<f64>()?.unwrap();
-                let complete = seq.next_element::<bool>()?.unwrap();
+                let max_size = seq.next_element::<u32>()?.unwrap();
+                let topn = seq.next_element::<u32>()?.unwrap();
                 let hasher = seq.next_element::<DatumHashBuilder>()?.unwrap();
 
-                let mut state = FrequencyTransState {
+                let mut state = SpaceSavingTransState {
                     entries: vec![],
-                    indicies: PgAnyElementHashMap::with_hasher(hasher),
+                    indices: PgAnyElementHashMap::with_hasher(hasher),
                     total_vals,
-                    min_freq,
-                    complete,
+                    freq_param: min_freq,
+                    max_size,
+                    topn,
                 };
 
                 let typid = state.type_oid();
@@ -154,13 +172,13 @@ impl<'de> Deserialize<'de> for FrequencyTransState {
                 {
                     let datum = reader.read_datum(datum_str);
 
-                    state.entries.push(FrequencyEntry {
+                    state.entries.push(SpaceSavingEntry {
                         value: unsafe { deep_copy_datum(datum, typid) },
                         count,
                         overcount,
                     });
                 }
-                state.update_all_map_indicies();
+                state.update_all_map_indices();
                 Ok(state)
             }
         }
@@ -169,89 +187,72 @@ impl<'de> Deserialize<'de> for FrequencyTransState {
     }
 }
 
-impl FrequencyTransState {
-    unsafe fn from_type_id(min_freq: f64, typ: pg_sys::Oid, collation: Option<Oid>) -> Self {
-        FrequencyTransState {
+impl SpaceSavingTransState {
+    fn max_size_for_freq(min_freq: f64) -> u32 {
+        (1. / min_freq) as u32 + 1
+    }
+
+    fn freq_agg_from_type_id(min_freq: f64, typ: pg_sys::Oid, collation: Option<Oid>) -> Self {
+        SpaceSavingTransState {
             entries: vec![],
-            indicies: PgAnyElementHashMap::new(typ, collation),
+            indices: PgAnyElementHashMap::new(typ, collation),
             total_vals: 0,
-            min_freq,
-            complete: true,
+            freq_param: min_freq,
+            max_size: SpaceSavingTransState::max_size_for_freq(min_freq),
+            topn: 0,
+        }
+    }
+
+    fn topn_agg_from_type_id(skew: f64, nval: u32, typ: pg_sys::Oid, collation: Option<Oid>) -> Self {
+        let prob_eq_n = zeta_eq_n(skew, nval as u64);
+        let prob_lt_n = zeta_le_n(skew, nval as u64 - 1);
+
+        SpaceSavingTransState {
+            entries: vec![],
+            indices: PgAnyElementHashMap::new(typ, collation),
+            total_vals: 0,
+            freq_param: skew,
+            max_size: nval - 1 + SpaceSavingTransState::max_size_for_freq(prob_eq_n / (1.0 - prob_lt_n)),
+            topn: nval,
         }
     }
 
     fn type_oid(&self) -> Oid {
-        self.indicies.typoid()
+        self.indices.typoid()
     }
 
     fn add(&mut self, element: PgAnyElement) {
         self.total_vals += 1;
-        if let Some(idx) = self.indicies.get(&element) {
+        if let Some(idx) = self.indices.get(&element) {
             let idx = *idx;
             self.entries[idx].count += 1;
             self.move_left(idx);
+        } else if self.entries.len() < self.max_size as usize {
+            let new_idx = self.entries.len();
+            self.entries.push(SpaceSavingEntry {
+                value: element.deep_copy_datum(),
+                count: 1,
+                overcount: 0,
+            });
+
+            // Important to create the indices entry using the datum in the local context
+            self.indices.insert(
+                (self.entries[new_idx].value, self.type_oid()).into(),
+                new_idx,
+            );
         } else {
-            // TODO: might be inefficient to call should_grow on every iteration
-            if self.entries.len() < MIN_SIZE || self.should_grow() {
-                let new_idx = self.entries.len();
-                let overcount = if self.complete {
-                    0
-                } else {
-                    self.entries.last().unwrap().overcount
-                };
-                self.entries.push(FrequencyEntry {
-                    value: element.deep_copy_datum(),
-                    count: 1 + overcount,
-                    overcount,
-                });
+            let new_value = element.deep_copy_datum();
 
-                // Important to create the indices entry using the datum in the local context
-                self.indicies.insert(
-                    (self.entries[new_idx].value, self.type_oid()).into(),
-                    new_idx,
-                );
-            } else {
-                self.complete = false;
-                let new_value = element.deep_copy_datum();
-
-                // TODO: might be more efficient to replace the lowest indexed tail value (count matching last) and not call move_up
-                let typoid = self.type_oid();
-                let entry = self.entries.last_mut().unwrap();
-                self.indicies.remove(&(entry.value, typoid).into());
-                entry.value = new_value; // JOSH FIXME should we pfree() old value if by-ref?
-                entry.overcount = entry.count;
-                entry.count += 1;
-                self.indicies
-                    .insert((new_value, typoid).into(), self.entries.len() - 1);
-                self.move_left(self.entries.len() - 1);
-            }
-        }
-    }
-
-    fn should_grow(&self) -> bool {
-        let mut used_count = 0; // This will be the sum of the counts of elements that occur more than min_freq
-
-        let mut i = 0;
-        while i < self.entries.len()
-            && self.entries[i].count as f64 / self.total_vals as f64 > self.min_freq
-        {
-            used_count += self.entries[i].count - self.entries[i].overcount; // Would just using count here introduce too much error?
-            i += 1
-        }
-
-        if i == self.entries.len() {
-            true
-        } else {
-            // At this point the first 'i' entries are all of the elements that occur more than 'min_freq' and account for 'used_count' of all the entries encountered so far.
-
-            // Noise threshold is the count below which we don't track values (this will be approximately the overcount of churning buckets)
-            let noise_threhold = self.min_freq * MAX_NOISE_RATIO * self.total_vals as f64;
-
-            // We compute our target size as 'i' plus the amount of buckets the remaining entries could be divided among if there are no values occuring between 'min_freq' and 'noise_threshold'
-            let remainder = self.total_vals - used_count;
-            let target_size = f64::ceil(remainder as f64 / noise_threhold) as usize + i;
-
-            self.entries.len() < target_size
+            // TODO: might be more efficient to replace the lowest indexed tail value (count matching last) and not call move_up
+            let typoid = self.type_oid();
+            let entry = self.entries.last_mut().unwrap();
+            self.indices.remove(&(entry.value, typoid).into());
+            entry.value = new_value; // JOSH FIXME should we pfree() old value if by-ref?
+            entry.overcount = entry.count;
+            entry.count += 1;
+            self.indices
+                .insert((new_value, typoid).into(), self.entries.len() - 1);
+            self.move_left(self.entries.len() - 1);
         }
     }
 
@@ -270,41 +271,41 @@ impl FrequencyTransState {
         }
     }
 
-    // Adds the 'indicies' lookup entry for the value at 'entries' index i
+    // Adds the 'indices' lookup entry for the value at 'entries' index i
     fn update_map_index(&mut self, i: usize) {
         let element_for_i = (self.entries[i].value, self.type_oid()).into();
-        if let Some(entry) = self.indicies.get_mut(&element_for_i) {
+        if let Some(entry) = self.indices.get_mut(&element_for_i) {
             *entry = i;
         } else {
-            self.indicies.insert(element_for_i, i);
+            self.indices.insert(element_for_i, i);
         }
     }
 
-    fn update_all_map_indicies(&mut self) {
+    fn update_all_map_indices(&mut self) {
         for i in 0..self.entries.len() {
             self.update_map_index(i);
         }
     }
 
-    fn combine(one: &FrequencyTransState, two: &FrequencyTransState) -> FrequencyTransState {
+    fn combine(one: &SpaceSavingTransState, two: &SpaceSavingTransState) -> SpaceSavingTransState {
         // This takes an entry from a TransState, updates it with any state from the other TransState, and adds the result into the map
         fn new_entry(
-            entry: &FrequencyEntry,
-            other: &FrequencyTransState,
-            map: &mut PgAnyElementHashMap<FrequencyEntry>,
+            entry: &SpaceSavingEntry,
+            other: &SpaceSavingTransState,
+            map: &mut PgAnyElementHashMap<SpaceSavingEntry>,
         ) {
             let typoid = other.type_oid();
 
             let mut new_ent = entry.clone(typoid);
             let new_dat = (new_ent.value, typoid).into();
-            match other.indicies.get(&new_dat) {
+            match other.indices.get(&new_dat) {
                 Some(&idx) => {
                     new_ent.count += other.entries[idx].count;
                     new_ent.overcount += other.entries[idx].overcount;
                 }
                 None => {
-                    // If the entry value isn't present in the other state, we have to assume that it was recently bumped (unless the other state is complete).
-                    let min = if other.complete {
+                    // If the entry value isn't present in the other state, we have to assume that it was recently bumped (unless the other state is not fully populated).
+                    let min = if other.indices.len() < other.max_size as usize {
                         0
                     } else {
                         other.entries.last().unwrap().count
@@ -316,7 +317,7 @@ impl FrequencyTransState {
             map.insert(new_dat, new_ent);
         }
 
-        let hasher = one.indicies.hasher().clone();
+        let hasher = one.indices.hasher().clone();
         let mut temp = PgAnyElementHashMap::with_hasher(hasher);
 
         // First go through the first state, and add all entries (updated with other other state) to our temporary hashmap
@@ -333,23 +334,21 @@ impl FrequencyTransState {
         }
 
         // TODO: get this into_iter working without making temp.0 public
-        let mut entries: Vec<FrequencyEntry> = temp.0.into_iter().map(|(_, v)| v).collect();
+        let mut entries: Vec<SpaceSavingEntry> = temp.0.into_iter().map(|(_, v)| v).collect();
         entries.sort_by(|a, b| b.count.partial_cmp(&a.count).unwrap()); // swap a and b for descending
 
-        // TODO: mimic should_grow logic to determine how many elements are actually worth retaining
-        let max_size = (1. / one.min_freq / MAX_NOISE_RATIO) as usize;
-        let truncated = entries.len() <= max_size;
-        entries.truncate(max_size);
+        entries.truncate(one.max_size as usize);
 
-        let mut result = FrequencyTransState {
+        let mut result = SpaceSavingTransState {
             entries,
-            indicies: PgAnyElementHashMap::with_hasher(one.indicies.hasher().clone()),
+            indices: PgAnyElementHashMap::with_hasher(one.indices.hasher().clone()),
             total_vals: one.total_vals + two.total_vals,
-            min_freq: one.min_freq,
-            complete: one.complete && two.complete && !truncated,
+            freq_param: one.freq_param,
+            max_size: one.max_size,
+            topn: one.topn,
         };
 
-        result.update_all_map_indicies();
+        result.update_all_map_indices();
         result
     }
 }
@@ -360,25 +359,20 @@ pub mod toolkit_experimental {
 
     pg_type! {
         #[derive(Debug)]
-        struct FrequencyAggregate<'input> {
+        struct SpaceSavingAggregate<'input> {
             type_oid: u32,
             num_values: u32,
             values_seen: u64,
-            min_freq: f64,
+            freq_param: f64,
+            topn: u64, // bump this up to u64 to keep alignment
             counts: [u64; self.num_values], // JOSH TODO look at AoS instead of SoA at some point
             overcounts: [u64; self.num_values],
             datums: DatumStore<'input>,
         }
     }
 
-    impl<'input> From<Internal> for FrequencyAggregate<'input> {
-        fn from(trans: Internal) -> Self {
-            Self::from(unsafe { trans.to_inner().unwrap() })
-        }
-    }
-
-    impl<'input> From<&mut FrequencyTransState> for FrequencyAggregate<'input> {
-        fn from(trans: &mut FrequencyTransState) -> Self {
+    impl<'input> From<&SpaceSavingTransState> for SpaceSavingAggregate<'input> {
+        fn from(trans: &SpaceSavingTransState) -> Self {
             let mut values = Vec::new();
             let mut counts = Vec::new();
             let mut overcounts = Vec::new();
@@ -390,11 +384,12 @@ pub mod toolkit_experimental {
             }
 
             build! {
-                FrequencyAggregate {
+                SpaceSavingAggregate {
                     type_oid: trans.type_oid() as _,
                     num_values: trans.entries.len() as _,
                     values_seen: trans.total_vals,
-                    min_freq: trans.min_freq,
+                    freq_param: trans.freq_param,
+                    topn: trans.topn as u64,
                     counts: counts.into(),
                     overcounts: overcounts.into(),
                     datums: DatumStore::from((trans.type_oid(), values)),
@@ -403,100 +398,199 @@ pub mod toolkit_experimental {
         }
     }
 
-    impl<'input> From<Inner<FrequencyTransState>> for FrequencyAggregate<'input> {
-        fn from(trans: Inner<FrequencyTransState>) -> Self {
-            let mut values = Vec::new();
-            let mut counts = Vec::new();
-            let mut overcounts = Vec::new();
-
-            for entry in &trans.entries {
-                values.push(entry.value);
-                counts.push(entry.count);
-                overcounts.push(entry.overcount);
-            }
-
-            build! {
-                FrequencyAggregate {
-                    type_oid: trans.type_oid() as _,
-                    num_values: trans.entries.len() as _,
-                    values_seen: trans.total_vals,
-                    min_freq: trans.min_freq,
-                    counts: counts.into(),
-                    overcounts: overcounts.into(),
-                    datums: DatumStore::from((trans.type_oid(), values)),
-                }
-            }
-        }
-    }
-
-    ron_inout_funcs!(FrequencyAggregate);
+    ron_inout_funcs!(SpaceSavingAggregate);
 }
 
-#[aggregate]
-impl toolkit_experimental::freq_agg {
-    type State = FrequencyTransState;
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+pub fn topn_agg_trans(
+    state: Internal,
+    n: i32,
+    value: Option<AnyElement>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Internal {
+    topn_agg_with_skew_trans(state, n, DEFAULT_ZETA_SKEW, value, fcinfo)
+}
 
-    const PARALLEL_SAFE: bool = true;
-
-    fn transition(
-        state: Option<State>,
-        #[sql_type("double precision")] freq: f64,
-        #[sql_type("AnyElement")] value: Option<AnyElement>,
-        fcinfo: pg_sys::FunctionCallInfo,
-    ) -> Option<State> {
-        let value = match value {
-            None => return state,
-            Some(value) => value,
-        };
-        let mut state = match state {
-            None => unsafe {
-                let typ = value.oid();
-                let collation = if fcinfo.is_null() {
-                    Some(100) // TODO: default OID, there should be a constant for this
-                } else {
-                    get_collation(fcinfo)
-                };
-                FrequencyTransState::from_type_id(freq, typ, collation)
-            },
-            Some(state) => state,
-        };
-
-        state.add(value.into());
-        Some(state)
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+pub fn topn_agg_with_skew_trans(
+    state: Internal,
+    n: i32,
+    skew: f64,
+    value: Option<AnyElement>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Internal {
+    if n <= 0 {
+        pgx::error!("topn aggregate requires an n value > 0")
+    }
+    if skew <= 1.0 {
+        pgx::error!("topn aggregate requires a skew factor > 1.0")
     }
 
-    fn finally(
-        state: Option<&mut State>,
-    ) -> Option<toolkit_experimental::FrequencyAggregate<'static>> {
-        state.map(FrequencyAggregate::from)
+    space_saving_trans(unsafe{ state.to_inner() }, value, fcinfo, |typ, collation| 
+        {SpaceSavingTransState::topn_agg_from_type_id(skew, n as u32, typ, collation)}).internal()
+}
+
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+pub fn freq_agg_trans(
+    state: Internal,
+    freq: f64,
+    value: Option<AnyElement>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Internal {
+    if freq <= 0. || freq >= 1.0 {
+        pgx::error!("frequency aggregate requires a frequency in the range (0.0, 1.0)")
     }
 
-    fn serialize(state: &State) -> bytea {
-        crate::do_serialize!(state)
-    }
+    space_saving_trans(unsafe{ state.to_inner() }, value, fcinfo, |typ, collation| 
+        {SpaceSavingTransState::freq_agg_from_type_id(freq, typ, collation)}).internal()
+}
 
-    fn deserialize(bytes: crate::raw::bytea) -> State {
-        crate::do_deserialize!(bytes, FrequencyTransState)
-    }
-
-    fn combine(a: Option<&State>, b: Option<&State>) -> Option<State> {
-        match (a, b) {
-            (Some(a), Some(b)) => Some(FrequencyTransState::combine(a, b)),
-            (Some(a), None) => Some(a.clone()),
-            (None, Some(b)) => Some(b.clone()),
-            (None, None) => None,
-        }
+pub fn space_saving_trans<F>(
+    state: Option<Inner<SpaceSavingTransState>>,
+    value: Option<AnyElement>,
+    fcinfo: pg_sys::FunctionCallInfo,
+    make_trans_state: F
+) -> Option<Inner<SpaceSavingTransState>> 
+where
+    F: FnOnce(pg_sys::Oid, Option<pg_sys::Oid>) -> SpaceSavingTransState
+{
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            let value = match value {
+                None => return state,
+                Some(value) => value,
+            };
+            let mut state = match state {
+                None => {
+                    let typ = value.oid();
+                    let collation = if fcinfo.is_null() {
+                        Some(100) // TODO: default OID, there should be a constant for this
+                    } else {
+                        get_collation(fcinfo)
+                    };
+                    make_trans_state(typ, collation).into()
+                },
+                Some(state) => state,
+            };
+    
+            state.add(value.into());
+            Some(state)
+        })
     }
 }
+
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+pub fn space_saving_combine(
+    state1: Internal,
+    state2: Internal,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Internal {
+    unsafe {
+        space_saving_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
+    }
+}
+pub fn space_saving_combine_inner(
+    a: Option<Inner<SpaceSavingTransState>>,
+    b: Option<Inner<SpaceSavingTransState>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<SpaceSavingTransState>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            match (a, b) {
+                (Some(a), Some(b)) => Some(SpaceSavingTransState::combine(&*a, &*b).into()),
+                (Some(a), None) => Some(a.clone().into()),
+                (None, Some(b)) => Some(b.clone().into()),
+                (None, None) => None,
+            }
+        })
+    }
+}
+
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+fn space_saving_final(
+    state: Internal,
+    _fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<toolkit_experimental::SpaceSavingAggregate<'static>> {
+    let state: Option<&SpaceSavingTransState> = unsafe { state.get() };
+    state.map(SpaceSavingAggregate::from)
+}
+
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+fn space_saving_serialize(
+    state: Internal,
+) -> bytea {
+    let state: Inner<SpaceSavingTransState> = unsafe { state.to_inner().unwrap() };
+    crate::do_serialize!(state)
+}
+
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+pub fn space_saving_deserialize(
+    bytes: bytea,
+    _internal: Internal,
+) -> Internal {
+    let i: SpaceSavingTransState = crate::do_deserialize!(bytes, SpaceSavingTransState);
+    Inner::from(i).internal()
+}
+
+extension_sql!("\n\
+    CREATE AGGREGATE toolkit_experimental.freq_agg(\n\
+        double precision, AnyElement\n\
+    ) (\n\
+        sfunc = toolkit_experimental.freq_agg_trans,\n\
+        stype = internal,\n\
+        finalfunc = toolkit_experimental.space_saving_final,\n\
+        combinefunc = toolkit_experimental.space_saving_combine,\n\
+        serialfunc = toolkit_experimental.space_saving_serialize,\n\
+        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+name = "freq_agg",
+requires = [freq_agg_trans, space_saving_final, space_saving_combine, space_saving_serialize, space_saving_deserialize],
+);
+
+extension_sql!("\n\
+    CREATE AGGREGATE toolkit_experimental.topn_agg(\n\
+        integer, AnyElement\n\
+    ) (\n\
+        sfunc = toolkit_experimental.topn_agg_trans,\n\
+        stype = internal,\n\
+        finalfunc = toolkit_experimental.space_saving_final,\n\
+        combinefunc = toolkit_experimental.space_saving_combine,\n\
+        serialfunc = toolkit_experimental.space_saving_serialize,\n\
+        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+name = "topn_agg",
+requires = [topn_agg_trans, space_saving_final, space_saving_combine, space_saving_serialize, space_saving_deserialize],
+);
+
+extension_sql!("\n\
+    CREATE AGGREGATE toolkit_experimental.topn_agg(\n\
+        integer, double precision, AnyElement\n\
+    ) (\n\
+        sfunc = toolkit_experimental.topn_agg_with_skew_trans,\n\
+        stype = internal,\n\
+        finalfunc = toolkit_experimental.space_saving_final,\n\
+        combinefunc = toolkit_experimental.space_saving_combine,\n\
+        serialfunc = toolkit_experimental.space_saving_serialize,\n\
+        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+name = "topn_agg_with_skew",
+requires = [topn_agg_with_skew_trans, space_saving_final, space_saving_combine, space_saving_serialize, space_saving_deserialize],
+);
 
 #[pg_extern(
     immutable,
     parallel_safe,
-    name = "values",
+    name = "into_values",
     schema = "toolkit_experimental"
 )]
 pub fn freq_iter(
-    agg: FrequencyAggregate<'_>,
+    agg: SpaceSavingAggregate<'_>,
     ty: AnyElement,
 ) -> impl std::iter::Iterator<
     Item = (
@@ -513,14 +607,10 @@ pub fn freq_iter(
         agg.datums.clone().into_iter().zip(counts).map_while(
             move |(value, (&count, &overcount))| {
                 let total = agg.values_seen as f64;
-                if count as f64 / total < agg.min_freq {
-                    None
-                } else {
-                    let value = AnyElement::from_datum(value, false, agg.type_oid).unwrap();
-                    let min_freq = (count - overcount) as f64 / total;
-                    let max_freq = count as f64 / total;
-                    Some((value, min_freq, max_freq))
-                }
+                let value = AnyElement::from_datum(value, false, agg.type_oid).unwrap();
+                let min_freq = (count - overcount) as f64 / total;
+                let max_freq = count as f64 / total;
+                Some((value, min_freq, max_freq))
             },
         )
     }
@@ -528,28 +618,98 @@ pub fn freq_iter(
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn topn(
-    agg: FrequencyAggregate<'_>,
+    agg: SpaceSavingAggregate<'_>,
     n: i32,
     ty: AnyElement,
 ) -> impl std::iter::Iterator<Item = AnyElement> + '_ {
-    unsafe {
-        if ty.oid() != agg.type_oid {
-            pgx::error!("mischatched types")
-        }
-        let iter = agg
-            .datums
-            .clone()
-            .into_iter()
-            .zip(agg.counts.slice().iter());
-        iter.enumerate().map_while(move |(i, (value, &count))| {
-            let total = agg.values_seen as f64;
-            if i >= n as usize || count as f64 / total < agg.min_freq {
-                None
-            } else {
-                AnyElement::from_datum(value, false, agg.type_oid)
-            }
-        })
+    if ty.oid() != agg.type_oid {
+        pgx::error!("mischatched types")
     }
+
+    let f = if agg.topn == 0 {
+        agg.freq_param
+    } else {
+        // TODO: should we allow this if we have enough data?
+        if n > agg.topn as i32 {
+            pgx::error!("requested N ({}) exceeds creation parameter of topn aggregate ({})", n , agg.topn)
+        }
+
+        // For topn_aggregates distributions we check that the top 'n' values satisfy the cumulative distribution
+        // for our zeta curve.
+
+        let needed_count = (zeta_le_n(agg.freq_param, n as u64) * agg.values_seen as f64).ceil() as u64;
+        if agg.counts.iter().take(n as usize).sum::<u64>() < needed_count {
+            pgx::error!("data is not skewed enough to find top {} parameters with a skew of {}, try reducing the skew factor", n , agg.freq_param)
+        }
+
+        // If we meet the cumulative distribution use 0 as min_freq, we won't filter based on frequency
+        0.
+    };
+
+    topn_internal(agg, n, f)
+}
+
+#[pg_extern(immutable, parallel_safe, name="topn", schema = "toolkit_experimental")]
+pub fn default_topn(
+    agg: SpaceSavingAggregate<'_>,
+    ty: AnyElement,
+) -> impl std::iter::Iterator<Item = AnyElement> + '_ {
+    if agg.topn == 0 {
+        pgx::error!("frequency aggregates require a N parameter to topn")
+    }
+    let n = agg.topn as i32;
+    topn(agg, n, ty)
+}
+
+// return up to 'max_n' elements having at least 'min_freq' frequency
+fn topn_internal(
+    agg: SpaceSavingAggregate<'_>,
+    max_n: i32,
+    min_freq: f64,
+) -> impl std::iter::Iterator<Item = AnyElement> + '_ {
+    let iter = agg
+        .datums
+        .clone()
+        .into_iter()
+        .zip(agg.counts.clone().into_iter());
+    iter.enumerate().map_while(move |(i, (value, count))| {
+        let total = agg.values_seen as f64;
+        if i >= max_n as usize || count as f64 / total < min_freq {
+            None
+        } else {
+            unsafe { AnyElement::from_datum(value, false, agg.type_oid)}
+        }
+    })
+}
+
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub fn max_frequency(
+    agg: SpaceSavingAggregate<'_>,
+    value: AnyElement,
+) -> f64 {
+    let value : PgAnyElement = value.into();
+    for (idx, datum) in agg.datums.iter().enumerate() {
+        let datum = (datum, agg.type_oid).into();
+        if value == datum {
+            return agg.counts.slice()[idx] as f64 / agg.values_seen as f64;
+        }
+    }
+    0.
+}
+
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub fn min_frequency(
+    agg: SpaceSavingAggregate<'_>,
+    value: AnyElement,
+) -> f64 {
+    let value : PgAnyElement = value.into();
+    for (idx, datum) in agg.datums.iter().enumerate() {
+        let datum = (datum, agg.type_oid).into();
+        if value == datum {
+            return (agg.counts.slice()[idx] - agg.overcounts.slice()[idx]) as f64 / agg.values_seen as f64;
+        }
+    }
+    0.
 }
 
 #[cfg(any(test, feature = "pg_test"))]
@@ -557,6 +717,10 @@ pub fn topn(
 mod tests {
     use pgx::*;
     use pgx_macros::pg_test;
+    use super::*;
+    use rand::distributions::{Distribution, Uniform};
+    use rand_distr::Zeta;
+    use rand::RngCore;
 
     #[pg_test]
     fn test_freq_aggregate() {
@@ -592,7 +756,46 @@ mod tests {
             let test = client.select("SELECT freq_agg(0.015, s.data)::TEXT FROM (SELECT data FROM test ORDER BY time) s", None, None)
                 .first()
                 .get_one::<String>().unwrap();
-            let expected = "(version:1,type_oid:23,num_values:78,values_seen:5050,min_freq:0.015,counts:[100,99,98,97,96,95,94,93,92,91,90,89,88,87,86,85,84,84,83,82,81,81,80,80,79,78,78,77,76,76,76,75,75,75,75,75,75,75,75,75,75,75,75,75,75,75,75,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74],overcounts:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1,1,1,3,2,4,3,3,6,3,5,7,5,5,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73],datums:[23,\"99\",\"98\",\"97\",\"96\",\"95\",\"94\",\"93\",\"92\",\"91\",\"90\",\"89\",\"88\",\"87\",\"86\",\"85\",\"84\",\"81\",\"82\",\"83\",\"80\",\"77\",\"78\",\"75\",\"76\",\"79\",\"73\",\"74\",\"71\",\"69\",\"70\",\"72\",\"53\",\"54\",\"55\",\"56\",\"57\",\"58\",\"59\",\"60\",\"61\",\"62\",\"63\",\"64\",\"65\",\"66\",\"67\",\"68\",\"22\",\"23\",\"24\",\"25\",\"26\",\"27\",\"28\",\"29\",\"30\",\"31\",\"32\",\"33\",\"34\",\"35\",\"36\",\"37\",\"38\",\"39\",\"40\",\"41\",\"42\",\"43\",\"44\",\"45\",\"46\",\"47\",\"48\",\"49\",\"50\",\"51\",\"21\"])";
+            let expected = "(version:1,type_oid:23,num_values:67,values_seen:5050,freq_param:0.015,topn:0,counts:[100,99,98,97,96,95,94,93,92,91,90,89,88,87,86,85,84,83,82,81,80,79,78,77,76,75,74,73,72,71,70,69,68,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67],overcounts:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66],datums:[23,\"99\",\"98\",\"97\",\"96\",\"95\",\"94\",\"93\",\"92\",\"91\",\"90\",\"89\",\"88\",\"87\",\"86\",\"85\",\"84\",\"83\",\"82\",\"81\",\"80\",\"79\",\"78\",\"77\",\"76\",\"75\",\"74\",\"73\",\"72\",\"71\",\"70\",\"69\",\"68\",\"67\",\"33\",\"34\",\"35\",\"36\",\"37\",\"38\",\"39\",\"40\",\"41\",\"42\",\"43\",\"44\",\"45\",\"46\",\"47\",\"48\",\"49\",\"50\",\"51\",\"52\",\"53\",\"54\",\"55\",\"56\",\"57\",\"58\",\"59\",\"60\",\"61\",\"62\",\"63\",\"64\",\"65\",\"66\"])";
+            assert_eq!(test, expected);
+        });
+    }
+
+    #[pg_test]
+    fn test_topn_aggregate() {
+        Spi::execute(|client| {
+            // using the search path trick for this test to make it easier to stabilize later on
+            let sp = client
+                .select(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select(
+                "SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'",
+                None,
+                None,
+            );
+
+            client.select("SET TIMEZONE to UTC", None, None);
+            client.select(
+                "CREATE TABLE test (data INTEGER, time TIMESTAMPTZ)",
+                None,
+                None,
+            );
+
+            for i in (0..200).rev() {
+                client.select(&format!("INSERT INTO test SELECT i, '2020-1-1'::TIMESTAMPTZ + ('{} days, ' || i::TEXT || ' seconds')::INTERVAL FROM generate_series({}, 199, 1) i", 200 - i, i), None, None);
+            }
+
+            let test = client.select("SELECT topn_agg(10, s.data)::TEXT FROM (SELECT data FROM test ORDER BY time) s", None, None)
+                .first()
+                .get_one::<String>().unwrap();
+            let expected = "(version:1,type_oid:23,num_values:110,values_seen:20100,freq_param:1.1,topn:10,counts:[200,199,198,197,196,195,194,193,192,191,190,189,188,187,186,185,184,183,182,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181],overcounts:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180],datums:[23,\"199\",\"198\",\"197\",\"196\",\"195\",\"194\",\"193\",\"192\",\"191\",\"190\",\"189\",\"188\",\"187\",\"186\",\"185\",\"184\",\"183\",\"182\",\"181\",\"90\",\"91\",\"92\",\"93\",\"94\",\"95\",\"96\",\"97\",\"98\",\"99\",\"100\",\"101\",\"102\",\"103\",\"104\",\"105\",\"106\",\"107\",\"108\",\"109\",\"110\",\"111\",\"112\",\"113\",\"114\",\"115\",\"116\",\"117\",\"118\",\"119\",\"120\",\"121\",\"122\",\"123\",\"124\",\"125\",\"126\",\"127\",\"128\",\"129\",\"130\",\"131\",\"132\",\"133\",\"134\",\"135\",\"136\",\"137\",\"138\",\"139\",\"140\",\"141\",\"142\",\"143\",\"144\",\"145\",\"146\",\"147\",\"148\",\"149\",\"150\",\"151\",\"152\",\"153\",\"154\",\"155\",\"156\",\"157\",\"158\",\"159\",\"160\",\"161\",\"162\",\"163\",\"164\",\"165\",\"166\",\"167\",\"168\",\"169\",\"170\",\"171\",\"172\",\"173\",\"174\",\"175\",\"176\",\"177\",\"178\",\"179\",\"180\"])";
             assert_eq!(test, expected);
         });
     }
@@ -601,17 +804,17 @@ mod tests {
     fn explicit_aggregate_test() {
         let freq = 0.0625;
         let fcinfo = std::ptr::null_mut(); // dummy value, will use default collation
-        let mut state = None;
+        let mut state = None.into();
 
         for i in 11..=20 {
             for j in i..=20 {
                 let value =
                     unsafe { AnyElement::from_datum(j as pg_sys::Datum, false, pg_sys::INT4OID) };
-                state = super::freq_agg::transition(state, freq, value, fcinfo);
+                state = super::freq_agg_trans(state, freq, value, fcinfo);
             }
         }
 
-        let first = super::freq_agg::serialize(&state.unwrap());
+        let first = super::space_saving_serialize(state);
 
         let bytes = unsafe {
             std::slice::from_raw_parts(
@@ -621,10 +824,11 @@ mod tests {
         };
         let expected = [
             1, 1, // versions
-            14, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence
+            15, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence
             55, 0, 0, 0, 0, 0, 0, 0, // elements seen
             0, 0, 0, 0, 0, 0, 176, 63, // frequency (f64 encoding of 0.0625)
-            1,  // complete
+            17, 0, 0, 0, // elements tracked
+            0, 0, 0, 0,  // topn
             7, 0, 0, 0, 1, 1, 10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111,
             103, 11, 0, 0, 0, 0, 0, 0, 0, 101, 110, 95, 85, 83, 46, 85, 84, 70, 45,
             56, // INT4 hasher
@@ -650,7 +854,7 @@ mod tests {
             0, // string 11, count 1, overcount 0
         ];
         // encoding of hasher can vary on platform and across postgres version (even in length), ignore it and check the other fields
-        let prefix_len = 8 * 3 + 3;
+        let prefix_len = 8 * 4 + 2;
         let suffix_len = (8 + 2 + 16) * 10;
         assert_eq!(bytes[..prefix_len], expected[..prefix_len]);
         assert_eq!(
@@ -658,18 +862,18 @@ mod tests {
             expected[expected.len() - suffix_len..]
         );
 
-        state = None;
+        state = None.into();
 
         for i in (1..=10).rev() {
             // reverse here introduces less error in the aggregate
             for j in i..=20 {
                 let value =
                     unsafe { AnyElement::from_datum(j as pg_sys::Datum, false, pg_sys::INT4OID) };
-                state = super::freq_agg::transition(state, freq, value, fcinfo);
+                state = super::freq_agg_trans(state, freq, value, fcinfo);
             }
         }
 
-        let second = super::freq_agg::serialize(&state.unwrap());
+        let second = super::space_saving_serialize(state);
 
         let bytes = unsafe {
             std::slice::from_raw_parts(
@@ -679,10 +883,11 @@ mod tests {
         };
         let expected = [
             1, 1, // versions
-            21, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence
+            22, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence
             155, 0, 0, 0, 0, 0, 0, 0, // elements seen
             0, 0, 0, 0, 0, 0, 176, 63, // frequency (f64 encoding of 0.0625)
-            0,  // complete
+            17, 0, 0, 0, // elements tracked
+            0, 0, 0, 0,  // topn
             7, 0, 0, 0, 1, 1, 10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111,
             103, 11, 0, 0, 0, 0, 0, 0, 0, 101, 110, 95, 85, 83, 46, 85, 84, 70, 45,
             56, // INT4 hasher
@@ -708,21 +913,20 @@ mod tests {
             0, // string 19, count 10, overcount 0
             2, 0, 0, 0, 0, 0, 0, 0, 50, 48, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, // string 20, count 10, overcount 0
-            1, 0, 0, 0, 0, 0, 0, 0, 55, 9, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0,
-            0, // string 7, count 9, overcount 5
-            1, 0, 0, 0, 0, 0, 0, 0, 57, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            1, 0, 0, 0, 0, 0, 0, 0, 57, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
             0, // string 9, count 9, overcount 0
-            1, 0, 0, 0, 0, 0, 0, 0, 52, 8, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0,
-            0, // string 4, count 8, overcount 4
-            1, 0, 0, 0, 0, 0, 0, 0, 53, 8, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0,
-            0, // string 5, count 8, overcount 4
-            1, 0, 0, 0, 0, 0, 0, 0, 56, 8, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0,
-            0, // string 8, count 8, overcount 7
-            1, 0, 0, 0, 0, 0, 0, 0, 51, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0,
-            0, // string 3, count 7, overcount 6
+            1, 0, 0, 0, 0, 0, 0, 0, 56, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+            0, // string 8, count 8, overcount 0
+            1, 0, 0, 0, 0, 0, 0, 0, 52, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            0, // string 4, count 7, overcount 6
+            1, 0, 0, 0, 0, 0, 0, 0, 53, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            0, // string 5, count 7, overcount 6
+            1, 0, 0, 0, 0, 0, 0, 0, 54, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            0, // string 6, count 7, overcount 6
+            1, 0, 0, 0, 0, 0, 0, 0, 55, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            0, // string 7, count 7, overcount 6
         ];
         // encoding of hasher can vary on platform and across postgres version (even in length), ignore it and check the other fields
-        let prefix_len = 8 * 3 + 3;
         let suffix_len = (8 + 2 + 16) * 11 + (8 + 1 + 16) * 6;
         assert_eq!(bytes[..prefix_len], expected[..prefix_len]);
         assert_eq!(
@@ -730,12 +934,12 @@ mod tests {
             expected[expected.len() - suffix_len..]
         );
 
-        let combined = super::freq_agg::serialize(
-            &super::freq_agg::combine(
-                Some(&super::freq_agg::deserialize(first)),
-                Some(&super::freq_agg::deserialize(second)),
+        let combined = super::space_saving_serialize(
+            super::space_saving_combine(
+                super::space_saving_deserialize(first, None.into()),
+                super::space_saving_deserialize(second, None.into()),
+                fcinfo,
             )
-            .unwrap(),
         );
 
         let bytes = unsafe {
@@ -746,10 +950,11 @@ mod tests {
         };
         let expected = [
             1, 1, // versions
-            21, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence
+            22, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence
             210, 0, 0, 0, 0, 0, 0, 0, // elements seen
             0, 0, 0, 0, 0, 0, 176, 63, // frequency (f64 encoding of 0.0625)
-            0,  // complete
+            17, 0, 0, 0, // elements tracked
+            0, 0, 0, 0,  // topn
             7, 0, 0, 0, 1, 1, 10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111,
             103, 11, 0, 0, 0, 0, 0, 0, 0, 101, 110, 95, 85, 83, 46, 85, 84, 70, 45,
             56, // INT4 hasher
@@ -777,24 +982,246 @@ mod tests {
             0, // string 10, count 10, overcount 0
             1, 0, 0, 0, 0, 0, 0, 0, 57, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, // string 9, count 9, overcount 0
-            1, 0, 0, 0, 0, 0, 0, 0, 55, 9, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0,
-            0, // string 7, count 9, overcount 5
-            1, 0, 0, 0, 0, 0, 0, 0, 56, 8, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0,
-            0, // string 8, count 8, overcount 7
-            1, 0, 0, 0, 0, 0, 0, 0, 52, 8, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0,
-            0, // string 4, count 8, overcount 4
-            1, 0, 0, 0, 0, 0, 0, 0, 53, 8, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0,
-            0, // string 5, count 8, overcount 4
-            1, 0, 0, 0, 0, 0, 0, 0, 51, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0,
-            0, // string 3, count 7, overcount 6
+            1, 0, 0, 0, 0, 0, 0, 0, 56, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, // string 8, count 8, overcount 0
+            1, 0, 0, 0, 0, 0, 0, 0, 52, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            0, // string 4, count 7, overcount 6
+            1, 0, 0, 0, 0, 0, 0, 0, 54, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            0, // string 6, count 7, overcount 6
+            1, 0, 0, 0, 0, 0, 0, 0, 53, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            0, // string 5, count 7, overcount 6
+            1, 0, 0, 0, 0, 0, 0, 0, 55, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            0, // string 7, count 7, overcount 6
         ];
         // encoding of hasher can vary on platform and across postgres version (even in length), ignore it and check the other fields
-        let prefix_len = 8 * 3 + 3;
         let suffix_len = (8 + 2 + 16) * 11 + (8 + 1 + 16) * 6;
         assert_eq!(bytes[..prefix_len], expected[..prefix_len]);
         assert_eq!(
             bytes[bytes.len() - suffix_len..],
             expected[expected.len() - suffix_len..]
         );
+    }
+
+    // Setup environment and create table 'test' with some aggregates in table 'aggs'
+    fn setup_with_test_table(client : &SpiClient)
+    {
+        // using the search path trick for this test to make it easier to stabilize later on
+        let sp = client
+            .select(
+                "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                None,
+                None,
+            )
+            .first()
+            .get_one::<String>()
+            .unwrap();
+        client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+        client.select(
+            "SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'",
+            None,
+            None,
+        );
+
+        client.select("SET TIMEZONE to UTC", None, None);
+        client.select(
+            "CREATE TABLE test (data INTEGER, time TIMESTAMPTZ)",
+            None,
+            None,
+        );
+
+        for i in (0..20).rev() {
+            client.select(&format!("INSERT INTO test SELECT i, '2020-1-1'::TIMESTAMPTZ + ('{} days, ' || i::TEXT || ' seconds')::INTERVAL FROM generate_series({}, 19, 1) i", 10 - i, i), None, None);
+        }
+
+        client.select("CREATE TABLE aggs (name TEXT, agg SPACESAVINGAGGREGATE)", None, None);
+        client.select("INSERT INTO aggs SELECT 'topn_default', topn_agg(5, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None);
+        client.select("INSERT INTO aggs SELECT 'topn_1.5', topn_agg(5, 1.5, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None);
+        client.select("INSERT INTO aggs SELECT 'topn_2', topn_agg(5, 2, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None);
+        client.select("INSERT INTO aggs SELECT 'freq_8', freq_agg(0.08, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None);
+        client.select("INSERT INTO aggs SELECT 'freq_5', freq_agg(0.05, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None);
+        client.select("INSERT INTO aggs SELECT 'freq_2', freq_agg(0.02, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None);
+    }
+
+    // API tests
+    #[pg_test]
+    fn test_topn() {
+        Spi::execute(|client| {
+            setup_with_test_table(&client);
+
+            // simple tests
+            let rows = client.select("SELECT topn(agg, 0::int) FROM aggs WHERE name = 'topn_default'", None, None).count();
+            assert_eq!(rows, 5);
+            let rows = client.select("SELECT topn(agg, 5, 0::int) FROM aggs WHERE name = 'freq_5'", None, None).count();
+            assert_eq!(rows, 5);
+
+            // can limit below topn_agg value
+            let rows = client.select("SELECT topn(agg, 3, 0::int) FROM aggs WHERE name = 'topn_default'", None, None).count();
+            assert_eq!(rows, 3);
+
+            // only 4 rows with freq >= 0.08
+            let rows = client.select("SELECT topn(agg, 5, 0::int) FROM aggs WHERE name = 'freq_8'", None, None).count();
+            assert_eq!(rows, 4);
+        });
+    }
+
+    // TODO:  Tests that expect failures will not currently run correctly in CI.  Uncomment the following tests once this is fixed.
+    // #[pg_test(error = "data is not skewed enough to find top 5 parameters with a skew of 1.5, try reducing the skew factor")]
+    // fn topn_on_underskewed_topn_agg() {
+    //     Spi::execute(|client| {
+    //         setup_with_test_table(&client);
+    //         client.select("SELECT topn(agg, 0::int) FROM aggs WHERE name = 'topn_1.5'", None, None).count();
+    //     });
+    // }
+
+    // #[pg_test(error = "requested N (8) exceeds creation parameter of topn aggregate (5)")]
+    // fn topn_high_n_on_topn_agg() {
+    //     Spi::execute(|client| {
+    //         setup_with_test_table(&client);
+    //         client.select("SELECT topn(agg, 8, 0::int) FROM aggs WHERE name = 'topn_default'", None, None).count();
+    //     });
+    // }
+
+    // #[pg_test(error = "frequency aggregates require a N parameter to topn")]
+    // fn topn_requires_n_for_freq_agg() {
+    //     Spi::execute(|client| {
+    //         setup_with_test_table(&client);
+    //         client.select("SELECT topn(agg, 0::int) FROM aggs WHERE name = 'freq_2'", None, None).count();
+    //     });
+    // }
+
+    #[pg_test]
+    fn test_into_values() {
+        Spi::execute(|client| {
+            setup_with_test_table(&client);
+
+            let rows = client.select("SELECT into_values(agg, 0::int) FROM aggs WHERE name = 'freq_8'", None, None).count();
+            assert_eq!(rows, 13);
+            let rows = client.select("SELECT into_values(agg, 0::int) FROM aggs WHERE name = 'freq_5'", None, None).count();
+            assert_eq!(rows, 20);
+            let rows = client.select("SELECT into_values(agg, 0::int) FROM aggs WHERE name = 'freq_2'", None, None).count();
+            assert_eq!(rows, 20);
+        });
+    }
+
+    #[pg_test]
+    fn test_frequency_getters() {
+        Spi::execute(|client| {
+            setup_with_test_table(&client);
+            
+            // simple tests
+            let (min, max) = client.select("SELECT min_frequency(agg, 3), max_frequency(agg, 3) FROM aggs WHERE name = 'freq_2'", None, None)
+                .first()
+                .get_two::<f64,f64>();
+            assert_eq!(min.unwrap(), 0.01904761904761905);
+            assert_eq!(max.unwrap(), 0.01904761904761905);
+
+            let (min, max) = client.select("SELECT min_frequency(agg, 11), max_frequency(agg, 11) FROM aggs WHERE name = 'topn_default'", None, None)
+                .first()
+                .get_two::<f64,f64>();
+            assert_eq!(min.unwrap(), 0.05714285714285714);
+            assert_eq!(max.unwrap(), 0.05714285714285714);
+
+            // missing value
+            let (min, max) = client.select("SELECT min_frequency(agg, 3), max_frequency(agg, 3) FROM aggs WHERE name = 'freq_8'", None, None)
+                .first()
+                .get_two::<f64,f64>();
+            assert_eq!(min.unwrap(), 0.);
+            assert_eq!(max.unwrap(), 0.);
+
+            let (min, max) = client.select("SELECT min_frequency(agg, 20), max_frequency(agg, 20) FROM aggs WHERE name = 'topn_2'", None, None)
+                .first()
+                .get_two::<f64,f64>();
+            assert_eq!(min.unwrap(), 0.);
+            assert_eq!(max.unwrap(), 0.);
+
+            // noisy value
+            let (min, max) = client.select("SELECT min_frequency(agg, 8), max_frequency(agg, 8) FROM aggs WHERE name = 'topn_1.5'", None, None)
+                .first()
+                .get_two::<f64,f64>();
+            assert_eq!(min.unwrap(), 0.004761904761904762);
+            assert_eq!(max.unwrap(), 0.05238095238095238);
+        });
+    }
+
+    #[pg_test]
+    fn test_freq_agg_invariant() {
+        // The frequency agg invariant is that any element with frequency >= f will appear in the freq_agg(f)
+
+        // This test will randomly generate 200 values in the uniform range [0, 99] and check to see any value
+        // that shows up at least 3 times appears in a frequency aggregate created with freq = 0.015
+        let rand100 = Uniform::new_inclusive(0, 99);
+        let mut rng = rand::thread_rng();
+
+        let mut counts = [0;100];
+
+        let mut state = None.into();
+        let freq = 0.015; 
+        let fcinfo = std::ptr::null_mut(); // dummy value, will use default collation
+
+        for _ in 0..200 {
+            let v = rand100.sample(&mut rng);
+            let value =
+                unsafe { AnyElement::from_datum(v as pg_sys::Datum, false, pg_sys::INT4OID) };
+            state = super::freq_agg_trans(state, freq, value, fcinfo);
+            counts[v] += 1;
+        }
+
+        let state = space_saving_final(state, fcinfo).unwrap();
+        let vals : std::collections::HashSet<usize> = state.datums.iter().collect();
+
+        for (val, &count) in counts.iter().enumerate() {
+            if count >= 3 {
+                assert!(vals.contains(&val));
+            }
+        }
+    }
+
+    #[pg_test]
+    fn test_topn_agg_invariant() {
+        // The ton agg invariant is that we'll be able to track the top n values for any data 
+        // with a distribution at least as skewed as a zeta distribution
+
+        // To test this we will generate a topn aggregate with a random skew (1.01 - 2.0) and
+        // n (5-10).  We then generate a random sample with skew 5% greater than our aggregate
+        // (this should be enough to keep the sample above the target even with bad luck), and
+        // verify that we correctly identify the top n values.
+        let mut rng = rand::thread_rng();
+        
+        let n = rng.next_u64() % 6 + 5;
+        let skew = (rng.next_u64() % 100) as f64 / 100. + 1.01;
+
+        let zeta = Zeta::new(skew * 1.05).unwrap();
+
+        let mut counts = [0;100];
+
+        let mut state = None.into();
+        let fcinfo = std::ptr::null_mut(); // dummy value, will use default collation
+
+        for _ in 0..100000 {
+            let v = zeta.sample(&mut rng).floor() as usize;
+            if v == usize::MAX {
+                continue;  // These tail values can start to add up at low skew values
+            }
+            let value =
+                unsafe { AnyElement::from_datum(v as pg_sys::Datum, false, pg_sys::INT4OID) };
+            state = super::topn_agg_with_skew_trans(state, n as i32, skew, value, fcinfo);
+            if v < 100 {  // anything greater than 100 will not be in the top values
+                counts[v] += 1;
+            }
+        }
+
+        let state = space_saving_final(state, fcinfo).unwrap();
+        let value =
+            unsafe { AnyElement::from_datum(0, false, pg_sys::INT4OID) };
+        let t : Vec<AnyElement> = default_topn(state, value.unwrap()).collect();
+        let agg_topn : Vec<usize> = t.iter().map(|x| x.datum()).collect();
+
+        let mut temp : Vec<(usize, &usize)> = counts.iter().enumerate().collect();
+        temp.sort_by(|(_, cnt1), (_, cnt2)| cnt2.cmp(cnt1)); // descending order by count
+        let top_vals : Vec<usize> = temp.into_iter().map(|(val, _)| val).collect();
+
+        for i in 0..n as usize {
+            assert_eq!(agg_topn[i], top_vals[i]);
+        }
     }
 }

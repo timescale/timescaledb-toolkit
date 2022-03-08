@@ -128,6 +128,9 @@ impl<V> PgAnyElementHashMap<V> {
     pub fn insert(&mut self, k: PgAnyElement, v: V) -> Option<V> {
         self.0.insert(k, v)
     }
+    pub fn len(&self) -> usize {
+        self.0.len()
+    }
     pub fn remove(&mut self, k: &PgAnyElement) -> Option<V> {
         self.0.remove(k)
     }

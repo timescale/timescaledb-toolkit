@@ -47,6 +47,8 @@ pub fn run_update_tests(
             );
 
             test_client.validate_test_objects(validation_values);
+
+            test_client.check_no_references_to_the_old_binary_leaked(&current_version);
         });
         eprintln!(
             "{} {} -> {}",
@@ -199,6 +201,32 @@ impl TestClient {
             new_values, validation_values,
             "values returned by the view changed on update",
         );
+    }
+
+    fn check_no_references_to_the_old_binary_leaked(&mut self, current_version: &str) {
+        let query_get_leaked_objects = format!(
+            "SELECT pg_proc.proname \
+            FROM pg_catalog.pg_proc \
+            WHERE pg_proc.probin LIKE '$libdir/timescaledb_toolkit%' \
+              AND pg_proc.probin <> '$libdir/timescaledb_toolkit-{}';",
+            current_version,
+        );
+        let leaks = self
+            .simple_query(&query_get_leaked_objects)
+            .unwrap_or_else(|e| panic!("could query the leaked objects due to {}", e));
+        let leaks = get_values(leaks);
+        // flatten the list of returned objects for better output on errors
+        // it shouldn't change the result since each row only has a single
+        // non-null element anyway.
+        let leaks: Vec<String> = leaks.into_iter()
+            .flat_map(Vec::into_iter)
+            .flatten()
+            .collect();
+        assert!(
+            leaks.is_empty(),
+            "objects reference the old binary: {:#?}",
+            &*leaks,
+        )
     }
 
     #[must_use]

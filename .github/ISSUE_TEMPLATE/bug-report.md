@@ -11,7 +11,7 @@ assignees: ''
  - OS: [e.g. Ubuntu 16.04, Windows 10 x64, etc]
  - PostgreSQL version (output of `SELECT version();`): [e.g. 12.0, 13.2, etc]
  - TimescaleDB Toolkit version (output of `\dx timescaledb_toolkit` in `psql`): [e.g. 1.0.0]
- - Installation method: [e.g., "Timescale Forge", "docker", "source"]
+ - Installation method: [e.g., "Timescale Cloud", "docker", "source"]
 
 **Describe the bug**
 A clear and concise description of what the bug is.

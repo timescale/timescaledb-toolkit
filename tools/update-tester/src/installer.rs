@@ -10,6 +10,7 @@ pub fn install_all_versions(
     root_dir: &str,
     cache_dir: Option<&str>,
     pg_config: &str,
+    current_version: &str,
     old_versions: &[String],
 ) -> xshell::Result<()> {
     let extension_dir = path!(root_dir / "extension");
@@ -53,10 +54,10 @@ pub fn install_all_versions(
         save_to_cache(cache_dir, pg_config)?;
     }
 
-    eprintln!("{} main", "Installing".bold().cyan());
+    eprintln!("{} {} ({})", "Installing Current".bold().cyan(), current_version, base_checkout);
     install_toolkit()?;
     post_install()?;
-    eprintln!("{} main", "Finished".bold().green());
+    eprintln!("{}", "Finished Current".bold().green());
 
     Ok(())
 }

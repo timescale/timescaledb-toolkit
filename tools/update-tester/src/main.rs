@@ -84,7 +84,13 @@ fn try_main(
 
     println!("{} [{}]", "Testing".green().bold(), old_versions.join(", "));
 
-    installer::install_all_versions(root_dir, cache_dir, pg_config, &old_versions)?;
+    installer::install_all_versions(
+        root_dir,
+        cache_dir,
+        pg_config,
+        &current_version,
+        &old_versions
+    )?;
 
     testrunner::run_update_tests(db_conn, current_version, old_versions)
 }

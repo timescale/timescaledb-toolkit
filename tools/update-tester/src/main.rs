@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     io::{self, Write},
     path::Path,
     process,
@@ -44,6 +45,7 @@ fn main() {
             it.")
         (@arg CACHE: -c --cache [cache_dir] "Directory in which to look-for/store \
             old versions of the Toolkit.")
+        (@arg REINSTALL: --reinstall [versions] "comma-separated list of versions to force reinstall")
         (@arg ROOT_DIR: +required <dir> "Path in which to find the timescaledb-toolkit repo")
         (@arg PG_CONFIG: +required <pg_config> "Path to pg_config for the DB we are using")
     )
@@ -63,9 +65,15 @@ fn main() {
         .value_of("ROOT_DIR")
         .expect("missing path to root of the toolkit repo");
 
+    let reinstall = matches
+        .value_of("REINSTALL")
+        .map(|r| r.split_terminator(',').collect())
+        .unwrap_or_else(HashSet::new);
+
     let pg_config = matches.value_of("PG_CONFIG").expect("missing pg_config");
 
-    if let Err(err) = try_main(root_dir, cache_dir, &connection_config, pg_config) {
+    let res = try_main(root_dir, cache_dir, &connection_config, pg_config, reinstall);
+    if let Err(err) = res {
         eprintln!("{}", err);
         process::exit(1);
     }
@@ -76,6 +84,7 @@ fn try_main(
     cache_dir: Option<&str>,
     db_conn: &ConnectionConfig<'_>,
     pg_config: &str,
+    reinstall: HashSet<&str>,
 ) -> xshell::Result<()> {
     let (current_version, old_versions) = get_version_info(root_dir)?;
     if old_versions.is_empty() {
@@ -89,7 +98,8 @@ fn try_main(
         cache_dir,
         pg_config,
         &current_version,
-        &old_versions
+        &old_versions,
+        &reinstall,
     )?;
 
     testrunner::run_update_tests(db_conn, current_version, old_versions)

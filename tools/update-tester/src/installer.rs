@@ -1,4 +1,7 @@
-use std::path::Path;
+use std::{
+    collections::HashSet,
+    path::Path,
+};
 
 use colored::Colorize;
 
@@ -12,6 +15,7 @@ pub fn install_all_versions(
     pg_config: &str,
     current_version: &str,
     old_versions: &[String],
+    reinstall: &HashSet<&str>,
 ) -> xshell::Result<()> {
     let extension_dir = path!(root_dir / "extension");
     let install_toolkit = || -> xshell::Result<()> {
@@ -36,7 +40,8 @@ pub fn install_all_versions(
     // Since later versions tend to be supersets of old versions,
     // I expect compilation to be faster this way - Josh
     for version in old_versions.iter().rev() {
-        if version_is_installed(pg_config, version)? {
+        let force_reinstall = reinstall.contains(&**version);
+        if !force_reinstall && version_is_installed(pg_config, version)? {
             eprintln!("{} {}", "Already Installed".blue(), version);
             continue
         }

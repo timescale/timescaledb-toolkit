@@ -48,15 +48,12 @@ impl FrequencyEntry {
     }
 }
 
-const MIN_SIZE: usize = 10;
-const MAX_NOISE_RATIO: f64 = 0.9;
-
 pub struct FrequencyTransState {
     entries: Vec<FrequencyEntry>,
     indicies: PgAnyElementHashMap<usize>,
     total_vals: u64,
     min_freq: f64,
-    complete: bool, // true if all seen values in entries
+    max_size: u64,  // Maximum size for indices
 }
 
 impl Clone for FrequencyTransState {
@@ -66,7 +63,7 @@ impl Clone for FrequencyTransState {
             indicies: PgAnyElementHashMap::with_hasher(self.indicies.hasher().clone()),
             total_vals: self.total_vals,
             min_freq: self.min_freq,
-            complete: self.complete,
+            max_size: self.max_size,
         };
 
         let typoid = self.type_oid();
@@ -87,7 +84,7 @@ impl Clone for FrequencyTransState {
 // serialize the object as one big sequence.  The serialized sequence should look like this:
 //   total_vals as u64
 //   min_freq as f64
-//   complete as bool
+//   max_idx as u64
 //   indicies.hasher as DatumHashBuilder
 //   entries as repeated (str, u64, u64) tuples
 impl Serialize for FrequencyTransState {
@@ -98,7 +95,7 @@ impl Serialize for FrequencyTransState {
         let mut seq = serializer.serialize_seq(Some(self.entries.len() + 4))?;
         seq.serialize_element(&self.total_vals)?;
         seq.serialize_element(&self.min_freq)?;
-        seq.serialize_element(&self.complete)?;
+        seq.serialize_element(&self.max_size)?;
         seq.serialize_element(&self.indicies.hasher())?;
 
         // TODO JOSH use a writer that switches based on whether we want binary or not
@@ -135,7 +132,7 @@ impl<'de> Deserialize<'de> for FrequencyTransState {
             {
                 let total_vals = seq.next_element::<u64>()?.unwrap();
                 let min_freq = seq.next_element::<f64>()?.unwrap();
-                let complete = seq.next_element::<bool>()?.unwrap();
+                let max_size = seq.next_element::<u64>()?.unwrap();
                 let hasher = seq.next_element::<DatumHashBuilder>()?.unwrap();
 
                 let mut state = FrequencyTransState {
@@ -143,7 +140,7 @@ impl<'de> Deserialize<'de> for FrequencyTransState {
                     indicies: PgAnyElementHashMap::with_hasher(hasher),
                     total_vals,
                     min_freq,
-                    complete,
+                    max_size,
                 };
 
                 let typid = state.type_oid();
@@ -170,13 +167,17 @@ impl<'de> Deserialize<'de> for FrequencyTransState {
 }
 
 impl FrequencyTransState {
+    fn max_size_for_freq(min_freq: f64) -> u64 {
+        (1. / min_freq) as u64 + 1
+    }
+
     unsafe fn from_type_id(min_freq: f64, typ: pg_sys::Oid, collation: Option<Oid>) -> Self {
         FrequencyTransState {
             entries: vec![],
             indicies: PgAnyElementHashMap::new(typ, collation),
             total_vals: 0,
             min_freq,
-            complete: true,
+            max_size: FrequencyTransState::max_size_for_freq(min_freq),
         }
     }
 
@@ -191,18 +192,12 @@ impl FrequencyTransState {
             self.entries[idx].count += 1;
             self.move_left(idx);
         } else {
-            // TODO: might be inefficient to call should_grow on every iteration
-            if self.entries.len() < MIN_SIZE || self.should_grow() {
+            if self.entries.len() < self.max_size as usize {
                 let new_idx = self.entries.len();
-                let overcount = if self.complete {
-                    0
-                } else {
-                    self.entries.last().unwrap().overcount
-                };
                 self.entries.push(FrequencyEntry {
                     value: element.deep_copy_datum(),
-                    count: 1 + overcount,
-                    overcount,
+                    count: 1,
+                    overcount: 0,
                 });
 
                 // Important to create the indices entry using the datum in the local context
@@ -211,7 +206,6 @@ impl FrequencyTransState {
                     new_idx,
                 );
             } else {
-                self.complete = false;
                 let new_value = element.deep_copy_datum();
 
                 // TODO: might be more efficient to replace the lowest indexed tail value (count matching last) and not call move_up
@@ -225,33 +219,6 @@ impl FrequencyTransState {
                     .insert((new_value, typoid).into(), self.entries.len() - 1);
                 self.move_left(self.entries.len() - 1);
             }
-        }
-    }
-
-    fn should_grow(&self) -> bool {
-        let mut used_count = 0; // This will be the sum of the counts of elements that occur more than min_freq
-
-        let mut i = 0;
-        while i < self.entries.len()
-            && self.entries[i].count as f64 / self.total_vals as f64 > self.min_freq
-        {
-            used_count += self.entries[i].count - self.entries[i].overcount; // Would just using count here introduce too much error?
-            i += 1
-        }
-
-        if i == self.entries.len() {
-            true
-        } else {
-            // At this point the first 'i' entries are all of the elements that occur more than 'min_freq' and account for 'used_count' of all the entries encountered so far.
-
-            // Noise threshold is the count below which we don't track values (this will be approximately the overcount of churning buckets)
-            let noise_threhold = self.min_freq * MAX_NOISE_RATIO * self.total_vals as f64;
-
-            // We compute our target size as 'i' plus the amount of buckets the remaining entries could be divided among if there are no values occuring between 'min_freq' and 'noise_threshold'
-            let remainder = self.total_vals - used_count;
-            let target_size = f64::ceil(remainder as f64 / noise_threhold) as usize + i;
-
-            self.entries.len() < target_size
         }
     }
 
@@ -303,8 +270,8 @@ impl FrequencyTransState {
                     new_ent.overcount += other.entries[idx].overcount;
                 }
                 None => {
-                    // If the entry value isn't present in the other state, we have to assume that it was recently bumped (unless the other state is complete).
-                    let min = if other.complete {
+                    // If the entry value isn't present in the other state, we have to assume that it was recently bumped (unless the other state is not fully populated).
+                    let min = if other.indicies.len() < other.max_size as usize {
                         0
                     } else {
                         other.entries.last().unwrap().count
@@ -336,17 +303,14 @@ impl FrequencyTransState {
         let mut entries: Vec<FrequencyEntry> = temp.0.into_iter().map(|(_, v)| v).collect();
         entries.sort_by(|a, b| b.count.partial_cmp(&a.count).unwrap()); // swap a and b for descending
 
-        // TODO: mimic should_grow logic to determine how many elements are actually worth retaining
-        let max_size = (1. / one.min_freq / MAX_NOISE_RATIO) as usize;
-        let truncated = entries.len() <= max_size;
-        entries.truncate(max_size);
+        entries.truncate(one.max_size as usize);
 
         let mut result = FrequencyTransState {
             entries,
             indicies: PgAnyElementHashMap::with_hasher(one.indicies.hasher().clone()),
             total_vals: one.total_vals + two.total_vals,
             min_freq: one.min_freq,
-            complete: one.complete && two.complete && !truncated,
+            max_size: one.max_size,
         };
 
         result.update_all_map_indicies();
@@ -592,7 +556,7 @@ mod tests {
             let test = client.select("SELECT freq_agg(0.015, s.data)::TEXT FROM (SELECT data FROM test ORDER BY time) s", None, None)
                 .first()
                 .get_one::<String>().unwrap();
-            let expected = "(version:1,type_oid:23,num_values:78,values_seen:5050,min_freq:0.015,counts:[100,99,98,97,96,95,94,93,92,91,90,89,88,87,86,85,84,84,83,82,81,81,80,80,79,78,78,77,76,76,76,75,75,75,75,75,75,75,75,75,75,75,75,75,75,75,75,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74],overcounts:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,2,1,1,1,3,2,4,3,3,6,3,5,7,5,5,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,74,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73,73],datums:[23,\"99\",\"98\",\"97\",\"96\",\"95\",\"94\",\"93\",\"92\",\"91\",\"90\",\"89\",\"88\",\"87\",\"86\",\"85\",\"84\",\"81\",\"82\",\"83\",\"80\",\"77\",\"78\",\"75\",\"76\",\"79\",\"73\",\"74\",\"71\",\"69\",\"70\",\"72\",\"53\",\"54\",\"55\",\"56\",\"57\",\"58\",\"59\",\"60\",\"61\",\"62\",\"63\",\"64\",\"65\",\"66\",\"67\",\"68\",\"22\",\"23\",\"24\",\"25\",\"26\",\"27\",\"28\",\"29\",\"30\",\"31\",\"32\",\"33\",\"34\",\"35\",\"36\",\"37\",\"38\",\"39\",\"40\",\"41\",\"42\",\"43\",\"44\",\"45\",\"46\",\"47\",\"48\",\"49\",\"50\",\"51\",\"21\"])";
+            let expected = "(version:1,type_oid:23,num_values:67,values_seen:5050,min_freq:0.015,counts:[100,99,98,97,96,95,94,93,92,91,90,89,88,87,86,85,84,83,82,81,80,79,78,77,76,75,74,73,72,71,70,69,68,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67],overcounts:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66],datums:[23,\"99\",\"98\",\"97\",\"96\",\"95\",\"94\",\"93\",\"92\",\"91\",\"90\",\"89\",\"88\",\"87\",\"86\",\"85\",\"84\",\"83\",\"82\",\"81\",\"80\",\"79\",\"78\",\"77\",\"76\",\"75\",\"74\",\"73\",\"72\",\"71\",\"70\",\"69\",\"68\",\"67\",\"33\",\"34\",\"35\",\"36\",\"37\",\"38\",\"39\",\"40\",\"41\",\"42\",\"43\",\"44\",\"45\",\"46\",\"47\",\"48\",\"49\",\"50\",\"51\",\"52\",\"53\",\"54\",\"55\",\"56\",\"57\",\"58\",\"59\",\"60\",\"61\",\"62\",\"63\",\"64\",\"65\",\"66\"])";
             assert_eq!(test, expected);
         });
     }
@@ -624,7 +588,7 @@ mod tests {
             14, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence
             55, 0, 0, 0, 0, 0, 0, 0, // elements seen
             0, 0, 0, 0, 0, 0, 176, 63, // frequency (f64 encoding of 0.0625)
-            1,  // complete
+            17, 0, 0, 0, 0, 0, 0, 0,  // elements tracked
             7, 0, 0, 0, 1, 1, 10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111,
             103, 11, 0, 0, 0, 0, 0, 0, 0, 101, 110, 95, 85, 83, 46, 85, 84, 70, 45,
             56, // INT4 hasher
@@ -650,7 +614,7 @@ mod tests {
             0, // string 11, count 1, overcount 0
         ];
         // encoding of hasher can vary on platform and across postgres version (even in length), ignore it and check the other fields
-        let prefix_len = 8 * 3 + 3;
+        let prefix_len = 8 * 4 + 2;
         let suffix_len = (8 + 2 + 16) * 10;
         assert_eq!(bytes[..prefix_len], expected[..prefix_len]);
         assert_eq!(
@@ -682,7 +646,7 @@ mod tests {
             21, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence
             155, 0, 0, 0, 0, 0, 0, 0, // elements seen
             0, 0, 0, 0, 0, 0, 176, 63, // frequency (f64 encoding of 0.0625)
-            0,  // complete
+            17, 0, 0, 0, 0, 0, 0, 0,  // elements tracked
             7, 0, 0, 0, 1, 1, 10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111,
             103, 11, 0, 0, 0, 0, 0, 0, 0, 101, 110, 95, 85, 83, 46, 85, 84, 70, 45,
             56, // INT4 hasher
@@ -708,21 +672,20 @@ mod tests {
             0, // string 19, count 10, overcount 0
             2, 0, 0, 0, 0, 0, 0, 0, 50, 48, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, // string 20, count 10, overcount 0
-            1, 0, 0, 0, 0, 0, 0, 0, 55, 9, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0,
-            0, // string 7, count 9, overcount 5
-            1, 0, 0, 0, 0, 0, 0, 0, 57, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            1, 0, 0, 0, 0, 0, 0, 0, 57, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
             0, // string 9, count 9, overcount 0
-            1, 0, 0, 0, 0, 0, 0, 0, 52, 8, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0,
-            0, // string 4, count 8, overcount 4
-            1, 0, 0, 0, 0, 0, 0, 0, 53, 8, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0,
-            0, // string 5, count 8, overcount 4
-            1, 0, 0, 0, 0, 0, 0, 0, 56, 8, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0,
-            0, // string 8, count 8, overcount 7
-            1, 0, 0, 0, 0, 0, 0, 0, 51, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0,
-            0, // string 3, count 7, overcount 6
+            1, 0, 0, 0, 0, 0, 0, 0, 56, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+            0, // string 8, count 8, overcount 0
+            1, 0, 0, 0, 0, 0, 0, 0, 52, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            0, // string 4, count 7, overcount 6
+            1, 0, 0, 0, 0, 0, 0, 0, 53, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            0, // string 5, count 7, overcount 6
+            1, 0, 0, 0, 0, 0, 0, 0, 54, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            0, // string 6, count 7, overcount 6
+            1, 0, 0, 0, 0, 0, 0, 0, 55, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            0, // string 7, count 7, overcount 6
         ];
         // encoding of hasher can vary on platform and across postgres version (even in length), ignore it and check the other fields
-        let prefix_len = 8 * 3 + 3;
         let suffix_len = (8 + 2 + 16) * 11 + (8 + 1 + 16) * 6;
         assert_eq!(bytes[..prefix_len], expected[..prefix_len]);
         assert_eq!(
@@ -749,7 +712,7 @@ mod tests {
             21, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence
             210, 0, 0, 0, 0, 0, 0, 0, // elements seen
             0, 0, 0, 0, 0, 0, 176, 63, // frequency (f64 encoding of 0.0625)
-            0,  // complete
+            17, 0, 0, 0, 0, 0, 0, 0,  // elements tracked
             7, 0, 0, 0, 1, 1, 10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111,
             103, 11, 0, 0, 0, 0, 0, 0, 0, 101, 110, 95, 85, 83, 46, 85, 84, 70, 45,
             56, // INT4 hasher
@@ -777,19 +740,18 @@ mod tests {
             0, // string 10, count 10, overcount 0
             1, 0, 0, 0, 0, 0, 0, 0, 57, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, // string 9, count 9, overcount 0
-            1, 0, 0, 0, 0, 0, 0, 0, 55, 9, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0,
-            0, // string 7, count 9, overcount 5
-            1, 0, 0, 0, 0, 0, 0, 0, 56, 8, 0, 0, 0, 0, 0, 0, 0, 7, 0, 0, 0, 0, 0, 0,
-            0, // string 8, count 8, overcount 7
-            1, 0, 0, 0, 0, 0, 0, 0, 52, 8, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0,
-            0, // string 4, count 8, overcount 4
-            1, 0, 0, 0, 0, 0, 0, 0, 53, 8, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0, 0, 0, 0, 0,
-            0, // string 5, count 8, overcount 4
-            1, 0, 0, 0, 0, 0, 0, 0, 51, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0,
-            0, // string 3, count 7, overcount 6
+            1, 0, 0, 0, 0, 0, 0, 0, 56, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, // string 8, count 8, overcount 0
+            1, 0, 0, 0, 0, 0, 0, 0, 52, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            0, // string 4, count 7, overcount 6
+            1, 0, 0, 0, 0, 0, 0, 0, 54, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            0, // string 6, count 7, overcount 6
+            1, 0, 0, 0, 0, 0, 0, 0, 53, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            0, // string 5, count 7, overcount 6
+            1, 0, 0, 0, 0, 0, 0, 0, 55, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            0, // string 7, count 7, overcount 6
         ];
         // encoding of hasher can vary on platform and across postgres version (even in length), ignore it and check the other fields
-        let prefix_len = 8 * 3 + 3;
         let suffix_len = (8 + 2 + 16) * 11 + (8 + 1 + 16) * 6;
         assert_eq!(bytes[..prefix_len], expected[..prefix_len]);
         assert_eq!(

@@ -30,17 +30,17 @@ use crate::{
 
 use aggregate_builder::aggregate;
 
-use crate::frequency::toolkit_experimental::FrequencyAggregate;
+use crate::frequency::toolkit_experimental::SpaceSavingAggregate;
 
-struct FrequencyEntry {
+struct SpaceSavingEntry {
     value: Datum,
     count: u64,
     overcount: u64,
 }
 
-impl FrequencyEntry {
-    fn clone(&self, typoid: Oid) -> FrequencyEntry {
-        FrequencyEntry {
+impl SpaceSavingEntry {
+    fn clone(&self, typoid: Oid) -> SpaceSavingEntry {
+        SpaceSavingEntry {
             value: unsafe { deep_copy_datum(self.value, typoid) },
             count: self.count,
             overcount: self.overcount,
@@ -48,27 +48,29 @@ impl FrequencyEntry {
     }
 }
 
-pub struct FrequencyTransState {
-    entries: Vec<FrequencyEntry>,
+pub struct SpaceSavingTransState {
+    entries: Vec<SpaceSavingEntry>,
     indicies: PgAnyElementHashMap<usize>,
     total_vals: u64,
-    min_freq: f64,
-    max_size: u64,  // Maximum size for indices
+    freq_param: f64, // This is the minimum frequency for a freq_agg or the skew for a topn_agg
+    topn: u32,       // 0 for freq_agg, creation parameter for topn_agg
+    max_size: u32,   // Maximum size for indices
 }
 
-impl Clone for FrequencyTransState {
+impl Clone for SpaceSavingTransState {
     fn clone(&self) -> Self {
         let mut new_state = Self {
             entries: vec![],
             indicies: PgAnyElementHashMap::with_hasher(self.indicies.hasher().clone()),
             total_vals: self.total_vals,
-            min_freq: self.min_freq,
+            freq_param: self.freq_param,
             max_size: self.max_size,
+            topn: self.topn,
         };
 
         let typoid = self.type_oid();
         for entry in &self.entries {
-            new_state.entries.push(FrequencyEntry {
+            new_state.entries.push(SpaceSavingEntry {
                 value: unsafe { deep_copy_datum(entry.value, typoid) },
                 count: entry.count,
                 overcount: entry.overcount,
@@ -79,23 +81,25 @@ impl Clone for FrequencyTransState {
     }
 }
 
-// FrequencyTransState is a little tricky to serialize due to needing the typ oid to serialize the Datums.
+// SpaceSavingTransState is a little tricky to serialize due to needing the typ oid to serialize the Datums.
 // This sort of requirement doesn't play nicely with the serde framework, so as a workaround we simply
 // serialize the object as one big sequence.  The serialized sequence should look like this:
 //   total_vals as u64
 //   min_freq as f64
-//   max_idx as u64
+//   max_idx as u32
+//   topn as u32
 //   indicies.hasher as DatumHashBuilder
 //   entries as repeated (str, u64, u64) tuples
-impl Serialize for FrequencyTransState {
+impl Serialize for SpaceSavingTransState {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
     {
-        let mut seq = serializer.serialize_seq(Some(self.entries.len() + 4))?;
+        let mut seq = serializer.serialize_seq(Some(self.entries.len() + 5))?;
         seq.serialize_element(&self.total_vals)?;
-        seq.serialize_element(&self.min_freq)?;
+        seq.serialize_element(&self.freq_param)?;
         seq.serialize_element(&self.max_size)?;
+        seq.serialize_element(&self.topn)?;
         seq.serialize_element(&self.indicies.hasher())?;
 
         // TODO JOSH use a writer that switches based on whether we want binary or not
@@ -112,7 +116,7 @@ impl Serialize for FrequencyTransState {
     }
 }
 
-impl<'de> Deserialize<'de> for FrequencyTransState {
+impl<'de> Deserialize<'de> for SpaceSavingTransState {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -120,7 +124,7 @@ impl<'de> Deserialize<'de> for FrequencyTransState {
         struct FrequencyTransStateVisitor();
 
         impl<'de> Visitor<'de> for FrequencyTransStateVisitor {
-            type Value = FrequencyTransState;
+            type Value = SpaceSavingTransState;
 
             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
                 formatter.write_str("a sequence encoding a FrequencyTransState object")
@@ -132,15 +136,17 @@ impl<'de> Deserialize<'de> for FrequencyTransState {
             {
                 let total_vals = seq.next_element::<u64>()?.unwrap();
                 let min_freq = seq.next_element::<f64>()?.unwrap();
-                let max_size = seq.next_element::<u64>()?.unwrap();
+                let max_size = seq.next_element::<u32>()?.unwrap();
+                let topn = seq.next_element::<u32>()?.unwrap();
                 let hasher = seq.next_element::<DatumHashBuilder>()?.unwrap();
 
-                let mut state = FrequencyTransState {
+                let mut state = SpaceSavingTransState {
                     entries: vec![],
                     indicies: PgAnyElementHashMap::with_hasher(hasher),
                     total_vals,
-                    min_freq,
+                    freq_param: min_freq,
                     max_size,
+                    topn,
                 };
 
                 let typid = state.type_oid();
@@ -151,7 +157,7 @@ impl<'de> Deserialize<'de> for FrequencyTransState {
                 {
                     let datum = reader.read_datum(datum_str);
 
-                    state.entries.push(FrequencyEntry {
+                    state.entries.push(SpaceSavingEntry {
                         value: unsafe { deep_copy_datum(datum, typid) },
                         count,
                         overcount,
@@ -166,18 +172,19 @@ impl<'de> Deserialize<'de> for FrequencyTransState {
     }
 }
 
-impl FrequencyTransState {
-    fn max_size_for_freq(min_freq: f64) -> u64 {
-        (1. / min_freq) as u64 + 1
+impl SpaceSavingTransState {
+    fn max_size_for_freq(min_freq: f64) -> u32 {
+        (1. / min_freq) as u32 + 1
     }
 
-    unsafe fn from_type_id(min_freq: f64, typ: pg_sys::Oid, collation: Option<Oid>) -> Self {
-        FrequencyTransState {
+    unsafe fn freq_agg_from_type_id(min_freq: f64, typ: pg_sys::Oid, collation: Option<Oid>) -> Self {
+        SpaceSavingTransState {
             entries: vec![],
             indicies: PgAnyElementHashMap::new(typ, collation),
             total_vals: 0,
-            min_freq,
-            max_size: FrequencyTransState::max_size_for_freq(min_freq),
+            freq_param: min_freq,
+            max_size: SpaceSavingTransState::max_size_for_freq(min_freq),
+            topn: 0,
         }
     }
 
@@ -194,7 +201,7 @@ impl FrequencyTransState {
         } else {
             if self.entries.len() < self.max_size as usize {
                 let new_idx = self.entries.len();
-                self.entries.push(FrequencyEntry {
+                self.entries.push(SpaceSavingEntry {
                     value: element.deep_copy_datum(),
                     count: 1,
                     overcount: 0,
@@ -253,12 +260,12 @@ impl FrequencyTransState {
         }
     }
 
-    fn combine(one: &FrequencyTransState, two: &FrequencyTransState) -> FrequencyTransState {
+    fn combine(one: &SpaceSavingTransState, two: &SpaceSavingTransState) -> SpaceSavingTransState {
         // This takes an entry from a TransState, updates it with any state from the other TransState, and adds the result into the map
         fn new_entry(
-            entry: &FrequencyEntry,
-            other: &FrequencyTransState,
-            map: &mut PgAnyElementHashMap<FrequencyEntry>,
+            entry: &SpaceSavingEntry,
+            other: &SpaceSavingTransState,
+            map: &mut PgAnyElementHashMap<SpaceSavingEntry>,
         ) {
             let typoid = other.type_oid();
 
@@ -300,17 +307,18 @@ impl FrequencyTransState {
         }
 
         // TODO: get this into_iter working without making temp.0 public
-        let mut entries: Vec<FrequencyEntry> = temp.0.into_iter().map(|(_, v)| v).collect();
+        let mut entries: Vec<SpaceSavingEntry> = temp.0.into_iter().map(|(_, v)| v).collect();
         entries.sort_by(|a, b| b.count.partial_cmp(&a.count).unwrap()); // swap a and b for descending
 
         entries.truncate(one.max_size as usize);
 
-        let mut result = FrequencyTransState {
+        let mut result = SpaceSavingTransState {
             entries,
             indicies: PgAnyElementHashMap::with_hasher(one.indicies.hasher().clone()),
             total_vals: one.total_vals + two.total_vals,
-            min_freq: one.min_freq,
+            freq_param: one.freq_param,
             max_size: one.max_size,
+            topn: one.topn,
         };
 
         result.update_all_map_indicies();
@@ -324,25 +332,26 @@ pub mod toolkit_experimental {
 
     pg_type! {
         #[derive(Debug)]
-        struct FrequencyAggregate<'input> {
+        struct SpaceSavingAggregate<'input> {
             type_oid: u32,
             num_values: u32,
             values_seen: u64,
-            min_freq: f64,
+            freq_param: f64,
+            topn: u64, // bump this up to u64 to keep alignment
             counts: [u64; self.num_values], // JOSH TODO look at AoS instead of SoA at some point
             overcounts: [u64; self.num_values],
             datums: DatumStore<'input>,
         }
     }
 
-    impl<'input> From<Internal> for FrequencyAggregate<'input> {
+    impl<'input> From<Internal> for SpaceSavingAggregate<'input> {
         fn from(trans: Internal) -> Self {
             Self::from(unsafe { trans.to_inner().unwrap() })
         }
     }
 
-    impl<'input> From<&mut FrequencyTransState> for FrequencyAggregate<'input> {
-        fn from(trans: &mut FrequencyTransState) -> Self {
+    impl<'input> From<&mut SpaceSavingTransState> for SpaceSavingAggregate<'input> {
+        fn from(trans: &mut SpaceSavingTransState) -> Self {
             let mut values = Vec::new();
             let mut counts = Vec::new();
             let mut overcounts = Vec::new();
@@ -354,11 +363,12 @@ pub mod toolkit_experimental {
             }
 
             build! {
-                FrequencyAggregate {
+                SpaceSavingAggregate {
                     type_oid: trans.type_oid() as _,
                     num_values: trans.entries.len() as _,
                     values_seen: trans.total_vals,
-                    min_freq: trans.min_freq,
+                    freq_param: trans.freq_param,
+                    topn: trans.topn as u64,
                     counts: counts.into(),
                     overcounts: overcounts.into(),
                     datums: DatumStore::from((trans.type_oid(), values)),
@@ -367,8 +377,8 @@ pub mod toolkit_experimental {
         }
     }
 
-    impl<'input> From<Inner<FrequencyTransState>> for FrequencyAggregate<'input> {
-        fn from(trans: Inner<FrequencyTransState>) -> Self {
+    impl<'input> From<Inner<SpaceSavingTransState>> for SpaceSavingAggregate<'input> {
+        fn from(trans: Inner<SpaceSavingTransState>) -> Self {
             let mut values = Vec::new();
             let mut counts = Vec::new();
             let mut overcounts = Vec::new();
@@ -380,11 +390,12 @@ pub mod toolkit_experimental {
             }
 
             build! {
-                FrequencyAggregate {
+                SpaceSavingAggregate {
                     type_oid: trans.type_oid() as _,
                     num_values: trans.entries.len() as _,
                     values_seen: trans.total_vals,
-                    min_freq: trans.min_freq,
+                    freq_param: trans.freq_param,
+                    topn: trans.topn as u64,
                     counts: counts.into(),
                     overcounts: overcounts.into(),
                     datums: DatumStore::from((trans.type_oid(), values)),
@@ -393,12 +404,12 @@ pub mod toolkit_experimental {
         }
     }
 
-    ron_inout_funcs!(FrequencyAggregate);
+    ron_inout_funcs!(SpaceSavingAggregate);
 }
 
 #[aggregate]
 impl toolkit_experimental::freq_agg {
-    type State = FrequencyTransState;
+    type State = SpaceSavingTransState;
 
     const PARALLEL_SAFE: bool = true;
 
@@ -420,7 +431,7 @@ impl toolkit_experimental::freq_agg {
                 } else {
                     get_collation(fcinfo)
                 };
-                FrequencyTransState::from_type_id(freq, typ, collation)
+                SpaceSavingTransState::freq_agg_from_type_id(freq, typ, collation)
             },
             Some(state) => state,
         };
@@ -431,8 +442,8 @@ impl toolkit_experimental::freq_agg {
 
     fn finally(
         state: Option<&mut State>,
-    ) -> Option<toolkit_experimental::FrequencyAggregate<'static>> {
-        state.map(FrequencyAggregate::from)
+    ) -> Option<toolkit_experimental::SpaceSavingAggregate<'static>> {
+        state.map(SpaceSavingAggregate::from)
     }
 
     fn serialize(state: &State) -> bytea {
@@ -440,12 +451,12 @@ impl toolkit_experimental::freq_agg {
     }
 
     fn deserialize(bytes: crate::raw::bytea) -> State {
-        crate::do_deserialize!(bytes, FrequencyTransState)
+        crate::do_deserialize!(bytes, SpaceSavingTransState)
     }
 
     fn combine(a: Option<&State>, b: Option<&State>) -> Option<State> {
         match (a, b) {
-            (Some(a), Some(b)) => Some(FrequencyTransState::combine(a, b)),
+            (Some(a), Some(b)) => Some(SpaceSavingTransState::combine(a, b)),
             (Some(a), None) => Some(a.clone()),
             (None, Some(b)) => Some(b.clone()),
             (None, None) => None,
@@ -460,7 +471,7 @@ impl toolkit_experimental::freq_agg {
     schema = "toolkit_experimental"
 )]
 pub fn freq_iter(
-    agg: FrequencyAggregate<'_>,
+    agg: SpaceSavingAggregate<'_>,
     ty: AnyElement,
 ) -> impl std::iter::Iterator<
     Item = (
@@ -477,7 +488,7 @@ pub fn freq_iter(
         agg.datums.clone().into_iter().zip(counts).map_while(
             move |(value, (&count, &overcount))| {
                 let total = agg.values_seen as f64;
-                if count as f64 / total < agg.min_freq {
+                if count as f64 / total < agg.freq_param {
                     None
                 } else {
                     let value = AnyElement::from_datum(value, false, agg.type_oid).unwrap();
@@ -492,7 +503,7 @@ pub fn freq_iter(
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn topn(
-    agg: FrequencyAggregate<'_>,
+    agg: SpaceSavingAggregate<'_>,
     n: i32,
     ty: AnyElement,
 ) -> impl std::iter::Iterator<Item = AnyElement> + '_ {
@@ -507,7 +518,7 @@ pub fn topn(
             .zip(agg.counts.slice().iter());
         iter.enumerate().map_while(move |(i, (value, &count))| {
             let total = agg.values_seen as f64;
-            if i >= n as usize || count as f64 / total < agg.min_freq {
+            if i >= n as usize || count as f64 / total < agg.freq_param {
                 None
             } else {
                 AnyElement::from_datum(value, false, agg.type_oid)
@@ -556,7 +567,7 @@ mod tests {
             let test = client.select("SELECT freq_agg(0.015, s.data)::TEXT FROM (SELECT data FROM test ORDER BY time) s", None, None)
                 .first()
                 .get_one::<String>().unwrap();
-            let expected = "(version:1,type_oid:23,num_values:67,values_seen:5050,min_freq:0.015,counts:[100,99,98,97,96,95,94,93,92,91,90,89,88,87,86,85,84,83,82,81,80,79,78,77,76,75,74,73,72,71,70,69,68,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67],overcounts:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66],datums:[23,\"99\",\"98\",\"97\",\"96\",\"95\",\"94\",\"93\",\"92\",\"91\",\"90\",\"89\",\"88\",\"87\",\"86\",\"85\",\"84\",\"83\",\"82\",\"81\",\"80\",\"79\",\"78\",\"77\",\"76\",\"75\",\"74\",\"73\",\"72\",\"71\",\"70\",\"69\",\"68\",\"67\",\"33\",\"34\",\"35\",\"36\",\"37\",\"38\",\"39\",\"40\",\"41\",\"42\",\"43\",\"44\",\"45\",\"46\",\"47\",\"48\",\"49\",\"50\",\"51\",\"52\",\"53\",\"54\",\"55\",\"56\",\"57\",\"58\",\"59\",\"60\",\"61\",\"62\",\"63\",\"64\",\"65\",\"66\"])";
+            let expected = "(version:1,type_oid:23,num_values:67,values_seen:5050,freq_param:0.015,topn:0,counts:[100,99,98,97,96,95,94,93,92,91,90,89,88,87,86,85,84,83,82,81,80,79,78,77,76,75,74,73,72,71,70,69,68,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67],overcounts:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66],datums:[23,\"99\",\"98\",\"97\",\"96\",\"95\",\"94\",\"93\",\"92\",\"91\",\"90\",\"89\",\"88\",\"87\",\"86\",\"85\",\"84\",\"83\",\"82\",\"81\",\"80\",\"79\",\"78\",\"77\",\"76\",\"75\",\"74\",\"73\",\"72\",\"71\",\"70\",\"69\",\"68\",\"67\",\"33\",\"34\",\"35\",\"36\",\"37\",\"38\",\"39\",\"40\",\"41\",\"42\",\"43\",\"44\",\"45\",\"46\",\"47\",\"48\",\"49\",\"50\",\"51\",\"52\",\"53\",\"54\",\"55\",\"56\",\"57\",\"58\",\"59\",\"60\",\"61\",\"62\",\"63\",\"64\",\"65\",\"66\"])";
             assert_eq!(test, expected);
         });
     }
@@ -585,10 +596,11 @@ mod tests {
         };
         let expected = [
             1, 1, // versions
-            14, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence
+            15, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence
             55, 0, 0, 0, 0, 0, 0, 0, // elements seen
             0, 0, 0, 0, 0, 0, 176, 63, // frequency (f64 encoding of 0.0625)
-            17, 0, 0, 0, 0, 0, 0, 0,  // elements tracked
+            17, 0, 0, 0, // elements tracked
+            0, 0, 0, 0,  // topn
             7, 0, 0, 0, 1, 1, 10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111,
             103, 11, 0, 0, 0, 0, 0, 0, 0, 101, 110, 95, 85, 83, 46, 85, 84, 70, 45,
             56, // INT4 hasher
@@ -643,10 +655,11 @@ mod tests {
         };
         let expected = [
             1, 1, // versions
-            21, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence
+            22, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence
             155, 0, 0, 0, 0, 0, 0, 0, // elements seen
             0, 0, 0, 0, 0, 0, 176, 63, // frequency (f64 encoding of 0.0625)
-            17, 0, 0, 0, 0, 0, 0, 0,  // elements tracked
+            17, 0, 0, 0, // elements tracked
+            0, 0, 0, 0,  // topn
             7, 0, 0, 0, 1, 1, 10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111,
             103, 11, 0, 0, 0, 0, 0, 0, 0, 101, 110, 95, 85, 83, 46, 85, 84, 70, 45,
             56, // INT4 hasher
@@ -709,10 +722,11 @@ mod tests {
         };
         let expected = [
             1, 1, // versions
-            21, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence
+            22, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence
             210, 0, 0, 0, 0, 0, 0, 0, // elements seen
             0, 0, 0, 0, 0, 0, 176, 63, // frequency (f64 encoding of 0.0625)
-            17, 0, 0, 0, 0, 0, 0, 0,  // elements tracked
+            17, 0, 0, 0, // elements tracked
+            0, 0, 0, 0,  // topn
             7, 0, 0, 0, 1, 1, 10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111,
             103, 11, 0, 0, 0, 0, 0, 0, 0, 101, 110, 95, 85, 83, 46, 85, 84, 70, 45,
             56, // INT4 hasher

@@ -206,6 +206,9 @@ fn add_version_to_install_script(
     let module_path = format!("$libdir/timescaledb_toolkit-{}", current_version);
 
     transform_file_to(&install_script, &versioned_script, |line| {
+        if line.contains("CREATE OR REPLACE FUNCTION") {
+            return line.replace("CREATE OR REPLACE FUNCTION", "CREATE FUNCTION")
+        }
         if line.contains("MODULE_PATHNAME") {
             return line.replace("MODULE_PATHNAME", &module_path)
         }

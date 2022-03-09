@@ -26,10 +26,13 @@ pub (crate) fn generate_from_install(
 ) {
     writeln!(
         &mut upgrade_file,
-        "DROP SCHEMA toolkit_experimental CASCADE;\n\
+        "DROP SCHEMA IF EXISTS toolkit_experimental CASCADE;\n\
         -- drop the EVENT TRIGGERs; there's no CREATE OR REPLACE for those
-        DROP EVENT TRIGGER disallow_experimental_deps CASCADE;\n\
-        DROP EVENT TRIGGER disallow_experimental_dependencies_on_views CASCADE;"
+        DROP EVENT TRIGGER IF EXISTS disallow_experimental_deps CASCADE;\n\
+        DROP EVENT TRIGGER IF EXISTS disallow_experimental_dependencies_on_views CASCADE;\n\
+        DROP FUNCTION IF EXISTS disallow_experimental_dependencies();\n\
+        DROP FUNCTION IF EXISTS disallow_experimental_view_dependencies();\n\
+        DROP FUNCTION IF EXISTS timescaledb_toolkit_probe;"
     ).unwrap();
 
     let mut lines = extension_file.lines()
@@ -39,6 +42,12 @@ pub (crate) fn generate_from_install(
                 .expect("cannot read install script");
             if line.trim_start().starts_with("CREATE AGGREGATE") {
                 return line.replace("CREATE AGGREGATE", "CREATE OR REPLACE AGGREGATE")
+            }
+            if line.trim_start().starts_with("CREATE FUNCTION toolkit_experimental.") {
+                return line
+            }
+            if line.trim_start().starts_with("CREATE FUNCTION") {
+                return line.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION")
             }
             line
         })

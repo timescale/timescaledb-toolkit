@@ -28,10 +28,6 @@ mod pg_any_element;
 #[cfg(any(test, feature = "pg_test"))]
 mod aggregate_builder_tests;
 
-// This should be last so we don't run our warning trigger on when
-// installing this extension
-pub mod zz_triggers;
-
 use pgx::*;
 
 pgx::pg_module_magic!();
@@ -50,6 +46,12 @@ pub extern "C" fn _PG_init() {
         GucContext::Userset,
     );
 }
+
+extension_sql!(r#"GRANT USAGE ON SCHEMA toolkit_experimental TO PUBLIC;"#,
+    name = "final_grant",
+    finalize,
+);
+
 
 #[cfg(test)]
 pub mod pg_test {

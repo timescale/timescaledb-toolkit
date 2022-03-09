@@ -3,7 +3,7 @@
 use pgx::*;
 
 extension_sql!("\n\
-        CREATE SCHEMA IF NOT EXISTS toolkit_experimental;\n\
+        CREATE SCHEMA toolkit_experimental;\n\
     ",
     name = "create_experimental_schema",
     creates=[

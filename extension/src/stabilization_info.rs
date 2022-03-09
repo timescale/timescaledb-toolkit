@@ -22,7 +22,6 @@ crate::functions_stabilized_at! {
         mean(uddsketch),
         num_vals(uddsketch),
         percentile_agg(double precision),
-        percentile_agg(uddsketch),
         percentile_agg_trans(internal,double precision),
         uddsketch(integer,double precision,double precision),
         rollup(uddsketch),

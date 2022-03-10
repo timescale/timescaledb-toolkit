@@ -1,6 +1,49 @@
 #[cfg(any(test, feature = "pg_test"))]
 use pgx::*;
 
+#[macro_export]
+macro_rules! functions_stabilized_at {
+    (
+        $export_symbol: ident
+        $(
+            $version: literal => {
+                $($fn_name: ident ( $( $($fn_type: ident)+ ),* ) ),* $(,)?
+            }
+        )*
+    ) => {
+
+    };
+}
+
+#[macro_export]
+macro_rules! types_stabilized_at {
+    (
+        $export_symbol: ident
+        $(
+            $version: literal => {
+                $($type_name: ident),* $(,)?
+            }
+        )*
+    ) => {
+
+    };
+}
+
+#[macro_export]
+macro_rules! operators_stabilized_at {
+    (
+        $export_symbol: ident
+        $(
+            $version: literal => {
+                $($operator_name: literal ( $( $($fn_type: ident)+ ),* ) ),* $(,)?
+            }
+        )*
+    ) => {
+
+    };
+}
+
+
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
@@ -97,11 +140,6 @@ mod tests {
     // TODO it may pay to auto-discover this list based on the previous version of
     //      the extension, once we have a released extension
     static RELEASED_FEATURES: &[&str] = &[
-        "event trigger disallow_experimental_deps",
-        "event trigger disallow_experimental_dependencies_on_views",
-        "function disallow_experimental_dependencies()",
-        "function disallow_experimental_view_dependencies()",
-        "function timescaledb_toolkit_probe()",
         "function approx_percentile(double precision,uddsketch)",
         "function approx_percentile_rank(double precision,uddsketch)",
         "function error(uddsketch)",

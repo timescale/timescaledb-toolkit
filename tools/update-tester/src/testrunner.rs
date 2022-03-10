@@ -6,6 +6,8 @@ use postgres_connection_configuration::ConnectionConfig;
 
 use crate::{defer, Deferred};
 
+mod stabilization;
+
 pub fn run_update_tests(
     root_config: &ConnectionConfig,
     current_version: String,
@@ -49,6 +51,8 @@ pub fn run_update_tests(
             test_client.validate_test_objects(validation_values);
 
             test_client.check_no_references_to_the_old_binary_leaked(&current_version);
+
+            test_client.validate_stable_objects_exist();
         });
         eprintln!(
             "{} {} -> {}",
@@ -245,6 +249,26 @@ impl TestClient {
             .pop() // row should have one value
             .expect("no timescaledb_toolkit version")
             .expect("no timescaledb_toolkit version")
+    }
+
+    pub(crate) fn validate_stable_objects_exist(&mut self) {
+        for function in stabilization::STABLE_FUNCTIONS {
+            let check_existence = format!("SELECT '{}'::regprocedure;", function);
+            self.simple_query(&check_existence)
+                .unwrap_or_else(|e| panic!("error checking function existence: {}", e));
+        }
+
+        for ty in stabilization::STABLE_TYPES {
+            let check_existence = format!("SELECT '{}'::regtype;", ty);
+            self.simple_query(&check_existence)
+                .unwrap_or_else(|e| panic!("error checking type existence: {}", e));
+        }
+
+        for operator in stabilization::STABLE_OPERATORS {
+            let check_existence = format!("SELECT '{}'::regoperator;", operator);
+            self.simple_query(&check_existence)
+                .unwrap_or_else(|e| panic!("error checking operator existence: {}", e));
+        }
     }
 }
 

@@ -42,8 +42,6 @@ fn try_main() -> xshell::Result<()> {
             get_extension_info_from_pg_config(&pg_config)?
         };
 
-
-
     // remove `module_path = '$libdir/timescaledb_toolkit'`
     // from timescaledb_toolkit.control.
     // Not needed for correctness purposes, but it ensures that if `MODULE_PATH`
@@ -235,7 +233,12 @@ fn generate_update_scripts(
         ));
         let mut upgrade_file = create_file(&upgrade_path);
 
-        update_script::generate_from_install(&mut extension_file, &mut upgrade_file);
+        update_script::generate_from_install(
+            from_version,
+            current_version,
+            &mut extension_file,
+            &mut upgrade_file,
+        );
 
         copy_permissions(extension_file, upgrade_file);
     }

@@ -16,7 +16,7 @@ in this repository at [`docs`](https://github.com/timescale/timescaledb-toolkit/
 
 ## 🖥 Try It Out ##
 
-The extension comes pre-installed on all [Timescale Forge](https://console.forge.timescale.com/) instances, and also on our full-featured [`timescale/timescaledb-ha` docker image](https://hub.docker.com/r/timescale/timescaledb-ha).
+The extension comes pre-installed on all [Timescale Cloud](https://www.timescale.com/products#timescale-cloud) instances, and also on our full-featured [`timescale/timescaledb-ha` docker image](https://hub.docker.com/r/timescale/timescaledb-ha).
 
 We also provide nightly builds as a docker images in `timescaledev/timescaledb-toolkit:nightly`.
 

@@ -227,7 +227,7 @@ fn tdigest_final(
 
 
 extension_sql!("\n\
-    CREATE AGGREGATE tdigest(size int, value DOUBLE PRECISION)\n\
+    CREATE AGGREGATE tdigest(size integer, value DOUBLE PRECISION)\n\
     (\n\
         sfunc = tdigest_trans,\n\
         stype = internal,\n\

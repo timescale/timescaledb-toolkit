@@ -445,7 +445,7 @@ fn decompress_counts<'b>(
 
 extension_sql!("\n\
     CREATE AGGREGATE uddsketch(\n\
-        size int, max_error DOUBLE PRECISION, value DOUBLE PRECISION\n\
+        size integer, max_error DOUBLE PRECISION, value DOUBLE PRECISION\n\
     ) (\n\
         sfunc = uddsketch_trans,\n\
         stype = internal,\n\

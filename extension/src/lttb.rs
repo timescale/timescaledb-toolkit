@@ -94,7 +94,7 @@ pub fn lttb_final_inner(
 }
 
 extension_sql!("\n\
-CREATE AGGREGATE toolkit_experimental.lttb(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution INT) (\n\
+CREATE AGGREGATE toolkit_experimental.lttb(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution integer) (\n\
     sfunc = toolkit_experimental.lttb_trans,\n\
     stype = internal,\n\
     finalfunc = toolkit_experimental.lttb_final\n\

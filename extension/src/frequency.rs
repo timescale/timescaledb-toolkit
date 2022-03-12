@@ -30,7 +30,21 @@ use crate::{
 
 use aggregate_builder::aggregate;
 
+use spfunc::zeta::zeta;
+use statrs::function::harmonic::gen_harmonic;
+
 use crate::frequency::toolkit_experimental::SpaceSavingAggregate;
+
+// Helper functions for zeta distribution
+
+// probability of the nth element of a zeta distribution
+fn zeta_eq_n(skew: f64, n: u64) -> f64 {
+    1.0 / zeta(skew) * (n as f64).powf(-1. * skew)
+}
+// cumulative distribution <= n in a zeta distribution
+fn zeta_le_n(skew: f64, n: u64) -> f64 {
+    gen_harmonic(n, skew) / zeta(skew)
+}
 
 struct SpaceSavingEntry {
     value: Datum,
@@ -177,7 +191,7 @@ impl SpaceSavingTransState {
         (1. / min_freq) as u32 + 1
     }
 
-    unsafe fn freq_agg_from_type_id(min_freq: f64, typ: pg_sys::Oid, collation: Option<Oid>) -> Self {
+    fn freq_agg_from_type_id(min_freq: f64, typ: pg_sys::Oid, collation: Option<Oid>) -> Self {
         SpaceSavingTransState {
             entries: vec![],
             indicies: PgAnyElementHashMap::new(typ, collation),
@@ -185,6 +199,20 @@ impl SpaceSavingTransState {
             freq_param: min_freq,
             max_size: SpaceSavingTransState::max_size_for_freq(min_freq),
             topn: 0,
+        }
+    }
+
+    fn topn_agg_from_type_id(skew: f64, nval: u32, typ: pg_sys::Oid, collation: Option<Oid>) -> Self {
+        let prob_eq_n = zeta_eq_n(skew, nval as u64);
+        let prob_lt_n = zeta_le_n(skew, nval as u64 - 1);
+
+        SpaceSavingTransState {
+            entries: vec![],
+            indicies: PgAnyElementHashMap::new(typ, collation),
+            total_vals: 0,
+            freq_param: skew,
+            max_size: nval - 1 + SpaceSavingTransState::max_size_for_freq(prob_eq_n / (1.0 - prob_lt_n)),
+            topn: nval,
         }
     }
 
@@ -467,7 +495,7 @@ impl toolkit_experimental::freq_agg {
 #[pg_extern(
     immutable,
     parallel_safe,
-    name = "values",
+    name = "display",
     schema = "toolkit_experimental"
 )]
 pub fn freq_iter(
@@ -507,10 +535,41 @@ pub fn topn(
     n: i32,
     ty: AnyElement,
 ) -> impl std::iter::Iterator<Item = AnyElement> + '_ {
-    unsafe {
-        if ty.oid() != agg.type_oid {
-            pgx::error!("mischatched types")
+    if ty.oid() != agg.type_oid {
+        pgx::error!("mischatched types")
+    }
+
+    let f = if agg.topn == 0 {
+        agg.freq_param
+    } else {
+        if n > agg.topn as i32 {
+            pgx::error!("requested N ({}) exceeds creation parameter of topn aggregate ({})", n , agg.topn)
         }
+        zeta_eq_n(agg.freq_param, agg.topn)
+    };
+
+    topn_internal(agg, n, f)
+}
+
+#[pg_extern(immutable, parallel_safe, name="topn", schema = "toolkit_experimental")]
+pub fn default_topn(
+    agg: SpaceSavingAggregate<'_>,
+    ty: AnyElement,
+) -> impl std::iter::Iterator<Item = AnyElement> + '_ {
+    if agg.topn == 0 {
+        pgx::error!("frequency aggregates require a N parameter to topn")
+    }
+    let n = agg.topn as i32;
+    topn(agg, n, ty)
+}
+
+// return up to 'max_n' elements having at least 'min_freq' frequency
+fn topn_internal(
+    agg: SpaceSavingAggregate<'_>,
+    max_n: i32,
+    min_freq: f64,
+) -> impl std::iter::Iterator<Item = AnyElement> + '_ {
+    unsafe {
         let iter = agg
             .datums
             .clone()
@@ -518,7 +577,7 @@ pub fn topn(
             .zip(agg.counts.slice().iter());
         iter.enumerate().map_while(move |(i, (value, &count))| {
             let total = agg.values_seen as f64;
-            if i >= n as usize || count as f64 / total < agg.freq_param {
+            if i >= max_n as usize || count as f64 / total < min_freq {
                 None
             } else {
                 AnyElement::from_datum(value, false, agg.type_oid)

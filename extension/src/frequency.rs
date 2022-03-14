@@ -35,6 +35,9 @@ use crate::frequency::toolkit_experimental::SpaceSavingAggregate;
 
 // Helper functions for zeta distribution
 
+// Default s-value
+const DEFAULT_ZETA_SKEW: f64 = 1.1;
+
 // probability of the nth element of a zeta distribution
 fn zeta_eq_n(skew: f64, n: u64) -> f64 {
     1.0 / zeta(skew) * (n as f64).powf(-1. * skew)
@@ -400,7 +403,56 @@ pub mod toolkit_experimental {
     ron_inout_funcs!(SpaceSavingAggregate);
 }
 
-
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+pub fn topn_agg_trans(
+    state: Internal,
+    n: i32,
+    value: Option<AnyElement>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Internal {
+    topn_agg_trans_inner(unsafe{ state.to_inner() }, n, DEFAULT_ZETA_SKEW, value, fcinfo).internal()
+}
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+pub fn topn_agg_with_skew_trans(
+    state: Internal,
+    n: i32,
+    skew: f64,
+    value: Option<AnyElement>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Internal {
+    topn_agg_trans_inner(unsafe{ state.to_inner() }, n, skew, value, fcinfo).internal()
+}
+pub fn topn_agg_trans_inner(
+    state: Option<Inner<SpaceSavingTransState>>,
+    n: i32,
+    skew: f64,
+    value: Option<AnyElement>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<SpaceSavingTransState>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            let value = match value {
+                None => return state,
+                Some(value) => value,
+            };
+            let mut state = match state {
+                None => {
+                    let typ = value.oid();
+                    let collation = if fcinfo.is_null() {
+                        Some(100) // TODO: default OID, there should be a constant for this
+                    } else {
+                        get_collation(fcinfo)
+                    };
+                    SpaceSavingTransState::topn_agg_from_type_id(skew, n as u32, typ, collation).into()
+                },
+                Some(state) => state,
+            };
+    
+            state.add(value.into());
+            Some(state)
+        })
+    }
+}
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn freq_agg_trans(
@@ -424,7 +476,7 @@ pub fn freq_agg_trans_inner(
                 Some(value) => value,
             };
             let mut state = match state {
-                None => unsafe {
+                None => {
                     let typ = value.oid();
                     let collation = if fcinfo.is_null() {
                         Some(100) // TODO: default OID, there should be a constant for this
@@ -510,6 +562,40 @@ extension_sql!("\n\
 ",
 name = "freq_agg",
 requires = [freq_agg_trans, space_saving_final, space_saving_combine, space_saving_serialize, space_saving_deserialize],
+);
+
+extension_sql!("\n\
+    CREATE AGGREGATE toolkit_experimental.topn_agg(\n\
+        integer, AnyElement\n\
+    ) (\n\
+        sfunc = toolkit_experimental.topn_agg_trans,\n\
+        stype = internal,\n\
+        finalfunc = toolkit_experimental.space_saving_final,\n\
+        combinefunc = toolkit_experimental.space_saving_combine,\n\
+        serialfunc = toolkit_experimental.space_saving_serialize,\n\
+        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+name = "topn_agg",
+requires = [topn_agg_trans, space_saving_final, space_saving_combine, space_saving_serialize, space_saving_deserialize],
+);
+
+extension_sql!("\n\
+    CREATE AGGREGATE toolkit_experimental.topn_agg(\n\
+        integer, double precision, AnyElement\n\
+    ) (\n\
+        sfunc = toolkit_experimental.topn_agg_with_skew_trans,\n\
+        stype = internal,\n\
+        finalfunc = toolkit_experimental.space_saving_final,\n\
+        combinefunc = toolkit_experimental.space_saving_combine,\n\
+        serialfunc = toolkit_experimental.space_saving_serialize,\n\
+        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+name = "topn_agg_with_skew",
+requires = [topn_agg_with_skew_trans, space_saving_final, space_saving_combine, space_saving_serialize, space_saving_deserialize],
 );
 
 #[pg_extern(
@@ -647,6 +733,45 @@ mod tests {
                 .first()
                 .get_one::<String>().unwrap();
             let expected = "(version:1,type_oid:23,num_values:67,values_seen:5050,freq_param:0.015,topn:0,counts:[100,99,98,97,96,95,94,93,92,91,90,89,88,87,86,85,84,83,82,81,80,79,78,77,76,75,74,73,72,71,70,69,68,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67],overcounts:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66],datums:[23,\"99\",\"98\",\"97\",\"96\",\"95\",\"94\",\"93\",\"92\",\"91\",\"90\",\"89\",\"88\",\"87\",\"86\",\"85\",\"84\",\"83\",\"82\",\"81\",\"80\",\"79\",\"78\",\"77\",\"76\",\"75\",\"74\",\"73\",\"72\",\"71\",\"70\",\"69\",\"68\",\"67\",\"33\",\"34\",\"35\",\"36\",\"37\",\"38\",\"39\",\"40\",\"41\",\"42\",\"43\",\"44\",\"45\",\"46\",\"47\",\"48\",\"49\",\"50\",\"51\",\"52\",\"53\",\"54\",\"55\",\"56\",\"57\",\"58\",\"59\",\"60\",\"61\",\"62\",\"63\",\"64\",\"65\",\"66\"])";
+            assert_eq!(test, expected);
+        });
+    }
+
+    #[pg_test]
+    fn test_topn_aggregate() {
+        Spi::execute(|client| {
+            // using the search path trick for this test to make it easier to stabilize later on
+            let sp = client
+                .select(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select(
+                "SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'",
+                None,
+                None,
+            );
+
+            client.select("SET TIMEZONE to UTC", None, None);
+            client.select(
+                "CREATE TABLE test (data INTEGER, time TIMESTAMPTZ)",
+                None,
+                None,
+            );
+
+            for i in (0..200).rev() {
+                client.select(&format!("INSERT INTO test SELECT i, '2020-1-1'::TIMESTAMPTZ + ('{} days, ' || i::TEXT || ' seconds')::INTERVAL FROM generate_series({}, 199, 1) i", 200 - i, i), None, None);
+            }
+
+            let test = client.select("SELECT topn_agg(10, s.data)::TEXT FROM (SELECT data FROM test ORDER BY time) s", None, None)
+                .first()
+                .get_one::<String>().unwrap();
+            let expected = "(version:1,type_oid:23,num_values:110,values_seen:20100,freq_param:1.1,topn:10,counts:[200,199,198,197,196,195,194,193,192,191,190,189,188,187,186,185,184,183,182,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181],overcounts:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180],datums:[23,\"199\",\"198\",\"197\",\"196\",\"195\",\"194\",\"193\",\"192\",\"191\",\"190\",\"189\",\"188\",\"187\",\"186\",\"185\",\"184\",\"183\",\"182\",\"181\",\"90\",\"91\",\"92\",\"93\",\"94\",\"95\",\"96\",\"97\",\"98\",\"99\",\"100\",\"101\",\"102\",\"103\",\"104\",\"105\",\"106\",\"107\",\"108\",\"109\",\"110\",\"111\",\"112\",\"113\",\"114\",\"115\",\"116\",\"117\",\"118\",\"119\",\"120\",\"121\",\"122\",\"123\",\"124\",\"125\",\"126\",\"127\",\"128\",\"129\",\"130\",\"131\",\"132\",\"133\",\"134\",\"135\",\"136\",\"137\",\"138\",\"139\",\"140\",\"141\",\"142\",\"143\",\"144\",\"145\",\"146\",\"147\",\"148\",\"149\",\"150\",\"151\",\"152\",\"153\",\"154\",\"155\",\"156\",\"157\",\"158\",\"159\",\"160\",\"161\",\"162\",\"163\",\"164\",\"165\",\"166\",\"167\",\"168\",\"169\",\"170\",\"171\",\"172\",\"173\",\"174\",\"175\",\"176\",\"177\",\"178\",\"179\",\"180\"])";
             assert_eq!(test, expected);
         });
     }

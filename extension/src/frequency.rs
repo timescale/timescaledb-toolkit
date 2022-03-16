@@ -28,6 +28,8 @@ use crate::{
     ron_inout_funcs,
 };
 
+use aggregate_builder::aggregate;
+
 use spfunc::zeta::zeta;
 use statrs::function::harmonic::gen_harmonic;
 
@@ -403,15 +405,35 @@ pub mod toolkit_experimental {
     ron_inout_funcs!(SpaceSavingAggregate);
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn topn_agg_trans(
-    state: Internal,
-    n: i32,
+fn state_transition<F>(
+    state: Option<SpaceSavingTransState>,
     value: Option<AnyElement>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
-    topn_agg_trans_inner(unsafe{ state.to_inner() }, n, DEFAULT_ZETA_SKEW, value, fcinfo).internal()
+    make: F,
+) -> Option<SpaceSavingTransState>
+where
+    F: FnOnce(u32, Option<u32>) -> SpaceSavingTransState,
+{
+            let value = match value {
+                None => return state,
+                Some(value) => value,
+            };
+            let mut state = match state {
+                None => {
+                    let typ = value.oid();
+                    let collation = if fcinfo.is_null() {
+                        Some(100) // TODO: default OID, there should be a constant for this
+                    } else {
+                        unsafe { get_collation(fcinfo) }
+                    };
+                    make(typ, collation)
+                },
+                Some(state) => state,
+            };
+            state.add(value.into());
+            Some(state)
 }
+
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn topn_agg_with_skew_trans(
     state: Internal,
@@ -420,183 +442,119 @@ pub fn topn_agg_with_skew_trans(
     value: Option<AnyElement>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Internal {
-    topn_agg_trans_inner(unsafe{ state.to_inner() }, n, skew, value, fcinfo).internal()
-}
-pub fn topn_agg_trans_inner(
-    state: Option<Inner<SpaceSavingTransState>>,
-    n: i32,
-    skew: f64,
-    value: Option<AnyElement>,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<SpaceSavingTransState>> {
+    let mut inner: Option<Inner<Option<SpaceSavingTransState>>> = unsafe { state.to_inner() };
+    let state: Option<SpaceSavingTransState> = match &mut inner {
+        None => None,
+        Some(inner) => Option::take(&mut **inner),
+    };
     unsafe {
         in_aggregate_context(fcinfo, || {
-            let value = match value {
-                None => return state,
-                Some(value) => value,
-            };
-            let mut state = match state {
-                None => {
-                    let typ = value.oid();
-                    let collation = if fcinfo.is_null() {
-                        Some(100) // TODO: default OID, there should be a constant for this
-                    } else {
-                        get_collation(fcinfo)
-                    };
-                    SpaceSavingTransState::topn_agg_from_type_id(skew, n as u32, typ, collation).into()
-                },
-                Some(state) => state,
-            };
-    
-            state.add(value.into());
-            Some(state)
-        })
-    }
-}
-
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn freq_agg_trans(
-    state: Internal,
-    freq: f64,
-    value: Option<AnyElement>,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
-    freq_agg_trans_inner(unsafe{ state.to_inner() }, freq, value, fcinfo).internal()
-}
-pub fn freq_agg_trans_inner(
-    state: Option<Inner<SpaceSavingTransState>>,
-    freq: f64,
-    value: Option<AnyElement>,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<SpaceSavingTransState>> {
-    unsafe {
-        in_aggregate_context(fcinfo, || {
-            let value = match value {
-                None => return state,
-                Some(value) => value,
-            };
-            let mut state = match state {
-                None => {
-                    let typ = value.oid();
-                    let collation = if fcinfo.is_null() {
-                        Some(100) // TODO: default OID, there should be a constant for this
-                    } else {
-                        get_collation(fcinfo)
-                    };
-                    SpaceSavingTransState::freq_agg_from_type_id(freq, typ, collation).into()
-                },
-                Some(state) => state,
-            };
-    
-            state.add(value.into());
-            Some(state)
-        })
-    }
-}
-
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn space_saving_combine(
-    state1: Internal,
-    state2: Internal,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
-    unsafe {
-        space_saving_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
-    }
-}
-pub fn space_saving_combine_inner(
-    a: Option<Inner<SpaceSavingTransState>>,
-    b: Option<Inner<SpaceSavingTransState>>,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<SpaceSavingTransState>> {
-    unsafe {
-        in_aggregate_context(fcinfo, || {
-            match (a, b) {
-                (Some(a), Some(b)) => Some(SpaceSavingTransState::combine(&*a, &*b).into()),
-                (Some(a), None) => Some(a.clone().into()),
-                (None, Some(b)) => Some(b.clone().into()),
+            let state: Option<SpaceSavingTransState> = topn_transition(state, n, skew, value, fcinfo);
+            match (inner, state) {
                 (None, None) => None,
+                (None, state @ Some(..)) => Some(state.into()),
+                (Some(mut inner), state) => {
+                    *inner = state;
+                    Some(inner)
+                }
             }
         })
     }
+    .internal()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-fn space_saving_final(
-    state: Internal,
-    _fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<toolkit_experimental::SpaceSavingAggregate<'static>> {
-    let state: Option<&SpaceSavingTransState> = unsafe { state.get() };
-    state.map(SpaceSavingAggregate::from)
+#[aggregate]
+impl toolkit_experimental::topn_agg {
+    type State = SpaceSavingTransState;
+
+    const PARALLEL_SAFE: bool = true;
+
+    fn transition(
+        state: Option<State>,
+        #[sql_type("integer")] n: i32,
+        #[sql_type("AnyElement")] value: Option<AnyElement>,
+        fcinfo: pg_sys::FunctionCallInfo,
+    ) -> Option<State> {
+        topn_transition(state, n, DEFAULT_ZETA_SKEW, value, fcinfo)
+    }
+
+    fn finally(
+        state: Option<&mut State>,
+    ) -> Option<toolkit_experimental::SpaceSavingAggregate<'static>> {
+        state.map(|state| (state as &State).into())
+    }
+
+    fn serialize(state: &State) -> bytea {
+        crate::do_serialize!(state)
+    }
+
+    fn deserialize(bytes: crate::raw::bytea) -> State {
+        crate::do_deserialize!(bytes, SpaceSavingTransState)
+    }
+
+    fn combine(a: Option<&State>, b: Option<&State>) -> Option<State> {
+        super::freq_agg::combine(a, b)
+    }
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-fn space_saving_serialize(
-    state: Internal,
-) -> bytea {
-    let state: Inner<SpaceSavingTransState> = unsafe { state.to_inner().unwrap() };
-    crate::do_serialize!(state)
-}
-
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn space_saving_deserialize(
-    bytes: bytea,
-    _internal: Internal,
-) -> Internal {
-    let i: SpaceSavingTransState = crate::do_deserialize!(bytes, SpaceSavingTransState);
-    Inner::from(i).internal()
-}
-
-extension_sql!("\n\
-    CREATE AGGREGATE toolkit_experimental.freq_agg(\n\
-        double precision, AnyElement\n\
-    ) (\n\
-        sfunc = toolkit_experimental.freq_agg_trans,\n\
-        stype = internal,\n\
-        finalfunc = toolkit_experimental.space_saving_final,\n\
-        combinefunc = toolkit_experimental.space_saving_combine,\n\
-        serialfunc = toolkit_experimental.space_saving_serialize,\n\
-        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
-        parallel = safe\n\
-    );\n\
-",
-name = "freq_agg",
-requires = [freq_agg_trans, space_saving_final, space_saving_combine, space_saving_serialize, space_saving_deserialize],
-);
-
-extension_sql!("\n\
-    CREATE AGGREGATE toolkit_experimental.topn_agg(\n\
-        integer, AnyElement\n\
-    ) (\n\
-        sfunc = toolkit_experimental.topn_agg_trans,\n\
-        stype = internal,\n\
-        finalfunc = toolkit_experimental.space_saving_final,\n\
-        combinefunc = toolkit_experimental.space_saving_combine,\n\
-        serialfunc = toolkit_experimental.space_saving_serialize,\n\
-        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
-        parallel = safe\n\
-    );\n\
-",
-name = "topn_agg",
-requires = [topn_agg_trans, space_saving_final, space_saving_combine, space_saving_serialize, space_saving_deserialize],
-);
-
+// TODO Can be rephrased as #[aggregate(name="topn_agg")] after we implement that.
 extension_sql!("\n\
     CREATE AGGREGATE toolkit_experimental.topn_agg(\n\
         integer, double precision, AnyElement\n\
     ) (\n\
         sfunc = toolkit_experimental.topn_agg_with_skew_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.space_saving_final,\n\
-        combinefunc = toolkit_experimental.space_saving_combine,\n\
-        serialfunc = toolkit_experimental.space_saving_serialize,\n\
-        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        finalfunc = toolkit_experimental.freq_agg_finally_fn_outer,\n\
+        combinefunc = toolkit_experimental.freq_agg_combine_fn_outer,\n\
+        serialfunc = toolkit_experimental.freq_agg_serialize_fn_outer,\n\
+        deserialfunc = toolkit_experimental.freq_agg_deserialize_fn_outer,\n\
         parallel = safe\n\
     );\n\
 ",
 name = "topn_agg_with_skew",
-requires = [topn_agg_with_skew_trans, space_saving_final, space_saving_combine, space_saving_serialize, space_saving_deserialize],
+requires = [topn_agg_with_skew_trans, freq_agg_finally_fn_outer, freq_agg_combine_fn_outer, freq_agg_serialize_fn_outer, freq_agg_deserialize_fn_outer],
 );
+
+#[aggregate]
+impl toolkit_experimental::freq_agg {
+    type State = SpaceSavingTransState;
+
+    const PARALLEL_SAFE: bool = true;
+
+    fn transition(
+        state: Option<State>,
+        #[sql_type("double precision")] freq: f64,
+        #[sql_type("AnyElement")] value: Option<AnyElement>,
+        fcinfo: pg_sys::FunctionCallInfo,
+    ) -> Option<State> {
+        super::state_transition(state, value, fcinfo, |typ, collation| {
+            SpaceSavingTransState::freq_agg_from_type_id(freq, typ, collation)
+        })
+    }
+
+    fn finally(
+        state: Option<&mut State>,
+    ) -> Option<toolkit_experimental::SpaceSavingAggregate<'static>> {
+        state.map(|state| (state as &State).into())
+    }
+
+    fn serialize(state: &State) -> bytea {
+        crate::do_serialize!(state)
+    }
+
+    fn deserialize(bytes: crate::raw::bytea) -> State {
+        crate::do_deserialize!(bytes, SpaceSavingTransState)
+    }
+
+    fn combine(a: Option<&State>, b: Option<&State>) -> Option<State> {
+        match (a, b) {
+            (Some(a), Some(b)) => Some(SpaceSavingTransState::combine(a, b)),
+            (Some(a), None) => Some(a.clone()),
+            (None, Some(b)) => Some(b.clone()),
+            (None, None) => None,
+        }
+    }
+}
 
 #[pg_extern(
     immutable,
@@ -690,6 +648,18 @@ fn topn_internal(
             }
         })
     }
+}
+
+fn topn_transition(
+    state: Option<SpaceSavingTransState>,
+    n: i32,
+    skew: f64,
+    value: Option<AnyElement>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<SpaceSavingTransState> {
+    state_transition(state, value, fcinfo, |typ, collation| {
+        SpaceSavingTransState::topn_agg_from_type_id(skew, n as u32, typ, collation).into()
+    })
 }
 
 #[cfg(any(test, feature = "pg_test"))]
@@ -786,11 +756,11 @@ mod tests {
             for j in i..=20 {
                 let value =
                     unsafe { AnyElement::from_datum(j as pg_sys::Datum, false, pg_sys::INT4OID) };
-                state = super::freq_agg_trans(state, freq, value, fcinfo);
+                state = super::freq_agg::transition(state, freq, value, fcinfo);
             }
         }
 
-        let first = super::space_saving_serialize(state);
+        let first = super::freq_agg::serialize(&state.unwrap());
 
         let bytes = unsafe {
             std::slice::from_raw_parts(
@@ -845,11 +815,11 @@ mod tests {
             for j in i..=20 {
                 let value =
                     unsafe { AnyElement::from_datum(j as pg_sys::Datum, false, pg_sys::INT4OID) };
-                state = super::freq_agg_trans(state, freq, value, fcinfo);
+                state = super::freq_agg::transition(state, freq, value, fcinfo);
             }
         }
 
-        let second = super::space_saving_serialize(state);
+        let second = super::freq_agg::serialize(&state.unwrap());
 
         let bytes = unsafe {
             std::slice::from_raw_parts(
@@ -910,12 +880,12 @@ mod tests {
             expected[expected.len() - suffix_len..]
         );
 
-        let combined = super::space_saving_serialize(
-            super::space_saving_combine(
-                super::space_saving_deserialize(first, None.into()),
-                super::space_saving_deserialize(second, None.into()),
-                fcinfo,
+        let combined = super::freq_agg::serialize(
+            &super::freq_agg::combine(
+                Some(&super::freq_agg::deserialize(first)),
+                Some(&super::freq_agg::deserialize(second)),
             )
+            .unwrap(),
         );
 
         let bytes = unsafe {

@@ -65,7 +65,7 @@ impl SpaceSavingEntry {
 
 pub struct SpaceSavingTransState {
     entries: Vec<SpaceSavingEntry>,
-    indicies: PgAnyElementHashMap<usize>,
+    indices: PgAnyElementHashMap<usize>,
     total_vals: u64,
     freq_param: f64, // This is the minimum frequency for a freq_agg or the skew for a topn_agg
     topn: u32,       // 0 for freq_agg, creation parameter for topn_agg
@@ -76,7 +76,7 @@ impl Clone for SpaceSavingTransState {
     fn clone(&self) -> Self {
         let mut new_state = Self {
             entries: vec![],
-            indicies: PgAnyElementHashMap::with_hasher(self.indicies.hasher().clone()),
+            indices: PgAnyElementHashMap::with_hasher(self.indices.hasher().clone()),
             total_vals: self.total_vals,
             freq_param: self.freq_param,
             max_size: self.max_size,
@@ -91,7 +91,7 @@ impl Clone for SpaceSavingTransState {
                 overcount: entry.overcount,
             })
         }
-        new_state.update_all_map_indicies();
+        new_state.update_all_map_indices();
         new_state
     }
 }
@@ -103,7 +103,7 @@ impl Clone for SpaceSavingTransState {
 //   min_freq as f64
 //   max_idx as u32
 //   topn as u32
-//   indicies.hasher as DatumHashBuilder
+//   indices.hasher as DatumHashBuilder
 //   entries as repeated (str, u64, u64) tuples
 impl Serialize for SpaceSavingTransState {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -115,7 +115,7 @@ impl Serialize for SpaceSavingTransState {
         seq.serialize_element(&self.freq_param)?;
         seq.serialize_element(&self.max_size)?;
         seq.serialize_element(&self.topn)?;
-        seq.serialize_element(&self.indicies.hasher())?;
+        seq.serialize_element(&self.indices.hasher())?;
 
         // TODO JOSH use a writer that switches based on whether we want binary or not
         let mut writer = TextSerializableDatumWriter::from_oid(self.type_oid());
@@ -157,7 +157,7 @@ impl<'de> Deserialize<'de> for SpaceSavingTransState {
 
                 let mut state = SpaceSavingTransState {
                     entries: vec![],
-                    indicies: PgAnyElementHashMap::with_hasher(hasher),
+                    indices: PgAnyElementHashMap::with_hasher(hasher),
                     total_vals,
                     freq_param: min_freq,
                     max_size,
@@ -178,7 +178,7 @@ impl<'de> Deserialize<'de> for SpaceSavingTransState {
                         overcount,
                     });
                 }
-                state.update_all_map_indicies();
+                state.update_all_map_indices();
                 Ok(state)
             }
         }
@@ -195,7 +195,7 @@ impl SpaceSavingTransState {
     fn freq_agg_from_type_id(min_freq: f64, typ: pg_sys::Oid, collation: Option<Oid>) -> Self {
         SpaceSavingTransState {
             entries: vec![],
-            indicies: PgAnyElementHashMap::new(typ, collation),
+            indices: PgAnyElementHashMap::new(typ, collation),
             total_vals: 0,
             freq_param: min_freq,
             max_size: SpaceSavingTransState::max_size_for_freq(min_freq),
@@ -209,7 +209,7 @@ impl SpaceSavingTransState {
 
         SpaceSavingTransState {
             entries: vec![],
-            indicies: PgAnyElementHashMap::new(typ, collation),
+            indices: PgAnyElementHashMap::new(typ, collation),
             total_vals: 0,
             freq_param: skew,
             max_size: nval - 1 + SpaceSavingTransState::max_size_for_freq(prob_eq_n / (1.0 - prob_lt_n)),
@@ -218,43 +218,41 @@ impl SpaceSavingTransState {
     }
 
     fn type_oid(&self) -> Oid {
-        self.indicies.typoid()
+        self.indices.typoid()
     }
 
     fn add(&mut self, element: PgAnyElement) {
         self.total_vals += 1;
-        if let Some(idx) = self.indicies.get(&element) {
+        if let Some(idx) = self.indices.get(&element) {
             let idx = *idx;
             self.entries[idx].count += 1;
             self.move_left(idx);
+        } else if self.entries.len() < self.max_size as usize {
+            let new_idx = self.entries.len();
+            self.entries.push(SpaceSavingEntry {
+                value: element.deep_copy_datum(),
+                count: 1,
+                overcount: 0,
+            });
+
+            // Important to create the indices entry using the datum in the local context
+            self.indices.insert(
+                (self.entries[new_idx].value, self.type_oid()).into(),
+                new_idx,
+            );
         } else {
-            if self.entries.len() < self.max_size as usize {
-                let new_idx = self.entries.len();
-                self.entries.push(SpaceSavingEntry {
-                    value: element.deep_copy_datum(),
-                    count: 1,
-                    overcount: 0,
-                });
+            let new_value = element.deep_copy_datum();
 
-                // Important to create the indices entry using the datum in the local context
-                self.indicies.insert(
-                    (self.entries[new_idx].value, self.type_oid()).into(),
-                    new_idx,
-                );
-            } else {
-                let new_value = element.deep_copy_datum();
-
-                // TODO: might be more efficient to replace the lowest indexed tail value (count matching last) and not call move_up
-                let typoid = self.type_oid();
-                let entry = self.entries.last_mut().unwrap();
-                self.indicies.remove(&(entry.value, typoid).into());
-                entry.value = new_value; // JOSH FIXME should we pfree() old value if by-ref?
-                entry.overcount = entry.count;
-                entry.count += 1;
-                self.indicies
-                    .insert((new_value, typoid).into(), self.entries.len() - 1);
-                self.move_left(self.entries.len() - 1);
-            }
+            // TODO: might be more efficient to replace the lowest indexed tail value (count matching last) and not call move_up
+            let typoid = self.type_oid();
+            let entry = self.entries.last_mut().unwrap();
+            self.indices.remove(&(entry.value, typoid).into());
+            entry.value = new_value; // JOSH FIXME should we pfree() old value if by-ref?
+            entry.overcount = entry.count;
+            entry.count += 1;
+            self.indices
+                .insert((new_value, typoid).into(), self.entries.len() - 1);
+            self.move_left(self.entries.len() - 1);
         }
     }
 
@@ -273,17 +271,17 @@ impl SpaceSavingTransState {
         }
     }
 
-    // Adds the 'indicies' lookup entry for the value at 'entries' index i
+    // Adds the 'indices' lookup entry for the value at 'entries' index i
     fn update_map_index(&mut self, i: usize) {
         let element_for_i = (self.entries[i].value, self.type_oid()).into();
-        if let Some(entry) = self.indicies.get_mut(&element_for_i) {
+        if let Some(entry) = self.indices.get_mut(&element_for_i) {
             *entry = i;
         } else {
-            self.indicies.insert(element_for_i, i);
+            self.indices.insert(element_for_i, i);
         }
     }
 
-    fn update_all_map_indicies(&mut self) {
+    fn update_all_map_indices(&mut self) {
         for i in 0..self.entries.len() {
             self.update_map_index(i);
         }
@@ -300,14 +298,14 @@ impl SpaceSavingTransState {
 
             let mut new_ent = entry.clone(typoid);
             let new_dat = (new_ent.value, typoid).into();
-            match other.indicies.get(&new_dat) {
+            match other.indices.get(&new_dat) {
                 Some(&idx) => {
                     new_ent.count += other.entries[idx].count;
                     new_ent.overcount += other.entries[idx].overcount;
                 }
                 None => {
                     // If the entry value isn't present in the other state, we have to assume that it was recently bumped (unless the other state is not fully populated).
-                    let min = if other.indicies.len() < other.max_size as usize {
+                    let min = if other.indices.len() < other.max_size as usize {
                         0
                     } else {
                         other.entries.last().unwrap().count
@@ -319,7 +317,7 @@ impl SpaceSavingTransState {
             map.insert(new_dat, new_ent);
         }
 
-        let hasher = one.indicies.hasher().clone();
+        let hasher = one.indices.hasher().clone();
         let mut temp = PgAnyElementHashMap::with_hasher(hasher);
 
         // First go through the first state, and add all entries (updated with other other state) to our temporary hashmap
@@ -343,14 +341,14 @@ impl SpaceSavingTransState {
 
         let mut result = SpaceSavingTransState {
             entries,
-            indicies: PgAnyElementHashMap::with_hasher(one.indicies.hasher().clone()),
+            indices: PgAnyElementHashMap::with_hasher(one.indices.hasher().clone()),
             total_vals: one.total_vals + two.total_vals,
             freq_param: one.freq_param,
             max_size: one.max_size,
             topn: one.topn,
         };
 
-        result.update_all_map_indicies();
+        result.update_all_map_indices();
         result
     }
 }
@@ -410,8 +408,9 @@ pub fn topn_agg_trans(
     value: Option<AnyElement>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Internal {
-    topn_agg_trans_inner(unsafe{ state.to_inner() }, n, DEFAULT_ZETA_SKEW, value, fcinfo).internal()
+    topn_agg_with_skew_trans(state, n, DEFAULT_ZETA_SKEW, value, fcinfo)
 }
+
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn topn_agg_with_skew_trans(
     state: Internal,
@@ -420,38 +419,15 @@ pub fn topn_agg_with_skew_trans(
     value: Option<AnyElement>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Internal {
-    topn_agg_trans_inner(unsafe{ state.to_inner() }, n, skew, value, fcinfo).internal()
-}
-pub fn topn_agg_trans_inner(
-    state: Option<Inner<SpaceSavingTransState>>,
-    n: i32,
-    skew: f64,
-    value: Option<AnyElement>,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<SpaceSavingTransState>> {
-    unsafe {
-        in_aggregate_context(fcinfo, || {
-            let value = match value {
-                None => return state,
-                Some(value) => value,
-            };
-            let mut state = match state {
-                None => {
-                    let typ = value.oid();
-                    let collation = if fcinfo.is_null() {
-                        Some(100) // TODO: default OID, there should be a constant for this
-                    } else {
-                        get_collation(fcinfo)
-                    };
-                    SpaceSavingTransState::topn_agg_from_type_id(skew, n as u32, typ, collation).into()
-                },
-                Some(state) => state,
-            };
-    
-            state.add(value.into());
-            Some(state)
-        })
+    if n <= 0 {
+        pgx::error!("topn aggregate requires an n value > 0")
     }
+    if skew <= 1.0 {
+        pgx::error!("topn aggregate requires a skew factor > 1.0")
+    }
+
+    space_saving_trans(unsafe{ state.to_inner() }, value, fcinfo, |typ, collation| 
+        {SpaceSavingTransState::topn_agg_from_type_id(skew, n as u32, typ, collation)}).internal()
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
@@ -461,14 +437,23 @@ pub fn freq_agg_trans(
     value: Option<AnyElement>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Internal {
-    freq_agg_trans_inner(unsafe{ state.to_inner() }, freq, value, fcinfo).internal()
+    if freq <= 0. || freq >= 1.0 {
+        pgx::error!("frequency aggregate requires a frequency in the range (0.0, 1.0)")
+    }
+
+    space_saving_trans(unsafe{ state.to_inner() }, value, fcinfo, |typ, collation| 
+        {SpaceSavingTransState::freq_agg_from_type_id(freq, typ, collation)}).internal()
 }
-pub fn freq_agg_trans_inner(
+
+pub fn space_saving_trans<F>(
     state: Option<Inner<SpaceSavingTransState>>,
-    freq: f64,
     value: Option<AnyElement>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<SpaceSavingTransState>> {
+    make_trans_state: F
+) -> Option<Inner<SpaceSavingTransState>> 
+where
+    F: FnOnce(pg_sys::Oid, Option<pg_sys::Oid>) -> SpaceSavingTransState
+{
     unsafe {
         in_aggregate_context(fcinfo, || {
             let value = match value {
@@ -483,7 +468,7 @@ pub fn freq_agg_trans_inner(
                     } else {
                         get_collation(fcinfo)
                     };
-                    SpaceSavingTransState::freq_agg_from_type_id(freq, typ, collation).into()
+                    make_trans_state(typ, collation).into()
                 },
                 Some(state) => state,
             };
@@ -601,7 +586,7 @@ requires = [topn_agg_with_skew_trans, space_saving_final, space_saving_combine, 
 #[pg_extern(
     immutable,
     parallel_safe,
-    name = "display",
+    name = "into_values",
     schema = "toolkit_experimental"
 )]
 pub fn freq_iter(

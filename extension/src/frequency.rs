@@ -633,10 +633,21 @@ pub fn topn(
     let f = if agg.topn == 0 {
         agg.freq_param
     } else {
+        // TODO: should we allow this if we have enough data?
         if n > agg.topn as i32 {
             pgx::error!("requested N ({}) exceeds creation parameter of topn aggregate ({})", n , agg.topn)
         }
-        zeta_eq_n(agg.freq_param, agg.topn)
+
+        // For topn_aggregates distributions we check that the top 'n' values satisfy the cumulative distribution
+        // for our zeta curve.
+
+        let needed_count = (zeta_le_n(agg.freq_param, n as u64) * agg.values_seen as f64).ceil() as u64;
+        if agg.counts.iter().take(n as usize).sum::<u64>() < needed_count {
+            pgx::error!("data is not skewed enough to find top {} parameters with a skew of {}, try reducing the skew factor", n , agg.freq_param)
+        }
+
+        // If we meet the cumulative distribution use 0 as min_freq, we won't filter based on frequency
+        0.
     };
 
     topn_internal(agg, n, f)
@@ -961,5 +972,91 @@ mod tests {
             bytes[bytes.len() - suffix_len..],
             expected[expected.len() - suffix_len..]
         );
+    }
+
+    // Setup environment and create table 'test' with some aggregates in table 'aggs'
+    fn setup_with_test_table(client : &SpiClient)
+    {
+        // using the search path trick for this test to make it easier to stabilize later on
+        let sp = client
+            .select(
+                "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                None,
+                None,
+            )
+            .first()
+            .get_one::<String>()
+            .unwrap();
+        client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+        client.select(
+            "SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'",
+            None,
+            None,
+        );
+
+        client.select("SET TIMEZONE to UTC", None, None);
+        client.select(
+            "CREATE TABLE test (data INTEGER, time TIMESTAMPTZ)",
+            None,
+            None,
+        );
+
+        for i in (0..20).rev() {
+            client.select(&format!("INSERT INTO test SELECT i, '2020-1-1'::TIMESTAMPTZ + ('{} days, ' || i::TEXT || ' seconds')::INTERVAL FROM generate_series({}, 19, 1) i", 10 - i, i), None, None);
+        }
+
+        client.select("CREATE TABLE aggs (name TEXT, agg SPACESAVINGAGGREGATE)", None, None);
+        client.select("INSERT INTO aggs SELECT 'topn_default', topn_agg(5, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None);
+        client.select("INSERT INTO aggs SELECT 'topn_1.5', topn_agg(5, 1.5, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None);
+        client.select("INSERT INTO aggs SELECT 'topn_2', topn_agg(5, 2, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None);
+        client.select("INSERT INTO aggs SELECT 'freq_8', freq_agg(0.08, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None);
+        client.select("INSERT INTO aggs SELECT 'freq_5', freq_agg(0.05, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None);
+        client.select("INSERT INTO aggs SELECT 'freq_2', freq_agg(0.02, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None);
+    }
+
+    // API tests
+    #[pg_test]
+    fn test_topn() {
+        Spi::execute(|client| {
+            setup_with_test_table(&client);
+
+            // simple tests
+            let rows = client.select("SELECT topn(agg, 0::int) FROM aggs WHERE name = 'topn_default'", None, None).count();
+            assert_eq!(rows, 5);
+            let rows = client.select("SELECT topn(agg, 5, 0::int) FROM aggs WHERE name = 'freq_5'", None, None).count();
+            assert_eq!(rows, 5);
+
+            // can limit below topn_agg value
+            let rows = client.select("SELECT topn(agg, 3, 0::int) FROM aggs WHERE name = 'topn_default'", None, None).count();
+            assert_eq!(rows, 3);
+
+            // only 4 rows with freq >= 0.08
+            let rows = client.select("SELECT topn(agg, 5, 0::int) FROM aggs WHERE name = 'freq_8'", None, None).count();
+            assert_eq!(rows, 4);
+        });
+    }
+
+    #[pg_test(error = "data is not skewed enough to find top 5 parameters with a skew of 1.5, try reducing the skew factor")]
+    fn topn_on_underskewed_topn_agg() {
+        Spi::execute(|client| {
+            setup_with_test_table(&client);
+            client.select("SELECT topn(agg, 0::int) FROM aggs WHERE name = 'topn_1.5'", None, None).count();
+        });
+    }
+
+    #[pg_test(error = "requested N (8) exceeds creation parameter of topn aggregate (5)")]
+    fn topn_high_n_on_topn_agg() {
+        Spi::execute(|client| {
+            setup_with_test_table(&client);
+            client.select("SELECT topn(agg, 8, 0::int) FROM aggs WHERE name = 'topn_default'", None, None).count();
+        });
+    }
+
+    #[pg_test(error = "frequency aggregates require a N parameter to topn")]
+    fn topn_requires_n_for_freq_agg() {
+        Spi::execute(|client| {
+            setup_with_test_table(&client);
+            client.select("SELECT topn(agg, 0::int) FROM aggs WHERE name = 'freq_2'", None, None).count();
+        });
     }
 }

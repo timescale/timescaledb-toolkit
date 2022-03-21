@@ -688,6 +688,36 @@ fn topn_internal(
     }
 }
 
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub fn max_frequency(
+    agg: SpaceSavingAggregate<'_>,
+    value: AnyElement,
+) -> f64 {
+    let value : PgAnyElement = value.into();
+    for (idx, datum) in agg.datums.iter().enumerate() {
+        let datum = (datum, agg.type_oid).into();
+        if value == datum {
+            return agg.counts.slice()[idx] as f64 / agg.values_seen as f64;
+        }
+    }
+    0.
+}
+
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub fn min_frequency(
+    agg: SpaceSavingAggregate<'_>,
+    value: AnyElement,
+) -> f64 {
+    let value : PgAnyElement = value.into();
+    for (idx, datum) in agg.datums.iter().enumerate() {
+        let datum = (datum, agg.type_oid).into();
+        if value == datum {
+            return (agg.counts.slice()[idx] - agg.overcounts.slice()[idx]) as f64 / agg.values_seen as f64;
+        }
+    }
+    0.
+}
+
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
@@ -1057,6 +1087,46 @@ mod tests {
         Spi::execute(|client| {
             setup_with_test_table(&client);
             client.select("SELECT topn(agg, 0::int) FROM aggs WHERE name = 'freq_2'", None, None).count();
+        });
+    }
+
+    #[pg_test]
+    fn test_frequency_getters() {
+        Spi::execute(|client| {
+            setup_with_test_table(&client);
+            
+            // simple tests
+            let (min, max) = client.select("SELECT min_frequency(agg, 3), max_frequency(agg, 3) FROM aggs WHERE name = 'freq_2'", None, None)
+                .first()
+                .get_two::<f64,f64>();
+            assert_eq!(min.unwrap(), 0.01904761904761905);
+            assert_eq!(max.unwrap(), 0.01904761904761905);
+
+            let (min, max) = client.select("SELECT min_frequency(agg, 11), max_frequency(agg, 11) FROM aggs WHERE name = 'topn_default'", None, None)
+                .first()
+                .get_two::<f64,f64>();
+            assert_eq!(min.unwrap(), 0.05714285714285714);
+            assert_eq!(max.unwrap(), 0.05714285714285714);
+
+            // missing value
+            let (min, max) = client.select("SELECT min_frequency(agg, 3), max_frequency(agg, 3) FROM aggs WHERE name = 'freq_8'", None, None)
+                .first()
+                .get_two::<f64,f64>();
+            assert_eq!(min.unwrap(), 0.);
+            assert_eq!(max.unwrap(), 0.);
+
+            let (min, max) = client.select("SELECT min_frequency(agg, 20), max_frequency(agg, 20) FROM aggs WHERE name = 'topn_2'", None, None)
+                .first()
+                .get_two::<f64,f64>();
+            assert_eq!(min.unwrap(), 0.);
+            assert_eq!(max.unwrap(), 0.);
+
+            // noisy value
+            let (min, max) = client.select("SELECT min_frequency(agg, 8), max_frequency(agg, 8) FROM aggs WHERE name = 'topn_1.5'", None, None)
+                .first()
+                .get_two::<f64,f64>();
+            assert_eq!(min.unwrap(), 0.004761904761904762);
+            assert_eq!(max.unwrap(), 0.05238095238095238);
         });
     }
 }

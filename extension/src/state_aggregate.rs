@@ -60,12 +60,16 @@ pub mod toolkit_experimental {
             None
         }
 
+        pub(super) fn states_as_str(&self) -> &str {
+            let states: &[u8] = self.states.as_slice();
+            // SAFETY: came from a String in `new` a few lines up
+            unsafe { std::str::from_utf8_unchecked(states) }
+        }
+
         fn state_str(&self, record: &DurationInState) -> &str {
             let beg = record.state_beg as usize;
             let end = record.state_end as usize;
-            let state = &self.states.as_slice()[beg..end];
-            // SAFETY: came from a String in `new` a few lines up
-            unsafe { std::str::from_utf8_unchecked(state) }
+            &self.states_as_str()[beg..end]
         }
     }
 
@@ -183,6 +187,18 @@ pub fn duration_in(state: String, aggregate: Option<StateAgg>) -> i64 {
         .map(|aggregate| aggregate.get(&state))
         .flatten()
         .unwrap_or(0)
+}
+
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub fn into_values(
+    agg: StateAgg<'_>,
+) -> impl std::iter::Iterator<Item = (name!(state, String), name!(duration, i64))> + '_ {
+    let states: String = agg.states_as_str().to_owned();
+    agg.durations.clone().into_iter().map(move |record| {
+        let beg = record.state_beg as usize;
+        let end = record.state_end as usize;
+        (states[beg..end].to_owned(), record.duration)
+    })
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, FlatSerializable, PartialEq, Serialize)]

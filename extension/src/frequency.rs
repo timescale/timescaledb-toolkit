@@ -607,14 +607,10 @@ pub fn freq_iter(
         agg.datums.clone().into_iter().zip(counts).map_while(
             move |(value, (&count, &overcount))| {
                 let total = agg.values_seen as f64;
-                if count as f64 / total < agg.freq_param {
-                    None
-                } else {
-                    let value = AnyElement::from_datum(value, false, agg.type_oid).unwrap();
-                    let min_freq = (count - overcount) as f64 / total;
-                    let max_freq = count as f64 / total;
-                    Some((value, min_freq, max_freq))
-                }
+                let value = AnyElement::from_datum(value, false, agg.type_oid).unwrap();
+                let min_freq = (count - overcount) as f64 / total;
+                let max_freq = count as f64 / total;
+                Some((value, min_freq, max_freq))
             },
         )
     }
@@ -1092,6 +1088,20 @@ mod tests {
     //         client.select("SELECT topn(agg, 0::int) FROM aggs WHERE name = 'freq_2'", None, None).count();
     //     });
     // }
+
+    #[pg_test]
+    fn test_into_values() {
+        Spi::execute(|client| {
+            setup_with_test_table(&client);
+
+            let rows = client.select("SELECT into_values(agg, 0::int) FROM aggs WHERE name = 'freq_8'", None, None).count();
+            assert_eq!(rows, 13);
+            let rows = client.select("SELECT into_values(agg, 0::int) FROM aggs WHERE name = 'freq_5'", None, None).count();
+            assert_eq!(rows, 20);
+            let rows = client.select("SELECT into_values(agg, 0::int) FROM aggs WHERE name = 'freq_2'", None, None).count();
+            assert_eq!(rows, 20);
+        });
+    }
 
     #[pg_test]
     fn test_frequency_getters() {

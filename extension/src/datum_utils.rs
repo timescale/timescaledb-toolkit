@@ -2,6 +2,7 @@ use std::{
     fmt,
     hash::{BuildHasher, Hasher},
     mem::size_of,
+    os::raw::c_int,
     slice,
 };
 
@@ -500,8 +501,8 @@ impl<'a> DatumStore<'a> {
 // there should be some way to efficiently merge these implementations
 pub enum DatumStoreIntoIterator<'a> {
     Value {
+        iter: slice::Iter<'a, Datum>,
         store: DatumStore<'a>,
-        next_idx: u32,
     },
     Varlena {
         store: DatumStore<'a>,
@@ -521,21 +522,7 @@ impl<'a> Iterator for DatumStoreIntoIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            DatumStoreIntoIterator::Value { store, next_idx } => {
-                let idx = *next_idx as usize;
-                let bound = store.data_len as usize / 8;
-                if idx >= bound {
-                    None
-                } else {
-                    // SAFETY `data` is guaranteed to be 8-byte aligned, so it is safe to use as a usize slice
-                    let dat = unsafe {std::slice::from_raw_parts(
-                        store.data.as_slice().as_ptr() as *const Datum,
-                        bound,
-                    )[idx]};
-                    *next_idx += 1;
-                    Some(dat)
-                }
-            },
+            DatumStoreIntoIterator::Value { iter, store: _ } => iter.next().copied(),
             DatumStoreIntoIterator::Varlena { store, next_offset } => {
                 if *next_offset >= store.data_len {
                     None
@@ -570,33 +557,44 @@ impl<'a> IntoIterator for DatumStore<'a> {
     type IntoIter = DatumStoreIntoIterator<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
-        unsafe {
-            let tentry = pg_sys::lookup_type_cache(self.type_oid.into(), 0_i32);
-            if (*tentry).typbyval {
+        let tentry: &pg_sys::TypeCacheEntry = lookup_type_cache(self.type_oid.into(), 0);
+        {
+            if tentry.typbyval {
                 // Datum by value
-                DatumStoreIntoIterator::Value {
-                    store: self,
-                    next_idx: 0,
-                }
-            } else if (*tentry).typlen == -1 {
+                let u8_slice: &[u8] = self.data.as_slice();
+                let ptr = u8_slice.as_ptr() as *const Datum;
+                // SAFETY `data` is guaranteed to be 8-byte aligned, so it is safe to use as a usize (Datum) slice
+                let datum_len: usize = u8_slice.len() / 8;
+                let datum_slice: &[Datum] = unsafe { std::slice::from_raw_parts(ptr, datum_len) };
+                let iter: std::slice::Iter<Datum> = datum_slice.iter();
+                DatumStoreIntoIterator::Value { iter, store: self }
+            } else if tentry.typlen == -1 {
                 // Varlena
                 DatumStoreIntoIterator::Varlena {
                     store: self,
                     next_offset: 0,
                 }
-            } else if (*tentry).typlen == -2 {
+            } else if tentry.typlen == -2 {
                 // Null terminated string
                 unreachable!()
             } else {
                 // Fixed size reference
-                assert!((*tentry).typlen.is_positive());
+                assert!(tentry.typlen.is_positive());
                 DatumStoreIntoIterator::FixedSize {
                     store: self,
                     next_index: 0,
-                    datum_size: round_to_multiple((*tentry).typlen as usize, 8) as u32,
+                    datum_size: round_to_multiple(tentry.typlen as usize, 8) as u32,
                 }
             }
         }
+    }
+}
+
+fn lookup_type_cache(type_oid: Oid, flags: c_int) -> &'static pg_sys::TypeCacheEntry {
+    // SAFETY: We check for null pointer.  Beyond that, we're trusting PostgreSQL.
+    match unsafe { pg_sys::lookup_type_cache(type_oid, flags).as_ref() } {
+        None => panic!("lookup_type_cache({}, {}) -> NULL", type_oid, flags),
+        Some(r) => r,
     }
 }
 

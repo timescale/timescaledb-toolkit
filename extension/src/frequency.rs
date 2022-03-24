@@ -671,21 +671,19 @@ fn topn_internal(
     max_n: i32,
     min_freq: f64,
 ) -> impl std::iter::Iterator<Item = AnyElement> + '_ {
-    unsafe {
-        let iter = agg
-            .datums
-            .clone()
-            .into_iter()
-            .zip(agg.counts.slice().iter());
-        iter.enumerate().map_while(move |(i, (value, &count))| {
-            let total = agg.values_seen as f64;
-            if i >= max_n as usize || count as f64 / total < min_freq {
-                None
-            } else {
-                AnyElement::from_datum(value, false, agg.type_oid)
-            }
-        })
-    }
+    let iter = agg
+        .datums
+        .clone()
+        .into_iter()
+        .zip(agg.counts.clone().into_iter());
+    iter.enumerate().map_while(move |(i, (value, count))| {
+        let total = agg.values_seen as f64;
+        if i >= max_n as usize || count as f64 / total < min_freq {
+            None
+        } else {
+            unsafe { AnyElement::from_datum(value, false, agg.type_oid)}
+        }
+    })
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
@@ -723,6 +721,10 @@ pub fn min_frequency(
 mod tests {
     use pgx::*;
     use pgx_macros::pg_test;
+    use super::*;
+    use rand::distributions::{Distribution, Uniform};
+    use rand_distr::Zeta;
+    use rand::RngCore;
 
     #[pg_test]
     fn test_freq_aggregate() {
@@ -1128,5 +1130,87 @@ mod tests {
             assert_eq!(min.unwrap(), 0.004761904761904762);
             assert_eq!(max.unwrap(), 0.05238095238095238);
         });
+    }
+
+    #[pg_test]
+    fn test_freq_agg_invariant() {
+        // The frequency agg invariant is that any element with frequency >= f will appear in the freq_agg(f)
+
+        // This test will randomly generate 200 values in the uniform range [0, 99] and check to see any value
+        // that shows up at least 3 times appears in a frequency aggregate created with freq = 0.015
+        let rand100 = Uniform::new_inclusive(0, 99);
+        let mut rng = rand::thread_rng();
+
+        let mut counts = [0;100];
+
+        let mut state = None.into();
+        let freq = 0.015; 
+        let fcinfo = std::ptr::null_mut(); // dummy value, will use default collation
+
+        for _ in 0..200 {
+            let v = rand100.sample(&mut rng);
+            let value =
+                unsafe { AnyElement::from_datum(v as pg_sys::Datum, false, pg_sys::INT4OID) };
+            state = super::freq_agg_trans(state, freq, value, fcinfo);
+            counts[v] += 1;
+        }
+
+        let state = space_saving_final(state, fcinfo).unwrap();
+        let vals : std::collections::HashSet<usize> = state.datums.iter().collect();
+
+        for test in 0..100 {
+            if counts[test] >= 3 {
+                assert!(vals.contains(&test));
+            }
+        }
+    }
+
+    #[pg_test]
+    fn test_topn_agg_invariant() {
+        // The ton agg invariant is that we'll be able to track the top n values for any data 
+        // with a distribution at least as skewed as a zeta distribution
+
+        // To test this we will generate a topn aggregate with a random skew (1.01 - 2.0) and
+        // n (5-10).  We then generate a random sample with skew 5% greater than our aggregate
+        // (this should be enough to keep the sample above the target even with bad luck), and
+        // verify that we correctly identify the top n values.
+        let mut rng = rand::thread_rng();
+        
+        let n = rng.next_u64() % 6 + 5;
+        let skew = (rng.next_u64() % 100) as f64 / 100. + 1.01;
+
+        let zeta = Zeta::new(skew * 1.05).unwrap();
+
+        let mut counts = [0;100];
+
+        let mut state = None.into();
+        let fcinfo = std::ptr::null_mut(); // dummy value, will use default collation
+
+        for _ in 0..100000 {
+            let v = zeta.sample(&mut rng).floor() as usize;
+            if v == usize::MAX {
+                continue;  // These tail values can start to add up at low skew values
+            }
+            let value =
+                unsafe { AnyElement::from_datum(v as pg_sys::Datum, false, pg_sys::INT4OID) };
+            state = super::topn_agg_with_skew_trans(state, n as i32, skew, value, fcinfo);
+            if v < 100 {  // anything greater than 100 will not be in the top values
+                counts[v] += 1;
+            }
+        }
+
+        let state = space_saving_final(state, fcinfo).unwrap();
+        let value =
+            unsafe { AnyElement::from_datum(0, false, pg_sys::INT4OID) };
+        let t : Vec<AnyElement> = default_topn(state, value.unwrap()).collect();
+        let agg_topn : Vec<usize> = t.iter().map(|x| x.datum()).collect();
+
+        let mut temp : Vec<(usize, &usize)> = counts.iter().enumerate().collect();
+        temp.sort_by(|(_, cnt1), (_, cnt2)| cnt2.cmp(cnt1)); // descending order by count
+        let top_vals : Vec<usize> = temp.into_iter().map(|(val, _)| val).collect();
+
+        for i in 0..n as usize {
+            assert_eq!(agg_topn[i], top_vals[i]);
+        }
     }
 }

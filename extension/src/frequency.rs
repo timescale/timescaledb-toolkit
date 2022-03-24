@@ -442,25 +442,34 @@ pub fn topn_agg_with_skew_trans(
     value: Option<AnyElement>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Internal {
-    let mut inner: Option<Inner<Option<SpaceSavingTransState>>> = unsafe { state.to_inner() };
-    let state: Option<SpaceSavingTransState> = match &mut inner {
+    bridge_transition(state, fcinfo, |state| topn_transition(state, n, skew, value, fcinfo))
+}
+
+fn bridge_transition<State, F>(
+    state: Internal,
+    fcinfo: pg_sys::FunctionCallInfo,
+    transition_fn: F,
+) -> Internal
+where
+    F: FnOnce(Option<State>) -> Option<State>,
+{
+    let mut inner: Option<Inner<Option<State>>> = unsafe { state.to_inner() };
+    let state: Option<State> = match &mut inner {
         None => None,
         Some(inner) => Option::take(&mut **inner),
     };
-    unsafe {
-        in_aggregate_context(fcinfo, || {
-            let state: Option<SpaceSavingTransState> = topn_transition(state, n, skew, value, fcinfo);
-            match (inner, state) {
-                (None, None) => None,
-                (None, state @ Some(..)) => Some(state.into()),
-                (Some(mut inner), state) => {
-                    *inner = state;
-                    Some(inner)
-                }
+    let closure = || {
+        let state: Option<State> = transition_fn(state);
+        match (inner, state) {
+            (None, None) => None,
+            (None, state @ Some(..)) => Some(state.into()),
+            (Some(mut inner), state) => {
+                *inner = state;
+                Some(inner)
             }
-        })
-    }
-    .internal()
+        }
+    };
+    unsafe { in_aggregate_context(fcinfo, closure) }.internal()
 }
 
 #[aggregate]

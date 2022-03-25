@@ -6,6 +6,8 @@ use std::fmt;
 
 
 pub mod range;
+
+#[cfg(test)]
 mod tests;
 
 #[derive(Debug, PartialEq)]
@@ -14,16 +16,33 @@ pub enum CounterError{
     BoundsInvalid,
 }
 
+// TODO Intent is for this to be immutable with mutations going through (and
+//  internal consistency protected by) the builders below.  But, we allow raw
+//  access to the extension to allow it to (de)serialize, so the separation is
+//  but a fiction for now.  If the only consequence of corruption is
+//  nonsensical results rather than unsound behavior, garbage in garbage out.
+//  But much better if we can validate at deserialization.  We can do that in
+//  the builder if we want.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-pub struct CounterSummary {
+pub struct MetricSummary {
+    // TODO invariants?
     pub first: TSPoint,
     pub second: TSPoint,
     pub penultimate: TSPoint,
     pub last: TSPoint,
+    // Invariants:
+    // - num_changes > 0 if num_resets > 0
+    // - num_resets > 0 if num_changes > 0
+    // - reset_sum > 0 if num_resets > 0
+    // - num_resets > 0 if reset_sum > 0
     pub reset_sum: f64,
     pub num_resets: u64,
     pub num_changes: u64,
+    // TODO Protect from deserialization?  Is there any risk other than giving
+    //  nonsensical results?  If so, maybe it's fine to just accept garbage
+    //  out upon garbage in.
     pub stats: StatsSummary2D,
+    // TODO See TODOs in I64Range about protecting from deserialization.
     pub bounds: Option<range::I64Range>,
 }
 
@@ -43,12 +62,12 @@ fn to_seconds(t: f64)-> f64{
     t / 1_000_000_f64 // by default postgres timestamps have microsecond precision
 }
 
-/// CounterSummary tracks monotonically increasing counters that may reset, ie every time the value decreases
+/// MetricSummary tracks monotonically increasing counters that may reset, ie every time the value decreases
 /// it is treated as a reset of the counter and the previous value is added to the "true value" of the
 /// counter at that timestamp.
-impl CounterSummary {
-    pub fn new(pt: &TSPoint, bounds:Option<range::I64Range>) -> CounterSummary {
-        let mut n = CounterSummary{
+impl MetricSummary {
+    pub fn new(pt: &TSPoint, bounds:Option<range::I64Range>) -> MetricSummary {
+        let mut n = MetricSummary{
             first: *pt,
             second: *pt,
             penultimate: *pt,
@@ -63,8 +82,15 @@ impl CounterSummary {
         n
     }
 
+    fn reset(&mut self, incoming: &TSPoint) {
+        if  incoming.val < self.last.val {
+            self.reset_sum += self.last.val;
+            self.num_resets += 1;
+        }
+    }
+
     // expects time-ordered input
-    pub fn add_point(&mut self, incoming: &TSPoint) -> Result<(), CounterError>{
+    fn add_point(&mut self, incoming: &TSPoint) -> Result<(), CounterError>{
 
         if incoming.ts < self.last.ts {
             return Err(CounterError::OrderError);
@@ -75,12 +101,8 @@ impl CounterSummary {
             // see discussion at https://github.com/timescale/timescaledb-toolkit/discussions/65
             return Ok(());
         }
-        if incoming.val < self.last.val {
-            self.reset_sum += self.last.val;
-            self.num_resets+= 1;
-        }
         // right now we treat a counter reset that goes to exactly zero as a change (not sure that's correct, but it seems defensible)
-        #[allow(clippy::float_cmp)]  // These values are not rounded, so direct comparison is valid
+        // These values are not rounded, so direct comparison is valid.
         if incoming.val != self.last.val {
             self.num_changes += 1;
         }
@@ -100,19 +122,15 @@ impl CounterSummary {
     }
 
     // combining can only happen for disjoint time ranges
-    pub fn combine(&mut self, incoming: &CounterSummary) -> Result<(), CounterError> {
+    fn combine(&mut self, incoming: &MetricSummary) -> Result<(), CounterError> {
         // this requires that self comes before incoming in time order
         if self.last.ts >= incoming.first.ts {
             return Err(CounterError::OrderError);
         }
 
-        #[allow(clippy::float_cmp)]  // These values are not rounded, so direct comparison is valid
+        // These values are not rounded, so direct comparison is valid.
         if self.last.val != incoming.first.val {
             self.num_changes += 1;
-            if  incoming.first.val < self.last.val {
-                self.reset_sum += self.last.val;
-                self.num_resets += 1;
-            }
         }
 
         if incoming.single_value() {
@@ -192,7 +210,7 @@ impl CounterSummary {
         }
     }
 
-    pub fn bounds_extend(&mut self, in_bounds:Option<range::I64Range>){
+    fn bounds_extend(&mut self, in_bounds:Option<range::I64Range>){
         match (self.bounds, in_bounds) {
             (None, _) => {self.bounds = in_bounds},
             (_, None) => {},
@@ -283,5 +301,91 @@ impl fmt::Display for CounterError {
             CounterError::BoundsInvalid =>
                 write!(f, "cannot calculate delta without valid bounds"),
         }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+pub struct GaugeSummaryBuilder(MetricSummary);
+
+impl GaugeSummaryBuilder {
+    pub fn new(pt: &TSPoint, bounds: Option<range::I64Range>) -> Self {
+        Self(MetricSummary::new(pt, bounds))
+    }
+
+    /// expects time-ordered input
+    pub fn add_point(&mut self, incoming: &TSPoint) -> Result<(), CounterError> {
+        self.0.add_point(incoming)
+    }
+
+    /// combining can only happen for disjoint time ranges
+    pub fn combine(&mut self, incoming: &MetricSummary) -> Result<(), CounterError> {
+        self.0.combine(incoming)
+    }
+
+    pub fn set_bounds(&mut self, bounds: Option<range::I64Range>) {
+        self.0.bounds = bounds;
+    }
+
+    pub fn build(self) -> MetricSummary {
+        self.0
+    }
+
+    pub fn first(&self) -> &TSPoint {
+        &self.0.first
+    }
+
+    // TODO build method should check validity rather than caller
+    pub fn bounds_valid(&self) -> bool {
+        self.0.bounds_valid()
+    }
+}
+
+impl From<MetricSummary> for GaugeSummaryBuilder {
+    fn from(summary: MetricSummary) -> Self {
+        Self(summary)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+pub struct CounterSummaryBuilder(MetricSummary);
+
+impl CounterSummaryBuilder {
+    pub fn new(pt: &TSPoint, bounds: Option<range::I64Range>) -> Self {
+        Self(MetricSummary::new(pt, bounds))
+    }
+
+    /// expects time-ordered input
+    pub fn add_point(&mut self, incoming: &TSPoint) -> Result<(), CounterError> {
+        self.0.reset(incoming);
+        self.0.add_point(incoming)
+    }
+
+    /// combining can only happen for disjoint time ranges
+    pub fn combine(&mut self, incoming: &MetricSummary) -> Result<(), CounterError> {
+        self.0.reset(&incoming.first);
+        self.0.combine(incoming)
+    }
+
+    pub fn set_bounds(&mut self, bounds: Option<range::I64Range>) {
+        self.0.bounds = bounds;
+    }
+
+    pub fn build(self) -> MetricSummary {
+        self.0
+    }
+
+    pub fn first(&self) -> &TSPoint {
+        &self.0.first
+    }
+
+    // TODO build method should check validity rather than caller
+    pub fn bounds_valid(&self) -> bool {
+        self.0.bounds_valid()
+    }
+}
+
+impl From<MetricSummary> for CounterSummaryBuilder {
+    fn from(summary: MetricSummary) -> Self {
+        Self(summary)
     }
 }

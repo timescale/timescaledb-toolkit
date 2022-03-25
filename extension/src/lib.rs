@@ -9,6 +9,7 @@ pub mod time_weighted_average;
 pub mod asap;
 pub mod lttb;
 pub mod counter_agg;
+pub mod gauge_agg;
 pub mod range;
 pub mod state_aggregate;
 pub mod stats_agg;

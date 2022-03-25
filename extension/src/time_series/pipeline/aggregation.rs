@@ -3,12 +3,14 @@ use std::mem::take;
 
 use pgx::*;
 
+use counter_agg::CounterSummaryBuilder;
+
 use super::*;
 
 use crate::{
     ron_inout_funcs, pg_type, build,
     stats_agg::{self, InternalStatsSummary1D, StatsSummary1D},
-    counter_agg::{InternalCounterSummary, CounterSummary},
+    counter_agg::CounterSummary,
     hyperloglog::HyperLogLog,
     uddsketch::UddSketch,
 };
@@ -464,7 +466,7 @@ name="pipe_then_num_vals",
 requires= [pipeline_num_vals_support],
 );
 
-
+// TODO support gauge
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_run_pipeline_then_counter_agg(
@@ -476,11 +478,11 @@ pub fn arrow_run_pipeline_then_counter_agg(
         return None
     }
     let mut it = timevector.iter();
-    let mut summary = InternalCounterSummary::new(&it.next().unwrap(), None);
+    let mut summary = CounterSummaryBuilder::new(&it.next().unwrap(), None);
     for point in it {
         summary.add_point(&point).expect("error while running counter_agg");
     }
-    Some(CounterSummary::from_internal_counter_summary(summary))
+    Some(CounterSummary::from_internal_counter_summary(summary.build()))
 }
 
 #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]

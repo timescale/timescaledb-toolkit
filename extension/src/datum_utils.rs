@@ -461,7 +461,7 @@ impl<'a, 'b> Iterator for DatumStoreIterator<'a, 'b> {
 }
 
 impl<'a> DatumStore<'a> {
-    fn iter<'b>(&'b self) -> DatumStoreIterator<'a, 'b> {
+    pub fn iter<'b>(&'b self) -> DatumStoreIterator<'a, 'b> {
         unsafe {
             let tentry = pg_sys::lookup_type_cache(self.type_oid.into(), 0_i32);
             if (*tentry).typbyval {
@@ -500,7 +500,8 @@ impl<'a> DatumStore<'a> {
 // there should be some way to efficiently merge these implementations
 pub enum DatumStoreIntoIterator<'a> {
     Value {
-        iter: slice::Iter<'a, Datum>,
+        store: DatumStore<'a>,
+        next_idx: u32,
     },
     Varlena {
         store: DatumStore<'a>,
@@ -520,7 +521,21 @@ impl<'a> Iterator for DatumStoreIntoIterator<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            DatumStoreIntoIterator::Value { iter } => iter.next().copied(),
+            DatumStoreIntoIterator::Value { store, next_idx } => {
+                let idx = *next_idx as usize;
+                let bound = store.data_len as usize / 8;
+                if idx >= bound {
+                    None
+                } else {
+                    // SAFETY `data` is guaranteed to be 8-byte aligned, so it is safe to use as a usize slice
+                    let dat = unsafe {std::slice::from_raw_parts(
+                        store.data.as_slice().as_ptr() as *const Datum,
+                        bound,
+                    )[idx]};
+                    *next_idx += 1;
+                    Some(dat)
+                }
+            },
             DatumStoreIntoIterator::Varlena { store, next_offset } => {
                 if *next_offset >= store.data_len {
                     None
@@ -560,12 +575,8 @@ impl<'a> IntoIterator for DatumStore<'a> {
             if (*tentry).typbyval {
                 // Datum by value
                 DatumStoreIntoIterator::Value {
-                    // SAFETY `data` is guaranteed to be 8-byte aligned, so it should be safe to use as a slice
-                    iter: std::slice::from_raw_parts(
-                        self.data.as_slice().as_ptr() as *const Datum,
-                        self.data_len as usize / 8,
-                    )
-                    .iter(),
+                    store: self,
+                    next_idx: 0,
                 }
             } else if (*tentry).typlen == -1 {
                 // Varlena

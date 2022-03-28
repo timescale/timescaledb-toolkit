@@ -18,8 +18,14 @@ impl I64Range {
     pub fn has_infinite(&self)-> bool{
         self.left.is_none() || self.right.is_none()
     }
-    
-    pub fn is_valid(&self) -> bool{
+
+    // TODO See TODO below about range validity.  Right now we don't care
+    //  much.  If we start to care, move the caring to `new` and `extend`
+    //  methods.  That will allow this crate to protect the integrity of
+    //  MetricSummary and I64Range in the face of the extension needing to be
+    //  able to construct them from raw (and therefore potentially
+    //  corrupt) inputs.
+    fn is_valid(&self) -> bool {
         match (self.left, self.right) {
             (Some(a), Some(b)) => a <= b, 
             _ => true,

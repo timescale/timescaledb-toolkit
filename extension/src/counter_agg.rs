@@ -17,8 +17,9 @@ use time_series::{
     TSPoint,
 };
 
-pub use counter_agg::{
-    CounterSummary as InternalCounterSummary,
+use counter_agg::{
+    MetricSummary,
+    CounterSummaryBuilder,
     range::I64Range,
 };
 use stats_agg::stats2d::StatsSummary2D;
@@ -29,6 +30,7 @@ use crate::raw::tstzrange;
 
 use crate::raw::bytea;
 
+// TODO wrap FlatSummary a la GaugeSummary - requires serialization version bump
 pg_type! {
     #[derive(Debug, PartialEq)]
     struct CounterSummary {
@@ -55,8 +57,8 @@ mod toolkit_experimental {
 }
 
 impl<'input> CounterSummary<'input> {
-    pub fn to_internal_counter_summary(&self) -> InternalCounterSummary {
-        InternalCounterSummary{
+    pub fn to_internal_counter_summary(&self) -> MetricSummary {
+        MetricSummary{
             first: self.first,
             second: self.second,
             penultimate: self.penultimate,
@@ -68,7 +70,7 @@ impl<'input> CounterSummary<'input> {
             bounds: self.bounds.to_i64range(),
         }
     }
-    pub fn from_internal_counter_summary(st: InternalCounterSummary) -> Self {
+    pub fn from_internal_counter_summary(st: MetricSummary) -> Self {
         unsafe{
             flatten!(
             CounterSummary {
@@ -98,10 +100,18 @@ pub struct CounterSummaryTransState {
     // We have a summary buffer here in order to deal with the fact that when the cmobine function gets called it
     // must first build up a buffer of InternalMetricSummaries, then sort them, then call the combine function in
     // the correct order.
-    summary_buffer: Vec<InternalCounterSummary>,
+    summary_buffer: Vec<MetricSummary>,
 }
 
 impl CounterSummaryTransState {
+    fn new() -> Self {
+        Self {
+            point_buffer: vec![],
+            bounds: None,
+            summary_buffer: vec![],
+        }
+    }
+
     fn push_point(&mut self, value: TSPoint) {
         self.point_buffer.push(value);
     }
@@ -116,16 +126,17 @@ impl CounterSummaryTransState {
         }
         self.point_buffer.sort_unstable_by_key(|p| p.ts);
         let mut iter = self.point_buffer.iter();
-        let mut summary = InternalCounterSummary::new( iter.next().unwrap(), self.bounds);
+        let mut summary = CounterSummaryBuilder::new( iter.next().unwrap(), self.bounds);
         for p in iter {
             summary.add_point(p).unwrap_or_else(|e| pgx::error!("{}", e));
         }
         self.point_buffer.clear();
+        // TODO build method should check validity
         // check bounds only after we've combined all the points, so we aren't doing it all the time.
         if !summary.bounds_valid() {
             panic!("counter bounds invalid")
         }
-        self.summary_buffer.push(summary);
+        self.summary_buffer.push(summary.build());
     }
 
     fn push_summary(&mut self, other: &CounterSummaryTransState) {
@@ -141,13 +152,14 @@ impl CounterSummaryTransState {
         if self.summary_buffer.len() <= 1 {
             return
         }
+        // TODO move much of this method to crate?
         self.summary_buffer.sort_unstable_by_key(|s| s.first.ts);
         let mut sum_iter = self.summary_buffer.iter();
-        let mut new_summary = sum_iter.next().unwrap().clone();
+        let mut new_summary = CounterSummaryBuilder::from(sum_iter.next().unwrap().clone());
         for sum in sum_iter {
             new_summary.combine(sum).unwrap_or_else(|e| pgx::error!("{}", e));
         }
-        self.summary_buffer = vec![new_summary];
+        self.summary_buffer = vec![new_summary.build()];
     }
 }
 
@@ -200,7 +212,7 @@ pub fn counter_agg_trans_inner(
             };
             match state {
                 None => {
-                    let mut s = CounterSummaryTransState{point_buffer: vec![], bounds: None, summary_buffer: vec![]};
+                    let mut s = CounterSummaryTransState::new();
                     if let Some(r) = bounds {
                         s.bounds = get_range(r.0 as *mut pg_sys::varlena);
                     }
@@ -241,8 +253,11 @@ pub fn counter_agg_summary_trans_inner(
         in_aggregate_context(fcinfo, || {
             match (state, value) {
                 (state, None) => state,
-                (None, Some(value)) => Some(
-                    CounterSummaryTransState{point_buffer: vec![], bounds: None, summary_buffer: vec![value.to_internal_counter_summary()]}.into()),
+                (None, Some(value)) => {
+                    let mut state = CounterSummaryTransState::new();
+                    state.summary_buffer.push(value.to_internal_counter_summary());
+                    Some(state.into())
+                }
                 (Some(mut state), Some(value)) => {
                     state.summary_buffer.push(value.to_internal_counter_summary());
                     Some(state)
@@ -501,9 +516,9 @@ pub fn arrow_counter_agg_with_bounds(
     accessor: toolkit_experimental::AccessorWithBounds,
 ) -> CounterSummary<'static> {
     let _ = accessor;
-    let mut summary = sketch.to_internal_counter_summary();
-    summary.bounds = accessor.bounds();
-    CounterSummary::from_internal_counter_summary(summary)
+    let mut builder = CounterSummaryBuilder::from(sketch.to_internal_counter_summary());
+    builder.set_bounds(accessor.bounds());
+    CounterSummary::from_internal_counter_summary(builder.build())
 }
 
 #[pg_extern(name="with_bounds", strict, immutable, parallel_safe)]
@@ -511,14 +526,25 @@ fn counter_agg_with_bounds(
     summary: CounterSummary,
     bounds: tstzrange,
 ) -> CounterSummary {
+    // TODO dedup with previous by using apply_bounds
     unsafe{
         let ptr = bounds.0 as *mut pg_sys::varlena;
-        let mut summary = summary.to_internal_counter_summary();
-        summary.bounds = get_range(ptr);
-        CounterSummary::from_internal_counter_summary(summary)
+        let mut builder = CounterSummaryBuilder::from(summary.to_internal_counter_summary());
+        builder.set_bounds(get_range(ptr));
+        CounterSummary::from_internal_counter_summary(builder.build())
     }
 }
 
+// TODO MetricSummary::with_bounds ?
+//     fn with_bounds(mut self, bounds: Option<I64Range>) -> Self {
+//         self.bounds = bounds;
+//         self
+//     }
+// fn apply_bounds(summary: MetricSummary, bounds: Option<I64Range>) -> MetricSummary {
+//     let mut builder = CounterSummaryBuilder::from(summary.to_internal_counter_summary());
+//     builder.set_bounds(bounds);
+//     CounterSummary::from_internal_counter_summary(builder.build())
+// }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
@@ -712,7 +738,6 @@ pub fn as_method(method: &str) -> Option<Method> {
     }
 }
 
-
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
@@ -720,6 +745,7 @@ mod tests {
     use approx::assert_relative_eq;
     use pgx::*;
     use super::*;
+    use super::testing::*;
 
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {
@@ -747,7 +773,7 @@ mod tests {
     //do proper numerical comparisons on the values where that matters, use exact where it should be exact.
     // copied from counter_agg crate
     #[track_caller]
-    fn assert_close_enough(p1:&InternalCounterSummary, p2:&InternalCounterSummary) {
+    fn assert_close_enough(p1:&MetricSummary, p2:&MetricSummary) {
         assert_eq!(p1.first, p2.first, "first");
         assert_eq!(p1.second, p2.second, "second");
         assert_eq!(p1.penultimate, p2.penultimate, "penultimate");
@@ -970,10 +996,194 @@ mod tests {
         }
     }
 
+    #[pg_test]
+    fn delta_after_counter_decrease() {
+        Spi::execute(|client| {
+            decrease(&client);
+            let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
+            // 10 after 30 means there was a reset so we add 30 + 10 = 40.
+            // Delta from 30 to 40 => 10
+            assert_eq!(10.0, select_one!(client, stmt, f64));
+        });
+    }
+
+    #[pg_test]
+    fn delta_after_counter_increase() {
+        Spi::execute(|client| {
+            increase(&client);
+            let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
+            assert_eq!(20.0, select_one!(client, stmt, f64));
+        });
+    }
+
+    #[pg_test]
+    fn delta_after_counter_decrease_then_increase_to_same_value() {
+        Spi::execute(|client| {
+            decrease_then_increase_to_same_value(&client);
+            let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
+            // 10 after 30 means there was a reset so we add 30 + 10 + 30 = 70.
+            // Delta from 30 to 70 => 30
+            assert_eq!(30.0, select_one!(client, stmt, f64));
+        });
+    }
+
+    #[pg_test]
+    fn delta_after_counter_increase_then_decrease_to_same_value() {
+        Spi::execute(|client| {
+            increase_then_decrease_to_same_value(&client);
+            let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
+            // In this case, counter goes 10, 30, 40 (reset + 10).
+            // Delta from 10 to 40 => 30
+            assert_eq!(30.0, select_one!(client, stmt, f64));
+        });
+    }
+
+    #[pg_test]
+    fn idelta_left_after_counter_decrease() {
+        Spi::execute(|client| {
+            decrease(&client);
+            let stmt = "SELECT idelta_left(counter_agg(ts, val)) FROM test";
+            assert_eq!(10.0, select_one!(client, stmt, f64));
+        });
+    }
+
+    #[pg_test]
+    fn idelta_left_after_counter_increase() {
+        Spi::execute(|client| {
+            increase(&client);
+            let stmt = "SELECT idelta_left(counter_agg(ts, val)) FROM test";
+            assert_eq!(20.0, select_one!(client, stmt, f64));
+        });
+    }
+
+    #[pg_test]
+    fn idelta_left_after_counter_increase_then_decrease_to_same_value() {
+        Spi::execute(|client| {
+            increase_then_decrease_to_same_value(&client);
+            let stmt = "SELECT idelta_left(counter_agg(ts, val)) FROM test";
+            assert_eq!(20.0, select_one!(client, stmt, f64));
+        });
+    }
+
+    #[pg_test]
+    fn idelta_left_after_counter_decrease_then_increase_to_same_value() {
+        Spi::execute(|client| {
+            decrease_then_increase_to_same_value(&client);
+
+            let stmt = "SELECT idelta_left(counter_agg(ts, val)) FROM test";
+            assert_eq!(10.0, select_one!(client, stmt, f64));
+        });
+    }
+
+    #[pg_test]
+    fn idelta_right_after_counter_decrease() {
+        Spi::execute(|client| {
+            decrease(&client);
+            let stmt = "SELECT idelta_right(counter_agg(ts, val)) FROM test";
+            assert_eq!(10.0, select_one!(client, stmt, f64));
+        });
+    }
+
+    #[pg_test]
+    fn idelta_right_after_counter_increase() {
+        Spi::execute(|client| {
+            increase(&client);
+            let stmt = "SELECT idelta_right(counter_agg(ts, val)) FROM test";
+            assert_eq!(20.0, select_one!(client, stmt, f64));
+        });
+    }
+
+    #[pg_test]
+    fn idelta_right_after_counter_increase_then_decrease_to_same_value() {
+        Spi::execute(|client| {
+            increase_then_decrease_to_same_value(&client);
+            let stmt = "SELECT idelta_right(counter_agg(ts, val)) FROM test";
+            assert_eq!(10.0, select_one!(client, stmt, f64));
+        });
+    }
+
+    #[pg_test]
+    fn idelta_right_after_counter_decrease_then_increase_to_same_value() {
+        Spi::execute(|client| {
+            decrease_then_increase_to_same_value(&client);
+            let stmt = "SELECT idelta_right(counter_agg(ts, val)) FROM test";
+            assert_eq!(20.0, select_one!(client, stmt, f64));
+        });
+    }
+
     // #[pg_test]
     // fn test_combine_aggregate(){
     //     Spi::execute(|client| {
 
     //     });
     // }
+}
+
+#[cfg(any(test, feature = "pg_test"))]
+pub(crate) mod testing {
+    pub fn decrease(client: &pgx::SpiClient) {
+        client.select(
+            "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+            None,
+            None,
+        );
+        client.select("SET TIME ZONE 'UTC'", None, None);
+        client.select(
+            r#"INSERT INTO test VALUES
+                ('2020-01-01 00:00:00+00', 30.0),
+                ('2020-01-01 00:07:00+00', 10.0)"#,
+            None,
+            None,
+        );
+    }
+
+    pub fn increase(client: &pgx::SpiClient) {
+        client.select(
+            "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+            None,
+            None,
+        );
+        client.select("SET TIME ZONE 'UTC'", None, None);
+        client.select(
+            r#"INSERT INTO test VALUES
+                ('2020-01-01 00:00:00+00', 10.0),
+                ('2020-01-01 00:07:00+00', 30.0)"#,
+            None,
+            None,
+        );
+    }
+
+    pub fn decrease_then_increase_to_same_value(client: &pgx::SpiClient) {
+        client.select(
+            "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+            None,
+            None,
+        );
+        client.select("SET TIME ZONE 'UTC'", None, None);
+        client.select(
+            r#"INSERT INTO test VALUES
+                ('2020-01-01 00:00:00+00', 30.0),
+                ('2020-01-01 00:07:00+00', 10.0),
+                ('2020-01-01 00:08:00+00', 30.0)"#,
+            None,
+            None,
+        );
+    }
+
+    pub fn increase_then_decrease_to_same_value(client: &pgx::SpiClient) {
+        client.select(
+            "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+            None,
+            None,
+        );
+        client.select("SET TIME ZONE 'UTC'", None, None);
+        client.select(
+            r#"INSERT INTO test VALUES
+                ('2020-01-01 00:00:00+00', 10.0),
+                ('2020-01-01 00:07:00+00', 30.0),
+                ('2020-01-01 00:08:00+00', 10.0)"#,
+            None,
+            None,
+        );
+    }
 }

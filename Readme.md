@@ -1,4 +1,4 @@
-[![CI](https://github.com/timescale/timescaledb-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/timescale/timescaledb-toolkit/actions/workflows/ci.yml) [![nightly](https://github.com/timescale/timescaledb-toolkit/actions/workflows/nightly_build.yml/badge.svg)](https://github.com/timescale/timescaledb-toolkit/actions/workflows/nightly_build.yml)
+[![CI](https://github.com/timescale/timescaledb-toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/timescale/timescaledb-toolkit/actions/workflows/ci.yml)
 
 
 # TimescaleDB Toolkit #
@@ -16,9 +16,7 @@ in this repository at [`docs`](https://github.com/timescale/timescaledb-toolkit/
 
 ## 🖥 Try It Out ##
 
-The extension comes pre-installed on all [Timescale Cloud](https://www.timescale.com/products#timescale-cloud) instances, and also on our full-featured [`timescale/timescaledb-ha` docker image](https://hub.docker.com/r/timescale/timescaledb-ha).
-
-We also provide nightly builds as a docker images in `timescaledev/timescaledb-toolkit:nightly`.
+The extension comes pre-installed on all [Timescale Cloud](https://www.timescale.com/products#timescale-cloud) instances and also on our full-featured [`timescale/timescaledb-ha` docker image](https://hub.docker.com/r/timescale/timescaledb-ha).
 
 All versions of the extension contain experimental features in the `toolkit_experimental`, schema see [our docs section on experimental features](/docs/README.md#tag-notes) for
 more details.

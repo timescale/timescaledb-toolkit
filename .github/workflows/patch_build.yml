@@ -1,14 +1,11 @@
-name: nightly
+name: patch
 
 on:
   pull_request:
     paths:
-      - 'docker/nightly/**'
-      - '.github/workflows/nightly_build.yml'
+      - 'docker/patch/**'
+      - '.github/workflows/patch_build.yml'
   workflow_dispatch:
-  schedule:
-    # we build at 8am UTC, 3am Eastern, midnight Pacific
-    - cron:  '0 8 * * 1-4'
 
 jobs:
   build:
@@ -43,7 +40,7 @@ jobs:
           push: false
           load: true
           context: .
-          file: ./docker/nightly/Dockerfile
+          file: ./docker/patch/Dockerfile
           tags: timescaledev/timescale-analytics:nightly
 
       - name: Run Doc Tests
@@ -58,7 +55,7 @@ jobs:
         with:
           push: true
           context: .
-          file: ./docker/nightly/Dockerfile
+          file: ./docker/patch/Dockerfile
           tags: timescaledev/timescale-analytics:nightly,timescaledev/timescaledb-toolkit:nightly
 
       - name: Image digest

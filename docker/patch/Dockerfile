@@ -24,7 +24,7 @@ ENV PATH="/build/.cargo/bin:${PATH}"
 RUN set -ex \
     && rm -rf "${CARGO_HOME}/registry" "${CARGO_HOME}/git" \
     && chown postgres:postgres -R "${CARGO_HOME}" \
-    && cargo install cargo-pgx \
+    && cargo install cargo-pgx --version '^0.2' \
     # initdb fails as root so generate the correct config ourselves
     # && cargo pgx init --pg13 /usr/lib/postgresql/13/bin/pg_config
     && mkdir -p /root/.pgx \

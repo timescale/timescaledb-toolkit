@@ -176,7 +176,7 @@ pub fn counter_summary_trans_serialize(
 pub fn counter_summary_trans_deserialize(
     bytes: bytea,
     _internal: Internal,
-) -> Internal {
+) -> Option<Internal> {
     counter_summary_trans_deserialize_inner(bytes).internal()
 }
 pub fn counter_summary_trans_deserialize_inner(
@@ -193,7 +193,7 @@ pub fn counter_agg_trans(
     val: Option<f64>,
     bounds: Option<tstzrange>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     counter_agg_trans_inner(unsafe { state.to_inner() }, ts, val, bounds, fcinfo).internal()
 }
 pub fn counter_agg_trans_inner(
@@ -231,7 +231,7 @@ pub fn counter_agg_trans_no_bounds(
     ts: Option<crate::raw::TimestampTz>,
     val: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     counter_agg_trans_inner(unsafe{ state.to_inner() }, ts, val, None, fcinfo).internal()
 }
 
@@ -241,7 +241,7 @@ pub fn counter_agg_summary_trans(
     state: Internal,
     value: Option<CounterSummary>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     counter_agg_summary_trans_inner(unsafe{ state.to_inner() }, value, fcinfo).internal()
 }
 pub fn counter_agg_summary_trans_inner(
@@ -272,7 +272,7 @@ pub fn counter_agg_combine(
     state1: Internal,
     state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     unsafe {
         counter_agg_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
     }
@@ -982,7 +982,7 @@ mod tests {
             let state = counter_agg_trans_inner(state, Some((BASE + 5 * MIN).into()), Some(30.0), None, ptr::null_mut());
 
             let mut control = state.unwrap();
-            let buffer = counter_summary_trans_serialize(Inner::from(control.clone()).internal());
+            let buffer = counter_summary_trans_serialize(Inner::from(control.clone()).internal().unwrap());
             let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
 
             let expected = [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 96, 194, 134, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 36, 64, 0, 231, 85, 138, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 52, 64, 0, 124, 16, 149, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 52, 64, 0, 3, 164, 152, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 62, 64, 0, 0, 0, 0, 0, 0, 62, 64, 1, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 144, 246, 54, 236, 65, 0, 0, 0, 0, 0, 195, 238, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 32, 17, 209, 65, 0, 0, 0, 0, 0, 64, 106, 64, 0, 0, 0, 0, 0, 88, 155, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 76, 248, 42, 65, 0, 0, 0, 0, 0, 130, 196, 64, 0];

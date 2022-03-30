@@ -407,7 +407,7 @@ pub fn topn_agg_trans(
     n: i32,
     value: Option<AnyElement>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     topn_agg_with_skew_trans(state, n, DEFAULT_ZETA_SKEW, value, fcinfo)
 }
 
@@ -418,7 +418,7 @@ pub fn topn_agg_with_skew_trans(
     skew: f64,
     value: Option<AnyElement>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     if n <= 0 {
         pgx::error!("topn aggregate requires an n value > 0")
     }
@@ -426,7 +426,7 @@ pub fn topn_agg_with_skew_trans(
         pgx::error!("topn aggregate requires a skew factor > 1.0")
     }
 
-    space_saving_trans(unsafe{ state.to_inner() }, value, fcinfo, |typ, collation| 
+    space_saving_trans(unsafe{ state.to_inner() }, value, fcinfo, |typ, collation|
         {SpaceSavingTransState::topn_agg_from_type_id(skew, n as u32, typ, collation)}).internal()
 }
 
@@ -436,12 +436,12 @@ pub fn freq_agg_trans(
     freq: f64,
     value: Option<AnyElement>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     if freq <= 0. || freq >= 1.0 {
         pgx::error!("frequency aggregate requires a frequency in the range (0.0, 1.0)")
     }
 
-    space_saving_trans(unsafe{ state.to_inner() }, value, fcinfo, |typ, collation| 
+    space_saving_trans(unsafe{ state.to_inner() }, value, fcinfo, |typ, collation|
         {SpaceSavingTransState::freq_agg_from_type_id(freq, typ, collation)}).internal()
 }
 
@@ -450,7 +450,7 @@ pub fn space_saving_trans<F>(
     value: Option<AnyElement>,
     fcinfo: pg_sys::FunctionCallInfo,
     make_trans_state: F
-) -> Option<Inner<SpaceSavingTransState>> 
+) -> Option<Inner<SpaceSavingTransState>>
 where
     F: FnOnce(pg_sys::Oid, Option<pg_sys::Oid>) -> SpaceSavingTransState
 {
@@ -472,7 +472,7 @@ where
                 },
                 Some(state) => state,
             };
-    
+
             state.add(value.into());
             Some(state)
         })
@@ -484,7 +484,7 @@ pub fn space_saving_combine(
     state1: Internal,
     state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     unsafe {
         space_saving_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
     }
@@ -527,7 +527,7 @@ fn space_saving_serialize(
 pub fn space_saving_deserialize(
     bytes: bytea,
     _internal: Internal,
-) -> Internal {
+) -> Option<Internal> {
     let i: SpaceSavingTransState = crate::do_deserialize!(bytes, SpaceSavingTransState);
     Inner::from(i).internal()
 }
@@ -810,7 +810,7 @@ mod tests {
             for j in i..=20 {
                 let value =
                     unsafe { AnyElement::from_datum(j as pg_sys::Datum, false, pg_sys::INT4OID) };
-                state = super::freq_agg_trans(state, freq, value, fcinfo);
+                state = super::freq_agg_trans(state, freq, value, fcinfo).unwrap();
             }
         }
 
@@ -869,7 +869,7 @@ mod tests {
             for j in i..=20 {
                 let value =
                     unsafe { AnyElement::from_datum(j as pg_sys::Datum, false, pg_sys::INT4OID) };
-                state = super::freq_agg_trans(state, freq, value, fcinfo);
+                state = super::freq_agg_trans(state, freq, value, fcinfo).unwrap();
             }
         }
 
@@ -913,17 +913,17 @@ mod tests {
             0, // string 19, count 10, overcount 0
             2, 0, 0, 0, 0, 0, 0, 0, 50, 48, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, // string 20, count 10, overcount 0
-            1, 0, 0, 0, 0, 0, 0, 0, 57, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+            1, 0, 0, 0, 0, 0, 0, 0, 57, 9, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, // string 9, count 9, overcount 0
-            1, 0, 0, 0, 0, 0, 0, 0, 56, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 
+            1, 0, 0, 0, 0, 0, 0, 0, 56, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, // string 8, count 8, overcount 0
-            1, 0, 0, 0, 0, 0, 0, 0, 52, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            1, 0, 0, 0, 0, 0, 0, 0, 52, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0,
             0, // string 4, count 7, overcount 6
-            1, 0, 0, 0, 0, 0, 0, 0, 53, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            1, 0, 0, 0, 0, 0, 0, 0, 53, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0,
             0, // string 5, count 7, overcount 6
-            1, 0, 0, 0, 0, 0, 0, 0, 54, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            1, 0, 0, 0, 0, 0, 0, 0, 54, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0,
             0, // string 6, count 7, overcount 6
-            1, 0, 0, 0, 0, 0, 0, 0, 55, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            1, 0, 0, 0, 0, 0, 0, 0, 55, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0,
             0, // string 7, count 7, overcount 6
         ];
         // encoding of hasher can vary on platform and across postgres version (even in length), ignore it and check the other fields
@@ -936,10 +936,10 @@ mod tests {
 
         let combined = super::space_saving_serialize(
             super::space_saving_combine(
-                super::space_saving_deserialize(first, None.into()),
-                super::space_saving_deserialize(second, None.into()),
+                super::space_saving_deserialize(first, None.into()).unwrap(),
+                super::space_saving_deserialize(second, None.into()).unwrap(),
                 fcinfo,
-            )
+            ).unwrap()
         );
 
         let bytes = unsafe {
@@ -984,13 +984,13 @@ mod tests {
             0, // string 9, count 9, overcount 0
             1, 0, 0, 0, 0, 0, 0, 0, 56, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, // string 8, count 8, overcount 0
-            1, 0, 0, 0, 0, 0, 0, 0, 52, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            1, 0, 0, 0, 0, 0, 0, 0, 52, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0,
             0, // string 4, count 7, overcount 6
-            1, 0, 0, 0, 0, 0, 0, 0, 54, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            1, 0, 0, 0, 0, 0, 0, 0, 54, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0,
             0, // string 6, count 7, overcount 6
-            1, 0, 0, 0, 0, 0, 0, 0, 53, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            1, 0, 0, 0, 0, 0, 0, 0, 53, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0,
             0, // string 5, count 7, overcount 6
-            1, 0, 0, 0, 0, 0, 0, 0, 55, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 
+            1, 0, 0, 0, 0, 0, 0, 0, 55, 7, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0,
             0, // string 7, count 7, overcount 6
         ];
         // encoding of hasher can vary on platform and across postgres version (even in length), ignore it and check the other fields
@@ -1107,7 +1107,7 @@ mod tests {
     fn test_frequency_getters() {
         Spi::execute(|client| {
             setup_with_test_table(&client);
-            
+
             // simple tests
             let (min, max) = client.select("SELECT min_frequency(agg, 3), max_frequency(agg, 3) FROM aggs WHERE name = 'freq_2'", None, None)
                 .first()
@@ -1155,14 +1155,14 @@ mod tests {
         let mut counts = [0;100];
 
         let mut state = None.into();
-        let freq = 0.015; 
+        let freq = 0.015;
         let fcinfo = std::ptr::null_mut(); // dummy value, will use default collation
 
         for _ in 0..200 {
             let v = rand100.sample(&mut rng);
             let value =
                 unsafe { AnyElement::from_datum(v as pg_sys::Datum, false, pg_sys::INT4OID) };
-            state = super::freq_agg_trans(state, freq, value, fcinfo);
+            state = super::freq_agg_trans(state, freq, value, fcinfo).unwrap();
             counts[v] += 1;
         }
 
@@ -1178,7 +1178,7 @@ mod tests {
 
     #[pg_test]
     fn test_topn_agg_invariant() {
-        // The ton agg invariant is that we'll be able to track the top n values for any data 
+        // The ton agg invariant is that we'll be able to track the top n values for any data
         // with a distribution at least as skewed as a zeta distribution
 
         // To test this we will generate a topn aggregate with a random skew (1.01 - 2.0) and
@@ -1186,7 +1186,7 @@ mod tests {
         // (this should be enough to keep the sample above the target even with bad luck), and
         // verify that we correctly identify the top n values.
         let mut rng = rand::thread_rng();
-        
+
         let n = rng.next_u64() % 6 + 5;
         let skew = (rng.next_u64() % 100) as f64 / 100. + 1.01;
 
@@ -1204,7 +1204,7 @@ mod tests {
             }
             let value =
                 unsafe { AnyElement::from_datum(v as pg_sys::Datum, false, pg_sys::INT4OID) };
-            state = super::topn_agg_with_skew_trans(state, n as i32, skew, value, fcinfo);
+            state = super::topn_agg_with_skew_trans(state, n as i32, skew, value, fcinfo).unwrap();
             if v < 100 {  // anything greater than 100 will not be in the top values
                 counts[v] += 1;
             }

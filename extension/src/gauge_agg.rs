@@ -131,7 +131,7 @@ fn gauge_summary_trans_serialize(state: Internal) -> bytea {
 }
 
 #[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
-fn gauge_summary_trans_deserialize(bytes: bytea, _internal: Internal) -> Internal {
+fn gauge_summary_trans_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
     gauge_summary_trans_deserialize_inner(bytes).internal()
 }
 fn gauge_summary_trans_deserialize_inner(bytes: bytea) -> Inner<GaugeSummaryTransState> {
@@ -146,7 +146,7 @@ fn gauge_agg_trans(
     val: Option<f64>,
     bounds: Option<tstzrange>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     gauge_agg_trans_inner(unsafe { state.to_inner() }, ts, val, bounds, fcinfo).internal()
 }
 fn gauge_agg_trans_inner(
@@ -187,7 +187,7 @@ fn gauge_agg_trans_no_bounds(
     ts: Option<crate::raw::TimestampTz>,
     val: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     gauge_agg_trans_inner(unsafe { state.to_inner() }, ts, val, None, fcinfo).internal()
 }
 
@@ -196,7 +196,7 @@ fn gauge_agg_summary_trans(
     state: Internal,
     value: Option<GaugeSummary>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     gauge_agg_summary_trans_inner(unsafe { state.to_inner() }, value, fcinfo).internal()
 }
 fn gauge_agg_summary_trans_inner(
@@ -225,7 +225,7 @@ fn gauge_agg_combine(
     state1: Internal,
     state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     unsafe { gauge_agg_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal() }
 }
 fn gauge_agg_combine_inner(

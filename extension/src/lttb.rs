@@ -23,7 +23,7 @@ pub fn lttb_trans(
     val: Option<f64>,
     resolution: i32,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     lttb_trans_inner(unsafe{ state.to_inner() }, time, val, resolution, fcinfo).internal()
 }
 pub fn lttb_trans_inner(

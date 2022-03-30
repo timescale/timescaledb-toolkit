@@ -57,7 +57,7 @@ pub fn tdigest_trans(
     size: i32,
     value: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     tdigest_trans_inner(unsafe{ state.to_inner() }, size, value, fcinfo).internal()
 }
 pub fn tdigest_trans_inner(
@@ -92,7 +92,7 @@ pub fn tdigest_combine(
     state1: Internal,
     state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     unsafe {
         tdigest_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
     }
@@ -146,7 +146,7 @@ pub fn tdigest_serialize(
 pub fn tdigest_deserialize(
     bytes: bytea,
     _internal: Internal,
-) -> Internal {
+) -> Option<Internal> {
     tdigest_deserialize_inner(bytes).internal()
 }
 pub fn tdigest_deserialize_inner(
@@ -247,7 +247,7 @@ pub fn tdigest_compound_trans(
     state: Internal,
     value: Option<TDigest<'static>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     tdigest_compound_trans_inner(unsafe{ state.to_inner() }, value, fcinfo).internal()
 }
 pub fn tdigest_compound_trans_inner(
@@ -276,7 +276,7 @@ pub fn tdigest_compound_combine(
     state1: Internal,
     state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     unsafe {
         tdigest_compound_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
     }
@@ -325,7 +325,7 @@ fn tdigest_compound_serialize(
 pub fn tdigest_compound_deserialize(
     bytes: bytea,
     _internal: Internal,
-) -> Internal {
+) -> Option<Internal> {
     let i: InternalTDigest = crate::do_deserialize!(bytes, InternalTDigest);
     Inner::from(i).internal()
 }
@@ -642,7 +642,7 @@ mod tests {
             let state = tdigest_trans_inner(state, 100, Some(-43.0), ptr::null_mut());
 
             let mut control = state.unwrap();
-            let buffer = tdigest_serialize(Inner::from(control.clone()).internal());
+            let buffer = tdigest_serialize(Inner::from(control.clone()).internal().unwrap());
             let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
 
             let expected = [1, 1, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 69, 192, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 44, 64, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 64, 1, 0, 0, 0, 0, 0, 0, 0, 51, 51, 51, 51, 51, 179, 54, 64, 1, 0, 0, 0, 0, 0, 0, 0, 246, 40, 92, 143, 194, 181, 67, 64, 1, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0, 0, 0, 0, 0, 0, 144, 194, 245, 40, 92, 143, 73, 64, 5, 0, 0, 0, 0, 0, 0, 0, 246, 40, 92, 143, 194, 181, 67, 64, 0, 0, 0, 0, 0, 128, 69, 192];

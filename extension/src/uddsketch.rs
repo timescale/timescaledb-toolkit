@@ -23,7 +23,7 @@ pub fn uddsketch_trans(
     max_error: f64,
     value: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     uddsketch_trans_inner(unsafe{ state.to_inner() }, size, max_error, value, fcinfo).internal()
 }
 
@@ -60,7 +60,7 @@ pub fn percentile_agg_trans(
     state: Internal,
     value: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     percentile_agg_trans_inner(unsafe{ state.to_inner() }, value, fcinfo).internal()
 }
 
@@ -80,7 +80,7 @@ pub fn uddsketch_combine(
     state1: Internal,
     state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     unsafe {
         uddsketch_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
     }
@@ -120,7 +120,7 @@ pub fn uddsketch_serialize(
 pub fn uddsketch_deserialize(
     bytes: bytea,
     _internal: Internal,
-) -> Internal {
+) -> Option<Internal> {
     uddsketch_deserialize_inner(bytes).internal()
 }
 pub fn uddsketch_deserialize_inner(
@@ -481,7 +481,7 @@ pub fn uddsketch_compound_trans(
     state: Internal,
     value: Option<UddSketch>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     unsafe {
         uddsketch_compound_trans_inner(state.to_inner(), value, fcinfo).internal()
     }
@@ -888,7 +888,7 @@ mod tests {
             let state = uddsketch_trans_inner(state, 100, 0.005, Some(-43.0), ptr::null_mut());
 
             let control = state.unwrap();
-            let buffer = uddsketch_serialize(Inner::from(control.clone()).internal());
+            let buffer = uddsketch_serialize(Inner::from(control.clone()).internal().unwrap());
             let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
 
             let expected = [1, 1, 123, 20, 174, 71, 225, 122, 116, 63, 100, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 144, 194, 245, 40, 92, 143, 73, 64, 2, 0, 0, 0, 0, 0, 0, 0, 202, 11, 1, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 66, 8, 105, 93, 221, 4, 0, 0, 0, 0, 0, 0, 0, 5, 1, 1, 1];
@@ -898,5 +898,20 @@ mod tests {
             let new_state = uddsketch_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
             assert_eq!(&*new_state, &*control);
         }
+    }
+
+    #[pg_test]
+    fn test_udd_null_input_yields_null_output() {
+        Spi::execute(|client| {
+            let output = client
+                .select(
+                    "SELECT uddsketch(20, 0.01, NULL)::TEXT",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>();
+            assert_eq!(output, None)
+        })
     }
 }

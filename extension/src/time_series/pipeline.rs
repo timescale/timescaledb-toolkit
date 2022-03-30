@@ -222,12 +222,12 @@ pub(crate) unsafe fn pipeline_support_helper(
     input: Internal,
     make_new_pipeline: impl FnOnce(UnstableTimevectorPipeline, pg_sys::Datum) -> pg_sys::Datum,
 ) -> Internal {
-    use std::{mem::{size_of, MaybeUninit}, ptr};
+    use std::mem::{size_of, MaybeUninit};
 
     let input = input.unwrap().unwrap();
     let input: *mut pg_sys::Node = input as _;
     if !pgx::is_a(input, pg_sys::NodeTag_T_SupportRequestSimplify) {
-        return ptr::null_mut::<pg_sys::Expr>().internal()
+        return no_change()
     }
 
     let req: *mut pg_sys::SupportRequestSimplify = input.cast();
@@ -246,14 +246,14 @@ pub(crate) unsafe fn pipeline_support_helper(
             let old_executor: *mut pg_sys::FuncExpr = arg1.cast();
             ((*old_executor).funcid, (*old_executor).args)
         } else {
-            return ptr::null_mut::<pg_sys::Expr>().internal()
+            return no_change()
         };
 
     // check old_executor operator fn is 'run_pipeline' above
     static RUN_PIPELINE_OID: once_cell::sync::OnceCell<pg_sys::Oid> = once_cell::sync::OnceCell::new();
     match RUN_PIPELINE_OID.get() {
         Some(oid) => if executor_id != *oid {
-            return ptr::null_mut::<pg_sys::Expr>().internal()
+            return no_change()
         }
         None => {
             let executor_fn = {
@@ -269,10 +269,10 @@ pub(crate) unsafe fn pipeline_support_helper(
             //       we'll fix this upstream
             let expected_executor = arrow_run_pipeline_wrapper as usize;
             match executor_fn {
-                None => return ptr::null_mut::<pg_sys::Expr>().internal(),
+                None => return no_change(),
                 // FIXME the direct comparison should work
                 Some(func) if func as usize != expected_executor =>
-                    return ptr::null_mut::<pg_sys::Expr>().internal(),
+                    return no_change(),
                 Some(_) => RUN_PIPELINE_OID.get_or_init(|| executor_id)
             };
         },
@@ -285,13 +285,13 @@ pub(crate) unsafe fn pipeline_support_helper(
     let old_const = lhs_args.tail().unwrap();
 
     if !is_a(old_const, pg_sys::NodeTag_T_Const) {
-        return ptr::null_mut::<pg_sys::Expr>().internal()
+        return no_change()
     }
 
     let old_const: *mut pg_sys::Const = old_const.cast();
 
     if !is_a(arg2, pg_sys::NodeTag_T_Const) {
-        return ptr::null_mut::<pg_sys::Expr>().internal()
+        return no_change()
     }
 
     let new_element_const: *mut pg_sys::Const = arg2.cast();
@@ -311,6 +311,12 @@ pub(crate) unsafe fn pipeline_support_helper(
     (*new_executor).args = new_executor_args.into_pg();
 
     Internal::from(Some(new_executor as pg_sys::Datum))
+}
+
+// support functions are spec'd as returning NULL pointer if no simplification
+// can be made
+fn no_change() -> pgx::Internal {
+    Internal::from(Some(std::ptr::null_mut::<pg_sys::Expr>() as pg_sys::Datum))
 }
 
 // using this instead of pg_operator since the latter doesn't support schemas yet

@@ -36,7 +36,7 @@ pub fn hyperloglog_trans(
     // TODO we want to use crate::raw::AnyElement but it doesn't work for some reason...
     value: Option<AnyElement>,
     fc: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     // let state: Internal = Internal::from_datum();
     hyperloglog_trans_inner(unsafe{ state.to_inner() }, size, value, fc).internal()
 }
@@ -80,7 +80,7 @@ pub fn hyperloglog_combine(
     state1: Internal,
     state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     unsafe {
         hyperloglog_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
     }
@@ -117,7 +117,7 @@ pub fn hyperloglog_serialize(state: Internal) -> bytea {
 pub fn hyperloglog_deserialize(
     bytes: bytea,
     _internal: Internal,
-) -> Internal {
+) -> Option<Internal> {
     hyperloglog_deserialize_inner(bytes).internal()
 }
 pub fn hyperloglog_deserialize_inner(
@@ -214,7 +214,7 @@ pub fn hyperloglog_union(
     state: Internal,
     other: HyperLogLog,
     fc: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     hyperloglog_union_inner(unsafe{ state.to_inner() }, other, fc).internal()
 }
 pub fn hyperloglog_union_inner(
@@ -465,7 +465,7 @@ mod tests {
             control.logger.add(&rust_str_to_text_p("second").into_datum().unwrap());
             control.logger.add(&rust_str_to_text_p("third").into_datum().unwrap());
 
-            let buffer = hyperloglog_serialize(Inner::from(control.clone()).internal());
+            let buffer = hyperloglog_serialize(Inner::from(control.clone()).internal().unwrap());
             let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
 
             let mut expected = vec![1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 136, 136, 9, 7, 8, 74, 76, 47, 200, 231, 53, 25, 3, 0, 0, 0, 0, 0, 0, 0, 6, 9, 0, 0, 0, 1];
@@ -483,7 +483,7 @@ mod tests {
                 control.logger.add(&rust_str_to_text_p(&i.to_string()).into_datum().unwrap());
             }
 
-            let buffer = hyperloglog_serialize(Inner::from(control.clone()).internal());
+            let buffer = hyperloglog_serialize(Inner::from(control.clone()).internal().unwrap());
             let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
 
             let mut expected = vec![1, 1, 1, 0, 0, 0, 49, 0, 0, 0, 0, 0, 0, 0, 20, 65, 2, 12, 48, 199, 20, 33, 4, 12, 49, 67, 16, 81, 66, 32, 145, 131, 24, 49, 4, 20, 33, 5, 8, 81, 66, 12, 81, 4, 8, 49, 2, 8, 65, 131, 24, 32, 133, 12, 50, 66, 12, 48, 197, 12, 81, 130, 255, 58, 6, 255, 255, 255, 255, 255, 255, 255, 3, 9, 0, 0, 0, 1];
@@ -657,6 +657,22 @@ mod tests {
 
         });
     }
+
+    #[pg_test]
+    fn test_hll_null_input_yields_null_output() {
+        Spi::execute(|client| {
+            let output = client
+                .select(
+                    "SELECT hyperloglog(32, null::int)::TEXT",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>();
+            assert_eq!(output, None)
+        })
+    }
+
 
     //TODO test continuous aggregates
 }

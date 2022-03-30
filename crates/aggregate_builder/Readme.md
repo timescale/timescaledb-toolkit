@@ -98,7 +98,7 @@ pub mod aggregate_name {
         __inner: pgx::Internal,
         value: RustType,
         __fcinfo: pg_sys::FunctionCallInfo,
-    ) -> Internal {
+    ) -> Option<Internal> {
         use crate::palloc::{Inner, InternalAsValue, ToInternal};
         unsafe {
             // Translate from the SQL type to the rust one
@@ -189,7 +189,7 @@ pub mod aggregate_name {
     pub fn aggregate_name_deserialize_fn_outer(
         bytes: crate::raw::bytea,
         _internal: Internal,
-    ) -> Internal {
+    ) -> Option<Internal> {
         use crate::palloc::ToInternal;
         let result = deserialize(bytes);
         let state: State = result;
@@ -209,7 +209,7 @@ pub mod aggregate_name {
         a: Internal,
         b: Internal,
         __fcinfo: pg_sys::FunctionCallInfo,
-    ) -> Internal {
+    ) -> Option<Internal> {
         use crate::palloc::{Inner, InternalAsValue, ToInternal};
         unsafe {
             // Switch to the aggregate memory context. This ensures that the

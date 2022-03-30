@@ -19,13 +19,30 @@ INSERT INTO states_test VALUES
 
 ### duration_in
 
+Compute the amount of time spent in a state as INTERVAL.
+
 ```SQL
 SELECT toolkit_experimental.duration_in('ERROR', toolkit_experimental.state_agg(ts, state)) FROM states_test;
 ```
 ```output
- duration_in
--------------
-     3000000
+ interval
+----------
+ 00:00:03
+```
+
+Extract as number of seconds:
+
+```SQL
+SELECT
+  EXTRACT(epoch FROM
+    toolkit_experimental.duration_in('ERROR', toolkit_experimental.state_agg(ts, state))
+  )::INTEGER
+FROM states_test;
+```
+```output
+ seconds
+---------
+       3
 ```
 
 ### into_values

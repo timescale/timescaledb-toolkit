@@ -182,11 +182,31 @@ impl StateAggTransState {
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn duration_in(state: String, aggregate: Option<StateAgg>) -> i64 {
-    aggregate
+pub fn duration_in(state: String, aggregate: Option<StateAgg>) -> crate::raw::Interval {
+    let time: i64 = aggregate
         .map(|aggregate| aggregate.get(&state))
         .flatten()
-        .unwrap_or(0)
+        .unwrap_or(0);
+    let interval = pg_sys::Interval {
+        time,
+        ..Default::default()
+    };
+    let interval: *const pg_sys::Interval = to_palloc(interval);
+    // Now we have a valid Interval in at least one sense.  But we have the
+    // microseconds in the `time` field and `day` and `month` are both 0,
+    // which is legal.  However, directly converting one of these to TEXT
+    // comes out quite ugly if the number of microseconds is greater than 1 day:
+    //   8760:02:00
+    // Should be:
+    //   365 days 00:02:00
+    // How does postgresql do it?  It happens in src/backend/utils/adt/timestamp.c:timestamp_mi:
+    //  result->time = dt1 - dt2;
+    //  result = DatumGetIntervalP(DirectFunctionCall1(interval_justify_hours,
+    //                                                 IntervalPGetDatum(result)));
+    // So if we want the same behavior, we need to call interval_justify_hours too:
+    let function_args = vec![Some(interval as pg_sys::Datum)];
+    unsafe { pgx::direct_function_call(pg_sys::interval_justify_hours, function_args) }
+        .expect("interval_justify_hours does not return None")
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
@@ -248,6 +268,14 @@ struct Record {
     time: i64,
 }
 
+fn to_palloc<T>(value: T) -> *const T {
+    unsafe {
+        let ptr = pg_sys::palloc(std::mem::size_of::<T>()) as *mut T;
+        *ptr = value;
+        ptr
+    }
+}
+
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
@@ -279,11 +307,13 @@ mod tests {
                 None,
             );
             assert_eq!(
-                31536120000000,
+                "365 days 00:02:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts, state)) FROM test",
-                    i64));
+                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts, state))::TEXT FROM test",
+                    &str
+                )
+            );
         });
     }
 
@@ -302,17 +332,21 @@ mod tests {
             );
 
             assert_eq!(
-                60000000,
+                "00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts, state)) FROM test",
-                    i64));
+                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts, state))::TEXT FROM test",
+                    &str
+                )
+            );
             assert_eq!(
-                31536060000000,
+                "365 days 00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.state_agg(ts, state)) FROM test",
-                    i64));
+                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.state_agg(ts, state))::TEXT FROM test",
+                    &str
+                )
+            );
         });
     }
 
@@ -332,17 +366,21 @@ mod tests {
             );
 
             assert_eq!(
-                31536060000000,
+                "365 days 00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts, state)) FROM test",
-                    i64));
+                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts, state))::TEXT FROM test",
+                    &str
+                )
+            );
             assert_eq!(
-                60000000,
+                "00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.state_agg(ts, state)) FROM test",
-                    i64));
+                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.state_agg(ts, state))::TEXT FROM test",
+                    &str
+                )
+            );
         });
     }
 
@@ -362,17 +400,21 @@ mod tests {
             );
 
             assert_eq!(
-                31536060000000,
+                "365 days 00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts, state)) FROM test",
-                    i64));
+                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts, state))::TEXT FROM test",
+                    &str
+                )
+            );
             assert_eq!(
-                60000000,
+                "00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.state_agg(ts, state)) FROM test",
-                    i64));
+                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.state_agg(ts, state))::TEXT FROM test",
+                    &str
+                )
+            );
         });
     }
 
@@ -393,17 +435,21 @@ mod tests {
                 None,
             );
             assert_eq!(
-                120000000,
+                "00:02:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts, state)) FROM test",
-                    i64));
+                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts, state))::TEXT FROM test",
+                    &str
+                )
+            );
             assert_eq!(
-                31536000000000,
+                "365 days",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.state_agg(ts, state)) FROM test",
-                    i64));
+                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.state_agg(ts, state))::TEXT FROM test",
+                    &str
+                )
+            );
         });
     }
 
@@ -420,26 +466,22 @@ mod tests {
                 None,
                 None,
             );
-            let result: i64 = client
-                .select(
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts, state)) FROM test",
-                    None,
-                    None,
+            assert_eq!(
+                "00:01:00",
+                select_one!(
+                    client,
+                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts, state))::TEXT FROM test",
+                    &str
                 )
-                .first()
-                .get_one()
-                .unwrap();
-            assert_eq!(60000000, result);
-            let result: i64 = client
-                .select(
-                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.state_agg(ts, state)) FROM test",
-                    None,
-                    None,
+            );
+            assert_eq!(
+                "365 days 00:01:00",
+                select_one!(
+                    client,
+                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.state_agg(ts, state))::TEXT FROM test",
+                    &str
                 )
-                .first()
-                .get_one()
-                .unwrap();
-            assert_eq!(31536060000000, result);
+            );
         });
     }
 
@@ -456,16 +498,14 @@ mod tests {
                 None,
                 None,
             );
-            let result: i64 = client
-                .select(
-                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.state_agg(ts, state)) FROM test",
-                    None,
-                    None,
+            assert_eq!(
+                "00:01:00",
+                select_one!(
+                    client,
+                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.state_agg(ts, state))::TEXT FROM test",
+                    &str
                 )
-                .first()
-                .get_one()
-                .unwrap();
-            assert_eq!(60000000, result);
+            );
         });
     }
 
@@ -484,16 +524,14 @@ insert into test select '2020-01-02 UTC'::timestamptz + make_interval(days=>v), 
                 None,
                 None,
             );
-            let result: i64 = client
-                .select(
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts, state)) FROM test",
-                    None,
-                    None,
+            assert_eq!(
+                "2 days",
+                select_one!(
+                    client,
+                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts, state))::TEXT FROM test",
+                    &str
                 )
-                .first()
-                .get_one()
-                .unwrap();
-            assert_eq!(172800000000, result);
+            );
         });
         assert!(state_agg::counters::COMBINE_NONE.load(Relaxed) == 0); // TODO untested
         assert!(state_agg::counters::COMBINE_A.load(Relaxed) == 0); // TODO untested
@@ -518,8 +556,10 @@ insert into test select '2020-01-02 UTC'::timestamptz + make_interval(days=>v), 
                 None,
                 None,
             );
-            let result: i64 = client
-                .select(
+            assert_eq!(
+                "48:00:00",
+                select_one!(
+                    client,
                     r#"
 SET parallel_setup_cost = 0;
 SET parallel_tuple_cost = 0;
@@ -527,19 +567,15 @@ SET min_parallel_table_scan_size = 0;
 SET max_parallel_workers_per_gather = 4;
 SET parallel_leader_participation = off;
 SET enable_indexonlyscan = off;
-SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts, state)) FROM (
+SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts, state))::TEXT FROM (
     SELECT * FROM test
     UNION ALL SELECT * FROM test
     UNION ALL SELECT * FROM test
     UNION ALL SELECT * FROM test) u
                 "#,
-                    None,
-                    None,
+                    &str
                 )
-                .first()
-                .get_one()
-                .unwrap();
-            assert_eq!(172800000000, result);
+            );
         });
         assert!(state_agg::counters::COMBINE_NONE.load(Relaxed) == 0); // TODO untested
         assert!(state_agg::counters::COMBINE_A.load(Relaxed) == 0); // TODO untested
@@ -563,16 +599,16 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
             assert_eq!(
                 client
                     .select(
-                        r#"SELECT toolkit_experimental.duration_in('ERROR', states) as error,
-                                  toolkit_experimental.duration_in('START', states) as start,
-                                  toolkit_experimental.duration_in('STOPPED', states) as stopped
+                        r#"SELECT toolkit_experimental.duration_in('ERROR', states)::TEXT as error,
+                                  toolkit_experimental.duration_in('START', states)::TEXT as start,
+                                  toolkit_experimental.duration_in('STOPPED', states)::TEXT as stopped
                              FROM (SELECT toolkit_experimental.state_agg(ts, state) as states FROM test) as foo"#,
                         None,
                         None,
                     )
                     .first()
-                    .get_three::<i64, i64, i64>(),
-                (Some(60000000), Some(60000000), Some(0))
+                    .get_three::<&str, &str, &str>(),
+                (Some("00:01:00"), Some("00:01:00"), Some("00:00:00"))
             );
         })
     }

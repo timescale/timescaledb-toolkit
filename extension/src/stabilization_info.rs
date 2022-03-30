@@ -158,6 +158,7 @@ crate::functions_stabilized_at! {
         variance_x(statssummary2d,text),
         variance_y(statssummary2d,text),
         x_intercept(statssummary2d),
+        distinct_count(hyperloglog),
     }
 }
 

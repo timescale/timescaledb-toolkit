@@ -194,7 +194,7 @@ fn hyperloglog_final_inner(
 }
 
 extension_sql!("\n\
-    CREATE AGGREGATE hyperloglog(size int, value AnyElement)\n\
+    CREATE AGGREGATE hyperloglog(size integer, value AnyElement)\n\
     (\n\
         stype = internal,\n\
         sfunc = hyperloglog_trans,\n\

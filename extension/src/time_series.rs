@@ -212,7 +212,7 @@ pub fn timevector_serialize(
 pub fn timevector_deserialize(
     bytes: bytea,
     _internal: Internal,
-) -> Internal {
+) -> Option<Internal> {
     let data: Timevector<'static> = crate::do_deserialize!(bytes, TimevectorData);
     Inner::from(data).internal()
 }
@@ -223,7 +223,7 @@ pub fn timevector_trans(
     time: Option<crate::raw::TimestampTz>,
     value: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     unsafe {
         timevector_trans_inner(state.to_inner(), time, value, fcinfo).internal()
     }
@@ -290,7 +290,7 @@ pub fn timevector_compound_trans(
     state: Internal,
     series: Option<toolkit_experimental::Timevector>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     inner_compound_trans(unsafe { state.to_inner() }, series, fcinfo).internal()
 }
 
@@ -351,7 +351,7 @@ pub fn timevector_combine (
     state1: Internal,
     state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     unsafe {
         inner_combine(state1.to_inner(), state2.to_inner(), fcinfo).internal()
     }

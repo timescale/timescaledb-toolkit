@@ -126,7 +126,7 @@ pub fn stats1d_trans_serialize(
 pub fn stats1d_trans_deserialize(
     bytes: bytea,
     _internal: Internal,
-) -> Internal {
+) -> Option<Internal> {
     stats1d_trans_deserialize_inner(bytes).internal()
 }
 pub fn stats1d_trans_deserialize_inner(
@@ -148,7 +148,7 @@ pub fn stats2d_trans_serialize(
 pub fn stats2d_trans_deserialize(
     bytes: bytea,
     _internal: Internal,
-) -> Internal {
+) -> Option<Internal> {
     stats2d_trans_deserialize_inner(bytes).internal()
 }
 pub fn stats2d_trans_deserialize_inner(
@@ -163,7 +163,7 @@ pub fn stats1d_trans<'s>(
     state: Internal,
     val: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     stats1d_trans_inner(unsafe{ state.to_inner() }, val, fcinfo).internal()
 }
 pub fn stats1d_trans_inner(
@@ -199,7 +199,7 @@ pub fn stats2d_trans(
     y: Option<f64>,
     x: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     stats2d_trans_inner(unsafe{ state.to_inner() }, y, x, fcinfo).internal()
 }
 pub fn stats2d_trans_inner(
@@ -240,7 +240,7 @@ pub fn stats1d_inv_trans(
     state: Internal,
     val: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     stats1d_inv_trans_inner(unsafe{ state.to_inner()}, val, fcinfo).internal()
 }
 pub fn stats1d_inv_trans_inner(
@@ -269,7 +269,7 @@ pub fn stats2d_inv_trans(
     y: Option<f64>,
     x: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     stats2d_inv_trans_inner(unsafe{ state.to_inner()}, y, x, fcinfo).internal()
 }
 pub fn stats2d_inv_trans_inner(
@@ -304,7 +304,7 @@ pub fn stats1d_summary_trans(
     state: Internal,
     value: Option<StatsSummary1D>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     stats1d_summary_trans_inner(unsafe{ state.to_inner() }, value, fcinfo).internal()
 }
 pub fn stats1d_summary_trans_inner<'s>(
@@ -336,7 +336,7 @@ pub fn stats2d_summary_trans(
     state: Internal,
     value: Option<StatsSummary2D>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     stats2d_summary_trans_inner(unsafe{ state.to_inner() }, value, fcinfo).internal()
 }
 pub fn stats2d_summary_trans_inner<'s>(
@@ -366,7 +366,7 @@ pub fn stats1d_summary_inv_trans(
     state: Internal,
     value: Option<StatsSummary1D>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     stats1d_summary_inv_trans_inner(unsafe{ state.to_inner() }, value, fcinfo).internal()
 }
 pub fn stats1d_summary_inv_trans_inner<'s>(
@@ -395,7 +395,7 @@ pub fn stats2d_summary_inv_trans(
     state: Internal,
     value: Option<StatsSummary2D>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     stats2d_summary_inv_trans_inner(unsafe {state.to_inner()}, value, fcinfo).internal()
 }
 pub fn stats2d_summary_inv_trans_inner<'s>(
@@ -424,7 +424,7 @@ pub fn stats1d_combine(
     state1: Internal,
     state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     unsafe {
         stats1d_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
     }
@@ -462,7 +462,7 @@ pub fn stats2d_combine(
     state1: Internal,
     state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     unsafe {
         stats2d_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
     }
@@ -1409,7 +1409,7 @@ mod tests {
             let state = stats1d_trans_inner(state, Some(-43.0), ptr::null_mut());
 
             let control = state.unwrap();
-            let buffer = stats1d_trans_serialize(Inner::from(control.clone()).internal());
+            let buffer = stats1d_trans_serialize(Inner::from(control.clone()).internal().unwrap());
             let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
 
             let expected = [1, 1, 1, 5, 0, 0, 0, 0, 0, 0, 0, 144, 194, 245, 40, 92, 143, 73, 64, 100, 180, 142, 170, 38, 151, 174, 64, 72, 48, 180, 190, 189, 33, 254, 192, 119, 78, 30, 195, 209, 190, 96, 65];

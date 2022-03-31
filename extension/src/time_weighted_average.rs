@@ -94,7 +94,7 @@ pub fn time_weight_trans_serialize(state: Internal) -> bytea {
 pub fn time_weight_trans_deserialize(
     bytes: bytea,
     _internal: Internal,
-) -> Internal {
+) -> Option<Internal> {
     time_weight_trans_deserialize_inner(bytes).internal()
 }
 pub fn time_weight_trans_deserialize_inner(
@@ -112,7 +112,7 @@ pub fn time_weight_trans(
     ts: Option<crate::raw::TimestampTz>,
     val: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     unsafe {
         time_weight_trans_inner(state.to_inner(), method, ts, val, fcinfo).internal()
     }
@@ -162,7 +162,7 @@ pub fn time_weight_summary_trans(
     state: Internal,
     next: Option<TimeWeightSummary>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     time_weight_summary_trans_inner(unsafe{ state.to_inner() }, next, fcinfo).internal()
 }
 
@@ -201,7 +201,7 @@ pub fn time_weight_combine(
     state1: Internal,
     state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     unsafe {
         time_weight_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
     }
@@ -496,7 +496,7 @@ mod tests {
             let state = time_weight_trans_inner(state, "linear".to_string(), Some((BASE + 5 * MIN).into()), Some(30.0), ptr::null_mut());
 
             let mut control = state.unwrap();
-            let buffer = time_weight_trans_serialize(Inner::from(control.clone()).internal());
+            let buffer = time_weight_trans_serialize(Inner::from(control.clone()).internal().unwrap());
             let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
 
             let expected = [1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 96, 194, 134, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 36, 64, 0, 3, 164, 152, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 62, 64, 0, 0, 0, 192, 11, 90, 246, 65];

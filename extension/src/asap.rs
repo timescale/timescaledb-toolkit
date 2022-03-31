@@ -39,7 +39,7 @@ pub fn asap_trans(
     val: Option<f64>,
     resolution: i32,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Internal {
+) -> Option<Internal> {
     asap_trans_internal(unsafe{ state.to_inner() }, ts, val, resolution, fcinfo).internal()
 }
 pub fn asap_trans_internal(

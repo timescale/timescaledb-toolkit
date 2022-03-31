@@ -50,7 +50,7 @@ unsafe impl InternalAsValue for Internal {
 /// # Safety
 /// The value input must live as long as postgres expects. TODO more info
 pub unsafe trait ToInternal {
-    fn internal(self) -> Internal;
+    fn internal(self) -> Option<Internal>;
 }
 
 pub struct Inner<T>(pub NonNull<T>);
@@ -70,14 +70,14 @@ impl<T> DerefMut for Inner<T> {
 }
 
 unsafe impl<T> ToInternal for Option<Inner<T>> {
-    fn internal(self) -> Internal {
-        self.map(|p| p.0.as_ptr() as pg_sys::Datum).into()
+    fn internal(self) -> Option<Internal> {
+        self.map(|p| Internal::from(Some(p.0.as_ptr() as pg_sys::Datum)))
     }
 }
 
 unsafe impl<T> ToInternal for Inner<T> {
-    fn internal(self) -> Internal {
-        Some(self.0.as_ptr() as pg_sys::Datum).into()
+    fn internal(self) -> Option<Internal> {
+        Some(Internal::from(Some(self.0.as_ptr() as pg_sys::Datum)))
     }
 }
 
@@ -91,14 +91,14 @@ impl<T> From<T> for Inner<T> {
 
 // TODO these last two should probably be `unsafe`
 unsafe impl<T> ToInternal for *mut T {
-    fn internal(self) -> Internal {
-        Internal::from(Some(self as pg_sys::Datum))
+    fn internal(self) -> Option<Internal> {
+        Some(Internal::from(Some(self as pg_sys::Datum)))
     }
 }
 
 unsafe impl<T> ToInternal for *const T {
-    fn internal(self) -> Internal {
-        Internal::from(Some(self as pg_sys::Datum))
+    fn internal(self) -> Option<Internal> {
+        Some(Internal::from(Some(self as pg_sys::Datum)))
     }
 }
 

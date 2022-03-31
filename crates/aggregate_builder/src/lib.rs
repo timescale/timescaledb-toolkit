@@ -675,7 +675,7 @@ impl AggregateFn {
             pub fn #outer_ident(
                 #input_var: pgx::Internal,
                 #(#arg_signatures,)*
-            ) -> Internal {
+            ) -> Option<Internal> {
                 use crate::palloc::{Inner, InternalAsValue, ToInternal};
                 unsafe {
                     let mut #input_var: Option<Inner<Option<State>>> = #input_var.to_inner();
@@ -863,7 +863,7 @@ impl AggregateFn {
             pub fn #outer_ident(
                 bytes: crate::raw::bytea,
                 _internal: Internal
-            ) -> Internal {
+            ) -> Option<Internal> {
                 use crate::palloc::ToInternal;
                 let #result_var = #ident(bytes);
                 #result_type_check
@@ -926,7 +926,7 @@ impl AggregateFn {
                 #a_name: Internal,
                 #b_name: Internal,
                 __fcinfo: pg_sys::FunctionCallInfo
-            ) -> Internal {
+            ) -> Option<Internal> {
                 use crate::palloc::{Inner, InternalAsValue, ToInternal};
                 unsafe {
                     crate::aggregate_utils::in_aggregate_context(__fcinfo, || {

@@ -8,6 +8,7 @@ extension_sql!("\n\
     name = "create_experimental_schema",
     creates=[
         Type(bytea),
+        Type(text),
         Type(TimestampTz),
         Type(AnyElement),
         Type(tstzrange),
@@ -64,6 +65,11 @@ macro_rules! raw_type {
 pub struct bytea(pub pg_sys::Datum);
 
 raw_type!(bytea, pg_sys::BYTEAOID, pg_sys::BYTEAARRAYOID);
+
+#[derive(Clone, Copy)]
+pub struct text(pub pg_sys::Datum);
+
+raw_type!(text, pg_sys::TEXTOID, pg_sys::TEXTARRAYOID);
 
 pub struct TimestampTz(pub pg_sys::Datum);
 

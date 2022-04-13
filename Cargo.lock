@@ -438,6 +438,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "countminsketch"
+version = "0.1.0"
+dependencies = [
+ "rand 0.8.4",
+ "serde",
+]
+
+[[package]]
 name = "cpufeatures"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2421,6 +2429,7 @@ dependencies = [
  "asap",
  "bincode",
  "counter-agg",
+ "countminsketch",
  "encodings",
  "flat_serialize",
  "flat_serialize_macro",

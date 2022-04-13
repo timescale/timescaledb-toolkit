@@ -576,7 +576,7 @@ pub fn topn_agg_with_skew_text_trans(
     }
 
     // Important: this variable will hold the lifetime of the varlena until we copy it in freq_agg_trans()
-    let text = value.map(|val| pgx::rust_str_to_text_p(val));
+    let text = value.map(pgx::rust_str_to_text_p);
     let value = match text {
         None => None,
         Some(val) => unsafe {AnyElement::from_datum(val.as_ptr() as pg_sys::Datum, false, pg_sys::TEXTOID)}
@@ -623,7 +623,7 @@ pub fn freq_agg_text_trans(
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     // Important: this variable will hold the lifetime of the varlena until we copy it in freq_agg_trans()
-    let text = value.map(|val| pgx::rust_str_to_text_p(val));
+    let text = value.map(pgx::rust_str_to_text_p);
     let value = match text {
         None => None,
         Some(val) => unsafe {AnyElement::from_datum(val.as_ptr() as pg_sys::Datum, false, pg_sys::TEXTOID)}
@@ -977,6 +977,25 @@ pub fn freq_text_iter(
     )
 }
 
+fn validate_topn_for_topn_agg(n: i32, topn: u32, skew: f64, total_vals: u64, counts: impl Iterator<Item = u64>) {
+    if topn == 0 {
+        // Not a topn aggregate
+        return
+    }
+
+    // TODO: should we allow this if we have enough data?
+    if n > topn as i32 {
+        pgx::error!("requested N ({}) exceeds creation parameter of topn aggregate ({})", n , topn)
+    }
+
+    // For topn_aggregates distributions we check that the top 'n' values satisfy the cumulative distribution
+    // for our zeta curve.
+    let needed_count = (zeta_le_n(skew, n as u64) * total_vals as f64).ceil() as u64;
+    if counts.take(n as usize).sum::<u64>() < needed_count {
+        pgx::error!("data is not skewed enough to find top {} parameters with a skew of {}, try reducing the skew factor", n , skew)
+    }
+}
+
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn topn(
     agg: SpaceSavingAggregate<'_>,
@@ -987,27 +1006,14 @@ pub fn topn(
         pgx::error!("mischatched types")
     }
 
-    let f = if agg.topn == 0 {
+    validate_topn_for_topn_agg(n, agg.topn as u32, agg.freq_param, agg.values_seen, agg.counts.iter());
+    let min_freq = if agg.topn == 0 {
         agg.freq_param
     } else {
-        // TODO: should we allow this if we have enough data?
-        if n > agg.topn as i32 {
-            pgx::error!("requested N ({}) exceeds creation parameter of topn aggregate ({})", n , agg.topn)
-        }
-
-        // For topn_aggregates distributions we check that the top 'n' values satisfy the cumulative distribution
-        // for our zeta curve.
-
-        let needed_count = (zeta_le_n(agg.freq_param, n as u64) * agg.values_seen as f64).ceil() as u64;
-        if agg.counts.iter().take(n as usize).sum::<u64>() < needed_count {
-            pgx::error!("data is not skewed enough to find top {} parameters with a skew of {}, try reducing the skew factor", n , agg.freq_param)
-        }
-
-        // If we meet the cumulative distribution use 0 as min_freq, we won't filter based on frequency
         0.
     };
 
-    topn_internal(agg, n, f)
+    topn_internal(agg, n, min_freq)
 }
 
 #[pg_extern(immutable, parallel_safe, name="topn", schema = "toolkit_experimental")]
@@ -1048,27 +1054,14 @@ pub fn topn_bigint(
     agg: SpaceSavingBigIntAggregate<'_>,
     n: i32,
 ) -> impl std::iter::Iterator<Item = i64> + '_ {
-    let f = if agg.topn == 0 {
+    validate_topn_for_topn_agg(n, agg.topn, agg.freq_param, agg.values_seen, agg.counts.iter());
+    let min_freq = if agg.topn == 0 {
         agg.freq_param
     } else {
-        // TODO: should we allow this if we have enough data?
-        if n > agg.topn as i32 {
-            pgx::error!("requested N ({}) exceeds creation parameter of topn aggregate ({})", n , agg.topn)
-        }
-
-        // For topn_aggregates distributions we check that the top 'n' values satisfy the cumulative distribution
-        // for our zeta curve.
-
-        let needed_count = (zeta_le_n(agg.freq_param, n as u64) * agg.values_seen as f64).ceil() as u64;
-        if agg.counts.iter().take(n as usize).sum::<u64>() < needed_count {
-            pgx::error!("data is not skewed enough to find top {} parameters with a skew of {}, try reducing the skew factor", n , agg.freq_param)
-        }
-
-        // If we meet the cumulative distribution use 0 as min_freq, we won't filter based on frequency
         0.
     };
 
-    topn_bigint_internal(agg, n, f)
+    topn_bigint_internal(agg, n, min_freq)
 }
 
 #[pg_extern(immutable, parallel_safe, name="topn", schema = "toolkit_experimental")]
@@ -1107,27 +1100,14 @@ pub fn topn_text(
     agg: SpaceSavingTextAggregate<'_>,
     n: i32,
 ) -> impl std::iter::Iterator<Item = String> + '_ {
-    let f = if agg.topn == 0 {
+    validate_topn_for_topn_agg(n, agg.topn, agg.freq_param, agg.values_seen, agg.counts.iter());
+    let min_freq = if agg.topn == 0 {
         agg.freq_param
     } else {
-        // TODO: should we allow this if we have enough data?
-        if n > agg.topn as i32 {
-            pgx::error!("requested N ({}) exceeds creation parameter of topn aggregate ({})", n , agg.topn)
-        }
-
-        // For topn_aggregates distributions we check that the top 'n' values satisfy the cumulative distribution
-        // for our zeta curve.
-
-        let needed_count = (zeta_le_n(agg.freq_param, n as u64) * agg.values_seen as f64).ceil() as u64;
-        if agg.counts.iter().take(n as usize).sum::<u64>() < needed_count {
-            pgx::error!("data is not skewed enough to find top {} parameters with a skew of {}, try reducing the skew factor", n , agg.freq_param)
-        }
-
-        // If we meet the cumulative distribution use 0 as min_freq, we won't filter based on frequency
         0.
     };
 
-    topn_text_internal(agg, n, f)
+    topn_text_internal(agg, n, min_freq)
 }
 
 #[pg_extern(immutable, parallel_safe, name="topn", schema = "toolkit_experimental")]

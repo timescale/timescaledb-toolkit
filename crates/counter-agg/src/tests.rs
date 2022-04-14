@@ -26,7 +26,7 @@
     #[test]
     fn create() {
         let testpt = TSPoint{ts: 0, val:0.0};
-        let test = CounterSummaryBuilder::new(&testpt, None).build();
+        let test = CounterSummaryBuilder::new(&testpt, I64Range::infinite()).build();
         assert_eq!(test.first, testpt);
         assert_eq!(test.second, testpt);
         assert_eq!(test.penultimate, testpt);
@@ -35,7 +35,7 @@
     }
     #[test]
     fn adding_point() {
-        let mut test = CounterSummaryBuilder::new( &TSPoint{ts: 0, val:0.0}, None);
+        let mut test = CounterSummaryBuilder::new( &TSPoint{ts: 0, val:0.0}, I64Range::infinite());
         let testpt = TSPoint{ts:5, val:10.0};
 
         test.add_point(&testpt).unwrap();
@@ -54,7 +54,7 @@
     #[test]
     fn adding_points_to_counter() {
         let startpt = TSPoint{ts: 0, val:0.0};
-        let mut summary = CounterSummaryBuilder::new( &startpt, None);
+        let mut summary = CounterSummaryBuilder::new( &startpt, I64Range::infinite());
         
         summary.add_point(&TSPoint{ts: 5, val:10.0}).unwrap();
         summary.add_point(&TSPoint{ts: 10, val:20.0}).unwrap();
@@ -80,7 +80,7 @@
     #[test]
     fn adding_out_of_order_counter(){
         let startpt = TSPoint{ts: 0, val:0.0};
-        let mut summary = CounterSummaryBuilder::new( &startpt, None);
+        let mut summary = CounterSummaryBuilder::new( &startpt, I64Range::infinite());
 
         summary.add_point(&TSPoint{ts: 5, val:10.0}).unwrap();
         assert_eq!(CounterError::OrderError, summary.add_point(&TSPoint{ts: 2, val:9.0}).unwrap_err());
@@ -90,7 +90,7 @@
     #[test]
     fn test_counter_delta(){
         let startpt = &TSPoint{ts: 0, val:10.0};
-        let mut summary = CounterSummaryBuilder::new(&startpt, None);
+        let mut summary = CounterSummaryBuilder::new(&startpt, I64Range::infinite());
 
         // with one point
         assert_relative_eq!(summary.clone().build().delta(), 0.0);
@@ -106,7 +106,7 @@
 
     #[test]
     fn test_combine(){
-        let mut summary = CounterSummaryBuilder::new( &TSPoint{ts: 0, val:0.0}, None);
+        let mut summary = CounterSummaryBuilder::new( &TSPoint{ts: 0, val:0.0}, I64Range::infinite());
         summary.add_point(&TSPoint{ts: 5, val:10.0}).unwrap();
         summary.add_point(&TSPoint{ts: 10, val:20.0}).unwrap();
         summary.add_point(&TSPoint{ts: 15, val:30.0}).unwrap();
@@ -115,11 +115,11 @@
         summary.add_point(&TSPoint{ts: 30, val:40.0}).unwrap();
 
 
-        let mut part1 = CounterSummaryBuilder::new(&TSPoint{ts: 0, val:0.0}, None);
+        let mut part1 = CounterSummaryBuilder::new(&TSPoint{ts: 0, val:0.0}, I64Range::infinite());
         part1.add_point(&TSPoint{ts: 5, val:10.0}).unwrap();
         part1.add_point(&TSPoint{ts: 10, val:20.0}).unwrap();
 
-        let mut part2 = CounterSummaryBuilder::new(&TSPoint{ts: 15, val:30.0}, None);
+        let mut part2 = CounterSummaryBuilder::new(&TSPoint{ts: 15, val:30.0}, I64Range::infinite());
         part2.add_point(&TSPoint{ts: 20, val:50.0}).unwrap();
         part2.add_point(&TSPoint{ts: 25, val:10.0}).unwrap();
         part2.add_point(&TSPoint{ts: 30, val:40.0}).unwrap();
@@ -135,13 +135,13 @@
 
     #[test]
     fn test_combine_with_small_summary(){
-        let mut summary = CounterSummaryBuilder::new( &TSPoint{ts: 0, val:50.0}, None);
+        let mut summary = CounterSummaryBuilder::new( &TSPoint{ts: 0, val:50.0}, I64Range::infinite());
         summary.add_point(&TSPoint{ts: 25, val:10.0}).unwrap();
 
 
         // also tests that a reset at the boundary works correctly
-        let part1 = CounterSummaryBuilder::new( &TSPoint{ts: 0, val:50.0}, None);
-        let part2 = CounterSummaryBuilder::new( &TSPoint{ts: 25, val:10.0}, None);
+        let part1 = CounterSummaryBuilder::new( &TSPoint{ts: 0, val:50.0}, I64Range::infinite());
+        let part2 = CounterSummaryBuilder::new( &TSPoint{ts: 25, val:10.0}, I64Range::infinite());
 
         let mut combined = part1.clone();
         combined.combine(&part2.clone().build()).unwrap();
@@ -154,7 +154,7 @@
     #[test]
     fn test_multiple_resets() {
         let startpt = TSPoint{ts: 0, val:0.0};
-        let mut summary = CounterSummaryBuilder::new( &startpt, None);
+        let mut summary = CounterSummaryBuilder::new( &startpt, I64Range::infinite());
         
         summary.add_point(&TSPoint{ts: 5, val:10.0}).unwrap();
         summary.add_point(&TSPoint{ts: 10, val:20.0}).unwrap();
@@ -176,11 +176,11 @@
         // non obvious one here, sy should be the sum of all values including the resets at the time they were added. 
         assert_relative_eq!(summary.stats.sum().unwrap().y, 0.0 + 10.0 + 20.0 + 30.0 + 60.0 + 80.0 + 100.0);
 
-        let mut part1 = CounterSummaryBuilder::new(&TSPoint{ts: 0, val:0.0}, None);
+        let mut part1 = CounterSummaryBuilder::new(&TSPoint{ts: 0, val:0.0}, I64Range::infinite());
         part1.add_point(&TSPoint{ts: 5, val:10.0}).unwrap();
         part1.add_point(&TSPoint{ts: 10, val:20.0}).unwrap();
 
-        let mut part2 = CounterSummaryBuilder::new(&TSPoint{ts: 15, val:10.0}, None);
+        let mut part2 = CounterSummaryBuilder::new(&TSPoint{ts: 15, val:10.0}, I64Range::infinite());
         part2.add_point(&TSPoint{ts: 20, val:40.0}).unwrap();
         part2.add_point(&TSPoint{ts: 25, val:20.0}).unwrap();
         part2.add_point(&TSPoint{ts: 30, val:40.0}).unwrap();
@@ -197,7 +197,7 @@
     #[test]
     fn test_extraction_single_point() {
         let startpt = TSPoint{ts: 20, val:10.0};
-        let summary = CounterSummaryBuilder::new( &startpt, None).build();
+        let summary = CounterSummaryBuilder::new( &startpt, I64Range::infinite()).build();
         assert_relative_eq!(summary.delta(), 0.0);
         assert_eq!(summary.rate(), None);
         assert_relative_eq!(summary.idelta_left(), 0.0);
@@ -210,7 +210,7 @@
 
     #[test]
     fn test_extraction_simple(){
-        let mut summary = CounterSummaryBuilder::new(&TSPoint{ts: 0, val:0.0}, None);
+        let mut summary = CounterSummaryBuilder::new(&TSPoint{ts: 0, val:0.0}, I64Range::infinite());
         summary.add_point(&TSPoint{ts: 5, val:5.0}).unwrap();
         summary.add_point(&TSPoint{ts: 10, val:20.0}).unwrap();
         summary.add_point(&TSPoint{ts: 15, val: 30.0}).unwrap();
@@ -228,7 +228,7 @@
 
     #[test]
     fn test_extraction_with_resets(){
-        let mut summary = CounterSummaryBuilder::new(&TSPoint{ts: 0, val: 10.0}, None);
+        let mut summary = CounterSummaryBuilder::new(&TSPoint{ts: 0, val: 10.0}, I64Range::infinite());
         summary.add_point(&TSPoint{ts: 5, val:5.0}).unwrap();
         summary.add_point(&TSPoint{ts: 10, val:30.0}).unwrap();
         summary.add_point(&TSPoint{ts: 15, val: 15.0}).unwrap();
@@ -246,14 +246,14 @@
 
     #[test]
     fn test_bounds(){
-        let summary = CounterSummaryBuilder::new(&TSPoint{ts: 0, val: 10.0}, None);
+        let summary = CounterSummaryBuilder::new(&TSPoint{ts: 0, val: 10.0}, I64Range::infinite());
         assert!(summary.bounds_valid()); // no bound is fine.
 
-        let summary = CounterSummaryBuilder::new(&TSPoint{ts: 0, val: 10.0}, Some(I64Range{left:Some(5), right:Some(10)}));
+        let summary = CounterSummaryBuilder::new(&TSPoint{ts: 0, val: 10.0}, I64Range::new(Some(5), Some(10)));
         assert!(!summary.bounds_valid()); // wrong bound not
 
         // left bound inclusive
-        let mut summary = CounterSummaryBuilder::new(&TSPoint{ts: 0, val: 10.0}, Some(I64Range{left:Some(0), right:Some(10)}));
+        let mut summary = CounterSummaryBuilder::new(&TSPoint{ts: 0, val: 10.0}, I64Range::new(Some(0), Some(10)));
         assert!(summary.bounds_valid());
         summary.add_point(&TSPoint{ts: 5, val:5.0}).unwrap();
         assert!(summary.bounds_valid());
@@ -264,57 +264,57 @@
         assert!(!summary.bounds_valid());
 
         // slightly weird case here... two invalid bounds can produce a validly bounded object once the bounds are combined, this is a bit weird, but seems like it's the correct behavior
-        let summary2 = CounterSummaryBuilder::new(&TSPoint{ts: 15, val: 10.0}, Some(I64Range{left:Some(20), right:Some(30)}));
+        let summary2 = CounterSummaryBuilder::new(&TSPoint{ts: 15, val: 10.0}, I64Range::new(Some(20), Some(30)));
         summary.combine(&summary2.build()).unwrap();
         assert!(summary.bounds_valid());
-        assert_eq!(summary.clone().build().bounds.unwrap(), I64Range{left:Some(0), right:Some(30)});
+        assert_eq!(summary.clone().build().bounds, I64Range::new(Some(0), Some(30)));
 
         // two of the same valid bounds remain the same and valid
-        let summary2 = CounterSummaryBuilder::new(&TSPoint{ts: 20, val: 10.0}, Some(I64Range{left:Some(0), right:Some(30)}));
+        let summary2 = CounterSummaryBuilder::new(&TSPoint{ts: 20, val: 10.0}, I64Range::new(Some(0), Some(30)));
         summary.combine(&summary2.build()).unwrap();
         assert!(summary.bounds_valid());
-        assert_eq!(summary.clone().build().bounds.unwrap(), I64Range{left:Some(0), right:Some(30)});
+        assert_eq!(summary.clone().build().bounds, I64Range::new(Some(0), Some(30)));
 
         // combining with unbounded ones is fine, but the bounds survive
-        let summary2 = CounterSummaryBuilder::new(&TSPoint{ts: 25, val: 10.0}, None);
+        let summary2 = CounterSummaryBuilder::new(&TSPoint{ts: 25, val: 10.0}, I64Range::infinite());
         summary.combine(&summary2.build()).unwrap();
         assert!(summary.bounds_valid());
-        assert_eq!(summary.clone().build().bounds.unwrap(), I64Range{left:Some(0), right:Some(30)});
+        assert_eq!(summary.clone().build().bounds, I64Range::new(Some(0), Some(30)));
 
         // and combining bounds that do not span are still invalid
-        let summary2 = CounterSummaryBuilder::new(&TSPoint{ts: 35, val: 10.0}, Some(I64Range{left:Some(0), right:Some(32)}));
+        let summary2 = CounterSummaryBuilder::new(&TSPoint{ts: 35, val: 10.0}, I64Range::new(Some(0), Some(32)));
         summary.combine(&summary2.build()).unwrap();
         assert!(!summary.bounds_valid());
-        assert_eq!(summary.build().bounds.unwrap(), I64Range{left:Some(0), right:Some(32)});
+        assert_eq!(summary.build().bounds, I64Range::new(Some(0), Some(32)));
 
         // combining unbounded with bounded ones is fine, but the bounds survive
-        let mut summary = CounterSummaryBuilder::new(&TSPoint{ts: 0, val: 10.0}, None);
-        let summary2 = CounterSummaryBuilder::new(&TSPoint{ts: 25, val: 10.0}, Some(I64Range{left:Some(0), right:Some(30)}));
+        let mut summary = CounterSummaryBuilder::new(&TSPoint{ts: 0, val: 10.0}, I64Range::infinite());
+        let summary2 = CounterSummaryBuilder::new(&TSPoint{ts: 25, val: 10.0}, I64Range::new(Some(0), Some(30)));
         summary.combine(&summary2.build()).unwrap();
         assert!(summary.bounds_valid());
-        assert_eq!(summary.build().bounds.unwrap(), I64Range{left:Some(0), right:Some(30)});
+        assert_eq!(summary.build().bounds, I64Range::new(Some(0), Some(30)));
     }
 
     #[test]
     fn test_prometheus_extrapolation_simple(){
         //error on lack of bounds provided
-        let summary = CounterSummaryBuilder::new(&TSPoint{ts: 5000, val:15.0}, None);
+        let summary = CounterSummaryBuilder::new(&TSPoint{ts: 5000, val:15.0}, I64Range::infinite());
         let summary = summary.build();
         assert_eq!(summary.prometheus_delta().unwrap_err(), CounterError::BoundsInvalid);
         assert_eq!(summary.prometheus_rate().unwrap_err(), CounterError::BoundsInvalid);
 
         //error on infinite bounds
-        let summary = CounterSummaryBuilder::new(&TSPoint{ts: 5000, val:15.0}, Some(I64Range{left:None, right:Some(21000)})).build();
+        let summary = CounterSummaryBuilder::new(&TSPoint{ts: 5000, val:15.0}, I64Range::new(None, Some(21000))).build();
         assert_eq!(summary.prometheus_delta().unwrap_err(), CounterError::BoundsInvalid);
         assert_eq!(summary.prometheus_rate().unwrap_err(), CounterError::BoundsInvalid);
 
         //ranges less than 1ms are treated as zero by Prom
-        let mut summary = CounterSummaryBuilder::new(&TSPoint{ts: 300, val:15.0}, Some(I64Range{left:Some(0), right:Some(900)}));
+        let mut summary = CounterSummaryBuilder::new(&TSPoint{ts: 300, val:15.0}, I64Range::new(Some(0), Some(900)));
         summary.add_point(&TSPoint{ts: 600, val:20.0}).unwrap();
         assert_eq!(summary.build().prometheus_rate().unwrap(), None);
 
         //ranges should go out an extra 1000 so that we account for the extra duration that prom subtracts (1 ms)
-        let mut summary = CounterSummaryBuilder::new(&TSPoint{ts: 5000, val:15.0}, Some(I64Range{left:Some(0), right:Some(21000)}));
+        let mut summary = CounterSummaryBuilder::new(&TSPoint{ts: 5000, val:15.0}, I64Range::new(Some(0), Some(21000)));
         // singletons should return none
         assert_eq!(summary.clone().build().prometheus_delta().unwrap(), None);
         assert_eq!(summary.clone().build().prometheus_rate().unwrap(), None);
@@ -323,7 +323,7 @@
         summary.add_point(&TSPoint{ts: 10000, val:20.0}).unwrap();
 
         //ranges should go out an extra 1000 so that we account for the extra duration that prom subtracts (1 ms)
-        let mut summary = CounterSummaryBuilder::new(&TSPoint{ts: 5000, val:15.0}, Some(I64Range{left:Some(0), right:Some(21000)}));
+        let mut summary = CounterSummaryBuilder::new(&TSPoint{ts: 5000, val:15.0}, I64Range::new(Some(0), Some(21000)));
         // singletons should return none
         assert_eq!(summary.clone().build().prometheus_delta().unwrap(), None);
         assert_eq!(summary.clone().build().prometheus_rate().unwrap(), None);
@@ -349,7 +349,7 @@
 
     #[test]
     fn test_prometheus_extrapolation_bound_size(){
-        let mut summary = CounterSummaryBuilder::new(&TSPoint{ts: 20000, val:40.0}, Some(I64Range{left:Some(10000), right:Some(51000)}));
+        let mut summary = CounterSummaryBuilder::new(&TSPoint{ts: 20000, val:40.0}, I64Range::new(Some(10000), Some(51000)));
         summary.add_point(&TSPoint{ts: 30000, val:20.0}).unwrap();
         summary.add_point(&TSPoint{ts: 40000, val: 40.0}).unwrap();
         let summary = summary.build();
@@ -362,7 +362,7 @@
 
         // now lets push the bounds to be a bit bigger
         let mut summary = CounterSummaryBuilder::from(summary);
-        summary.set_bounds(Some(I64Range{left:Some(8000), right:Some(53000)}));
+        summary.set_bounds(I64Range::new(Some(8000), Some(53000)));
         // now because we're further than 1.1 out on each side, we end projecting out to half the avg distance on each side
         assert_relative_eq!(summary.clone().build().prometheus_delta().unwrap().unwrap(), 60.0);
         // but the rate is still divided by the full bound duration
@@ -371,7 +371,7 @@
         //this should all be the same as the last one in the first part. 
         // The change occurs because we hit the zero boundary condition 
         // so things change on the second bit because of where resets occur and our starting value
-        let mut summary = CounterSummaryBuilder::new(&TSPoint{ts: 20000, val:20.0}, Some(I64Range{left:Some(10000), right:Some(51000)}));
+        let mut summary = CounterSummaryBuilder::new(&TSPoint{ts: 20000, val:20.0}, I64Range::new(Some(10000), Some(51000)));
         summary.add_point(&TSPoint{ts: 30000, val:40.0}).unwrap();
         summary.add_point(&TSPoint{ts: 40000, val: 20.0}).unwrap();
         let summary = summary.build();
@@ -384,7 +384,7 @@
 
         // now lets push the bounds to be a bit bigger
         let mut summary = CounterSummaryBuilder::from(summary);
-        summary.set_bounds(Some(I64Range{left:Some(8000), right:Some(53000)}));
+        summary.set_bounds(I64Range::new(Some(8000), Some(53000)));
         let summary = summary.build();
         // now because we're further than 1.1 out on the right side, 
         // we end projecting out to half the avg distance on that side, 
@@ -404,12 +404,9 @@ mod bounds_extend {
     // TODO A method called "extend" shouldn't narrow.
     #[test]
     fn on_unbounded_narrows_to_input() {
-        let input = Some(I64Range {
-            left: Some(11),
-            right: Some(12),
-        });
+        let input = I64Range::new(Some(11), Some(12));
         let expected = input.clone();
-        let mut summary = MetricSummary::new(&POINT, None);
+        let mut summary = MetricSummary::new(&POINT, I64Range::infinite());
         summary.bounds_extend(input);
         assert_eq!(&expected, &summary.bounds);
     }
@@ -420,93 +417,35 @@ mod bounds_extend {
     //  - If for some reason it shouldn't, shouldn't it error, not silently ignore?
     #[test]
     fn on_bounded_with_input_unbounded_ignores_input() {
-        let input = None;
-        let expected = Some(I64Range {
-            left: Some(11),
-            right: Some(12),
-        });
+        let input = I64Range::infinite();
+        let expected = I64Range::new(Some(11), Some(12));
         let mut summary = MetricSummary::new(&POINT, expected.clone());
         summary.bounds_extend(input);
         assert_eq!(&expected, &summary.bounds);
 
         // But extending to unbounded one side at a time DOES work
         // (bounds:None is handled the same as bounds:I64Range{left:None,right:None}).
-        let expected = Some(I64Range {
-            left: None,
-            right: None,
-        });
-        let mut summary = MetricSummary::new(
-            &POINT,
-            Some(I64Range {
-                left: Some(11),
-                right: Some(12),
-            }),
-        );
-        summary.bounds_extend(Some(I64Range {
-            left: None,
-            right: Some(0),
-        }));
-        summary.bounds_extend(Some(I64Range {
-            left: Some(0),
-            right: None,
-        }));
-        assert_eq!(&expected, &summary.bounds);
-
-        // As does extending with Some(unbounded_range).
-        let input = Some(I64Range {
-            left: None,
-            right: None,
-        });
-        let expected = input.clone();
-        let mut summary = MetricSummary::new(
-            &POINT,
-            Some(I64Range {
-                left: Some(11),
-                right: Some(12),
-            }),
-        );
-        summary.bounds_extend(input);
+        let expected = I64Range::new(None, None);
+        let mut summary = MetricSummary::new(&POINT, I64Range::new(Some(11), Some(12)));
+        summary.bounds_extend(I64Range::new(None, Some(0)));
+        summary.bounds_extend(I64Range::new(Some(0), None));
         assert_eq!(&expected, &summary.bounds);
     }
 
     #[test]
     fn on_bounded_with_input_unbounded_on_right_extends_right() {
-        let input = Some(I64Range {
-            left: Some(12),
-            right: None,
-        });
-        let expected = Some(I64Range {
-            left: Some(11),
-            right: None,
-        });
-        let mut summary = MetricSummary::new(
-            &POINT,
-            Some(I64Range {
-                left: Some(11),
-                right: Some(15),
-            }),
-        );
+        let input = I64Range::new(Some(12), None);
+        let expected = I64Range::new(Some(11), None);
+        let mut summary = MetricSummary::new(&POINT, I64Range::new(Some(11), Some(15)));
         summary.bounds_extend(input);
         assert_eq!(&expected, &summary.bounds);
     }
 
     #[test]
     fn on_bounded_with_input_unbounded_on_left_extends_left() {
-        let input = Some(I64Range {
-            left: None,
-            right: Some(14),
-        });
-        let expected = Some(I64Range {
-            left: None,
-            right: Some(15),
-        });
-        let mut summary = MetricSummary::new(
-            &POINT,
-            Some(I64Range {
-                left: Some(11),
-                right: Some(15),
-            }),
-        );
+        let input = I64Range::new(None, Some(14));
+        let expected = I64Range::new(None, Some(15));
+        let mut summary = MetricSummary::new(&POINT, I64Range::new(Some(11), Some(15)));
         summary.bounds_extend(input);
         assert_eq!(&expected, &summary.bounds);
     }

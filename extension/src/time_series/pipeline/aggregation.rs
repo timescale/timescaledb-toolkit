@@ -478,7 +478,7 @@ pub fn arrow_run_pipeline_then_counter_agg(
         return None
     }
     let mut it = timevector.iter();
-    let mut summary = CounterSummaryBuilder::new(&it.next().unwrap(), None);
+    let mut summary = CounterSummaryBuilder::new(&it.next().unwrap(), counter_agg::range::I64Range::infinite());
     for point in it {
         summary.add_point(&point).expect("error while running counter_agg");
     }

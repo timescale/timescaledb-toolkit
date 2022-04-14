@@ -6,37 +6,75 @@ use serde::{Deserialize, Serialize};
 // we are a discrete type so translating is simple [), this enforces equality
 // between ranges like [0, 10) and [0, 9]
 // None values denote infinite bounds on that side
-#[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[repr(C)]
 pub struct I64Range {
-    pub left: Option<i64>,
-    pub right: Option<i64>
+    left: Option<i64>,
+    right: Option<i64>
 }
 
-
 impl I64Range {
-    pub fn has_infinite(&self)-> bool{
-        self.left.is_none() || self.right.is_none()
+    /// Panics if `left` > `right`.
+    pub fn new(left: Option<i64>, right: Option<i64>) -> Self {
+        let range = Self { left, right };
+        assert!(range.is_valid());
+        range
     }
 
-    // TODO See TODO below about range validity.  Right now we don't care
-    //  much.  If we start to care, move the caring to `new` and `extend`
-    //  methods.  That will allow this crate to protect the integrity of
-    //  MetricSummary and I64Range in the face of the extension needing to be
-    //  able to construct them from raw (and therefore potentially
-    //  corrupt) inputs.
+    pub fn infinite() -> Self {
+        Self {
+            left: None,
+            right: None,
+        }
+    }
+
+    /// Return `Some([left]))` when it is finite, else `None`.
+    #[inline]
+    pub fn left(&self) -> Option<i64> {
+        self.left
+    }
+
+    /// Return `Some([right]))` when it is finite, else `None`.
+    #[inline]
+    pub fn right(&self) -> Option<i64> {
+        self.right
+    }
+
+    /// Return `Some(([left], [right]))` when both are finite, else `None`.
+    pub fn both(&self) -> Option<(i64, i64)> {
+        match (self.left, self.right) {
+            (Some(left), Some(right)) => Some((left, right)),
+            _ => None,
+        }
+    }
+
+    pub fn is_infinite_either(&self) -> bool {
+        self.is_infinite_left() || self.is_infinite_right()
+    }
+
+    pub fn is_infinite(&self) -> bool {
+        self.is_infinite_left() && self.is_infinite_right()
+    }
+
+    pub fn is_infinite_left(&self) -> bool {
+        self.left.is_none()
+    }
+
+    pub fn is_infinite_right(&self) -> bool {
+        self.right.is_none()
+    }
+
+    // TODO See TODO below about range validity.
     fn is_valid(&self) -> bool {
-        match (self.left, self.right) {
-            (Some(a), Some(b)) => a <= b, 
-            _ => true,
-        }
+        self.both()
+            .map(|(left, right)| left <= right)
+            .unwrap_or(true)
     }
 
-    pub fn is_singleton(&self) -> bool{
-        match (self.left, self.right) {
-            (Some(a), Some(b)) => a == b, 
-            _ => false,
-        }
+    pub fn is_singleton(&self) -> bool {
+        self.both()
+            .map(|(left, right)| left == right)
+            .unwrap_or(false)
     }
 
     pub fn extend(&mut self, other: &Self) {
@@ -61,15 +99,11 @@ impl I64Range {
             (None, None) => true,
         }
     }
-    
-    // pub fn contains(&self, other: I64Range) -> bool{
-    //     unimplemented!()
-    // }
-    pub fn duration(&self) -> Option<i64> {
-        if self.has_infinite() || !self.is_valid() {
-            return None
-        }
-        Some(self.right.unwrap() - self.left.unwrap())
+
+    /// Panics if either `left` or `right` is infinite.
+    pub fn duration(&self) -> i64 {
+        let (left, right) = self.both().expect("infinite duration");
+        right - left
     }
 }
 
@@ -131,7 +165,6 @@ mod tests {
         let normal = I64Range{left:Some(2), right:Some(9)};
         weird.extend(&normal);
         assert_eq!(weird, I64Range{left:Some(-6), right:Some(9)});
-
     }
 
     #[test]
@@ -163,21 +196,33 @@ mod tests {
     #[test]
     fn test_duration(){
         let a = I64Range{left:Some(3), right:Some(7)};
-        assert_eq!(a.duration().unwrap(), 4);
+        assert_eq!(a.duration(), 4);
         let a = I64Range{left:Some(-3), right:Some(7)};
-        assert_eq!(a.duration().unwrap(), 10);
-        let a = I64Range{left:None, right:Some(7)};
-        assert_eq!(a.duration(), None);
-        let a = I64Range{left:Some(3), right:None};
-        assert_eq!(a.duration(), None);
-        //invalid ranges return None durations as well
-        let a = I64Range{left:Some(3), right:Some(0)};
-        assert_eq!(a.duration(), None);
+        assert_eq!(a.duration(), 10);
     }
 
     #[test]
-    fn test_checks(){
+    #[should_panic(expected = "infinite duration")]
+    fn duration_infinite_left() {
+        I64Range{left:None, right:Some(7)}
+        .duration();
+    }
 
+    #[test]
+    #[should_panic(expected = "infinite duration")]
+    fn duration_infinite_right() {
+        I64Range{left:Some(-1), right:None}
+        .duration();
+    }
+
+    #[test]
+    #[should_panic(expected = "infinite duration")]
+    fn duration_infinite_both() {
+        I64Range::infinite().duration();
+    }
+
+    #[test]
+    fn test_checks() {
         let a = I64Range{left:Some(2), right:Some(5)};
         assert!(a.is_valid());
         assert!(!a.is_singleton());
@@ -190,7 +235,7 @@ mod tests {
         let a = I64Range{left:Some(2), right:Some(2)};
         assert!(a.is_valid());
         assert!(a.is_singleton());
-        assert_eq!(a.duration().unwrap(), 0);
+        assert_eq!(a.duration(), 0);
         let a = I64Range{left:Some(0), right:Some(-10)};
         assert!(!a.is_valid());
         assert!(!a.is_singleton());
@@ -209,6 +254,11 @@ mod tests {
     fn exclude_i64_max() {
         let range = I64Range { left: Some(i64::MIN), right: Some(i64::MAX) };
         assert!(range.contains(i64::MIN));
+        // TODO If we don't need to exclude i64::MAX, we can simplify even
+        //  further and make right non-Option (left already doesn't need to be
+        //  Option as None and Some(i64::MIN) are handled the same way.
+        //  How important is it that we draw the line at
+        //  9,223,372,036,854,775,807 rather than 9,223,372,036,854,775,806?
         assert!(!range.contains(i64::MAX));
     }
 }

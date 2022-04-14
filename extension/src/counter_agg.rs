@@ -21,6 +21,7 @@ use counter_agg::{
     MetricSummary,
     CounterSummaryBuilder,
     range::I64Range,
+    stable,
 };
 use stats_agg::stats2d::StatsSummary2D;
 
@@ -100,7 +101,7 @@ pub struct CounterSummaryTransState {
     // We have a summary buffer here in order to deal with the fact that when the cmobine function gets called it
     // must first build up a buffer of InternalMetricSummaries, then sort them, then call the combine function in
     // the correct order.
-    summary_buffer: Vec<MetricSummary>,
+    summary_buffer: Vec<stable::MetricSummary>,
 }
 
 impl CounterSummaryTransState {
@@ -126,7 +127,10 @@ impl CounterSummaryTransState {
         }
         self.point_buffer.sort_unstable_by_key(|p| p.ts);
         let mut iter = self.point_buffer.iter();
-        let mut summary = CounterSummaryBuilder::new( iter.next().unwrap(), self.bounds);
+        let mut summary = CounterSummaryBuilder::new(
+            iter.next().unwrap(),
+            self.bounds.clone().unwrap_or_else(I64Range::infinite),
+        );
         for p in iter {
             summary.add_point(p).unwrap_or_else(|e| pgx::error!("{}", e));
         }
@@ -136,7 +140,7 @@ impl CounterSummaryTransState {
         if !summary.bounds_valid() {
             panic!("counter bounds invalid")
         }
-        self.summary_buffer.push(summary.build());
+        self.summary_buffer.push(summary.build().into());
     }
 
     fn push_summary(&mut self, other: &CounterSummaryTransState) {
@@ -150,16 +154,19 @@ impl CounterSummaryTransState {
         self.combine_points();
 
         if self.summary_buffer.len() <= 1 {
-            return
+            return;
         }
         // TODO move much of this method to crate?
         self.summary_buffer.sort_unstable_by_key(|s| s.first.ts);
-        let mut sum_iter = self.summary_buffer.iter();
-        let mut new_summary = CounterSummaryBuilder::from(sum_iter.next().unwrap().clone());
+        let mut sum_iter = self.summary_buffer.drain(..);
+        let first = sum_iter.next().expect("already handled empty case");
+        let mut new_summary = CounterSummaryBuilder::from(MetricSummary::from(first));
         for sum in sum_iter {
-            new_summary.combine(sum).unwrap_or_else(|e| pgx::error!("{}", e));
+            new_summary
+                .combine(&sum.into())
+                .unwrap_or_else(|e| pgx::error!("{}", e));
         }
-        self.summary_buffer = vec![new_summary.build()];
+        self.summary_buffer.push(new_summary.build().into());
     }
 }
 
@@ -255,11 +262,11 @@ pub fn counter_agg_summary_trans_inner(
                 (state, None) => state,
                 (None, Some(value)) => {
                     let mut state = CounterSummaryTransState::new();
-                    state.summary_buffer.push(value.to_internal_counter_summary());
+                    state.summary_buffer.push(stable::MetricSummary::from(value.to_internal_counter_summary()));
                     Some(state.into())
                 }
                 (Some(mut state), Some(value)) => {
-                    state.summary_buffer.push(value.to_internal_counter_summary());
+                    state.summary_buffer.push(stable::MetricSummary::from(value.to_internal_counter_summary()));
                     Some(state)
                 }
             }
@@ -323,6 +330,7 @@ fn counter_agg_final_inner(
             match state.summary_buffer.pop() {
                 None => None,
                 Some(st) => {
+                    let st = MetricSummary::from(st);
                     // there are some edge cases that this should prevent, but I'm not sure it's necessary, we do check the bounds in the functions that use them.
                     if !st.bounds_valid() {
                         panic!("counter bounds invalid")
@@ -530,7 +538,7 @@ fn counter_agg_with_bounds(
     unsafe{
         let ptr = bounds.0 as *mut pg_sys::varlena;
         let mut builder = CounterSummaryBuilder::from(summary.to_internal_counter_summary());
-        builder.set_bounds(get_range(ptr));
+        builder.set_bounds(get_range(ptr).unwrap_or_else(I64Range::infinite));
         CounterSummary::from_internal_counter_summary(builder.build())
     }
 }

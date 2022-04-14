@@ -394,3 +394,120 @@
         // but the rate is still divided by the full bound duration
         assert_relative_eq!(summary.prometheus_rate().unwrap().unwrap(), to_micro(70.0 / 44000.0));
     }
+
+// TODO But don't move these
+mod bounds_extend {
+    use super::*;
+
+    const POINT: TSPoint = TSPoint { ts: 0, val: 0.0 };
+
+    // TODO A method called "extend" shouldn't narrow.
+    #[test]
+    fn on_unbounded_narrows_to_input() {
+        let input = Some(I64Range {
+            left: Some(11),
+            right: Some(12),
+        });
+        let expected = input.clone();
+        let mut summary = MetricSummary::new(&POINT, None);
+        summary.bounds_extend(input);
+        assert_eq!(&expected, &summary.bounds);
+    }
+
+    // TODO Should a method called "extend" ignore any inputs?
+    //  - Why is `summary.bounds_extend(unbounded)` not the same as
+    //    `summary.bounds_extend(unbounded_left); summary.bounds_extend(unbounded_right)`?
+    //  - If for some reason it shouldn't, shouldn't it error, not silently ignore?
+    #[test]
+    fn on_bounded_with_input_unbounded_ignores_input() {
+        let input = None;
+        let expected = Some(I64Range {
+            left: Some(11),
+            right: Some(12),
+        });
+        let mut summary = MetricSummary::new(&POINT, expected.clone());
+        summary.bounds_extend(input);
+        assert_eq!(&expected, &summary.bounds);
+
+        // But extending to unbounded one side at a time DOES work
+        // (bounds:None is handled the same as bounds:I64Range{left:None,right:None}).
+        let expected = Some(I64Range {
+            left: None,
+            right: None,
+        });
+        let mut summary = MetricSummary::new(
+            &POINT,
+            Some(I64Range {
+                left: Some(11),
+                right: Some(12),
+            }),
+        );
+        summary.bounds_extend(Some(I64Range {
+            left: None,
+            right: Some(0),
+        }));
+        summary.bounds_extend(Some(I64Range {
+            left: Some(0),
+            right: None,
+        }));
+        assert_eq!(&expected, &summary.bounds);
+
+        // As does extending with Some(unbounded_range).
+        let input = Some(I64Range {
+            left: None,
+            right: None,
+        });
+        let expected = input.clone();
+        let mut summary = MetricSummary::new(
+            &POINT,
+            Some(I64Range {
+                left: Some(11),
+                right: Some(12),
+            }),
+        );
+        summary.bounds_extend(input);
+        assert_eq!(&expected, &summary.bounds);
+    }
+
+    #[test]
+    fn on_bounded_with_input_unbounded_on_right_extends_right() {
+        let input = Some(I64Range {
+            left: Some(12),
+            right: None,
+        });
+        let expected = Some(I64Range {
+            left: Some(11),
+            right: None,
+        });
+        let mut summary = MetricSummary::new(
+            &POINT,
+            Some(I64Range {
+                left: Some(11),
+                right: Some(15),
+            }),
+        );
+        summary.bounds_extend(input);
+        assert_eq!(&expected, &summary.bounds);
+    }
+
+    #[test]
+    fn on_bounded_with_input_unbounded_on_left_extends_left() {
+        let input = Some(I64Range {
+            left: None,
+            right: Some(14),
+        });
+        let expected = Some(I64Range {
+            left: None,
+            right: Some(15),
+        });
+        let mut summary = MetricSummary::new(
+            &POINT,
+            Some(I64Range {
+                left: Some(11),
+                right: Some(15),
+            }),
+        );
+        summary.bounds_extend(input);
+        assert_eq!(&expected, &summary.bounds);
+    }
+}

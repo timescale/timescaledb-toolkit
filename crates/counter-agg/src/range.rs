@@ -195,4 +195,20 @@ mod tests {
         assert!(!a.is_valid());
         assert!(!a.is_singleton());
     }
+
+    #[test]
+    fn infinite() {
+        let range = I64Range { left: None, right: None };
+        assert!(range.contains(i64::MIN));
+        assert!(range.contains(i64::MIN + 1));
+        assert!(range.contains(i64::MAX));
+        assert!(range.contains(i64::MAX - 1));
+    }
+
+    #[test]
+    fn exclude_i64_max() {
+        let range = I64Range { left: Some(i64::MIN), right: Some(i64::MAX) };
+        assert!(range.contains(i64::MIN));
+        assert!(!range.contains(i64::MAX));
+    }
 }

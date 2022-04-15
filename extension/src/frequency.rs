@@ -204,6 +204,13 @@ impl SpaceSavingTransState {
     }
 
     fn topn_agg_from_type_id(skew: f64, nval: u32, typ: pg_sys::Oid, collation: Option<Oid>) -> Self {
+        if nval <= 0 {
+            pgx::error!("topn aggregate requires an n value > 0")
+        }
+        if skew <= 1.0 {
+            pgx::error!("topn aggregate requires a skew factor > 1.0")
+        }
+
         let prob_eq_n = zeta_eq_n(skew, nval as u64);
         let prob_lt_n = zeta_le_n(skew, nval as u64 - 1);
 
@@ -525,13 +532,6 @@ pub fn topn_agg_with_skew_trans(
     value: Option<AnyElement>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    if n <= 0 {
-        pgx::error!("topn aggregate requires an n value > 0")
-    }
-    if skew <= 1.0 {
-        pgx::error!("topn aggregate requires a skew factor > 1.0")
-    }
-
     space_saving_trans(unsafe{ state.to_inner() }, value, fcinfo, |typ, collation|
         {SpaceSavingTransState::topn_agg_from_type_id(skew, n as u32, typ, collation)}).internal()
 }
@@ -544,13 +544,6 @@ pub fn topn_agg_with_skew_bigint_trans(
     value: Option<i64>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    if n <= 0 {
-        pgx::error!("topn aggregate requires an n value > 0")
-    }
-    if skew <= 1.0 {
-        pgx::error!("topn aggregate requires a skew factor > 1.0")
-    }
-
     let value = match value {
         None => None,
         Some(val) => unsafe {AnyElement::from_datum(val as pg_sys::Datum, false, pg_sys::INT8OID)}
@@ -568,13 +561,6 @@ pub fn topn_agg_with_skew_text_trans(
     value: Option<&str>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    if n <= 0 {
-        pgx::error!("topn aggregate requires an n value > 0")
-    }
-    if skew <= 1.0 {
-        pgx::error!("topn aggregate requires a skew factor > 1.0")
-    }
-
     // Important: this variable will hold the lifetime of the varlena until we copy it in freq_agg_trans()
     let text = value.map(pgx::rust_str_to_text_p);
     let value = match text {

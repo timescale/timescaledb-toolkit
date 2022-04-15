@@ -380,16 +380,7 @@ pub mod toolkit_experimental {
 
     impl<'input> From<&SpaceSavingTransState> for SpaceSavingAggregate<'input> {
         fn from(trans: &SpaceSavingTransState) -> Self {
-            let mut values = Vec::new();
-            let mut counts = Vec::new();
-            let mut overcounts = Vec::new();
-
-            for entry in &trans.entries {
-                values.push(entry.value);
-                counts.push(entry.count);
-                overcounts.push(entry.overcount);
-            }
-
+            let entries = SpaceSavingEntries::from(&trans.entries[..]);
             build! {
                 SpaceSavingAggregate {
                     type_oid: trans.type_oid() as _,
@@ -397,9 +388,9 @@ pub mod toolkit_experimental {
                     values_seen: trans.total_vals,
                     freq_param: trans.freq_param,
                     topn: trans.topn as u64,
-                    counts: counts.into(),
-                    overcounts: overcounts.into(),
-                    datums: DatumStore::from((trans.type_oid(), values)),
+                    counts: entries.counts.into(),
+                    overcounts: entries.overcounts.into(),
+                    datums: DatumStore::from((trans.type_oid(), entries.values)),
                 }
             }
         }
@@ -423,26 +414,16 @@ pub mod toolkit_experimental {
     impl<'input> From<&SpaceSavingTransState> for SpaceSavingBigIntAggregate<'input> {
         fn from(trans: &SpaceSavingTransState) -> Self {
             assert_eq!(trans.type_oid(), pg_sys::INT8OID);
-
-            let mut values = Vec::new();
-            let mut counts = Vec::new();
-            let mut overcounts = Vec::new();
-
-            for entry in &trans.entries {
-                values.push(entry.value as i64);
-                counts.push(entry.count);
-                overcounts.push(entry.overcount);
-            }
-
+            let entries = SpaceSavingEntries::from(&trans.entries[..]);
             build! {
                 SpaceSavingBigIntAggregate {
                     num_values: trans.entries.len() as _,
                     values_seen: trans.total_vals,
                     freq_param: trans.freq_param,
                     topn: trans.topn,
-                    counts: counts.into(),
-                    overcounts: overcounts.into(),
-                    datums: values.into(),
+                    counts: entries.counts.into(),
+                    overcounts: entries.overcounts.into(),
+                    datums: entries.values.iter().map(|datum| *datum as i64).collect::<Vec<_>>().into(),
                 }
             }
         }
@@ -466,26 +447,16 @@ pub mod toolkit_experimental {
     impl<'input> From<&SpaceSavingTransState> for SpaceSavingTextAggregate<'input> {
         fn from(trans: &SpaceSavingTransState) -> Self {
             assert_eq!(trans.type_oid(), pg_sys::TEXTOID);
-
-            let mut values = Vec::new();
-            let mut counts = Vec::new();
-            let mut overcounts = Vec::new();
-
-            for entry in &trans.entries {
-                values.push(entry.value);
-                counts.push(entry.count);
-                overcounts.push(entry.overcount);
-            }
-
+            let entries = SpaceSavingEntries::from(&trans.entries[..]);
             build! {
                 SpaceSavingTextAggregate {
                     num_values: trans.entries.len() as _,
                     values_seen: trans.total_vals,
                     freq_param: trans.freq_param,
                     topn: trans.topn,
-                    counts: counts.into(),
-                    overcounts: overcounts.into(),
-                    datums: DatumStore::from((trans.type_oid(), values)),
+                    counts: entries.counts.into(),
+                    overcounts: entries.overcounts.into(),
+                    datums: DatumStore::from((trans.type_oid(), entries.values)),
                 }
             }
         }
@@ -1213,6 +1184,25 @@ pub fn min_text_frequency(
         }
     }
     0.
+}
+
+#[derive(Default)]
+struct SpaceSavingEntries {
+    values: Vec<Datum>,
+    counts: Vec<u64>,
+    overcounts: Vec<u64>,
+}
+
+impl From<&[SpaceSavingEntry]> for SpaceSavingEntries {
+    fn from(from: &[SpaceSavingEntry]) -> Self {
+        let mut to = SpaceSavingEntries::default();
+        for entry in from {
+            to.values.push(entry.value);
+            to.counts.push(entry.count);
+            to.overcounts.push(entry.overcount);
+        }
+        to
+    }
 }
 
 #[cfg(any(test, feature = "pg_test"))]

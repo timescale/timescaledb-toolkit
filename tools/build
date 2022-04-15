@@ -19,20 +19,23 @@ usage() {
     die 'build [ -n -pg1[234] ] ( test-crates | test-extension | test-post-install | test-doc | clippy )'
 }
 
-require_pgversion() {
-    [ -n "$pgversion" ] || die 'specify one of -pg12 | -pg13 | -pg14'
+require_pg_version() {
+    [ -n "$pg_version" ] || die 'specify one of -pg12 | -pg13 | -pg14'
 }
 
-find_pgconfig() {
-    require_pgversion
-    full_version=$(
-        cd "$HOME/.pgx"
-        set -- $pgversion.*/pgx-install
-        [ "$1" = "$pgversion.*/pgx-install" ] && die "$pgversion not installed in $HOME/.pgx"
-        set -- $(dirname $*)
-        [ $# -eq 1 ] || die "too many installations for $pgversion, found: $*"
-        echo $1)
-    pg_config="$HOME/.pgx/$full_version/pgx-install/bin/pg_config"
+find_pg_config() {
+    if [ -z "$pg_config" ]; then
+        require_pg_version
+        full_version=$(
+            cd "$HOME/.pgx"
+            set -- $pg_version.*/pgx-install
+            [ "$1" = "$pg_version.*/pgx-install" ] && die "$pg_version not installed in $HOME/.pgx"
+            set -- $(dirname $*)
+            [ $# -eq 1 ] || die "too many installations for $pg_version, found: $*"
+            echo $1)
+        pg_config="$HOME/.pgx/$full_version/pgx-install/bin/pg_config"
+    fi
+    [ -x "$pg_config" ] || die "$pg_config not executable"
 }
 
 [ $# -ge 1 ] || usage
@@ -69,10 +72,20 @@ while [ $# -gt 0 ]; do
             nop=:
             ;;
 
+        -pgconfig)
+            pg_config="$1"
+            shift
+            ;;
+
+        -pgport)
+            pg_port="$1"
+            shift
+            ;;
+
         -pg1[234])
-            pgversion=${arg#-pg}
-            pg=pg$pgversion
-            pgport=288$pgversion
+            pg_version=${arg#-pg}
+            pg=pg$pg_version
+            [ -z "$pg_port" ] && pg_port=288$pg_version
             ;;
 
         clippy)
@@ -89,47 +102,49 @@ while [ $# -gt 0 ]; do
 
         test-extension)
             cd extension
-            require_pgversion
+            require_pg_version
             $nop env "CARGO_TARGET_DIR=$extension_CARGO_TARGET_DIR" cargo fetch
             $nop env "CARGO_TARGET_DIR=$extension_CARGO_TARGET_DIR" cargo test --features "$pg pg_test" --no-default-features
             ;;
 
         install)
             cd extension
-            find_pgconfig
+            require_pg_version
+            find_pg_config
             $nop env "CARGO_TARGET_DIR=$extension_CARGO_TARGET_DIR" cargo pgx install -c "$pg_config"
             ;;
 
         # Requires extension has been installed.  `install` or `test-extension` takes care of that.
         test-post-install)
-            find_pgconfig
+            require_pg_version
+            find_pg_config
             (
                 export CARGO_TARGET_DIR="$top_CARGO_TARGET_DIR"
                 $nop cargo pgx stop $pg
                 $nop cargo pgx start $pg
                 $nop cargo run --manifest-path tools/post-install/Cargo.toml "$pg_config"
-                $nop cargo run --manifest-path tools/testrunner/Cargo.toml -- -h localhost -p $pgport
+                $nop cargo run --manifest-path tools/testrunner/Cargo.toml -- -h localhost -p $pg_port
             )
             ;;
 
         test-doc)
-            require_pgversion
-            $nop sql-doctester \
+            require_pg_version
+            $nop cargo run -p sql-doctester -- \
                  -h localhost \
-                 -p $pgport \
+                 -p $pg_port \
                  -s "CREATE EXTENSION timescaledb; CREATE EXTENSION timescaledb_toolkit; SET SESSION TIMEZONE TO 'UTC'" \
                  docs
             ;;
 
         test-updates)
-            require_pgversion
-            find_pgconfig
+            require_pg_version
+            find_pg_config
             (
                 export CARGO_TARGET_DIR="$top_CARGO_TARGET_DIR"
                 $nop cargo pgx start $pg
                 $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- \
                  -h localhost \
-                 -p $pgport \
+                 -p $pg_port \
                  --cache old-versions \
                  . \
                  "$pg_config"

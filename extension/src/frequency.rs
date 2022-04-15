@@ -924,9 +924,7 @@ pub fn freq_text_iter(
     agg.datums.clone().into_iter().zip(counts).map_while(
         move |(value, (&count, &overcount))| {
             let total = agg.values_seen as f64;
-            // This takes converts the varlena to a [u8] to a str to a String, the final step doing a copy which is safe to return
-            // TODO: is there a more straightforward way of doing this?
-            let data = std::string::String::from(std::str::from_utf8(unsafe {varlena_to_byte_slice(value as * const pg_sys::varlena)}).expect("Error creating string from text data")); 
+            let data = unsafe { varlena_to_string(value as * const pg_sys::varlena) };
             let min_freq = (count - overcount) as f64 / total;
             let max_freq = count as f64 / total;
             Some((data, min_freq, max_freq))
@@ -991,19 +989,15 @@ fn topn_internal(
     max_n: i32,
     min_freq: f64,
 ) -> impl std::iter::Iterator<Item = AnyElement> + '_ {
-    let iter = agg
-        .datums
-        .clone()
-        .into_iter()
-        .zip(agg.counts.clone().into_iter());
-    iter.enumerate().map_while(move |(i, (value, count))| {
-        let total = agg.values_seen as f64;
-        if i >= max_n as usize || count as f64 / total < min_freq {
-            None
-        } else {
-            unsafe { AnyElement::from_datum(value, false, agg.type_oid)}
-        }
-    })
+    let type_oid: u32 = agg.type_oid;
+    TopNIterator::new(
+        agg.datums.clone().into_iter(),
+        agg.counts.clone().into_vec(),
+        agg.values_seen as f64,
+        max_n,
+        min_freq,
+        move |value| unsafe { AnyElement::from_datum(value, false, type_oid) },
+    )
 }
 
 #[pg_extern(immutable, parallel_safe, name="topn", schema = "toolkit_experimental")]
@@ -1037,19 +1031,14 @@ fn topn_bigint_internal(
     max_n: i32,
     min_freq: f64,
 ) -> impl std::iter::Iterator<Item = i64> + '_ {
-    let iter = agg
-        .datums
-        .clone()
-        .into_iter()
-        .zip(agg.counts.clone().into_iter());
-    iter.enumerate().map_while(move |(i, (value, count))| {
-        let total = agg.values_seen as f64;
-        if i >= max_n as usize || count as f64 / total < min_freq {
-            None
-        } else {
-            Some(value)
-        }
-    })
+    TopNIterator::new(
+        agg.datums.clone().into_iter(),
+        agg.counts.clone().into_vec(),
+        agg.values_seen as f64,
+        max_n,
+        min_freq,
+        Some,
+    )
 }
 
 #[pg_extern(immutable, parallel_safe, name="topn", schema = "toolkit_experimental")]
@@ -1083,19 +1072,14 @@ fn topn_text_internal(
     max_n: i32,
     min_freq: f64,
 ) -> impl std::iter::Iterator<Item = String> + '_ {
-    let iter = agg
-        .datums
-        .clone()
-        .into_iter()
-        .zip(agg.counts.clone().into_iter());
-    iter.enumerate().map_while(move |(i, (value, count))| {
-        let total = agg.values_seen as f64;
-        if i >= max_n as usize || count as f64 / total < min_freq {
-            None
-        } else {
-            Some(std::string::String::from(std::str::from_utf8(unsafe {varlena_to_byte_slice(value as * const pg_sys::varlena)}).expect("Error creating string from text data")))
-        }
-    })
+    TopNIterator::new(
+        agg.datums.clone().into_iter(),
+        agg.counts.clone().into_vec(),
+        agg.values_seen as f64,
+        max_n,
+        min_freq,
+        |value| Some(unsafe { varlena_to_string(value as *const pg_sys::varlena) }),
+    )
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
@@ -1203,6 +1187,77 @@ impl From<&[SpaceSavingEntry]> for SpaceSavingEntries {
         }
         to
     }
+}
+
+struct TopNIterator<
+    Input,
+    InputIterator: std::iter::Iterator<Item = Input>,
+    Output,
+    Convert: FnMut(Input) -> Option<Output>,
+> {
+    datums_iter: InputIterator,
+    counts_iter: std::vec::IntoIter<u64>,
+    values_seen: f64,
+    max_n: u32,
+    min_freq: f64,
+    convert: Convert,
+    i: u32,
+}
+
+impl<
+        Input,
+        InputIterator: std::iter::Iterator<Item = Input>,
+        Output,
+        Convert: FnMut(Input) -> Option<Output>,
+    > TopNIterator<Input, InputIterator, Output, Convert>
+{
+    fn new(
+        datums_iter: InputIterator,
+        counts: Vec<u64>,
+        values_seen: f64,
+        max_n: i32,
+        min_freq: f64,
+        f: Convert,
+    ) -> Self {
+        Self {
+            datums_iter,
+            counts_iter: counts.into_iter(),
+            values_seen,
+            max_n: max_n as u32,
+            min_freq,
+            convert: f,
+            i: 0,
+        }
+    }
+}
+
+impl<
+        Input,
+        InputIterator: std::iter::Iterator<Item = Input>,
+        Output,
+        Convert: FnMut(Input) -> Option<Output>,
+    > Iterator for TopNIterator<Input, InputIterator, Output, Convert>
+{
+    type Item = Output;
+    fn next(&mut self) -> Option<Self::Item> {
+        match (self.datums_iter.next(), self.counts_iter.next()) {
+            (Some(value), Some(count)) => {
+                self.i += 1;
+                if self.i > self.max_n || count as f64 / self.values_seen < self.min_freq {
+                    None
+                } else {
+                    (self.convert)(value)
+                }
+            }
+            _ => None,
+        }
+    }
+}
+
+unsafe fn varlena_to_string(vl: *const pg_sys::varlena) -> String {
+    let bytes: &[u8] = varlena_to_byte_slice(vl);
+    let s = std::str::from_utf8(bytes).expect("Error creating string from text data");
+    s.into()
 }
 
 #[cfg(any(test, feature = "pg_test"))]

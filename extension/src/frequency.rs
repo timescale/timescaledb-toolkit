@@ -996,8 +996,9 @@ fn topn_internal(
         agg.values_seen as f64,
         max_n,
         min_freq,
-        move |value| unsafe { AnyElement::from_datum(value, false, type_oid) },
     )
+    // TODO Shouldn't failure to convert to AnyElement cause error, not early stop?
+    .map_while(move |value| unsafe { AnyElement::from_datum(value, false, type_oid) })
 }
 
 #[pg_extern(immutable, parallel_safe, name="topn", schema = "toolkit_experimental")]
@@ -1037,7 +1038,6 @@ fn topn_bigint_internal(
         agg.values_seen as f64,
         max_n,
         min_freq,
-        Some,
     )
 }
 
@@ -1078,8 +1078,8 @@ fn topn_text_internal(
         agg.values_seen as f64,
         max_n,
         min_freq,
-        |value| Some(unsafe { varlena_to_string(value as *const pg_sys::varlena) }),
     )
+    .map(|value| unsafe { varlena_to_string(value as *const pg_sys::varlena) })
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
@@ -1189,35 +1189,22 @@ impl From<&[SpaceSavingEntry]> for SpaceSavingEntries {
     }
 }
 
-struct TopNIterator<
-    Input,
-    InputIterator: std::iter::Iterator<Item = Input>,
-    Output,
-    Convert: FnMut(Input) -> Option<Output>,
-> {
+struct TopNIterator<Input, InputIterator: std::iter::Iterator<Item = Input>> {
     datums_iter: InputIterator,
     counts_iter: std::vec::IntoIter<u64>,
     values_seen: f64,
     max_n: u32,
     min_freq: f64,
-    convert: Convert,
     i: u32,
 }
 
-impl<
-        Input,
-        InputIterator: std::iter::Iterator<Item = Input>,
-        Output,
-        Convert: FnMut(Input) -> Option<Output>,
-    > TopNIterator<Input, InputIterator, Output, Convert>
-{
+impl<Input, InputIterator: std::iter::Iterator<Item = Input>> TopNIterator<Input, InputIterator> {
     fn new(
         datums_iter: InputIterator,
         counts: Vec<u64>,
         values_seen: f64,
         max_n: i32,
         min_freq: f64,
-        f: Convert,
     ) -> Self {
         Self {
             datums_iter,
@@ -1225,20 +1212,15 @@ impl<
             values_seen,
             max_n: max_n as u32,
             min_freq,
-            convert: f,
             i: 0,
         }
     }
 }
 
-impl<
-        Input,
-        InputIterator: std::iter::Iterator<Item = Input>,
-        Output,
-        Convert: FnMut(Input) -> Option<Output>,
-    > Iterator for TopNIterator<Input, InputIterator, Output, Convert>
+impl<Input, InputIterator: std::iter::Iterator<Item = Input>> Iterator
+    for TopNIterator<Input, InputIterator>
 {
-    type Item = Output;
+    type Item = Input;
     fn next(&mut self) -> Option<Self::Item> {
         match (self.datums_iter.next(), self.counts_iter.next()) {
             (Some(value), Some(count)) => {
@@ -1246,7 +1228,7 @@ impl<
                 if self.i > self.max_n || count as f64 / self.values_seen < self.min_freq {
                     None
                 } else {
-                    (self.convert)(value)
+                    Some(value)
                 }
             }
             _ => None,

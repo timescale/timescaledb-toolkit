@@ -434,7 +434,6 @@ mod tests {
             // difficult to spot otherwise.
             let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             client.select(
                 "CREATE TABLE lttb_pipe (series timevector)",
@@ -544,7 +543,6 @@ mod tests {
             // difficult to spot otherwise.
             let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             let output = client.select(
                 "EXPLAIN (verbose) SELECT timevector('2021-01-01'::timestamptz, 0.1) -> round() -> abs() -> round();",

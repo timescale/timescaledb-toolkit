@@ -35,12 +35,6 @@ pub fn run_update_tests(
 
             let validation_values = test_client.create_test_objects_for(&old_version);
 
-            // TODO old versions require a new connection for updates.
-            //      we can fix this by dropping our guc,
-            //      at which point this can be deleted
-            drop(test_client);
-            test_client = connect_to(&test_config);
-
             test_client.update_to_current_version();
             let new_version = test_client.get_installed_extension_version();
             assert_eq!(

@@ -736,11 +736,6 @@ mod tests {
                 .get_one::<String>()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select(
-                "SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'",
-                None,
-                None,
-            );
 
             client.select("SET TIMEZONE to UTC", None, None);
             client.select(
@@ -775,11 +770,6 @@ mod tests {
                 .get_one::<String>()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select(
-                "SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'",
-                None,
-                None,
-            );
 
             client.select("SET TIMEZONE to UTC", None, None);
             client.select(
@@ -1016,11 +1006,6 @@ mod tests {
             .get_one::<String>()
             .unwrap();
         client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-        client.select(
-            "SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'",
-            None,
-            None,
-        );
 
         client.select("SET TIMEZONE to UTC", None, None);
         client.select(

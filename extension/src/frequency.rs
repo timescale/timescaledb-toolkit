@@ -24,14 +24,16 @@ use crate::{
     palloc::{Inner, Internal, InternalAsValue, ToInternal},
     pg_any_element::{PgAnyElement, PgAnyElementHashMap},
     pg_type,
-    raw::bytea,
+    raw::{bytea, text},
     ron_inout_funcs,
 };
 
 use spfunc::zeta::zeta;
 use statrs::function::harmonic::gen_harmonic;
 
-use crate::frequency::toolkit_experimental::SpaceSavingAggregate;
+use crate::frequency::toolkit_experimental::{
+    SpaceSavingAggregate, SpaceSavingBigIntAggregate, SpaceSavingTextAggregate,
+};
 
 // Helper functions for zeta distribution
 
@@ -203,7 +205,19 @@ impl SpaceSavingTransState {
         }
     }
 
-    fn topn_agg_from_type_id(skew: f64, nval: u32, typ: pg_sys::Oid, collation: Option<Oid>) -> Self {
+    fn topn_agg_from_type_id(
+        skew: f64,
+        nval: u32,
+        typ: pg_sys::Oid,
+        collation: Option<Oid>,
+    ) -> Self {
+        if nval == 0 {
+            pgx::error!("topn aggregate requires an n value > 0")
+        }
+        if skew <= 1.0 {
+            pgx::error!("topn aggregate requires a skew factor > 1.0")
+        }
+
         let prob_eq_n = zeta_eq_n(skew, nval as u64);
         let prob_lt_n = zeta_le_n(skew, nval as u64 - 1);
 
@@ -212,7 +226,8 @@ impl SpaceSavingTransState {
             indices: PgAnyElementHashMap::new(typ, collation),
             total_vals: 0,
             freq_param: skew,
-            max_size: nval - 1 + SpaceSavingTransState::max_size_for_freq(prob_eq_n / (1.0 - prob_lt_n)),
+            max_size: nval - 1
+                + SpaceSavingTransState::max_size_for_freq(prob_eq_n / (1.0 - prob_lt_n)),
             topn: nval,
         }
     }
@@ -399,6 +414,92 @@ pub mod toolkit_experimental {
     }
 
     ron_inout_funcs!(SpaceSavingAggregate);
+
+    pg_type! {
+        #[derive(Debug)]
+        struct SpaceSavingBigIntAggregate<'input> {
+            num_values: u32,
+            topn: u32,
+            values_seen: u64,
+            freq_param: f64,
+            counts: [u64; self.num_values], // JOSH TODO look at AoS instead of SoA at some point
+            overcounts: [u64; self.num_values],
+            datums: [i64; self.num_values],
+        }
+    }
+
+    impl<'input> From<&SpaceSavingTransState> for SpaceSavingBigIntAggregate<'input> {
+        fn from(trans: &SpaceSavingTransState) -> Self {
+            assert_eq!(trans.type_oid(), pg_sys::INT8OID);
+
+            let mut values = Vec::new();
+            let mut counts = Vec::new();
+            let mut overcounts = Vec::new();
+
+            for entry in &trans.entries {
+                values.push(entry.value as i64);
+                counts.push(entry.count);
+                overcounts.push(entry.overcount);
+            }
+
+            build! {
+                SpaceSavingBigIntAggregate {
+                    num_values: trans.entries.len() as _,
+                    values_seen: trans.total_vals,
+                    freq_param: trans.freq_param,
+                    topn: trans.topn,
+                    counts: counts.into(),
+                    overcounts: overcounts.into(),
+                    datums: values.into(),
+                }
+            }
+        }
+    }
+
+    ron_inout_funcs!(SpaceSavingBigIntAggregate);
+
+    pg_type! {
+        #[derive(Debug)]
+        struct SpaceSavingTextAggregate<'input> {
+            num_values: u32,
+            topn: u32,
+            values_seen: u64,
+            freq_param: f64,
+            counts: [u64; self.num_values], // JOSH TODO look at AoS instead of SoA at some point
+            overcounts: [u64; self.num_values],
+            datums: DatumStore<'input>,
+        }
+    }
+
+    impl<'input> From<&SpaceSavingTransState> for SpaceSavingTextAggregate<'input> {
+        fn from(trans: &SpaceSavingTransState) -> Self {
+            assert_eq!(trans.type_oid(), pg_sys::TEXTOID);
+
+            let mut values = Vec::new();
+            let mut counts = Vec::new();
+            let mut overcounts = Vec::new();
+
+            for entry in &trans.entries {
+                values.push(entry.value);
+                counts.push(entry.count);
+                overcounts.push(entry.overcount);
+            }
+
+            build! {
+                SpaceSavingTextAggregate {
+                    num_values: trans.entries.len() as _,
+                    values_seen: trans.total_vals,
+                    freq_param: trans.freq_param,
+                    topn: trans.topn,
+                    counts: counts.into(),
+                    overcounts: overcounts.into(),
+                    datums: DatumStore::from((trans.type_oid(), values)),
+                }
+            }
+        }
+    }
+
+    ron_inout_funcs!(SpaceSavingTextAggregate);
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
@@ -412,6 +513,26 @@ pub fn topn_agg_trans(
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+pub fn topn_agg_bigint_trans(
+    state: Internal,
+    n: i32,
+    value: Option<i64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal> {
+    topn_agg_with_skew_bigint_trans(state, n, DEFAULT_ZETA_SKEW, value, fcinfo)
+}
+
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+pub fn topn_agg_text_trans(
+    state: Internal,
+    n: i32,
+    value: Option<crate::raw::text>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal> {
+    topn_agg_with_skew_text_trans(state, n, DEFAULT_ZETA_SKEW, value, fcinfo)
+}
+
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn topn_agg_with_skew_trans(
     state: Internal,
     n: i32,
@@ -419,15 +540,68 @@ pub fn topn_agg_with_skew_trans(
     value: Option<AnyElement>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    if n <= 0 {
-        pgx::error!("topn aggregate requires an n value > 0")
-    }
-    if skew <= 1.0 {
-        pgx::error!("topn aggregate requires a skew factor > 1.0")
-    }
+    space_saving_trans(
+        unsafe { state.to_inner() },
+        value,
+        fcinfo,
+        |typ, collation| {
+            SpaceSavingTransState::topn_agg_from_type_id(skew, n as u32, typ, collation)
+        },
+    )
+    .internal()
+}
 
-    space_saving_trans(unsafe{ state.to_inner() }, value, fcinfo, |typ, collation|
-        {SpaceSavingTransState::topn_agg_from_type_id(skew, n as u32, typ, collation)}).internal()
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+pub fn topn_agg_with_skew_bigint_trans(
+    state: Internal,
+    n: i32,
+    skew: f64,
+    value: Option<i64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal> {
+    let value = match value {
+        None => None,
+        Some(val) => unsafe {
+            AnyElement::from_datum(val as pg_sys::Datum, false, pg_sys::INT8OID)
+        },
+    };
+
+    space_saving_trans(
+        unsafe { state.to_inner() },
+        value,
+        fcinfo,
+        |typ, collation| {
+            SpaceSavingTransState::topn_agg_from_type_id(skew, n as u32, typ, collation)
+        },
+    )
+    .internal()
+}
+
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+pub fn topn_agg_with_skew_text_trans(
+    state: Internal,
+    n: i32,
+    skew: f64,
+    value: Option<crate::raw::text>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal> {
+    let txt = value.map(|v| unsafe { pg_sys::pg_detoast_datum_copy(v.0 as *mut pg_sys::varlena) });
+    let value = match txt {
+        None => None,
+        Some(val) => unsafe {
+            AnyElement::from_datum(val as pg_sys::Datum, false, pg_sys::TEXTOID)
+        },
+    };
+
+    space_saving_trans(
+        unsafe { state.to_inner() },
+        value,
+        fcinfo,
+        |typ, collation| {
+            SpaceSavingTransState::topn_agg_from_type_id(skew, n as u32, typ, collation)
+        },
+    )
+    .internal()
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
@@ -441,18 +615,56 @@ pub fn freq_agg_trans(
         pgx::error!("frequency aggregate requires a frequency in the range (0.0, 1.0)")
     }
 
-    space_saving_trans(unsafe{ state.to_inner() }, value, fcinfo, |typ, collation|
-        {SpaceSavingTransState::freq_agg_from_type_id(freq, typ, collation)}).internal()
+    space_saving_trans(
+        unsafe { state.to_inner() },
+        value,
+        fcinfo,
+        |typ, collation| SpaceSavingTransState::freq_agg_from_type_id(freq, typ, collation),
+    )
+    .internal()
+}
+
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+pub fn freq_agg_bigint_trans(
+    state: Internal,
+    freq: f64,
+    value: Option<i64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal> {
+    let value = match value {
+        None => None,
+        Some(val) => unsafe {
+            AnyElement::from_datum(val as pg_sys::Datum, false, pg_sys::INT8OID)
+        },
+    };
+    freq_agg_trans(state, freq, value, fcinfo)
+}
+
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+pub fn freq_agg_text_trans(
+    state: Internal,
+    freq: f64,
+    value: Option<crate::raw::text>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal> {
+    let txt = value.map(|v| unsafe { pg_sys::pg_detoast_datum_copy(v.0 as *mut pg_sys::varlena) });
+    let value = match txt {
+        None => None,
+        Some(val) => unsafe {
+            AnyElement::from_datum(val as pg_sys::Datum, false, pg_sys::TEXTOID)
+        },
+    };
+    freq_agg_trans(state, freq, value, fcinfo)
 }
 
 pub fn space_saving_trans<F>(
     state: Option<Inner<SpaceSavingTransState>>,
     value: Option<AnyElement>,
     fcinfo: pg_sys::FunctionCallInfo,
-    make_trans_state: F
+    make_trans_state: F,
 ) -> Option<Inner<SpaceSavingTransState>>
 where
-    F: FnOnce(pg_sys::Oid, Option<pg_sys::Oid>) -> SpaceSavingTransState
+    F: FnOnce(pg_sys::Oid, Option<pg_sys::Oid>) -> SpaceSavingTransState,
 {
     unsafe {
         in_aggregate_context(fcinfo, || {
@@ -469,7 +681,7 @@ where
                         get_collation(fcinfo)
                     };
                     make_trans_state(typ, collation).into()
-                },
+                }
                 Some(state) => state,
             };
 
@@ -485,9 +697,7 @@ pub fn space_saving_combine(
     state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    unsafe {
-        space_saving_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
-    }
+    unsafe { space_saving_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal() }
 }
 pub fn space_saving_combine_inner(
     a: Option<Inner<SpaceSavingTransState>>,
@@ -495,13 +705,11 @@ pub fn space_saving_combine_inner(
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<SpaceSavingTransState>> {
     unsafe {
-        in_aggregate_context(fcinfo, || {
-            match (a, b) {
-                (Some(a), Some(b)) => Some(SpaceSavingTransState::combine(&*a, &*b).into()),
-                (Some(a), None) => Some(a.clone().into()),
-                (None, Some(b)) => Some(b.clone().into()),
-                (None, None) => None,
-            }
+        in_aggregate_context(fcinfo, || match (a, b) {
+            (Some(a), Some(b)) => Some(SpaceSavingTransState::combine(&*a, &*b).into()),
+            (Some(a), None) => Some(a.clone().into()),
+            (None, Some(b)) => Some(b.clone().into()),
+            (None, None) => None,
         })
     }
 }
@@ -516,25 +724,39 @@ fn space_saving_final(
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-fn space_saving_serialize(
+fn space_saving_bigint_final(
     state: Internal,
-) -> bytea {
+    _fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<toolkit_experimental::SpaceSavingBigIntAggregate<'static>> {
+    let state: Option<&SpaceSavingTransState> = unsafe { state.get() };
+    state.map(SpaceSavingBigIntAggregate::from)
+}
+
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+fn space_saving_text_final(
+    state: Internal,
+    _fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<toolkit_experimental::SpaceSavingTextAggregate<'static>> {
+    let state: Option<&SpaceSavingTransState> = unsafe { state.get() };
+    state.map(SpaceSavingTextAggregate::from)
+}
+
+#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+fn space_saving_serialize(state: Internal) -> bytea {
     let state: Inner<SpaceSavingTransState> = unsafe { state.to_inner().unwrap() };
     crate::do_serialize!(state)
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn space_saving_deserialize(
-    bytes: bytea,
-    _internal: Internal,
-) -> Option<Internal> {
+pub fn space_saving_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
     let i: SpaceSavingTransState = crate::do_deserialize!(bytes, SpaceSavingTransState);
     Inner::from(i).internal()
 }
 
-extension_sql!("\n\
-    CREATE AGGREGATE toolkit_experimental.freq_agg(\n\
-        double precision, AnyElement\n\
+extension_sql!(
+    "\n\
+    CREATE AGGREGATE toolkit_experimental.raw_freq_agg(\n\
+        frequency double precision, value AnyElement\n\
     ) (\n\
         sfunc = toolkit_experimental.freq_agg_trans,\n\
         stype = internal,\n\
@@ -545,13 +767,68 @@ extension_sql!("\n\
         parallel = safe\n\
     );\n\
 ",
-name = "freq_agg",
-requires = [freq_agg_trans, space_saving_final, space_saving_combine, space_saving_serialize, space_saving_deserialize],
+    name = "freq_agg",
+    requires = [
+        freq_agg_trans,
+        space_saving_final,
+        space_saving_combine,
+        space_saving_serialize,
+        space_saving_deserialize
+    ],
 );
 
-extension_sql!("\n\
-    CREATE AGGREGATE toolkit_experimental.topn_agg(\n\
-        integer, AnyElement\n\
+extension_sql!(
+    "\n\
+    CREATE AGGREGATE toolkit_experimental.freq_agg(\n\
+        frequency double precision, value INT8\n\
+    ) (\n\
+        sfunc = toolkit_experimental.freq_agg_bigint_trans,\n\
+        stype = internal,\n\
+        finalfunc = toolkit_experimental.space_saving_bigint_final,\n\
+        combinefunc = toolkit_experimental.space_saving_combine,\n\
+        serialfunc = toolkit_experimental.space_saving_serialize,\n\
+        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+    name = "freq_bigint_agg",
+    requires = [
+        freq_agg_bigint_trans,
+        space_saving_bigint_final,
+        space_saving_combine,
+        space_saving_serialize,
+        space_saving_deserialize
+    ],
+);
+
+extension_sql!(
+    "\n\
+    CREATE AGGREGATE toolkit_experimental.freq_agg(\n\
+        frequency double precision, value TEXT\n\
+    ) (\n\
+        sfunc = toolkit_experimental.freq_agg_text_trans,\n\
+        stype = internal,\n\
+        finalfunc = toolkit_experimental.space_saving_text_final,\n\
+        combinefunc = toolkit_experimental.space_saving_combine,\n\
+        serialfunc = toolkit_experimental.space_saving_serialize,\n\
+        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+    name = "freq_text_agg",
+    requires = [
+        freq_agg_text_trans,
+        space_saving_text_final,
+        space_saving_combine,
+        space_saving_serialize,
+        space_saving_deserialize
+    ],
+);
+
+extension_sql!(
+    "\n\
+    CREATE AGGREGATE toolkit_experimental.raw_topn_agg(\n\
+        count integer, value AnyElement\n\
     ) (\n\
         sfunc = toolkit_experimental.topn_agg_trans,\n\
         stype = internal,\n\
@@ -562,13 +839,68 @@ extension_sql!("\n\
         parallel = safe\n\
     );\n\
 ",
-name = "topn_agg",
-requires = [topn_agg_trans, space_saving_final, space_saving_combine, space_saving_serialize, space_saving_deserialize],
+    name = "topn_agg",
+    requires = [
+        topn_agg_trans,
+        space_saving_final,
+        space_saving_combine,
+        space_saving_serialize,
+        space_saving_deserialize
+    ],
 );
 
-extension_sql!("\n\
+extension_sql!(
+    "\n\
     CREATE AGGREGATE toolkit_experimental.topn_agg(\n\
-        integer, double precision, AnyElement\n\
+        count integer, value INT8\n\
+    ) (\n\
+        sfunc = toolkit_experimental.topn_agg_bigint_trans,\n\
+        stype = internal,\n\
+        finalfunc = toolkit_experimental.space_saving_bigint_final,\n\
+        combinefunc = toolkit_experimental.space_saving_combine,\n\
+        serialfunc = toolkit_experimental.space_saving_serialize,\n\
+        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+    name = "topn_bigint_agg",
+    requires = [
+        topn_agg_bigint_trans,
+        space_saving_bigint_final,
+        space_saving_combine,
+        space_saving_serialize,
+        space_saving_deserialize
+    ],
+);
+
+extension_sql!(
+    "\n\
+    CREATE AGGREGATE toolkit_experimental.topn_agg(\n\
+        count integer, value TEXT\n\
+    ) (\n\
+        sfunc = toolkit_experimental.topn_agg_text_trans,\n\
+        stype = internal,\n\
+        finalfunc = toolkit_experimental.space_saving_text_final,\n\
+        combinefunc = toolkit_experimental.space_saving_combine,\n\
+        serialfunc = toolkit_experimental.space_saving_serialize,\n\
+        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+    name = "topn_text_agg",
+    requires = [
+        topn_agg_text_trans,
+        space_saving_text_final,
+        space_saving_combine,
+        space_saving_serialize,
+        space_saving_deserialize
+    ],
+);
+
+extension_sql!(
+    "\n\
+    CREATE AGGREGATE toolkit_experimental.raw_topn_agg(\n\
+        count integer, skew double precision, value AnyElement\n\
     ) (\n\
         sfunc = toolkit_experimental.topn_agg_with_skew_trans,\n\
         stype = internal,\n\
@@ -579,8 +911,62 @@ extension_sql!("\n\
         parallel = safe\n\
     );\n\
 ",
-name = "topn_agg_with_skew",
-requires = [topn_agg_with_skew_trans, space_saving_final, space_saving_combine, space_saving_serialize, space_saving_deserialize],
+    name = "topn_agg_with_skew",
+    requires = [
+        topn_agg_with_skew_trans,
+        space_saving_final,
+        space_saving_combine,
+        space_saving_serialize,
+        space_saving_deserialize
+    ],
+);
+
+extension_sql!(
+    "\n\
+    CREATE AGGREGATE toolkit_experimental.topn_agg(\n\
+        count integer, skew double precision, value int8\n\
+    ) (\n\
+        sfunc = toolkit_experimental.topn_agg_with_skew_bigint_trans,\n\
+        stype = internal,\n\
+        finalfunc = toolkit_experimental.space_saving_bigint_final,\n\
+        combinefunc = toolkit_experimental.space_saving_combine,\n\
+        serialfunc = toolkit_experimental.space_saving_serialize,\n\
+        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+    name = "topn_agg_with_skew_bigint",
+    requires = [
+        topn_agg_with_skew_bigint_trans,
+        space_saving_bigint_final,
+        space_saving_combine,
+        space_saving_serialize,
+        space_saving_deserialize
+    ],
+);
+
+extension_sql!(
+    "\n\
+    CREATE AGGREGATE toolkit_experimental.topn_agg(\n\
+        count integer, skew double precision, value text\n\
+    ) (\n\
+        sfunc = toolkit_experimental.topn_agg_with_skew_text_trans,\n\
+        stype = internal,\n\
+        finalfunc = toolkit_experimental.space_saving_text_final,\n\
+        combinefunc = toolkit_experimental.space_saving_combine,\n\
+        serialfunc = toolkit_experimental.space_saving_serialize,\n\
+        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+    name = "topn_agg_with_skew_text",
+    requires = [
+        topn_agg_with_skew_text_trans,
+        space_saving_text_final,
+        space_saving_combine,
+        space_saving_serialize,
+        space_saving_deserialize
+    ],
 );
 
 #[pg_extern(
@@ -616,6 +1002,92 @@ pub fn freq_iter(
     }
 }
 
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "into_values",
+    schema = "toolkit_experimental"
+)]
+pub fn freq_bigint_iter(
+    agg: SpaceSavingBigIntAggregate<'_>,
+) -> impl std::iter::Iterator<
+    Item = (
+        name!(value, i64),
+        name!(min_freq, f64),
+        name!(max_freq, f64),
+    ),
+> + '_ {
+    let counts = agg.counts.slice().iter().zip(agg.overcounts.slice().iter());
+    agg.datums
+        .clone()
+        .into_iter()
+        .zip(counts)
+        .map_while(move |(value, (&count, &overcount))| {
+            let total = agg.values_seen as f64;
+            let min_freq = (count - overcount) as f64 / total;
+            let max_freq = count as f64 / total;
+            Some((value, min_freq, max_freq))
+        })
+}
+
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "into_values",
+    schema = "toolkit_experimental"
+)]
+pub fn freq_text_iter(
+    agg: SpaceSavingTextAggregate<'_>,
+) -> impl std::iter::Iterator<
+    Item = (
+        name!(value, String),
+        name!(min_freq, f64),
+        name!(max_freq, f64),
+    ),
+> + '_ {
+    let counts = agg.counts.slice().iter().zip(agg.overcounts.slice().iter());
+    agg.datums
+        .clone()
+        .into_iter()
+        .zip(counts)
+        .map_while(move |(value, (&count, &overcount))| {
+            let total = agg.values_seen as f64;
+            let data = unsafe { varlena_to_string(value as *const pg_sys::varlena) };
+            let min_freq = (count - overcount) as f64 / total;
+            let max_freq = count as f64 / total;
+            Some((data, min_freq, max_freq))
+        })
+}
+
+fn validate_topn_for_topn_agg(
+    n: i32,
+    topn: u32,
+    skew: f64,
+    total_vals: u64,
+    counts: impl Iterator<Item = u64>,
+) {
+    if topn == 0 {
+        // Not a topn aggregate
+        return;
+    }
+
+    // TODO: should we allow this if we have enough data?
+    if n > topn as i32 {
+        pgx::error!(
+            "requested N ({}) exceeds creation parameter of topn aggregate ({})",
+            n,
+            topn
+        )
+    }
+
+    // For topn_aggregates distributions we check that the top 'n' values satisfy the cumulative distribution
+    // for our zeta curve.
+    let needed_count = (zeta_le_n(skew, n as u64) * total_vals as f64).ceil() as u64;
+    if counts.take(n as usize).sum::<u64>() < needed_count {
+        pgx::error!("data is not skewed enough to find top {} parameters with a skew of {}, try reducing the skew factor", n , skew)
+    }
+}
+
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn topn(
     agg: SpaceSavingAggregate<'_>,
@@ -626,30 +1098,33 @@ pub fn topn(
         pgx::error!("mischatched types")
     }
 
-    let f = if agg.topn == 0 {
-        agg.freq_param
-    } else {
-        // TODO: should we allow this if we have enough data?
-        if n > agg.topn as i32 {
-            pgx::error!("requested N ({}) exceeds creation parameter of topn aggregate ({})", n , agg.topn)
-        }
+    validate_topn_for_topn_agg(
+        n,
+        agg.topn as u32,
+        agg.freq_param,
+        agg.values_seen,
+        agg.counts.iter(),
+    );
+    let min_freq = if agg.topn == 0 { agg.freq_param } else { 0. };
 
-        // For topn_aggregates distributions we check that the top 'n' values satisfy the cumulative distribution
-        // for our zeta curve.
-
-        let needed_count = (zeta_le_n(agg.freq_param, n as u64) * agg.values_seen as f64).ceil() as u64;
-        if agg.counts.iter().take(n as usize).sum::<u64>() < needed_count {
-            pgx::error!("data is not skewed enough to find top {} parameters with a skew of {}, try reducing the skew factor", n , agg.freq_param)
-        }
-
-        // If we meet the cumulative distribution use 0 as min_freq, we won't filter based on frequency
-        0.
-    };
-
-    topn_internal(agg, n, f)
+    let type_oid: u32 = agg.type_oid;
+    TopNIterator::new(
+        agg.datums.clone().into_iter(),
+        agg.counts.clone().into_vec(),
+        agg.values_seen as f64,
+        n,
+        min_freq,
+    )
+    // TODO Shouldn't failure to convert to AnyElement cause error, not early stop?
+    .map_while(move |value| unsafe { AnyElement::from_datum(value, false, type_oid) })
 }
 
-#[pg_extern(immutable, parallel_safe, name="topn", schema = "toolkit_experimental")]
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "topn",
+    schema = "toolkit_experimental"
+)]
 pub fn default_topn(
     agg: SpaceSavingAggregate<'_>,
     ty: AnyElement,
@@ -661,66 +1136,250 @@ pub fn default_topn(
     topn(agg, n, ty)
 }
 
-// return up to 'max_n' elements having at least 'min_freq' frequency
-fn topn_internal(
-    agg: SpaceSavingAggregate<'_>,
-    max_n: i32,
-    min_freq: f64,
-) -> impl std::iter::Iterator<Item = AnyElement> + '_ {
-    let iter = agg
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "topn",
+    schema = "toolkit_experimental"
+)]
+pub fn topn_bigint(
+    agg: SpaceSavingBigIntAggregate<'_>,
+    n: i32,
+) -> impl std::iter::Iterator<Item = i64> + '_ {
+    validate_topn_for_topn_agg(
+        n,
+        agg.topn,
+        agg.freq_param,
+        agg.values_seen,
+        agg.counts.iter(),
+    );
+    let min_freq = if agg.topn == 0 { agg.freq_param } else { 0. };
+
+    TopNIterator::new(
+        agg.datums.clone().into_iter(),
+        agg.counts.clone().into_vec(),
+        agg.values_seen as f64,
+        n,
+        min_freq,
+    )
+}
+
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "topn",
+    schema = "toolkit_experimental"
+)]
+pub fn default_topn_bigint(
+    agg: SpaceSavingBigIntAggregate<'_>,
+) -> impl std::iter::Iterator<Item = i64> + '_ {
+    if agg.topn == 0 {
+        pgx::error!("frequency aggregates require a N parameter to topn")
+    }
+    let n = agg.topn as i32;
+    topn_bigint(agg, n)
+}
+
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "topn",
+    schema = "toolkit_experimental"
+)]
+pub fn topn_text(
+    agg: SpaceSavingTextAggregate<'_>,
+    n: i32,
+) -> impl std::iter::Iterator<Item = String> + '_ {
+    validate_topn_for_topn_agg(
+        n,
+        agg.topn,
+        agg.freq_param,
+        agg.values_seen,
+        agg.counts.iter(),
+    );
+    let min_freq = if agg.topn == 0 { agg.freq_param } else { 0. };
+
+    TopNIterator::new(
+        agg.datums.clone().into_iter(),
+        agg.counts.clone().into_vec(),
+        agg.values_seen as f64,
+        n,
+        min_freq,
+    )
+    .map(|value| unsafe { varlena_to_string(value as *const pg_sys::varlena) })
+}
+
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "topn",
+    schema = "toolkit_experimental"
+)]
+pub fn default_topn_text(
+    agg: SpaceSavingTextAggregate<'_>,
+) -> impl std::iter::Iterator<Item = String> + '_ {
+    if agg.topn == 0 {
+        pgx::error!("frequency aggregates require a N parameter to topn")
+    }
+    let n = agg.topn as i32;
+    topn_text(agg, n)
+}
+
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub fn max_frequency(agg: SpaceSavingAggregate<'_>, value: AnyElement) -> f64 {
+    let value: PgAnyElement = value.into();
+    match agg
         .datums
-        .clone()
-        .into_iter()
-        .zip(agg.counts.clone().into_iter());
-    iter.enumerate().map_while(move |(i, (value, count))| {
-        let total = agg.values_seen as f64;
-        if i >= max_n as usize || count as f64 / total < min_freq {
-            None
-        } else {
-            unsafe { AnyElement::from_datum(value, false, agg.type_oid)}
-        }
-    })
+        .iter()
+        .position(|datum| value == (datum, agg.type_oid).into())
+    {
+        Some(idx) => agg.counts.slice()[idx] as f64 / agg.values_seen as f64,
+        None => 0.,
+    }
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn max_frequency(
-    agg: SpaceSavingAggregate<'_>,
-    value: AnyElement,
-) -> f64 {
-    let value : PgAnyElement = value.into();
-    for (idx, datum) in agg.datums.iter().enumerate() {
-        let datum = (datum, agg.type_oid).into();
-        if value == datum {
-            return agg.counts.slice()[idx] as f64 / agg.values_seen as f64;
+pub fn min_frequency(agg: SpaceSavingAggregate<'_>, value: AnyElement) -> f64 {
+    let value: PgAnyElement = value.into();
+    match agg
+        .datums
+        .iter()
+        .position(|datum| value == (datum, agg.type_oid).into())
+    {
+        Some(idx) => {
+            (agg.counts.slice()[idx] - agg.overcounts.slice()[idx]) as f64 / agg.values_seen as f64
         }
+        None => 0.,
     }
-    0.
 }
 
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn min_frequency(
-    agg: SpaceSavingAggregate<'_>,
-    value: AnyElement,
-) -> f64 {
-    let value : PgAnyElement = value.into();
-    for (idx, datum) in agg.datums.iter().enumerate() {
-        let datum = (datum, agg.type_oid).into();
-        if value == datum {
-            return (agg.counts.slice()[idx] - agg.overcounts.slice()[idx]) as f64 / agg.values_seen as f64;
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "max_frequency",
+    schema = "toolkit_experimental"
+)]
+pub fn max_bigint_frequency(agg: SpaceSavingBigIntAggregate<'_>, value: i64) -> f64 {
+    match agg.datums.iter().position(|datum| value == datum) {
+        Some(idx) => agg.counts.slice()[idx] as f64 / agg.values_seen as f64,
+        None => 0.,
+    }
+}
+
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "min_frequency",
+    schema = "toolkit_experimental"
+)]
+pub fn min_bigint_frequency(agg: SpaceSavingBigIntAggregate<'_>, value: i64) -> f64 {
+    match agg.datums.iter().position(|datum| value == datum) {
+        Some(idx) => {
+            (agg.counts.slice()[idx] - agg.overcounts.slice()[idx]) as f64 / agg.values_seen as f64
+        }
+        None => 0.,
+    }
+}
+
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "max_frequency",
+    schema = "toolkit_experimental"
+)]
+pub fn max_text_frequency(agg: SpaceSavingTextAggregate<'_>, value: text) -> f64 {
+    let value: PgAnyElement = (value.0, pg_sys::TEXTOID).into();
+    match agg
+        .datums
+        .iter()
+        .position(|datum| value == (datum, pg_sys::TEXTOID).into())
+    {
+        Some(idx) => agg.counts.slice()[idx] as f64 / agg.values_seen as f64,
+        None => 0.,
+    }
+}
+
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "min_frequency",
+    schema = "toolkit_experimental"
+)]
+pub fn min_text_frequency(agg: SpaceSavingTextAggregate<'_>, value: text) -> f64 {
+    let value: PgAnyElement = (value.0, pg_sys::TEXTOID).into();
+    match agg
+        .datums
+        .iter()
+        .position(|datum| value == (datum, pg_sys::TEXTOID).into())
+    {
+        Some(idx) => {
+            (agg.counts.slice()[idx] - agg.overcounts.slice()[idx]) as f64 / agg.values_seen as f64
+        }
+        None => 0.,
+    }
+}
+
+struct TopNIterator<Input, InputIterator: std::iter::Iterator<Item = Input>> {
+    datums_iter: InputIterator,
+    counts_iter: std::vec::IntoIter<u64>,
+    values_seen: f64,
+    max_n: u32,
+    min_freq: f64,
+    i: u32,
+}
+
+impl<Input, InputIterator: std::iter::Iterator<Item = Input>> TopNIterator<Input, InputIterator> {
+    fn new(
+        datums_iter: InputIterator,
+        counts: Vec<u64>,
+        values_seen: f64,
+        max_n: i32,
+        min_freq: f64,
+    ) -> Self {
+        Self {
+            datums_iter,
+            counts_iter: counts.into_iter(),
+            values_seen,
+            max_n: max_n as u32,
+            min_freq,
+            i: 0,
         }
     }
-    0.
+}
+
+impl<Input, InputIterator: std::iter::Iterator<Item = Input>> Iterator
+    for TopNIterator<Input, InputIterator>
+{
+    type Item = Input;
+    fn next(&mut self) -> Option<Self::Item> {
+        match (self.datums_iter.next(), self.counts_iter.next()) {
+            (Some(value), Some(count)) => {
+                self.i += 1;
+                if self.i > self.max_n || count as f64 / self.values_seen < self.min_freq {
+                    None
+                } else {
+                    Some(value)
+                }
+            }
+            _ => None,
+        }
+    }
+}
+
+unsafe fn varlena_to_string(vl: *const pg_sys::varlena) -> String {
+    let bytes: &[u8] = varlena_to_byte_slice(vl);
+    let s = std::str::from_utf8(bytes).expect("Error creating string from text data");
+    s.into()
 }
 
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgx::*;
-    use pgx_macros::pg_test;
     use super::*;
+    use pgx_macros::pg_test;
     use rand::distributions::{Distribution, Uniform};
-    use rand_distr::Zeta;
     use rand::RngCore;
+    use rand_distr::Zeta;
 
     #[pg_test]
     fn test_freq_aggregate() {
@@ -756,7 +1415,7 @@ mod tests {
             let test = client.select("SELECT freq_agg(0.015, s.data)::TEXT FROM (SELECT data FROM test ORDER BY time) s", None, None)
                 .first()
                 .get_one::<String>().unwrap();
-            let expected = "(version:1,type_oid:23,num_values:67,values_seen:5050,freq_param:0.015,topn:0,counts:[100,99,98,97,96,95,94,93,92,91,90,89,88,87,86,85,84,83,82,81,80,79,78,77,76,75,74,73,72,71,70,69,68,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67],overcounts:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66],datums:[23,\"99\",\"98\",\"97\",\"96\",\"95\",\"94\",\"93\",\"92\",\"91\",\"90\",\"89\",\"88\",\"87\",\"86\",\"85\",\"84\",\"83\",\"82\",\"81\",\"80\",\"79\",\"78\",\"77\",\"76\",\"75\",\"74\",\"73\",\"72\",\"71\",\"70\",\"69\",\"68\",\"67\",\"33\",\"34\",\"35\",\"36\",\"37\",\"38\",\"39\",\"40\",\"41\",\"42\",\"43\",\"44\",\"45\",\"46\",\"47\",\"48\",\"49\",\"50\",\"51\",\"52\",\"53\",\"54\",\"55\",\"56\",\"57\",\"58\",\"59\",\"60\",\"61\",\"62\",\"63\",\"64\",\"65\",\"66\"])";
+            let expected = "(version:1,num_values:67,topn:0,values_seen:5050,freq_param:0.015,counts:[100,99,98,97,96,95,94,93,92,91,90,89,88,87,86,85,84,83,82,81,80,79,78,77,76,75,74,73,72,71,70,69,68,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67],overcounts:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66],datums:[99,98,97,96,95,94,93,92,91,90,89,88,87,86,85,84,83,82,81,80,79,78,77,76,75,74,73,72,71,70,69,68,67,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66])";
             assert_eq!(test, expected);
         });
     }
@@ -795,7 +1454,7 @@ mod tests {
             let test = client.select("SELECT topn_agg(10, s.data)::TEXT FROM (SELECT data FROM test ORDER BY time) s", None, None)
                 .first()
                 .get_one::<String>().unwrap();
-            let expected = "(version:1,type_oid:23,num_values:110,values_seen:20100,freq_param:1.1,topn:10,counts:[200,199,198,197,196,195,194,193,192,191,190,189,188,187,186,185,184,183,182,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181],overcounts:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180],datums:[23,\"199\",\"198\",\"197\",\"196\",\"195\",\"194\",\"193\",\"192\",\"191\",\"190\",\"189\",\"188\",\"187\",\"186\",\"185\",\"184\",\"183\",\"182\",\"181\",\"90\",\"91\",\"92\",\"93\",\"94\",\"95\",\"96\",\"97\",\"98\",\"99\",\"100\",\"101\",\"102\",\"103\",\"104\",\"105\",\"106\",\"107\",\"108\",\"109\",\"110\",\"111\",\"112\",\"113\",\"114\",\"115\",\"116\",\"117\",\"118\",\"119\",\"120\",\"121\",\"122\",\"123\",\"124\",\"125\",\"126\",\"127\",\"128\",\"129\",\"130\",\"131\",\"132\",\"133\",\"134\",\"135\",\"136\",\"137\",\"138\",\"139\",\"140\",\"141\",\"142\",\"143\",\"144\",\"145\",\"146\",\"147\",\"148\",\"149\",\"150\",\"151\",\"152\",\"153\",\"154\",\"155\",\"156\",\"157\",\"158\",\"159\",\"160\",\"161\",\"162\",\"163\",\"164\",\"165\",\"166\",\"167\",\"168\",\"169\",\"170\",\"171\",\"172\",\"173\",\"174\",\"175\",\"176\",\"177\",\"178\",\"179\",\"180\"])";
+            let expected = "(version:1,num_values:110,topn:10,values_seen:20100,freq_param:1.1,counts:[200,199,198,197,196,195,194,193,192,191,190,189,188,187,186,185,184,183,182,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181],overcounts:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180],datums:[199,198,197,196,195,194,193,192,191,190,189,188,187,186,185,184,183,182,181,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180])";
             assert_eq!(test, expected);
         });
     }
@@ -828,7 +1487,7 @@ mod tests {
             55, 0, 0, 0, 0, 0, 0, 0, // elements seen
             0, 0, 0, 0, 0, 0, 176, 63, // frequency (f64 encoding of 0.0625)
             17, 0, 0, 0, // elements tracked
-            0, 0, 0, 0,  // topn
+            0, 0, 0, 0, // topn
             7, 0, 0, 0, 1, 1, 10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111,
             103, 11, 0, 0, 0, 0, 0, 0, 0, 101, 110, 95, 85, 83, 46, 85, 84, 70, 45,
             56, // INT4 hasher
@@ -887,7 +1546,7 @@ mod tests {
             155, 0, 0, 0, 0, 0, 0, 0, // elements seen
             0, 0, 0, 0, 0, 0, 176, 63, // frequency (f64 encoding of 0.0625)
             17, 0, 0, 0, // elements tracked
-            0, 0, 0, 0,  // topn
+            0, 0, 0, 0, // topn
             7, 0, 0, 0, 1, 1, 10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111,
             103, 11, 0, 0, 0, 0, 0, 0, 0, 101, 110, 95, 85, 83, 46, 85, 84, 70, 45,
             56, // INT4 hasher
@@ -939,7 +1598,8 @@ mod tests {
                 super::space_saving_deserialize(first, None.into()).unwrap(),
                 super::space_saving_deserialize(second, None.into()).unwrap(),
                 fcinfo,
-            ).unwrap()
+            )
+            .unwrap(),
         );
 
         let bytes = unsafe {
@@ -954,7 +1614,7 @@ mod tests {
             210, 0, 0, 0, 0, 0, 0, 0, // elements seen
             0, 0, 0, 0, 0, 0, 176, 63, // frequency (f64 encoding of 0.0625)
             17, 0, 0, 0, // elements tracked
-            0, 0, 0, 0,  // topn
+            0, 0, 0, 0, // topn
             7, 0, 0, 0, 1, 1, 10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111,
             103, 11, 0, 0, 0, 0, 0, 0, 0, 101, 110, 95, 85, 83, 46, 85, 84, 70, 45,
             56, // INT4 hasher
@@ -1003,8 +1663,7 @@ mod tests {
     }
 
     // Setup environment and create table 'test' with some aggregates in table 'aggs'
-    fn setup_with_test_table(client : &SpiClient)
-    {
+    fn setup_with_test_table(client: &SpiClient) {
         // using the search path trick for this test to make it easier to stabilize later on
         let sp = client
             .select(
@@ -1033,7 +1692,11 @@ mod tests {
             client.select(&format!("INSERT INTO test SELECT i, '2020-1-1'::TIMESTAMPTZ + ('{} days, ' || i::TEXT || ' seconds')::INTERVAL FROM generate_series({}, 19, 1) i", 10 - i, i), None, None);
         }
 
-        client.select("CREATE TABLE aggs (name TEXT, agg SPACESAVINGAGGREGATE)", None, None);
+        client.select(
+            "CREATE TABLE aggs (name TEXT, agg SPACESAVINGBIGINTAGGREGATE)",
+            None,
+            None,
+        );
         client.select("INSERT INTO aggs SELECT 'topn_default', topn_agg(5, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None);
         client.select("INSERT INTO aggs SELECT 'topn_1.5', topn_agg(5, 1.5, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None);
         client.select("INSERT INTO aggs SELECT 'topn_2', topn_agg(5, 2, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None);
@@ -1049,17 +1712,41 @@ mod tests {
             setup_with_test_table(&client);
 
             // simple tests
-            let rows = client.select("SELECT topn(agg, 0::int) FROM aggs WHERE name = 'topn_default'", None, None).count();
+            let rows = client
+                .select(
+                    "SELECT topn(agg) FROM aggs WHERE name = 'topn_default'",
+                    None,
+                    None,
+                )
+                .count();
             assert_eq!(rows, 5);
-            let rows = client.select("SELECT topn(agg, 5, 0::int) FROM aggs WHERE name = 'freq_5'", None, None).count();
+            let rows = client
+                .select(
+                    "SELECT topn(agg, 5) FROM aggs WHERE name = 'freq_5'",
+                    None,
+                    None,
+                )
+                .count();
             assert_eq!(rows, 5);
 
             // can limit below topn_agg value
-            let rows = client.select("SELECT topn(agg, 3, 0::int) FROM aggs WHERE name = 'topn_default'", None, None).count();
+            let rows = client
+                .select(
+                    "SELECT topn(agg, 3) FROM aggs WHERE name = 'topn_default'",
+                    None,
+                    None,
+                )
+                .count();
             assert_eq!(rows, 3);
 
             // only 4 rows with freq >= 0.08
-            let rows = client.select("SELECT topn(agg, 5, 0::int) FROM aggs WHERE name = 'freq_8'", None, None).count();
+            let rows = client
+                .select(
+                    "SELECT topn(agg, 5) FROM aggs WHERE name = 'freq_8'",
+                    None,
+                    None,
+                )
+                .count();
             assert_eq!(rows, 4);
         });
     }
@@ -1094,11 +1781,29 @@ mod tests {
         Spi::execute(|client| {
             setup_with_test_table(&client);
 
-            let rows = client.select("SELECT into_values(agg, 0::int) FROM aggs WHERE name = 'freq_8'", None, None).count();
+            let rows = client
+                .select(
+                    "SELECT into_values(agg) FROM aggs WHERE name = 'freq_8'",
+                    None,
+                    None,
+                )
+                .count();
             assert_eq!(rows, 13);
-            let rows = client.select("SELECT into_values(agg, 0::int) FROM aggs WHERE name = 'freq_5'", None, None).count();
+            let rows = client
+                .select(
+                    "SELECT into_values(agg) FROM aggs WHERE name = 'freq_5'",
+                    None,
+                    None,
+                )
+                .count();
             assert_eq!(rows, 20);
-            let rows = client.select("SELECT into_values(agg, 0::int) FROM aggs WHERE name = 'freq_2'", None, None).count();
+            let rows = client
+                .select(
+                    "SELECT into_values(agg) FROM aggs WHERE name = 'freq_2'",
+                    None,
+                    None,
+                )
+                .count();
             assert_eq!(rows, 20);
         });
     }
@@ -1152,7 +1857,7 @@ mod tests {
         let rand100 = Uniform::new_inclusive(0, 99);
         let mut rng = rand::thread_rng();
 
-        let mut counts = [0;100];
+        let mut counts = [0; 100];
 
         let mut state = None.into();
         let freq = 0.015;
@@ -1167,7 +1872,7 @@ mod tests {
         }
 
         let state = space_saving_final(state, fcinfo).unwrap();
-        let vals : std::collections::HashSet<usize> = state.datums.iter().collect();
+        let vals: std::collections::HashSet<usize> = state.datums.iter().collect();
 
         for (val, &count) in counts.iter().enumerate() {
             if count >= 3 {
@@ -1192,7 +1897,7 @@ mod tests {
 
         let zeta = Zeta::new(skew * 1.05).unwrap();
 
-        let mut counts = [0;100];
+        let mut counts = [0; 100];
 
         let mut state = None.into();
         let fcinfo = std::ptr::null_mut(); // dummy value, will use default collation
@@ -1200,25 +1905,25 @@ mod tests {
         for _ in 0..100000 {
             let v = zeta.sample(&mut rng).floor() as usize;
             if v == usize::MAX {
-                continue;  // These tail values can start to add up at low skew values
+                continue; // These tail values can start to add up at low skew values
             }
             let value =
                 unsafe { AnyElement::from_datum(v as pg_sys::Datum, false, pg_sys::INT4OID) };
             state = super::topn_agg_with_skew_trans(state, n as i32, skew, value, fcinfo).unwrap();
-            if v < 100 {  // anything greater than 100 will not be in the top values
+            if v < 100 {
+                // anything greater than 100 will not be in the top values
                 counts[v] += 1;
             }
         }
 
         let state = space_saving_final(state, fcinfo).unwrap();
-        let value =
-            unsafe { AnyElement::from_datum(0, false, pg_sys::INT4OID) };
-        let t : Vec<AnyElement> = default_topn(state, value.unwrap()).collect();
-        let agg_topn : Vec<usize> = t.iter().map(|x| x.datum()).collect();
+        let value = unsafe { AnyElement::from_datum(0, false, pg_sys::INT4OID) };
+        let t: Vec<AnyElement> = default_topn(state, value.unwrap()).collect();
+        let agg_topn: Vec<usize> = t.iter().map(|x| x.datum()).collect();
 
-        let mut temp : Vec<(usize, &usize)> = counts.iter().enumerate().collect();
+        let mut temp: Vec<(usize, &usize)> = counts.iter().enumerate().collect();
         temp.sort_by(|(_, cnt1), (_, cnt2)| cnt2.cmp(cnt1)); // descending order by count
-        let top_vals : Vec<usize> = temp.into_iter().map(|(val, _)| val).collect();
+        let top_vals: Vec<usize> = temp.into_iter().map(|(val, _)| val).collect();
 
         for i in 0..n as usize {
             assert_eq!(agg_topn[i], top_vals[i]);

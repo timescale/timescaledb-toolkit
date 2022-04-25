@@ -34,19 +34,9 @@ use pgx::*;
 
 pgx::pg_module_magic!();
 
-static EXPERIMENTAL_ENABLED: GucSetting<bool> = GucSetting::new(false);
-
 #[pg_guard]
 pub extern "C" fn _PG_init() {
-    GucRegistry::define_bool_guc(
-        "timescaledb_toolkit_acknowledge_auto_drop",
-        "enable creation of auto-dropping objects using experimental timescaledb_toolkit_features",
-        "experimental features are very unstable, and objects \
-            depending on them will be automatically deleted on extension update",
-        &EXPERIMENTAL_ENABLED,
-        //TODO should this be superuser?
-        GucContext::Userset,
-    );
+    // Nothing to do here
 }
 
 extension_sql!(r#"GRANT USAGE ON SCHEMA toolkit_experimental TO PUBLIC;"#,

@@ -47,7 +47,6 @@ INSERT INTO test_data
 
 Now suppose we want to know how much the temperature fluctuates on a daily basis for each device.  Using timevector and pipelines can simplify the process of finding the answer:
 ```SQL ,non-transactional,ignore-output
-SET timescaledb_toolkit_acknowledge_auto_drop TO 'true';
 CREATE VIEW daily_delta AS
     SELECT device,
         toolkit_experimental.timevector(time, temperature)

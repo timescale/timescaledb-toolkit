@@ -184,7 +184,6 @@ mod tests {
             // difficult to spot otherwise.
             let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -215,7 +214,6 @@ mod tests {
             // difficult to spot otherwise.
             let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -244,7 +242,6 @@ mod tests {
             // difficult to spot otherwise.
             let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             // `-> materialize()` should force materialization, but otherwise the
             // pipeline-folding optimization should proceed

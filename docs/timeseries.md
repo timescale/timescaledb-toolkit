@@ -31,11 +31,6 @@ INSERT INTO test
 INSERT 0 4032
 ```
 
-While still expermental, we'll need to set this before creating our view:
-```SQL , non-transactional,ignore-output
-    SET timescaledb_toolkit_acknowledge_auto_drop TO 'true';
-```
-
 Now lets capture this data into a time series which we'll store in a view.
 
 ```SQL ,non-transactional,ignore-output

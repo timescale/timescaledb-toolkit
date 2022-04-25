@@ -552,7 +552,6 @@ mod tests {
             // difficult to spot otherwise.
             let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
             client.select("SELECT $$ let $1 = 1.0; 2.0, $1 $$::toolkit_experimental.lambda", None, None);
             // client.select("SELECT $$ '1 day'i $$::toolkit_experimental.lambda", None, None);
             // client.select("SELECT $$ '2020-01-01't $$::toolkit_experimental.lambda", None, None);
@@ -625,7 +624,6 @@ mod tests {
             // difficult to spot otherwise.
             let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             bool_lambda_eq!(client, "2.0 <  3.0", "true");
             bool_lambda_eq!(client, "2.0 <= 3.0", "true");
@@ -666,7 +664,6 @@ mod tests {
             // difficult to spot otherwise.
             let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             f64_lambda_eq!(client, "pi()",    std::f64::consts::PI);
 
@@ -707,7 +704,6 @@ mod tests {
             // difficult to spot otherwise.
             let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             f64_lambda_eq!(client, "-(2.0)", -2.0f64);
             f64_lambda_eq!(client, "-(-2.0)", 2.0f64);
@@ -729,7 +725,6 @@ mod tests {
             // difficult to spot otherwise.
             let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             interval_lambda_eq!(client, "'1 day'i + '1 day'i", "2 days");
             interval_lambda_eq!(client, "'1 day'i + '1 week'i", "8 days");
@@ -749,7 +744,6 @@ mod tests {
             // difficult to spot otherwise.
             let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select("SET timescaledb_toolkit_acknowledge_auto_drop TO 'true'", None, None);
 
             f64_lambda_eq!(client, "let $foo = 2.0; $foo", 2.0);
             f64_lambda_eq!(client, "let $foo = -2.0; $foo", -2.0);

@@ -18,10 +18,10 @@ jobs:
       - name: Debian and Ubuntu packages
         if: always()
         run: |
-          gh workflow run toolkit-apt.yml -R timescale/release-build-scripts -r master -f version=${{ env.RELEASE_VERSION }} -f upload-artifacts=true
+          gh workflow run toolkit-apt.yml -R timescale/release-build-scripts -r main -f version=${{ env.RELEASE_VERSION }} -f upload-artifacts=true
 
       - name: RPM packages
         if: always()
         run: |
-          gh workflow run toolkit-rpm.yml -R timescale/release-build-scripts -r master -f version=${{ env.RELEASE_VERSION }} -f upload-artifacts=true
+          gh workflow run toolkit-rpm.yml -R timescale/release-build-scripts -r main -f version=${{ env.RELEASE_VERSION }} -f upload-artifacts=true
 

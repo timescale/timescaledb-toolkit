@@ -152,11 +152,11 @@ pub fn check_user_function_type(function: pg_sys::regproc) {
         error!("invalid number of mapping function arguments, expected fn(timevector) RETURNS timevector")
     }
 
-    if unsafe { *argtypes } != *crate::time_series::TIMEVECTOR_OID {
+    if unsafe { *argtypes } != *crate::time_vector::TIMEVECTOR_OID {
         error!("invalid argument type, expected fn(timevector) RETURNS timevector")
     }
 
-    if rettype != *crate::time_series::TIMEVECTOR_OID {
+    if rettype != *crate::time_vector::TIMEVECTOR_OID {
         error!("invalid return type, expected fn(timevector) RETURNS timevector")
     }
 }

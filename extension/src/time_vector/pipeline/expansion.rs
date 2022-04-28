@@ -94,7 +94,7 @@ pub fn arrow_run_pipeline_then_unnest(
 {
     let series = run_pipeline_elements(timevector, pipeline.elements.iter())
         .0.into_owned();
-    crate::time_series::unnest(series.into())
+    crate::time_vector::unnest(series.into())
 }
 
 #[pg_extern(

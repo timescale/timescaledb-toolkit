@@ -8,7 +8,7 @@ use crate::{
 
 use tspoint::TSPoint;
 
-use crate::time_series::{TimevectorData, SeriesType, Timevector};
+use crate::time_vector::{TimevectorData, SeriesType, Timevector};
 
 
 pub struct LttbTrans {
@@ -65,13 +65,13 @@ pub fn lttb_trans_inner(
 pub fn lttb_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
+) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
     lttb_final_inner(unsafe{ state.to_inner() }, fcinfo)
 }
 pub fn lttb_final_inner(
     state: Option<Inner<LttbTrans>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
+) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let mut state = match state {
@@ -182,18 +182,18 @@ pub fn lttb(data: &[TSPoint], threshold: usize) -> Cow<'_, [TSPoint]> {
 
 #[pg_extern(name="lttb", schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn lttb_on_timevector(
-    series: crate::time_series::toolkit_experimental::Timevector<'static>,
+    series: crate::time_vector::toolkit_experimental::Timevector<'static>,
     threshold: i32,
-) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
+) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
     lttb_ts(series, threshold as usize).into()
 }
 
 // based on https://github.com/jeromefroe/lttb-rs version 0.2.0
 pub fn lttb_ts(
-    data: crate::time_series::toolkit_experimental::Timevector,
+    data: crate::time_vector::toolkit_experimental::Timevector,
     threshold: usize
 )
--> crate::time_series::toolkit_experimental::Timevector
+-> crate::time_vector::toolkit_experimental::Timevector
 {
     if !data.is_sorted() {
         panic!("lttb requires sorted timevector");

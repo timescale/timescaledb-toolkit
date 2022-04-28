@@ -9,7 +9,7 @@ use crate::{
 
 use tspoint::TSPoint;
 
-use crate::time_series::{Timevector, TimevectorData, SeriesType};
+use crate::time_vector::{Timevector, TimevectorData, SeriesType};
 
 // This is included for debug purposes and probably should not leave experimental
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
@@ -109,13 +109,13 @@ fn find_downsample_interval(points: &[TSPoint], resolution: i64) -> i64 {
 fn asap_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
+) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
     asap_final_inner(unsafe{ state.to_inner() }, fcinfo)
 }
 fn asap_final_inner(
     state: Option<Inner<ASAPTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
+) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let state = match state {
@@ -160,9 +160,9 @@ fn asap_final_inner(
 
 #[pg_extern(name="asap_smooth", schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn asap_on_timevector(
-    mut series: crate::time_series::toolkit_experimental::Timevector<'static>,
+    mut series: crate::time_vector::toolkit_experimental::Timevector<'static>,
     resolution: i32
-) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
+) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
     // TODO: implement this using zero copy (requires sort, find_downsample_interval, and downsample_and_gapfill on Timevector)
     let needs_sort = matches!(&series.series, SeriesType::Explicit{..});
     let start_ts;

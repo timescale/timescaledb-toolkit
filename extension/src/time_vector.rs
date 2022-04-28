@@ -479,7 +479,7 @@ pub fn combine(first: Timevector<'_>, second: Timevector<'_>) -> Timevector<'sta
 pub fn timevector_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
+) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
     unsafe {
         timevector_final_inner(state.to_inner(), fcinfo)
     }
@@ -488,7 +488,7 @@ pub fn timevector_final(
 pub fn timevector_final_inner<'a>(
     state: Option<Inner<Timevector<'a>>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
+) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let state = match state {

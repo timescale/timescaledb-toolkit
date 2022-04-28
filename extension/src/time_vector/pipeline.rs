@@ -51,7 +51,7 @@ pub use self::toolkit_experimental::*;
 #[pg_schema]
 pub mod toolkit_experimental {
     use super::*;
-    pub use crate::time_series::Timevector;
+    pub use crate::time_vector::Timevector;
     pub(crate) use crate::accessors::toolkit_experimental::AccessorDelta;
     pub(crate) use lambda::toolkit_experimental::{Lambda, LambdaData};
     // TODO once we start stabilizing elements, create a type TimevectorPipeline

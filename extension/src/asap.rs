@@ -25,83 +25,6 @@ pub fn asap_smooth_raw(
 mod toolkit_experimental {
 }
 
-pub enum GapfillMethod {
-    LOCF,
-    Linear,
-    Nearest,  // Defaults to left on tie
-}
-
-impl GapfillMethod {
-    // Adds the given number of points to the end of a non-empty NormalTimevector
-    pub fn fill_normalized_series_gap(&self, values: &mut Vec<f64>, points: i32, post_gap_val: f64) {
-        assert!(!values.is_empty());
-        let last_val = *values.last().unwrap();
-        for i in 1..=points {
-            match self {
-                GapfillMethod::LOCF => values.push(last_val),
-                GapfillMethod::Linear => values.push(last_val + (post_gap_val - last_val) * i as f64 / (points + 1) as f64),
-                GapfillMethod::Nearest => values.push(if i <= (points + 1) / 2 {last_val} else {post_gap_val}),
-            }
-        }
-    }
-}
-
-impl GapfillMethod {
-    // Determine a value to the left of a given point or two (for linear) using the given gapfill method
-    // TODO: this returns the first value for LOCF, which probabaly isn't correct, technically this function shouldn't be valid for LOCF,
-    pub fn predict_left(&self, target_time: i64, first: TSPoint, second: Option<TSPoint>) -> TSPoint {
-        TSPoint {
-            ts: target_time,
-            val: match self {
-                GapfillMethod::LOCF => first.val,
-                GapfillMethod::Nearest => first.val,
-                GapfillMethod::Linear => {
-                    let second = match second {
-                        Some(v) => v,
-                        None => panic!{"Unable to predict left point without two values to interpolate from"},
-                    };
-                    let slope = (first.val - second.val) / (first.ts - second.ts) as f64;
-                    first.val - slope * (first.ts - target_time) as f64
-                },
-            }
-        }
-    }
-
-    // Determine a value to the right of a given point or two (for linear) using the given gapfill method
-    pub fn predict_right(&self, target_time: i64, last: TSPoint, penultimate: Option<TSPoint>) -> TSPoint {
-        TSPoint {
-            ts: target_time,
-            val: match self {
-                GapfillMethod::LOCF => last.val,
-                GapfillMethod::Nearest => last.val,
-                GapfillMethod::Linear => {
-                    let penultimate = match penultimate {
-                        Some(v) => v,
-                        None => panic!{"Unable to predict right point without two values to interpolate from"},
-                    };
-                    let slope = (last.val - penultimate.val) / (last.ts - penultimate.ts) as f64;
-                    last.val + slope * (target_time - last.ts) as f64
-                },
-            }
-        }
-    }
-
-    // Given a target time and the immediate points to either side, provide the missing point
-    pub fn gapfill(&self, target_time: i64, left: TSPoint, right: TSPoint) -> TSPoint {
-        TSPoint {
-            ts: target_time,
-            val: match self {
-                GapfillMethod::LOCF => left.val,
-                GapfillMethod::Nearest => if target_time - left.ts <= right.ts - target_time {left.val} else {right.val},
-                GapfillMethod::Linear => {
-                    let slope = (right.val - left.val) / (right.ts - left.ts) as f64;
-                    left.val + slope * (target_time - left.ts) as f64
-                },
-            }
-        }
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ASAPTransState {
     ts: Vec<TSPoint>,
@@ -212,7 +135,7 @@ fn asap_final_inner(
             } else {
                 (points.last().unwrap().ts - points.first().unwrap().ts) / points.len() as i64
             };
-            let mut normal = downsample_and_gapfill_to_normal_form(&points, downsample_interval, GapfillMethod::Linear);
+            let mut normal = downsample_and_gapfill_to_normal_form(&points, downsample_interval);
             let start_ts = points.first().unwrap().ts;
 
             // Drop the last value to match the reference implementation
@@ -256,7 +179,7 @@ pub fn asap_on_timevector(
             } else {
                 (points.as_slice().last().unwrap().ts - points.as_slice().first().unwrap().ts) / points.len() as i64
             };
-            let normal = downsample_and_gapfill_to_normal_form(points.as_slice(), downsample_interval, GapfillMethod::Linear);
+            let normal = downsample_and_gapfill_to_normal_form(points.as_slice(), downsample_interval);
             start_ts = points.as_slice().first().unwrap().ts;
             normal
         },
@@ -288,10 +211,18 @@ pub fn asap_on_timevector(
     })
 }
 
+// Adds the given number of points to the end of a non-empty NormalTimevector
+pub fn fill_normalized_series_gap(values: &mut Vec<f64>, points: i32, post_gap_val: f64) {
+    assert!(!values.is_empty());
+    let last_val = *values.last().unwrap();
+    for i in 1..=points {
+        values.push(last_val + (post_gap_val - last_val) * i as f64 / (points + 1) as f64);
+    }
+}
+
 fn downsample_and_gapfill_to_normal_form(
     points: &[TSPoint],
-    downsample_interval: i64,
-    gapfill_method: GapfillMethod
+    downsample_interval: i64
 ) -> Vec<f64> {
     if points.len() < 2 || points.last().unwrap().ts - points.first().unwrap().ts < downsample_interval {
         panic!("Not enough data to generate a smoothed representation")
@@ -311,7 +242,7 @@ fn downsample_and_gapfill_to_normal_form(
             let new_val = sum / count as f64;
             // If we missed any intervals prior to the current one, fill in the gap here
             if gap_count != 0 {
-                gapfill_method.fill_normalized_series_gap(&mut values, gap_count, new_val);
+                fill_normalized_series_gap(&mut values, gap_count, new_val);
                 gap_count = 0;
             }
             values.push(new_val);
@@ -332,7 +263,7 @@ fn downsample_and_gapfill_to_normal_form(
     assert!(count > 0);
     let new_val = sum / count as f64;
     if gap_count != 0 {
-        gapfill_method.fill_normalized_series_gap(&mut values, gap_count, new_val);
+        fill_normalized_series_gap(&mut values, gap_count, new_val);
     }
     values.push(sum / count as f64);
     values

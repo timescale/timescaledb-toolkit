@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use time_series::TSPoint;
+use tspoint::TSPoint;
 
 use flat_serialize_macro::FlatSerializable;
 

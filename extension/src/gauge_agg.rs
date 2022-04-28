@@ -5,7 +5,7 @@ use counter_agg::{range::I64Range, GaugeSummaryBuilder, MetricSummary};
 use flat_serialize::FlatSerializable;
 use flat_serialize_macro::FlatSerializable;
 use stats_agg::stats2d::StatsSummary2D;
-use time_series::TSPoint;
+use tspoint::TSPoint;
 
 use crate::{
     aggregate_utils::in_aggregate_context,

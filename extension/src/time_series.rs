@@ -6,9 +6,7 @@ use crate::{
     aggregate_utils::in_aggregate_context, pg_type, build, flatten, palloc::{Internal, InternalAsValue, Inner, ToInternal},
 };
 
-use time_series::{
-    TSPoint,
-};
+use tspoint::TSPoint;
 
 pub use iter::Iter;
 

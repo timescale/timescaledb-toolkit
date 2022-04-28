@@ -1,4 +1,4 @@
-use time_series::TSPoint;
+use tspoint::TSPoint;
 
 use Iter::*;
 

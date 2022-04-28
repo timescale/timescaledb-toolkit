@@ -7,7 +7,7 @@ use crate::{
     aggregate_utils::in_aggregate_context, palloc::{Internal, InternalAsValue, Inner, ToInternal},
 };
 
-use time_series::TSPoint;
+use tspoint::TSPoint;
 
 use crate::time_series::{Timevector, TimevectorData, SeriesType};
 

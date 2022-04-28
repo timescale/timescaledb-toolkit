@@ -13,9 +13,7 @@ use crate::{
     range::*,
 };
 
-use time_series::{
-    TSPoint,
-};
+use tspoint::TSPoint;
 
 use counter_agg::{
     MetricSummary,

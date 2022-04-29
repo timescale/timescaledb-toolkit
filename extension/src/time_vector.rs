@@ -31,24 +31,10 @@ pub mod toolkit_experimental {
                     num_points: u64,  // required to be aligned
                     points: [TSPoint; self.num_points],
                 },
-                Normal: 2 {
-                    start_ts: i64,
-                    step_interval: i64,
-                    num_vals: u64,  // required to be aligned
-                    values: [f64; self.num_vals],
-                },
                 // Explicit is assumed to be unordered
                 Explicit: 3 {
                     num_points: u64,  // required to be aligned
                     points: [TSPoint; self.num_points],
-                },
-                GappyNormal: 4 {
-                    start_ts: i64,
-                    step_interval: i64,
-                    num_vals: u64,  // required to be aligned
-                    count: u64,
-                    values: [f64; self.num_vals],
-                    present: [u64; (self.count + 63) / 64]
                 },
             },
         }
@@ -100,10 +86,6 @@ impl<'input> Timevector<'input> {
                 points.len(),
             SeriesType::Explicit{points, ..} =>
                 points.len(),
-            SeriesType::Normal{values, ..} =>
-                values.len(),
-            SeriesType::GappyNormal{values, ..} =>
-                values.len(),
         }
     }
 
@@ -119,10 +101,6 @@ impl<'input> Timevector<'input> {
                 Some(points.as_slice()[index]),
             SeriesType::Explicit{points, ..} =>
                 Some(points.as_slice()[index]),
-            SeriesType::Normal{start_ts, step_interval, values, ..} =>
-                Some(TSPoint{ts: start_ts + index as i64 * step_interval, val: values.as_slice()[index]}),
-            SeriesType::GappyNormal{..} =>
-                panic!("Can not efficient index into the middle of a normalized timevector with gaps"),
         }
     }
 
@@ -132,10 +110,6 @@ impl<'input> Timevector<'input> {
                 true,
             SeriesType::Explicit{..} =>
                 false, // a sorted Explicit is written out as a SortedSeries
-            SeriesType::Normal{..} =>
-                true,
-            SeriesType::GappyNormal{..} =>
-                true,
         }
     }
 
@@ -151,19 +125,13 @@ impl<'a> Timevector<'a> {
                 Iter::Slice{iter: points.iter()},
             SeriesType::Explicit{points, ..} =>
                 Iter::Slice{iter: points.iter()},
-            SeriesType::Normal{start_ts, step_interval, values, ..} =>
-                Iter::Normal{idx: 0, start: *start_ts, step: *step_interval, vals: values.iter()},
-            SeriesType::GappyNormal{count, start_ts, step_interval, present, values, ..} =>
-                Iter::GappyNormal{idx: 0, count: *count, start: *start_ts, step: *step_interval, present: present.as_slice(), vals: values.iter()},
         }
     }
 
     pub fn num_vals(&self) -> usize {
         match &self.series {
             SeriesType::Sorted { num_points, .. } => *num_points as _,
-            SeriesType::Normal { num_vals, .. } => *num_vals as _,
             SeriesType::Explicit { num_points, ..} => *num_points as _,
-            SeriesType::GappyNormal { num_vals, .. } => *num_vals as _,
         }
     }
 }
@@ -178,10 +146,6 @@ impl<'a> IntoIterator for Timevector<'a> {
                 Iter::Slice{iter: points.into_iter()},
             SeriesType::Explicit{points, ..} =>
                 Iter::Slice{iter: points.into_iter()},
-            SeriesType::Normal{start_ts, step_interval, values, ..} =>
-                Iter::Normal{idx: 0, start: start_ts, step: step_interval, vals: values.into_iter()},
-            SeriesType::GappyNormal{count, start_ts, step_interval, present, values, ..} =>
-                Iter::GappyNormal{idx: 0, count, start: start_ts, step: step_interval, present: present.slice(), vals: values.into_iter()},
         }
     }
 }
@@ -276,7 +240,6 @@ pub fn timevector_trans_inner(
                         }
                     }
                 },
-                _ => unreachable!(),
             }
             Some(state)
         })
@@ -336,8 +299,6 @@ pub fn inner_compound_trans<'b>(
                             };
                             Some(state)
                         },
-                        _ => unreachable!(),
-
                     }
             }
         })
@@ -409,70 +370,14 @@ pub fn combine(first: Timevector<'_>, second: Timevector<'_>) -> Timevector<'sta
         }
     };
 
-    // If the series are adjacent normal series, combine them into a larger normal series
-    let mut ordered = false;
-    if let (
-        Normal {
-            start_ts: start_ts_1,
-            step_interval: step_interval_1,
-            num_vals: _,
-            values: values_1
-        },
-        Normal {
-            start_ts: start_ts_2,
-            step_interval: step_interval_2,
-            num_vals: _,
-            values: values_2
-        }
-    ) = (&first.series, &second.series) {
-        if step_interval_1 == step_interval_2 {
-            if *start_ts_2 == start_ts_1 + values_1.len() as i64 * step_interval_1 {
-                let mut new_values = values_1.clone().into_owned();
-                new_values.as_owned().extend(values_2.iter());
-                return build!{ Timevector {
-                    series: Normal {
-                        start_ts: *start_ts_1,
-                        step_interval: *step_interval_1,
-                        num_vals: new_values.len() as _,
-                        values: new_values,
-                    }
-                }};
-            }
-
-            if *start_ts_1 == start_ts_2 + values_2.len() as i64 * step_interval_2 {
-                let mut new_values = values_2.clone().into_owned();
-                new_values.as_owned().extend(values_1.iter());
-                return build!{ Timevector {
-                    series: Normal {
-                        start_ts: *start_ts_2,
-                        step_interval: *step_interval_2,
-                        num_vals: new_values.len() as _,
-                        values: new_values,
-                    }
-                }};
-            }
-        }
-
-        ordered = start_ts_1 + (values_1.len() - 1) as i64 * step_interval_1 < *start_ts_2
-    };
-
     // In all other cases, just return a new explicit series containing all the points from both series
     let points: Vec<_> = first.iter().chain(second.iter()).collect();
-    if ordered {
-        build!{ Timevector {
-            series: Sorted {
-                num_points: points.len() as _,
-                points: points.into(),
-            }
-        }}
-    } else {
-        build!{ Timevector {
-            series: Explicit {
-                num_points: points.len() as _,
-                points: points.into(),
-            }
-        }}
-    }
+    build!{ Timevector {
+        series: Explicit {
+            num_points: points.len() as _,
+            points: points.into(),
+        }
+    }}
 }
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]

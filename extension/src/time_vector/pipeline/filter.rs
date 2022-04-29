@@ -56,17 +56,6 @@ pub fn filter_lambda_over_series(
             points.as_owned().retain(|p| func(p.ts, p.val));
             *num_points = points.len() as _;
         },
-        _ => {
-            let new_points: Vec<_> = series.iter().filter(|p| func(p.ts, p.val)).collect();
-            *series = build! {
-                Timevector {
-                    series: Explicit {
-                        num_points: new_points.len() as _,
-                        points: new_points.into(),
-                    },
-                }
-            }
-        }
     }
 }
 

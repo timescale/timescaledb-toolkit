@@ -77,13 +77,6 @@ pub fn map_lambda_over_series(
                 }
             }
         },
-        // Normal { values, .. } => if only_val {
-        //     // TODO
-        //     let values = values.as_owned();
-        //     for value in values {
-        //         *value = func(*value)
-        //     }
-        // },
         Explicit { points, .. } => {
             let points = points.as_owned();
             // FIXME ensure sorted
@@ -95,31 +88,6 @@ pub fn map_lambda_over_series(
                 }
             }
         },
-        // GappyNormal { values, .. } => if only_val {
-        //     // TODO
-        //     let values = values.as_owned();
-        //     //FIXME add setjmp guard around loop
-        //     for value in values {
-        //         *value = func(*value)
-        //     }
-        // },
-        _ => {
-            let new_points: Vec<_> = series.iter().map(|point| {
-                let (new_time, new_val) = func(point.ts, point.val);
-                TSPoint {
-                    ts: new_time.unwrap_or(point.ts),
-                    val: new_val.unwrap_or(point.val),
-                }
-            }).collect();
-            *series = build! {
-                Timevector {
-                    series: Explicit {
-                        num_points: new_points.len() as _,
-                        points: new_points.into(),
-                    },
-                }
-            }
-        }
     }
 }
 
@@ -282,18 +250,6 @@ pub fn map_series(series: &mut Timevector<'_>, mut func: impl FnMut(f64) -> f64)
                 }
             }))
         },
-        Normal { values, .. } => {
-            let values = values.as_owned().iter_mut();
-            // setjump guard around the loop to reduce the amount we have to
-            // call it
-            // NOTE need to be careful that there's no allocation within the
-            //      loop body so it cannot leak
-            pgx::guard(AssertUnwindSafe(|| {
-                for value in values {
-                    *value = func(*value)
-                }
-            }))
-        },
         Explicit { points, .. } => {
             let points = points.as_owned().iter_mut();
             // setjump guard around the loop to reduce the amount we have to
@@ -306,18 +262,6 @@ pub fn map_series(series: &mut Timevector<'_>, mut func: impl FnMut(f64) -> f64)
                         ts: point.ts,
                         val: func(point.val),
                     }
-                }
-            }))
-        },
-        GappyNormal { values, .. } => {
-            let values = values.as_owned().iter_mut();
-            // setjump guard around the loop to reduce the amount we have to
-            // call it
-            // NOTE need to be careful that there's not allocation within the
-            //      loop body so it cannot leak
-            pgx::guard(AssertUnwindSafe(|| {
-                for value in values {
-                    *value = func(*value)
                 }
             }))
         },

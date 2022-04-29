@@ -142,16 +142,15 @@ fn asap_final_inner(
             normal.pop();
             let values = asap_smooth(&normal, state.resolution as u32);
 
+            let mut points = Vec::new();
+            let interval = downsample_interval * normal.len() as i64 / values.len() as i64;
+            for i in 0..values.len() {
+                points.push(TSPoint{ts: start_ts + i as i64 * interval, val: values[i]});
+            }
+
             Some(crate::build! {
                 Timevector {
-                    series: SeriesType::Normal {
-                        start_ts,
-                        // Set the step interval for the asap result so that it covers the same interval
-                        // as the passed in data
-                        step_interval: downsample_interval * normal.len() as i64 / values.len() as i64,
-                        num_vals: values.len() as _,
-                        values: values.into(),
-                    }
+                    series: SeriesType::Sorted { num_points: points.len() as u64, points: points.into() }
                 }
             })
         })
@@ -183,13 +182,6 @@ pub fn asap_on_timevector(
             start_ts = points.as_slice().first().unwrap().ts;
             normal
         },
-        SeriesType::Normal { start_ts: start, step_interval, values, .. } => {
-            start_ts = *start;
-            downsample_interval = *step_interval;
-            values.clone().into_vec()
-        },
-        SeriesType::GappyNormal { .. } =>
-            panic!("Series must be gapfilled before running asap smoothing"),
     };
 
     // Drop the last value to match the reference implementation
@@ -197,16 +189,15 @@ pub fn asap_on_timevector(
 
     let result = asap_smooth(&normal, resolution as u32);
 
+    let mut points = Vec::new();
+    let interval = downsample_interval * normal.len() as i64 / result.len() as i64;
+    for i in 0..result.len() {
+        points.push(TSPoint{ts: start_ts + i as i64 * interval, val: result[i]});
+    }
+
     Some(crate::build! {
         Timevector {
-            series: SeriesType::Normal {
-                start_ts,
-                // Set the step interval for the asap result so that it covers the same interval
-                // as the passed in data
-                step_interval: downsample_interval * normal.len() as i64 / result.len() as i64,
-                num_vals: result.len() as _,
-                values: result.into(),
-            }
+            series: SeriesType::Sorted { num_points: points.len() as u64, points: points.into() }
         }
     })
 }

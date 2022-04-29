@@ -19,7 +19,7 @@ pub fn sort_timevector(
     mut series: toolkit_experimental::Timevector<'_>,
 ) -> toolkit_experimental::Timevector<'_> {
     match &mut series.series {
-        SeriesType::GappyNormal{..} | SeriesType::Normal{..} | SeriesType::Sorted{..} => series,
+        SeriesType::Sorted{..} => series,
         SeriesType::Explicit{points, ..} => {
             let points = points.as_owned();
             let mut points = std::mem::take(points);

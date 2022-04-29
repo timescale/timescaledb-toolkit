@@ -78,7 +78,6 @@ pub fn fill_to<'s>(
 
     match series.series {
         SeriesType::Explicit{..} => panic!("Timeseries must be sorted prior to passing to fill_to"),
-        SeriesType::Normal{step_interval, ..} => if step_interval <= interval { return series; },
         _ => ()
     }
 

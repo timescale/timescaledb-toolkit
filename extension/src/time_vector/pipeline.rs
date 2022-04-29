@@ -1,7 +1,5 @@
 
-mod fill_holes;
 mod fill_to;
-mod resample_to_rate;
 mod sort;
 mod delta;
 mod lambda;
@@ -21,19 +19,9 @@ use crate::{
     ron_inout_funcs, pg_type, flatten,
 };
 
-use fill_holes::{
-    fill_holes,
-    FillHolesMethod,
-};
-
 use fill_to::{
     fill_to,
     FillToMethod,
-};
-
-use resample_to_rate::{
-    resample_to_rate,
-    ResampleMethod,
 };
 
 use sort::sort_timevector;
@@ -73,14 +61,8 @@ pub mod toolkit_experimental {
             LTTB: 1 {
                 resolution: u64,
             },
-            ResampleToRate: 2 {
-                interval: i64,
-                resample_method: ResampleMethod,
-                snap_to_rate: i64, // padded bool
-            },
-            FillHoles: 3 {
-                fill_method: FillHolesMethod,
-            },
+            // 2 was for resample_to_rate
+            // 3 was for fill_holes
             Sort: 4 {
             },
             Delta: 5 {
@@ -168,10 +150,6 @@ pub fn execute_pipeline_element<'s>(
     match element {
         Element::LTTB{resolution} =>
             crate::lttb::lttb_ts(timevector, *resolution as _),
-        Element::ResampleToRate{..} =>
-            resample_to_rate(&timevector, element),
-        Element::FillHoles{..} =>
-            fill_holes(timevector, element),
         Element::Sort{..} =>
             sort_timevector(timevector),
         Element::Delta{..} =>

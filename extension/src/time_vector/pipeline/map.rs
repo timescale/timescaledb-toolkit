@@ -64,30 +64,12 @@ pub fn map_lambda_over_series(
     only_val: bool,
     mut func: impl FnMut(i64, f64) -> (Option<i64>, Option<f64>),
 ) {
-    use SeriesType::*;
-
-    match &mut series.series {
-        Sorted { points, .. } => if only_val {
-            let points = points.as_owned();
-            for point in points {
-                let (_, new_val) = func(point.ts, point.val);
-                *point = TSPoint {
-                    ts: point.ts,
-                    val: new_val.unwrap_or(point.val),
-                }
-            }
-        },
-        Explicit { points, .. } => {
-            let points = points.as_owned();
-            // FIXME ensure sorted
-            for point in points {
-                let (new_time, new_val) = func(point.ts, point.val);
-                *point = TSPoint {
-                    ts: new_time.unwrap_or(point.ts),
-                    val: new_val.unwrap_or(point.val),
-                }
-            }
-        },
+    for point in series.points.as_owned() {
+        let (new_time, new_val) = func(point.ts, point.val);
+        *point = TSPoint {
+            ts: if only_val { point.ts } else { new_time.unwrap_or(point.ts) },
+            val: new_val.unwrap_or(point.val),
+        }
     }
 }
 
@@ -231,41 +213,21 @@ pub fn apply_to(mut series: Timevector<'_>, func: pg_sys::RegProcedure)
 }
 
 pub fn map_series(series: &mut Timevector<'_>, mut func: impl FnMut(f64) -> f64) {
-    use SeriesType::*;
     use std::panic::AssertUnwindSafe;
 
-    match &mut series.series {
-        Sorted { points, .. } => {
-            let points = points.as_owned().iter_mut();
-            // setjump guard around the loop to reduce the amount we have to
-            // call it
-            // NOTE need to be careful that there's no allocation within the
-            //      loop body so it cannot leak
-            pgx::guard(AssertUnwindSafe(|| {
-                for point in points {
-                    *point = TSPoint {
-                        ts: point.ts,
-                        val: func(point.val),
-                    }
-                }
-            }))
-        },
-        Explicit { points, .. } => {
-            let points = points.as_owned().iter_mut();
-            // setjump guard around the loop to reduce the amount we have to
-            // call it
-            // NOTE need to be careful that there's not allocation within the
-            //      loop body so it cannot leak
-            pgx::guard(AssertUnwindSafe(|| {
-                for point in points {
-                    *point = TSPoint {
-                        ts: point.ts,
-                        val: func(point.val),
-                    }
-                }
-            }))
-        },
-    }
+    let points = series.points.as_owned().iter_mut();
+    // setjump guard around the loop to reduce the amount we have to
+    // call it
+    // NOTE need to be careful that there's not allocation within the
+    //      loop body so it cannot leak
+    pgx::guard(AssertUnwindSafe(|| {
+        for point in points {
+            *point = TSPoint {
+                ts: point.ts,
+                val: func(point.val),
+            }
+        }
+    }))
 }
 
 #[cfg(any(test, feature = "pg_test"))]

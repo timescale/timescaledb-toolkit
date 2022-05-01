@@ -9,7 +9,7 @@ use crate::{
 
 use tspoint::TSPoint;
 
-use crate::time_vector::{Timevector, TimevectorData, SeriesType};
+use crate::time_vector::{Timevector, TimevectorData};
 
 // This is included for debug purposes and probably should not leave experimental
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
@@ -150,7 +150,9 @@ fn asap_final_inner(
 
             Some(crate::build! {
                 Timevector {
-                    series: SeriesType::Sorted { num_points: points.len() as u64, points: points.into() }
+                    num_points: points.len() as u64,
+                    points: points.into(), 
+                    is_sorted: true,
                 }
             })
         })
@@ -163,26 +165,21 @@ pub fn asap_on_timevector(
     resolution: i32
 ) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
     // TODO: implement this using zero copy (requires sort, find_downsample_interval, and downsample_and_gapfill on Timevector)
-    let needs_sort = matches!(&series.series, SeriesType::Explicit{..});
+    let needs_sort = series.is_sorted();
     let start_ts;
     let downsample_interval;
-    let mut normal = match &mut series.series {
-        SeriesType::Explicit { points, .. } | SeriesType::Sorted { points, .. }
-        => {
-            if needs_sort {
-                points.as_owned().sort_by_key(|p| p.ts);
-            }
-            // TODO points.make_slice()?
-            downsample_interval = if points.len() >= 2 * resolution as usize {
-                find_downsample_interval(points.as_slice(), resolution as i64)
-            } else {
-                (points.as_slice().last().unwrap().ts - points.as_slice().first().unwrap().ts) / points.len() as i64
-            };
-            let normal = downsample_and_gapfill_to_normal_form(points.as_slice(), downsample_interval);
-            start_ts = points.as_slice().first().unwrap().ts;
-            normal
-        },
+
+    if needs_sort {
+        series.points.as_owned().sort_by_key(|p| p.ts);
+    }
+    // TODO points.make_slice()?
+    downsample_interval = if series.points.len() >= 2 * resolution as usize {
+        find_downsample_interval(series.points.as_slice(), resolution as i64)
+    } else {
+        (series.points.as_slice().last().unwrap().ts - series.points.as_slice().first().unwrap().ts) / series.points.len() as i64
     };
+    let mut normal = downsample_and_gapfill_to_normal_form(series.points.as_slice(), downsample_interval);
+    start_ts = series.points.as_slice().first().unwrap().ts;
 
     // Drop the last value to match the reference implementation
     normal.pop();
@@ -197,7 +194,9 @@ pub fn asap_on_timevector(
 
     Some(crate::build! {
         Timevector {
-            series: SeriesType::Sorted { num_points: points.len() as u64, points: points.into() }
+            num_points: points.len() as u64,
+            points: points.into(), 
+            is_sorted: true,
         }
     })
 }

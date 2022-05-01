@@ -18,23 +18,20 @@ pub fn sort_pipeline_element<'p, 'e>(
 pub fn sort_timevector(
     mut series: toolkit_experimental::Timevector<'_>,
 ) -> toolkit_experimental::Timevector<'_> {
-    match &mut series.series {
-        SeriesType::Sorted{..} => series,
-        SeriesType::Explicit{points, ..} => {
-            let points = points.as_owned();
-            let mut points = std::mem::take(points);
-            points.sort_by(|a, b| a.ts.cmp(&b.ts));
-            TimevectorData {
-                header: 0,
-                version: 1,
-                padding: [0; 3],
-                series: SeriesType::Sorted {
-                    num_points: points.len() as u64,
-                    points: points.into(),
-                },
-            }.into()
-        }
+    if series.is_sorted() {
+        return series;
     }
+    
+    let mut points = std::mem::take(series.points.as_owned());
+    points.sort_by(|a, b| a.ts.cmp(&b.ts));
+    TimevectorData {
+        header: 0,
+        version: 1,
+        padding: [0; 3],
+        num_points: points.len() as u64,
+        points: points.into(),
+        is_sorted: true,
+    }.into()
 }
 
 #[cfg(any(test, feature = "pg_test"))]

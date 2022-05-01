@@ -76,9 +76,8 @@ pub fn fill_to<'s>(
         _ => unreachable!()
     };
 
-    match series.series {
-        SeriesType::Explicit{..} => panic!("Timeseries must be sorted prior to passing to fill_to"),
-        _ => ()
+    if !series.is_sorted() {
+        panic!("Timeseries must be sorted prior to passing to fill_to")
     }
 
     let mut result = vec![];
@@ -105,10 +104,9 @@ pub fn fill_to<'s>(
     result.sort_by_key(|p| p.ts);
     build!{
         Timevector {
-            series: SeriesType::Sorted{
-                num_points: result.len() as _,
-                points: result.into(),
-            }
+            num_points: result.len() as _,
+            points: result.into(),
+            is_sorted: true,
         }
     }
 }

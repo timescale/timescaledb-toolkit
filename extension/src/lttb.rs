@@ -8,7 +8,7 @@ use crate::{
 
 use tspoint::TSPoint;
 
-use crate::time_vector::{TimevectorData, SeriesType, Timevector};
+use crate::time_vector::{TimevectorData, Timevector};
 
 
 pub struct LttbTrans {
@@ -83,10 +83,9 @@ pub fn lttb_final_inner(
             let downsampled = lttb(&*series, state.resolution);
             flatten!(
                 Timevector {
-                    series: SeriesType::Sorted {
-                        num_points: downsampled.len() as u64,
-                        points: (&*downsampled).into(),
-                    }
+                    num_points: downsampled.len() as u64,
+                    points: (&*downsampled).into(),
+                    is_sorted: true,
                 }
             ).into()
         })
@@ -272,10 +271,9 @@ pub fn lttb_ts(
 
     crate::build! {
         Timevector {
-            series: SeriesType::Sorted {
-                num_points: sampled.len() as _,
-                points: sampled.into(),
-            }
+            num_points: sampled.len() as _,
+            points: sampled.into(),
+            is_sorted: true,
         }
     }
 }

@@ -49,14 +49,8 @@ pub fn filter_lambda_over_series(
     series: &mut Timevector<'_>,
     mut func: impl FnMut(i64, f64) -> bool,
 ) {
-    use SeriesType::*;
-
-    match &mut series.series {
-        Sorted { points, num_points } | Explicit { points, num_points } => {
-            points.as_owned().retain(|p| func(p.ts, p.val));
-            *num_points = points.len() as _;
-        },
-    }
+    series.points.as_owned().retain(|p| func(p.ts, p.val));
+    series.num_points = series.points.len() as _;
 }
 
 #[cfg(any(test, feature = "pg_test"))]

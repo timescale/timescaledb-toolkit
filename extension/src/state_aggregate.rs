@@ -184,8 +184,7 @@ impl StateAggTransState {
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn duration_in(state: String, aggregate: Option<StateAgg>) -> crate::raw::Interval {
     let time: i64 = aggregate
-        .map(|aggregate| aggregate.get(&state))
-        .flatten()
+        .and_then(|aggregate| aggregate.get(&state))
         .unwrap_or(0);
     let interval = pg_sys::Interval {
         time,

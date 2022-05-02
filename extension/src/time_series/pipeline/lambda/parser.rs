@@ -403,7 +403,7 @@ static PREC_CLIMBER: once_cell::sync::Lazy<PrecClimber<Rule>> = once_cell::sync:
 // Maps function name to a tuple (num arguments, function identifier)
 static BUILTIN_FUNCTION: once_cell::sync::Lazy<HashMap<&str, (usize, Function)>> =  once_cell::sync::Lazy::new(|| {
     use Function::*;
-    std::array::IntoIter::new([
+    [
         ("abs",   (1, Abs)),
         ("cbrt",  (1, Cbrt)),
         ("ceil",  (1, Ceil)),
@@ -429,5 +429,5 @@ static BUILTIN_FUNCTION: once_cell::sync::Lazy<HashMap<&str, (usize, Function)>>
         ("asinh", (1, Asinh)),
         ("acosh", (1, Acosh)),
         ("atanh", (1, Atanh)),
-    ]).collect()
+    ].into_iter().collect()
 });

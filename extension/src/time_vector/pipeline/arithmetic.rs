@@ -296,13 +296,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:26),\
                 (ts:\"2020-01-01 00:00:00+00\",val:11),\
                 (ts:\"2020-01-03 00:00:00+00\",val:21),\
                 (ts:\"2020-01-02 00:00:00+00\",val:16),\
                 (ts:\"2020-01-05 00:00:00+00\",val:31)\
-            ]");
+            ],is_sorted:false)");
 
             let val = client.select(
                 &format!("SELECT (series -> sub(3.0))::TEXT FROM ({}) s", create_series),
@@ -311,13 +311,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:22),\
                 (ts:\"2020-01-01 00:00:00+00\",val:7),\
                 (ts:\"2020-01-03 00:00:00+00\",val:17),\
                 (ts:\"2020-01-02 00:00:00+00\",val:12),\
                 (ts:\"2020-01-05 00:00:00+00\",val:27)\
-            ]");
+            ],is_sorted:false)");
 
             let val = client.select(
                 &format!("SELECT (series -> mul(2.0))::TEXT FROM ({}) s", create_series),
@@ -326,13 +326,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:50),\
                 (ts:\"2020-01-01 00:00:00+00\",val:20),\
                 (ts:\"2020-01-03 00:00:00+00\",val:40),\
                 (ts:\"2020-01-02 00:00:00+00\",val:30),\
                 (ts:\"2020-01-05 00:00:00+00\",val:60)\
-            ]");
+            ],is_sorted:false)");
 
             let val = client.select(
                 &format!("SELECT (series -> div(5.0))::TEXT FROM ({}) s", create_series),
@@ -341,13 +341,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:5),\
                 (ts:\"2020-01-01 00:00:00+00\",val:2),\
                 (ts:\"2020-01-03 00:00:00+00\",val:4),\
                 (ts:\"2020-01-02 00:00:00+00\",val:3),\
                 (ts:\"2020-01-05 00:00:00+00\",val:6)\
-            ]");
+            ],is_sorted:false)");
 
             let val = client.select(
                 &format!("SELECT (series -> mod(5.0))::TEXT FROM ({}) s", create_series),
@@ -356,13 +356,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:0),\
                 (ts:\"2020-01-01 00:00:00+00\",val:0),\
                 (ts:\"2020-01-03 00:00:00+00\",val:0),\
                 (ts:\"2020-01-02 00:00:00+00\",val:0),\
                 (ts:\"2020-01-05 00:00:00+00\",val:0)\
-            ]");
+            ],is_sorted:false)");
 
             let val = client.select(
                 &format!("SELECT (series -> power(2.0))::TEXT FROM ({}) s", create_series),
@@ -371,13 +371,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:625),\
                 (ts:\"2020-01-01 00:00:00+00\",val:100),\
                 (ts:\"2020-01-03 00:00:00+00\",val:400),\
                 (ts:\"2020-01-02 00:00:00+00\",val:225),\
                 (ts:\"2020-01-05 00:00:00+00\",val:900)\
-            ]");
+            ],is_sorted:false)");
 
 
             let val = client.select(
@@ -387,13 +387,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:1.3979400086720375),\
                 (ts:\"2020-01-01 00:00:00+00\",val:1),\
                 (ts:\"2020-01-03 00:00:00+00\",val:1.301029995663981),\
                 (ts:\"2020-01-02 00:00:00+00\",val:1.1760912590556811),\
                 (ts:\"2020-01-05 00:00:00+00\",val:1.4771212547196624)\
-            ]");
+            ],is_sorted:false)");
         });
     }
 
@@ -421,13 +421,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:25.5),\
                 (ts:\"2020-01-01 00:00:00+00\",val:10.1),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20.2),\
                 (ts:\"2020-01-02 00:00:00+00\",val:15.6),\
                 (ts:\"2020-01-05 00:00:00+00\",val:30.3)\
-            ]");
+            ],is_sorted:false)");
 
             // TODO re-enable once made stable
             // let val = client.select(
@@ -452,13 +452,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:26),\
                 (ts:\"2020-01-01 00:00:00+00\",val:-10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:21),\
                 (ts:\"2020-01-02 00:00:00+00\",val:-15),\
                 (ts:\"2020-01-05 00:00:00+00\",val:31)\
-            ]");
+            ],is_sorted:false)");
 
             let val = client.select(
                 &format!("SELECT (series -> floor())::TEXT FROM ({}) s", create_series),
@@ -467,13 +467,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:25),\
                 (ts:\"2020-01-01 00:00:00+00\",val:-11),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
                 (ts:\"2020-01-02 00:00:00+00\",val:-16),\
                 (ts:\"2020-01-05 00:00:00+00\",val:30)\
-            ]");
+            ],is_sorted:false)");
 
             // TODO why are there `null`s here?
             // Josh - likely JSON can't represent nans correctly...
@@ -516,13 +516,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:26),\
                 (ts:\"2020-01-01 00:00:00+00\",val:-10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
                 (ts:\"2020-01-02 00:00:00+00\",val:-16),\
                 (ts:\"2020-01-05 00:00:00+00\",val:30)\
-            ]");
+            ],is_sorted:false)");
 
             let val = client.select(
                 &format!("SELECT (series -> sign())::TEXT FROM ({}) s", create_series),
@@ -531,13 +531,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:1),\
                 (ts:\"2020-01-01 00:00:00+00\",val:-1),\
                 (ts:\"2020-01-03 00:00:00+00\",val:1),\
                 (ts:\"2020-01-02 00:00:00+00\",val:-1),\
                 (ts:\"2020-01-05 00:00:00+00\",val:1)\
-            ]");
+            ],is_sorted:false)");
 
             // TODO re-enable once made stable
             // let val = client.select(
@@ -562,13 +562,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:25),\
                 (ts:\"2020-01-01 00:00:00+00\",val:-10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
                 (ts:\"2020-01-02 00:00:00+00\",val:-15),\
                 (ts:\"2020-01-05 00:00:00+00\",val:30)\
-            ]");
+            ],is_sorted:false)");
         });
     }
 }

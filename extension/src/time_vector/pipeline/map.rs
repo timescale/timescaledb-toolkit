@@ -269,13 +269,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:25),\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
                 (ts:\"2020-01-02 00:00:00+00\",val:15),\
                 (ts:\"2020-01-05 00:00:00+00\",val:30)\
-            ]");
+            ],is_sorted:false)");
 
             let val = client.select(
                 "SELECT (timevector(time, value) -> map($$ ($time + '1 day'i, $value * 2) $$))::TEXT FROM series",
@@ -284,13 +284,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
                 (ts:\"2020-01-05 00:00:00+00\",val:50),\
                 (ts:\"2020-01-02 00:00:00+00\",val:20),\
                 (ts:\"2020-01-04 00:00:00+00\",val:40),\
                 (ts:\"2020-01-03 00:00:00+00\",val:30),\
                 (ts:\"2020-01-06 00:00:00+00\",val:60)\
-            ]");
+            ],is_sorted:false)");
         });
     }
 
@@ -327,21 +327,21 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:25),\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
                 (ts:\"2020-01-02 00:00:00+00\",val:15),\
                 (ts:\"2020-01-05 00:00:00+00\",val:30)\
-            ]");
+            ],is_sorted:false)");
 
-            let expected = "[\
+            let expected = "(version:1,num_points:5,points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:725.7),\
                 (ts:\"2020-01-01 00:00:00+00\",val:166.2),\
                 (ts:\"2020-01-03 00:00:00+00\",val:489.2),\
                 (ts:\"2020-01-02 00:00:00+00\",val:302.7),\
                 (ts:\"2020-01-05 00:00:00+00\",val:1012.2)\
-            ]";
+            ],is_sorted:false)";
             let val = client.select(
                 "SELECT (timevector(time, value) \
                     -> map($$ ($time, $value^2 + $value * 2.3 + 43.2) $$))::TEXT \
@@ -401,13 +401,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:25),\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
                 (ts:\"2020-01-02 00:00:00+00\",val:15),\
                 (ts:\"2020-01-05 00:00:00+00\",val:30)\
-            ]");
+            ],is_sorted:false)");
 
             client.select(
                 "CREATE FUNCTION x2(double precision) RETURNS DOUBLE PRECISION AS 'SELECT $1 * 2;' LANGUAGE SQL",
@@ -423,13 +423,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:50),\
                 (ts:\"2020-01-01 00:00:00+00\",val:20),\
                 (ts:\"2020-01-03 00:00:00+00\",val:40),\
                 (ts:\"2020-01-02 00:00:00+00\",val:30),\
                 (ts:\"2020-01-05 00:00:00+00\",val:60)\
-            ]");
+            ],is_sorted:false)");
         });
     }
 
@@ -466,13 +466,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:25),\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
                 (ts:\"2020-01-02 00:00:00+00\",val:15),\
                 (ts:\"2020-01-05 00:00:00+00\",val:30)\
-            ]");
+            ],is_sorted:false)");
 
             client.select(
                 "CREATE FUNCTION jan_3_x3(timevector) RETURNS timevector AS $$\
@@ -492,7 +492,9 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[(ts:\"2020-01-03 00:00:00+00\",val:60)]");
+            assert_eq!(val.unwrap(), "(version:1,num_points:1,points:[\
+                (ts:\"2020-01-03 00:00:00+00\",val:60)\
+            ],is_sorted:true)");
 
             let val = client.select(
                 "SELECT (timevector(time, value) ->> 'jan_3_x3')::TEXT FROM series",
@@ -501,7 +503,9 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[(ts:\"2020-01-03 00:00:00+00\",val:60)]");
+            assert_eq!(val.unwrap(), "(version:1,num_points:1,points:[\
+                (ts:\"2020-01-03 00:00:00+00\",val:60)\
+            ],is_sorted:true)");
         });
     }
 
@@ -538,13 +542,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:25),\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
                 (ts:\"2020-01-02 00:00:00+00\",val:15),\
                 (ts:\"2020-01-05 00:00:00+00\",val:30)\
-            ]");
+            ],is_sorted:false)");
 
             client.select(
                 "CREATE FUNCTION serier(timevector) RETURNS timevector AS $$\

@@ -1,5 +1,6 @@
 #![allow(clippy::modulo_one)]   // flat_serialize! alignment checks hit this for any single byte field (of which all pg_types! have two by default)
 #![allow(clippy::extra_unused_lifetimes)]  // some disagreement between clippy and the rust compiler about when lifetime are and are not needed
+#![allow(clippy::not_unsafe_ptr_arg_deref)]  // every function calling in_aggregate_context should be unsafe
 
 pub mod accessors;
 pub mod tdigest;

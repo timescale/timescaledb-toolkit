@@ -33,7 +33,7 @@ use std::f64::consts::PI;
  * Computes the discrete Fourier transform (DFT) of the given complex vector, storing the result back into the vector.
  * The vector can have any length. This is a wrapper function.
  */
-pub fn transform(real: &mut Vec<f64>, imag: &mut Vec<f64>) {
+pub fn transform(real: &mut [f64], imag: &mut [f64]) {
     assert_eq!(real.len(), imag.len());
 
     let n = real.len();
@@ -52,7 +52,7 @@ pub fn transform(real: &mut Vec<f64>, imag: &mut Vec<f64>) {
  * Computes the inverse discrete Fourier transform (IDFT) of the given complex vector, storing the result back into the vector.
  * The vector can have any length. This is a wrapper function. This transform does not perform scaling, so the inverse is not a true inverse.
  */
-pub fn inverse_transform(real: &mut Vec<f64>, imag: &mut Vec<f64>) {
+pub fn inverse_transform(real: &mut [f64], imag: &mut [f64]) {
     transform(imag, real);
 }
 
@@ -61,7 +61,7 @@ pub fn inverse_transform(real: &mut Vec<f64>, imag: &mut Vec<f64>) {
  * Computes the discrete Fourier transform (DFT) of the given complex vector, storing the result back into the vector.
  * The vector's length must be a power of 2. Uses the Cooley-Tukey decimation-in-time radix-2 algorithm.
  */
-fn transform_radix2(real: &mut Vec<f64>, imag: &mut Vec<f64>) {
+fn transform_radix2(real: &mut [f64], imag: &mut [f64]) {
     // Initialization
     let n = real.len();
     if n == 1 {  // Trivial transform
@@ -130,7 +130,7 @@ fn transform_radix2(real: &mut Vec<f64>, imag: &mut Vec<f64>) {
  * The vector can have any length. This requires the convolution function, which in turn requires the radix-2 FFT function.
  * Uses Bluestein's chirp z-transform algorithm.
  */
-fn transform_bluestein(real: &mut Vec<f64>, imag: &mut Vec<f64>) {
+fn transform_bluestein(real: &mut [f64], imag: &mut [f64]) {
     // Find a power-of-2 convolution length m such that m >= n * 2 + 1
     let n = real.len();
     let mut m = 1;
@@ -203,7 +203,7 @@ fn transform_bluestein(real: &mut Vec<f64>, imag: &mut Vec<f64>) {
 // /*
 //  * Computes the circular convolution of the given complex vectors. Each vector's length must be the same.
 //  */
-fn convolve_complex(xreal: &mut Vec<f64>, ximag: &mut Vec<f64>, yreal: &mut Vec<f64>, yimag: &mut Vec<f64>, outreal: &mut Vec<f64>, outimag: &mut Vec<f64>) {
+fn convolve_complex(xreal: &mut [f64], ximag: &mut [f64], yreal: &mut [f64], yimag: &mut [f64], outreal: &mut [f64], outimag: &mut [f64]) {
     let n = xreal.len();
 
     transform(xreal, ximag);

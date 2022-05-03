@@ -180,11 +180,10 @@ where T: FlatSerializable<'i> + 'i {
     }
 
     fn into_owned(self) -> Self::OWNED {
-        use std::array::IntoIter;
         let mut output: [MaybeUninit<T::OWNED>; N] = unsafe {
             MaybeUninit::uninit().assume_init()
         };
-        for (i, t) in IntoIter::new(self).map(|s| s.into_owned()).enumerate() {
+        for (i, t) in self.into_iter().map(|s| s.into_owned()).enumerate() {
             output[i] = MaybeUninit::new(t)
         }
 

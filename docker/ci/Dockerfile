@@ -1,4 +1,4 @@
-FROM rust:1.57 AS pgx_builder
+FROM rust:1.60 AS pgx_builder
 
 RUN apt-get update \
     && apt-get install -y clang libclang1 sudo bash cmake \

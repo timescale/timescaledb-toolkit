@@ -347,7 +347,7 @@ impl TDigest {
         result
     }
 
-    fn external_merge(centroids: &mut Vec<Centroid>, first: usize, middle: usize, last: usize) {
+    fn external_merge(centroids: &mut [Centroid], first: usize, middle: usize, last: usize) {
         let mut result: Vec<Centroid> = Vec::with_capacity(centroids.len());
 
         let mut i = first;

@@ -21,7 +21,7 @@ pub fn aggregate(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as Aggregate);
     let expanded = expand(input);
     if cfg!(feature = "print-generated") {
-        println!("{}", expanded.to_string());
+        println!("{}", expanded);
     }
     expanded.into()
 }

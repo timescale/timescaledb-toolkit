@@ -18,7 +18,7 @@ pub fn flat_serialize(input: TokenStream) -> TokenStream {
         FlatSerialize::Enum(input) => flat_serialize_enum(input),
     };
     if cfg!(feature = "print-generated") {
-        println!("{}", expanded.to_string());
+        println!("{}", expanded);
     }
     expanded.into()
 }

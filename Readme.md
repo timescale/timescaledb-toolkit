@@ -35,9 +35,9 @@ For Ubuntu you can follow the [postgres install instructions](https://www.postgr
 ```bash
 sudo apt-get install make gcc pkg-config clang postgresql-server-dev-13 libssl-dev
 ```
-and finally, [pgx](https://github.com/zombodb/pgx), which can be installed with
+and finally, [pgx](https://github.com/tcdi/pgx), which can be installed with
 ```bash
-cargo install --version 0.2.4 cargo-pgx && cargo pgx init --pg13 pg_config
+cargo install --version 0.4.3 cargo-pgx && cargo pgx init --pg13 pg_config
 ```
 
 ### 💾 Building and Installing the extension ###

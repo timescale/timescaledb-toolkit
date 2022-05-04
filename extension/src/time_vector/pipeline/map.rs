@@ -102,6 +102,7 @@ pub fn check_user_function_type(function: pg_sys::regproc) {
         error!("invalid number of mapping function arguments, expected fn(timevector) RETURNS timevector")
     }
 
+    assert!(!argtypes.is_null());
     if unsafe { *argtypes } != *crate::time_vector::TIMEVECTOR_OID {
         error!("invalid argument type, expected fn(timevector) RETURNS timevector")
     }

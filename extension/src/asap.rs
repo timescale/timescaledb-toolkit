@@ -171,20 +171,18 @@ pub fn asap_on_timevector(
 ) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
     // TODO: implement this using zero copy (requires sort, find_downsample_interval, and downsample_and_gapfill on Timevector)
     let needs_sort = series.is_sorted();
-    let start_ts;
-    let downsample_interval;
 
     if needs_sort {
         series.points.as_owned().sort_by_key(|p| p.ts);
     }
     // TODO points.make_slice()?
-    downsample_interval = if series.points.len() >= 2 * resolution as usize {
+    let downsample_interval = if series.points.len() >= 2 * resolution as usize {
         find_downsample_interval(series.points.as_slice(), resolution as i64)
     } else {
         (series.points.as_slice().last().unwrap().ts - series.points.as_slice().first().unwrap().ts) / series.points.len() as i64
     };
     let mut normal = downsample_and_gapfill_to_normal_form(series.points.as_slice(), downsample_interval);
-    start_ts = series.points.as_slice().first().unwrap().ts;
+    let start_ts = series.points.as_slice().first().unwrap().ts;
 
     // Drop the last value to match the reference implementation
     normal.pop();

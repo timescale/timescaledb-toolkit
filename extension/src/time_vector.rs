@@ -78,6 +78,7 @@ impl<'a> IntoIterator for Timevector<'a> {
     type IntoIter = Iter<'a>;
 
     fn into_iter(self) -> Self::IntoIter {
+        #[allow(clippy::unnecessary_to_owned)] // Pretty sure clippy's wrong about this
         Iter::Slice{iter: self.points.to_owned().into_iter()}
     }
 }

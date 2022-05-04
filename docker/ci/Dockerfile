@@ -8,7 +8,7 @@ RUN useradd -ms /bin/bash postgres
 USER postgres
 
 # install cargo pgx
-RUN cargo install cargo-pgx
+RUN cargo install cargo-pgx --version '^0.2'
 
 # only use pg12 for now timescaledb doesn't support 13
 RUN set -ex \

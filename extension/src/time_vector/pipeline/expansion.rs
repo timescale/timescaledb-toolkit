@@ -230,13 +230,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:25),\
                 (ts:\"2020-01-01 00:00:00+00\",val:11),\
                 (ts:\"2020-01-03 00:00:00+00\",val:21),\
                 (ts:\"2020-01-02 00:00:00+00\",val:15),\
                 (ts:\"2020-01-05 00:00:00+00\",val:31)\
-            ],is_sorted:false)");
+            ])");
         });
     }
 

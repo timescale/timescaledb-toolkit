@@ -142,17 +142,22 @@ fn asap_final_inner(
             normal.pop();
             let values = asap_smooth(&normal, state.resolution as u32);
 
-            let mut points = Vec::new();
             let interval = downsample_interval * normal.len() as i64 / values.len() as i64;
-            for i in 0..values.len() {
-                points.push(TSPoint{ts: start_ts + i as i64 * interval, val: values[i]});
-            }
+            let points: Vec<_> = values
+                .into_iter()
+                .enumerate()
+                .map(|(i, val)| TSPoint {
+                    ts: start_ts + i as i64 * interval,
+                    val,
+                })
+                .collect();
 
             Some(crate::build! {
                 Timevector {
-                    num_points: points.len() as u64,
-                    points: points.into(), 
+                    num_points: points.len() as u32,
                     is_sorted: true,
+                    internal_padding: [0; 3],
+                    points: points.into(), 
                 }
             })
         })
@@ -186,23 +191,28 @@ pub fn asap_on_timevector(
 
     let result = asap_smooth(&normal, resolution as u32);
 
-    let mut points = Vec::new();
     let interval = downsample_interval * normal.len() as i64 / result.len() as i64;
-    for i in 0..result.len() {
-        points.push(TSPoint{ts: start_ts + i as i64 * interval, val: result[i]});
-    }
+    let points: Vec<_> = result
+        .into_iter()
+        .enumerate()
+        .map(|(i, val)| TSPoint {
+            ts: start_ts + i as i64 * interval,
+            val,
+        })
+        .collect();
 
     Some(crate::build! {
         Timevector {
-            num_points: points.len() as u64,
-            points: points.into(), 
+            num_points: points.len() as u32,
             is_sorted: true,
+            internal_padding: [0; 3],
+            points: points.into(),
         }
     })
 }
 
 // Adds the given number of points to the end of a non-empty NormalTimevector
-pub fn fill_normalized_series_gap(values: &mut Vec<f64>, points: i32, post_gap_val: f64) {
+fn fill_normalized_series_gap(values: &mut Vec<f64>, points: i32, post_gap_val: f64) {
     assert!(!values.is_empty());
     let last_val = *values.last().unwrap();
     for i in 1..=points {

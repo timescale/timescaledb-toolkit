@@ -83,9 +83,10 @@ pub fn lttb_final_inner(
             let downsampled = lttb(&*series, state.resolution);
             flatten!(
                 Timevector {
-                    num_points: downsampled.len() as u64,
-                    points: (&*downsampled).into(),
+                    num_points: downsampled.len() as u32,
                     is_sorted: true,
+                    internal_padding: [0; 3],
+                    points: (&*downsampled).into(),
                 }
             ).into()
         })
@@ -272,8 +273,9 @@ pub fn lttb_ts(
     crate::build! {
         Timevector {
             num_points: sampled.len() as _,
-            points: sampled.into(),
             is_sorted: true,
+            internal_padding: [0; 3],
+            points: sampled.into(),
         }
     }
 }

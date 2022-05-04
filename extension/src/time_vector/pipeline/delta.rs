@@ -43,9 +43,10 @@ pub fn timevector_delta<'s>(
 
     build!(
         Timevector {
-            num_points: delta_points.len() as u64,
-            points: delta_points.into(),
+            num_points: delta_points.len() as u32,
             is_sorted: true,
+            internal_padding: [0; 3],
+            points: delta_points.into(),
         }
     )
 }
@@ -93,7 +94,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:8,points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:8,is_sorted:true,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-02 00:00:00+00\",val:15),\
                 (ts:\"2020-01-03 00:00:00+00\",val:-5),\
                 (ts:\"2020-01-04 00:00:00+00\",val:72),\
@@ -102,7 +103,7 @@ mod tests {
                 (ts:\"2020-01-07 00:00:00+00\",val:0),\
                 (ts:\"2020-01-08 00:00:00+00\",val:0.09999999999999787),\
                 (ts:\"2020-01-09 00:00:00+00\",val:-458.09999999999997)\
-            ],is_sorted:true)");
+            ])");
         });
     }
 }

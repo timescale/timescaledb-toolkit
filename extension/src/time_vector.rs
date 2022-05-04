@@ -29,9 +29,10 @@ pub mod toolkit_experimental {
     pg_type! {
         #[derive(Debug)]
         struct Timevector<'input> {
-            num_points: u64,  // required to be aligned
-            points: [TSPoint; self.num_points],
+            num_points: u32,
             is_sorted: bool,
+            internal_padding: [u8; 3],  // required to be aligned
+            points: [TSPoint; self.num_points],
         }
     }
 
@@ -142,8 +143,9 @@ pub fn timevector_trans_inner(
                 None => Inner::from(build!{
                     Timevector {
                         num_points: 0,
-                        points: vec![].into(),
                         is_sorted: true,
+                        internal_padding: [0; 3],
+                        points: vec![].into(),
                     }
                 }),
                 Some(state) => state,
@@ -233,8 +235,9 @@ pub fn combine(first: Timevector<'_>, second: Timevector<'_>) -> Timevector<'sta
     build!{ 
         Timevector {
             num_points: points.len() as _,
+            is_sorted,
+            internal_padding: [0; 3],
             points: points.into(),
-            is_sorted
         }
     }
 }

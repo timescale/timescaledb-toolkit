@@ -437,7 +437,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:17,points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:17,is_sorted:true,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-11 00:00:00+00\",val:12.7015),\
                 (ts:\"2020-01-13 00:00:00+00\",val:11.8117),\
                 (ts:\"2020-01-22 00:00:00+00\",val:7.4757),\
@@ -455,7 +455,7 @@ mod tests {
                 (ts:\"2020-04-10 00:00:00+00\",val:5.8046),\
                 (ts:\"2020-04-14 00:00:00+00\",val:7.195),\
                 (ts:\"2020-04-20 00:00:00+00\",val:10.0221)\
-            ],is_sorted:true)");
+            ])");
 
             let val = client.select(
                 "SELECT (series -> lttb(8))::TEXT FROM lttb_pipe",
@@ -464,7 +464,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:8,points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:8,is_sorted:true,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-11 00:00:00+00\",val:12.7015),\
                 (ts:\"2020-01-27 00:00:00+00\",val:5.7155),\
                 (ts:\"2020-02-06 00:00:00+00\",val:5.5162),\
@@ -473,7 +473,7 @@ mod tests {
                 (ts:\"2020-03-30 00:00:00+00\",val:5.6728),\
                 (ts:\"2020-04-09 00:00:00+00\",val:5.554),\
                 (ts:\"2020-04-20 00:00:00+00\",val:10.0221)\
-            ],is_sorted:true)");
+            ])");
 
             let val = client.select(
                 "SELECT (series -> lttb(8) -> lttb(8))::TEXT FROM lttb_pipe",
@@ -482,7 +482,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:8,points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:8,is_sorted:true,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-11 00:00:00+00\",val:12.7015),\
                 (ts:\"2020-01-27 00:00:00+00\",val:5.7155),\
                 (ts:\"2020-02-06 00:00:00+00\",val:5.5162),\
@@ -491,7 +491,7 @@ mod tests {
                 (ts:\"2020-03-30 00:00:00+00\",val:5.6728),\
                 (ts:\"2020-04-09 00:00:00+00\",val:5.554),\
                 (ts:\"2020-04-20 00:00:00+00\",val:10.0221)\
-            ],is_sorted:true)");
+            ])");
 
             let val = client.select(
                 "SELECT (series -> (lttb(8) -> lttb(8) -> lttb(8)))::TEXT FROM lttb_pipe",
@@ -500,7 +500,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:8,points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:8,is_sorted:true,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-11 00:00:00+00\",val:12.7015),\
                 (ts:\"2020-01-27 00:00:00+00\",val:5.7155),\
                 (ts:\"2020-02-06 00:00:00+00\",val:5.5162),\
@@ -509,7 +509,7 @@ mod tests {
                 (ts:\"2020-03-30 00:00:00+00\",val:5.6728),\
                 (ts:\"2020-04-09 00:00:00+00\",val:5.554),\
                 (ts:\"2020-04-20 00:00:00+00\",val:10.0221)\
-            ],is_sorted:true)");
+            ])");
         });
     }
 

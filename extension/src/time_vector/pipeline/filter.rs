@@ -92,13 +92,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:5,points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:25),\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
                 (ts:\"2020-01-02 00:00:00+00\",val:15),\
                 (ts:\"2020-01-05 00:00:00+00\",val:30)\
-            ],is_sorted:false)");
+            ])");
 
             let val = client.select(
                 "SELECT (timevector(time, value) -> filter($$ $time != '2020-01-05't and ($value = 10 or $value = 20) $$))::TEXT FROM series",
@@ -107,10 +107,10 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:2,points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:2,is_sorted:false,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20)\
-            ],is_sorted:false)");
+            ])");
         });
     }
 }

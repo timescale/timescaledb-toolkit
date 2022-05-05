@@ -18,10 +18,11 @@ pub fn install_all_versions(
     reinstall: &HashSet<&str>,
 ) -> xshell::Result<()> {
     let extension_dir = path!(root_dir / "extension");
-    let install_toolkit = || -> xshell::Result<()> {
-        let _d = pushd(&extension_dir)?;
+    let install_toolkit = |pgx_version| -> xshell::Result<()> {
         let _e = pushenv("CARGO_TARGET_DIR", "../target/extension");
-        quietly_run(cmd!("cargo pgx install -c {pg_config}"))
+        quietly_run(cmd!(
+            "/pgx-{pgx_version}/bin/cargo-pgx pgx install -c {pg_config}"
+        ))
     };
     let post_install = || -> xshell::Result<()> {
         let _d = pushd(root_dir)?;
@@ -50,7 +51,11 @@ pub fn install_all_versions(
         quietly_run(cmd!("git fetch origin tag {tag_version}"))?;
         quietly_run(cmd!("git checkout tags/{tag_version}"))?;
         let _d = defer(|| quietly_run(cmd!("git checkout {base_checkout}")));
-        install_toolkit()?;
+        let _ext = pushd(&extension_dir)?;
+        let cargo_toml_contents =
+            std::fs::read_to_string("Cargo.toml").expect("unable to read Cargo.toml");
+        let pgx_version = get_pgx_version(&cargo_toml_contents);
+        install_toolkit(pgx_version)?;
         post_install()?;
         eprintln!("{} {}", "Finished".bold().green(), version);
     }
@@ -59,8 +64,16 @@ pub fn install_all_versions(
         save_to_cache(cache_dir, pg_config)?;
     }
 
-    eprintln!("{} {} ({})", "Installing Current".bold().cyan(), current_version, base_checkout);
-    install_toolkit()?;
+    eprintln!(
+        "{} {} ({})",
+        "Installing Current".bold().cyan(),
+        current_version,
+        base_checkout
+    );
+    let cargo_toml_contents =
+        std::fs::read_to_string("Cargo.toml").expect("unable to read Cargo.toml");
+    let pgx_version = get_pgx_version(&cargo_toml_contents);
+    install_toolkit(pgx_version)?;
     post_install()?;
     eprintln!("{}", "Finished Current".bold().green());
 
@@ -75,6 +88,36 @@ fn get_current_checkout() -> xshell::Result<String> {
     }
 
     cmd!("git rev-parse --verify HEAD").read()
+}
+
+fn get_pgx_version(cargo_toml_contents: &str) -> String {
+    let mut version = get_field_val(cargo_toml_contents, "pgx").to_string();
+    version.truncate(3); // only care about the major.minor version
+    version
+}
+
+// find a `<field name> = "<field value>"` and extract `<field value>`
+fn get_field_val<'a>(contents: &'a str, field_name: &str) -> &'a str {
+    contents
+        .lines()
+        .filter(|line| line.starts_with(field_name))
+        .map(get_quoted_field)
+        .next()
+        .unwrap_or_else(|| panic!("cannot read field `{}` in file", field_name))
+}
+
+// given a `<field name> = "<field value>"` extract `<field value>`
+fn get_quoted_field(line: &str) -> &str {
+    let quoted = line
+        .split('=')
+        .nth(1)
+        .unwrap_or_else(|| panic!("cannot find value in line `{}`", line));
+
+    quoted
+        .trim()
+        .split_terminator('\"')
+        .find(|s| !s.is_empty())
+        .unwrap_or_else(|| panic!("unquoted value in line `{}`", line))
 }
 
 // We were unprincipled with some of our old versions, so the version from

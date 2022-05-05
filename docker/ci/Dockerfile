@@ -8,17 +8,17 @@ RUN useradd -ms /bin/bash postgres
 USER postgres
 
 # install cargo pgx
-RUN cargo install cargo-pgx --version '^0.2'
+RUN cargo install cargo-pgx --version '^0.2' --root /pgx-0.2 \
+    && cargo install cargo-pgx --version '^0.4' --root /pgx-0.4
 
-# only use pg12 for now timescaledb doesn't support 13
 RUN set -ex \
-    && cargo pgx init --pg12 download --pg13 download --pg14 download \
-    && cargo pgx start pg12 \
-    && cargo pgx stop  pg12 \
-    && cargo pgx start pg13 \
-    && cargo pgx stop  pg13 \
-    && cargo pgx start pg14 \
-    && cargo pgx stop  pg14
+    && /pgx-0.4/bin/cargo-pgx pgx init --pg12 download --pg13 download --pg14 download \
+    && /pgx-0.4/bin/cargo-pgx pgx start pg12 \
+    && /pgx-0.4/bin/cargo-pgx pgx stop  pg12 \
+    && /pgx-0.4/bin/cargo-pgx pgx start pg13 \
+    && /pgx-0.4/bin/cargo-pgx pgx stop  pg13 \
+    && /pgx-0.4/bin/cargo-pgx pgx start pg14 \
+    && /pgx-0.4/bin/cargo-pgx pgx stop  pg14
 
 # install timescaledb
 # TODO make seperate image from ^

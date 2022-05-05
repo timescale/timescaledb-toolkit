@@ -87,7 +87,7 @@ impl<'a> IntoIterator for Timevector<'a> {
 }
 
 pub static TIMEVECTOR_OID: once_cell::sync::Lazy<pg_sys::Oid> =
-    once_cell::sync::Lazy::new(|| Timevector::type_oid());
+    once_cell::sync::Lazy::new(Timevector::type_oid);
 
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn unnest(

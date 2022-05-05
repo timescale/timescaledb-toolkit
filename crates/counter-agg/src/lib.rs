@@ -1,11 +1,10 @@
-
 use time_series::TSPoint;
 use stats_agg::{XYPair, stats2d::StatsSummary2D};
-use serde::{Deserialize, Serialize};
 use std::fmt;
 
 
 pub mod range;
+pub mod stable;
 
 #[cfg(test)]
 mod tests;
@@ -23,7 +22,7 @@ pub enum CounterError{
 //  nonsensical results rather than unsound behavior, garbage in garbage out.
 //  But much better if we can validate at deserialization.  We can do that in
 //  the builder if we want.
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MetricSummary {
     // TODO invariants?
     pub first: TSPoint,
@@ -43,7 +42,7 @@ pub struct MetricSummary {
     //  out upon garbage in.
     pub stats: StatsSummary2D,
     // TODO See TODOs in I64Range about protecting from deserialization.
-    pub bounds: Option<range::I64Range>,
+    pub bounds: range::I64Range,
 }
 
 // Note that this can lose fidelity with the timestamp, but it would only lose it in the microseconds,
@@ -66,8 +65,8 @@ fn to_seconds(t: f64)-> f64{
 /// it is treated as a reset of the counter and the previous value is added to the "true value" of the
 /// counter at that timestamp.
 impl MetricSummary {
-    pub fn new(pt: &TSPoint, bounds:Option<range::I64Range>) -> MetricSummary {
-        let mut n = MetricSummary{
+    pub fn new(pt: &TSPoint, bounds: range::I64Range) -> MetricSummary {
+        let mut n = MetricSummary {
             first: *pt,
             second: *pt,
             penultimate: *pt,
@@ -150,7 +149,7 @@ impl MetricSummary {
         self.num_changes += incoming.num_changes;
 
         self.stats = self.stats.combine(stats).unwrap();
-        self.bounds_extend(incoming.bounds);
+        self.bounds_extend(incoming.bounds.clone());
         Ok(())
     }
 
@@ -204,31 +203,45 @@ impl MetricSummary {
     }
 
     pub fn bounds_valid(&self) -> bool {
-        match self.bounds{
-            None => true,  // unbounded contains everything
-            Some(b) => b.contains(self.last.ts) && b.contains(self.first.ts)
-        }
+        self.bounds.contains(self.last.ts) && self.bounds.contains(self.first.ts)
     }
 
-    fn bounds_extend(&mut self, in_bounds:Option<range::I64Range>){
-        match (self.bounds, in_bounds) {
-            (None, _) => {self.bounds = in_bounds},
-            (_, None) => {},
-            (Some(mut a), Some(b)) => {
-                a.extend(&b);
-                self.bounds = Some(a);
-            }
-        };
+    fn bounds_extend(&mut self, in_bounds: range::I64Range) {
+        // TODO(epg): This preserves existing behavior, which seems odd to me:
+        // match (self.bounds, in_bounds) {
+        // If we're unbounded, narrow to in_bounds (that's not "extend").
+        //     (None, _) => self.bounds = in_bounds,
+        if self.bounds.is_infinite() {
+            self.bounds = in_bounds;
+        }
+        // Else if in_bounds is infinite, ignore it!
+        //     (_, None) => {}
+        else if in_bounds.is_infinite() {
+        }
+        // Else, widen or narrow at both ends as necessary (makes sense but inconsistent!).
+        //     (Some(mut a), Some(b)) => {
+        else {
+            self.bounds.extend(&in_bounds);
+        }
     }
 
     // based on:  https://github.com/timescale/promscale_extension/blob/d51a0958442f66cb78d38b584a10100f0d278298/src/lib.rs#L208,
     // which is based on:     // https://github.com/prometheus/prometheus/blob/e5ffa8c9a08a5ee4185271c8c26051ddc1388b7a/promql/functions.go#L59
     pub fn prometheus_delta(&self) -> Result<Option<f64>, CounterError>{
-        if self.bounds.is_none() || !self.bounds_valid() ||  self.bounds.unwrap().has_infinite() {
+        if !self.bounds_valid() {
             return Err(CounterError::BoundsInvalid);
         }
+        let (left, right);
+        match self.bounds.both() {
+            None => return Err(CounterError::BoundsInvalid),
+            Some((l, r)) => {
+                left = l;
+                right = r;
+            }
+        }
         //must have at least 2 values
-        if self.single_value() || self.bounds.unwrap().is_singleton() { //technically, the is_singleton check is redundant, it's included for clarity (any singleton bound that is valid can only be one point)
+        if self.single_value() || self.bounds.is_singleton() {
+            //technically, the is_singleton check is redundant, it's included for clarity (any singleton bound that is valid can only be one point)
             return Ok(None);
         }
 
@@ -236,10 +249,10 @@ impl MetricSummary {
 
         // all calculated durations in seconds in Prom implementation, so we'll do that here.
         // we can unwrap all of the bounds accesses as they are guaranteed to be there from the checks above
-        let mut duration_to_start = to_seconds((self.first.ts - self.bounds.unwrap().left.unwrap()) as f64);
+        let mut duration_to_start = to_seconds((self.first.ts - left) as f64);
 
         /* bounds stores [L,H), but Prom takes the duration using the inclusive range [L, H-1ms]. Subtract an extra ms, ours is in microseconds. */
-        let duration_to_end = to_seconds((self.bounds.unwrap().right.unwrap() - self.last.ts - 1_000) as f64);
+        let duration_to_end = to_seconds((right - self.last.ts - 1_000) as f64);
         let sampled_interval = self.time_delta();
         let avg_duration_between_samples = sampled_interval / (self.stats.n - 1) as f64; // don't have to worry about divide by zero because we know we have at least 2 values from the above.
 
@@ -282,9 +295,9 @@ impl MetricSummary {
             return Ok(None);
         }
         let delta = delta.unwrap();
-        let bounds = self.bounds.unwrap() ; // if we got through delta without error then we have bounds
+        let bounds = &self.bounds; // if we got through delta without error then we have bounds
         /* bounds stores [L,H), but Prom takes the duration using the inclusive range [L, H-1ms]. So subtract an extra ms from the duration*/
-        let duration = bounds.duration().unwrap() - 1_000;
+        let duration = bounds.duration() - 1_000;
         if duration <= 0 {
             return Ok(None); // if we have a total duration under a ms, it's less than prom could deal with so we return none.
         }
@@ -304,11 +317,11 @@ impl fmt::Display for CounterError {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct GaugeSummaryBuilder(MetricSummary);
 
 impl GaugeSummaryBuilder {
-    pub fn new(pt: &TSPoint, bounds: Option<range::I64Range>) -> Self {
+    pub fn new(pt: &TSPoint, bounds: range::I64Range) -> Self {
         Self(MetricSummary::new(pt, bounds))
     }
 
@@ -322,7 +335,7 @@ impl GaugeSummaryBuilder {
         self.0.combine(incoming)
     }
 
-    pub fn set_bounds(&mut self, bounds: Option<range::I64Range>) {
+    pub fn set_bounds(&mut self, bounds: range::I64Range) {
         self.0.bounds = bounds;
     }
 
@@ -346,11 +359,11 @@ impl From<MetricSummary> for GaugeSummaryBuilder {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct CounterSummaryBuilder(MetricSummary);
 
 impl CounterSummaryBuilder {
-    pub fn new(pt: &TSPoint, bounds: Option<range::I64Range>) -> Self {
+    pub fn new(pt: &TSPoint, bounds: range::I64Range) -> Self {
         Self(MetricSummary::new(pt, bounds))
     }
 
@@ -366,7 +379,7 @@ impl CounterSummaryBuilder {
         self.0.combine(incoming)
     }
 
-    pub fn set_bounds(&mut self, bounds: Option<range::I64Range>) {
+    pub fn set_bounds(&mut self, bounds: range::I64Range) {
         self.0.bounds = bounds;
     }
 

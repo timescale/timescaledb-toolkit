@@ -11,15 +11,13 @@ pub type tstzrange = *mut pg_sys::varlena;
 
 // Derived from Postgres' range_deserialize: https://github.com/postgres/postgres/blob/27e1f14563cf982f1f4d71e21ef247866662a052/src/backend/utils/adt/rangetypes.c#L1779
 // but we modify because we only allow specific types of ranges, namely [) inclusive on left and exclusive on right, as this makes a lot of logic simpler, and allows for a standard way to represent a range.
+/// Returns `None` to represent [I64Range::infinite].
 #[allow(clippy::missing_safety_doc)]
 pub unsafe fn get_range(range: tstzrange) -> Option<I64Range> {
     let range_bytes = get_toasted_bytes(&*range);
     let mut range_bytes = &range_bytes[8..]; // don't care about the Header and Oid
     let flags = *range_bytes.last().unwrap();
-    let mut range = I64Range{
-        left: None,
-        right: None,
-    };
+    let (mut range_left, mut range_right) = (None, None);
     if flags & RANGE_EMPTY != 0{
         return None
     }
@@ -30,7 +28,7 @@ pub unsafe fn get_range(range: tstzrange) -> Option<I64Range> {
         if !lbound_inclusive(flags) {
             left += 1;
         }
-        range.left = Some(left);
+        range_left = Some(left);
     }
     if range_has_rbound(flags){
         let bytes = range_bytes[..8].try_into().unwrap();
@@ -38,10 +36,9 @@ pub unsafe fn get_range(range: tstzrange) -> Option<I64Range> {
         if rbound_inclusive(flags) {
             right += 1;
         }
-        range.right = Some(right);
+        range_right = Some(right);
     }
-    Some(range)
-
+    Some(I64Range::new(range_left, range_right))
 }
 
 unsafe fn get_toasted_bytes(ptr: &pg_sys::varlena) -> &[u8] {
@@ -104,34 +101,32 @@ flat_serialize! {
     }
 }
 impl I64RangeWrapper {
-    pub fn to_i64range(&self) -> Option<I64Range> {
+    pub fn to_i64range(&self) -> I64Range {
         if self.is_present == 0 {
-            return None
+            return I64Range::infinite();
         }
-        Some(I64Range{
-            left: self.left,
-            right: self.right,
-        })
+        I64Range::new(self.left, self.right)
     }
 
-    pub fn from_i64range(b: Option<I64Range>) -> Self {
-        match b {
-            Some(range) => Self {
+    pub fn from_i64range(range: I64Range) -> Self {
+        if !range.is_infinite() {
+            Self {
                 is_present: 1,
-                has_left: range.left.is_some().into(),
-                has_right:  range.right.is_some().into(),
+                has_left: !range.is_infinite_left() as u8,
+                has_right: !range.is_infinite_right() as u8,
                 padding: [0; 5],
-                left: range.left,
-                right: range.right,
-            },
-            None => Self {
+                left: range.left(),
+                right: range.right(),
+            }
+        } else {
+            Self {
                 is_present: 0,
                 has_left: 0,
                 has_right: 0,
                 padding: [0; 5],
                 left: None,
                 right: None,
-            },
+            }
         }
     }
 }

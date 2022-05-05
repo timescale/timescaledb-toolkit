@@ -1001,11 +1001,11 @@ pub mod toolkit_experimental {
         match range {
             None => accessor.range_null = 1,
             Some(range) => {
-                if let Some(left) = range.left {
+                if let Some(left) = range.left() {
                     accessor.lower_present = 1;
                     accessor.lower = left;
                 }
-                if let Some(right) = range.right {
+                if let Some(right) = range.right() {
                     accessor.upper_present = 1;
                     accessor.upper = right;
                 }
@@ -1015,15 +1015,15 @@ pub mod toolkit_experimental {
     }
 
     impl<'i> AccessorWithBounds<'i> {
-        pub fn bounds(&self) -> Option<I64Range> {
+        pub fn bounds(&self) -> I64Range {
             if self.range_null != 0{
-                return None
+                return I64Range::infinite();
             }
 
-            I64Range {
-                left: (self.lower_present != 0).then(|| self.lower),
-                right: (self.upper_present != 0).then(|| self.upper),
-            }.into()
+            I64Range::new(
+                (self.lower_present != 0).then(|| self.lower),
+                (self.upper_present != 0).then(|| self.upper),
+            )
         }
     }
 }

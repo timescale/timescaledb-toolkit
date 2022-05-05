@@ -1,7 +1,7 @@
 use pgx::*;
 use serde::{Deserialize, Serialize};
 
-use counter_agg::{range::I64Range, GaugeSummaryBuilder, MetricSummary};
+use counter_agg::{range::I64Range, stable, GaugeSummaryBuilder, MetricSummary};
 use flat_serialize::FlatSerializable;
 use flat_serialize_macro::FlatSerializable;
 use stats_agg::stats2d::StatsSummary2D;
@@ -64,7 +64,7 @@ struct GaugeSummaryTransState {
     // We have a summary buffer here in order to deal with the fact that when the cmobine function gets called it
     // must first build up a buffer of InternalMetricSummaries, then sort them, then call the combine function in
     // the correct order.
-    summary_buffer: Vec<MetricSummary>,
+    summary_buffer: Vec<stable::MetricSummary>,
 }
 
 impl GaugeSummaryTransState {
@@ -86,7 +86,10 @@ impl GaugeSummaryTransState {
         }
         self.point_buffer.sort_unstable_by_key(|p| p.ts);
         let mut iter = self.point_buffer.iter();
-        let mut summary = GaugeSummaryBuilder::new(iter.next().unwrap(), self.bounds);
+        let mut summary = GaugeSummaryBuilder::new(
+            iter.next().unwrap(),
+            self.bounds.clone().unwrap_or_else(I64Range::infinite),
+        );
         for p in iter {
             summary
                 .add_point(p)
@@ -98,7 +101,7 @@ impl GaugeSummaryTransState {
         if !summary.bounds_valid() {
             panic!("Metric bounds invalid")
         }
-        self.summary_buffer.push(summary.build());
+        self.summary_buffer.push(summary.build().into());
     }
 
     fn push_summary(&mut self, other: &Self) {
@@ -114,16 +117,17 @@ impl GaugeSummaryTransState {
         if self.summary_buffer.len() <= 1 {
             return;
         }
+        // TODO move much of this method to crate?
         self.summary_buffer.sort_unstable_by_key(|s| s.first.ts);
         let mut sum_iter = self.summary_buffer.drain(..);
         let first = sum_iter.next().expect("already handled empty case");
-        let mut new_summary = GaugeSummaryBuilder::from(first);
+        let mut new_summary = GaugeSummaryBuilder::from(MetricSummary::from(first));
         for sum in sum_iter {
             new_summary
-                .combine(&sum)
+                .combine(&sum.into())
                 .unwrap_or_else(|e| pgx::error!("{}", e));
         }
-        self.summary_buffer.push(new_summary.build());
+        self.summary_buffer.push(new_summary.build().into());
     }
 }
 
@@ -213,11 +217,15 @@ fn gauge_agg_summary_trans_inner(
             (state, None) => state,
             (None, Some(value)) => {
                 let mut state = GaugeSummaryTransState::new();
-                state.summary_buffer.push(value.into());
+                state
+                    .summary_buffer
+                    .push(stable::MetricSummary::from(MetricSummary::from(value)));
                 Some(state.into())
             }
             (Some(mut state), Some(value)) => {
-                state.summary_buffer.push(value.into());
+                state
+                    .summary_buffer
+                    .push(stable::MetricSummary::from(MetricSummary::from(value)));
                 Some(state)
             }
         })
@@ -286,6 +294,7 @@ fn gauge_agg_final_inner(
             match state.summary_buffer.pop() {
                 None => None,
                 Some(st) => {
+                    let st = MetricSummary::from(st);
                     // there are some edge cases that this should prevent, but I'm not sure it's necessary, we do check the bounds in the functions that use them.
                     if !st.bounds_valid() {
                         panic!("Metric bounds invalid")

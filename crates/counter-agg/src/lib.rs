@@ -1,5 +1,5 @@
 
-use time_series::TSPoint;
+use tspoint::TSPoint;
 use stats_agg::{XYPair, stats2d::StatsSummary2D};
 use serde::{Deserialize, Serialize};
 use std::fmt;

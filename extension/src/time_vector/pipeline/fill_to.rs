@@ -76,10 +76,8 @@ pub fn fill_to<'s>(
         _ => unreachable!()
     };
 
-    match series.series {
-        SeriesType::Explicit{..} => panic!("Timeseries must be sorted prior to passing to fill_to"),
-        SeriesType::Normal{step_interval, ..} => if step_interval <= interval { return series; },
-        _ => ()
+    if !series.is_sorted() {
+        panic!("Timeseries must be sorted prior to passing to fill_to")
     }
 
     let mut result = vec![];
@@ -106,10 +104,10 @@ pub fn fill_to<'s>(
     result.sort_by_key(|p| p.ts);
     build!{
         Timevector {
-            series: SeriesType::Sorted{
-                num_points: result.len() as _,
-                points: result.into(),
-            }
+            num_points: result.len() as _,
+            is_sorted: true,
+            internal_padding: [0; 3],
+            points: result.into(),
         }
     }
 }
@@ -155,7 +153,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:9,is_sorted:true,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-02 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
@@ -164,7 +162,8 @@ mod tests {
                 (ts:\"2020-01-06 00:00:00+00\",val:30),\
                 (ts:\"2020-01-07 00:00:00+00\",val:30),\
                 (ts:\"2020-01-08 00:00:00+00\",val:30),\
-                (ts:\"2020-01-09 00:00:00+00\",val:40)]");
+                (ts:\"2020-01-09 00:00:00+00\",val:40)\
+            ])");
 
             let val = client.select(
                 "SELECT (timevector(time, value) -> fill_to('24 hours', 'linear'))::TEXT FROM series",
@@ -173,7 +172,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:9,is_sorted:true,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-02 00:00:00+00\",val:15),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
@@ -182,7 +181,8 @@ mod tests {
                 (ts:\"2020-01-06 00:00:00+00\",val:30),\
                 (ts:\"2020-01-07 00:00:00+00\",val:33.33333333333334),\
                 (ts:\"2020-01-08 00:00:00+00\",val:36.66666666666667),\
-                (ts:\"2020-01-09 00:00:00+00\",val:40)]");
+                (ts:\"2020-01-09 00:00:00+00\",val:40)\
+            ])");
 
             let val = client.select(
                 "SELECT (timevector(time, value) -> fill_to('24 hours', 'nearest'))::TEXT FROM series",
@@ -191,7 +191,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:9,is_sorted:true,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-02 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
@@ -200,7 +200,8 @@ mod tests {
                 (ts:\"2020-01-06 00:00:00+00\",val:30),\
                 (ts:\"2020-01-07 00:00:00+00\",val:30),\
                 (ts:\"2020-01-08 00:00:00+00\",val:40),\
-                (ts:\"2020-01-09 00:00:00+00\",val:40)]");
+                (ts:\"2020-01-09 00:00:00+00\",val:40)\
+            ])");
 
             let val = client.select(
                 "SELECT (timevector(time, value) -> fill_to('10 hours', 'nearest'))::TEXT FROM series",
@@ -209,7 +210,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:22,is_sorted:true,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-01 10:00:00+00\",val:10),\
                 (ts:\"2020-01-01 20:00:00+00\",val:10),\
@@ -231,7 +232,8 @@ mod tests {
                 (ts:\"2020-01-08 02:00:00+00\",val:40),\
                 (ts:\"2020-01-08 12:00:00+00\",val:40),\
                 (ts:\"2020-01-08 22:00:00+00\",val:40),\
-                (ts:\"2020-01-09 00:00:00+00\",val:40)]");
+                (ts:\"2020-01-09 00:00:00+00\",val:40)\
+            ])");
         });
     }
 }

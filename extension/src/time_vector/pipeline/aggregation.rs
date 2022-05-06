@@ -35,8 +35,8 @@ use self::toolkit_experimental::{
 #[pg_schema]
 pub mod toolkit_experimental {
     use super::*;
-    pub(crate) use crate::time_series::Timevector;
-    pub(crate) use crate::time_series::pipeline::UnstableTimevectorPipeline;
+    pub(crate) use crate::time_vector::Timevector;
+    pub(crate) use crate::time_vector::pipeline::UnstableTimevectorPipeline;
     pub(crate) use crate::accessors::toolkit_experimental::*;
 
     pg_type! {

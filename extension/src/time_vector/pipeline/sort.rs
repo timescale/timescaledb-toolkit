@@ -18,23 +18,21 @@ pub fn sort_pipeline_element<'p, 'e>(
 pub fn sort_timevector(
     mut series: toolkit_experimental::Timevector<'_>,
 ) -> toolkit_experimental::Timevector<'_> {
-    match &mut series.series {
-        SeriesType::GappyNormal{..} | SeriesType::Normal{..} | SeriesType::Sorted{..} => series,
-        SeriesType::Explicit{points, ..} => {
-            let points = points.as_owned();
-            let mut points = std::mem::take(points);
-            points.sort_by(|a, b| a.ts.cmp(&b.ts));
-            TimevectorData {
-                header: 0,
-                version: 1,
-                padding: [0; 3],
-                series: SeriesType::Sorted {
-                    num_points: points.len() as u64,
-                    points: points.into(),
-                },
-            }.into()
-        }
+    if series.is_sorted() {
+        return series;
     }
+    
+    let mut points = std::mem::take(series.points.as_owned());
+    points.sort_by(|a, b| a.ts.cmp(&b.ts));
+    TimevectorData {
+        header: 0,
+        version: 1,
+        padding: [0; 3],
+        num_points: points.len() as u32,
+        is_sorted: true,
+        internal_padding: [0; 3],
+        points: points.into(),
+    }.into()
 }
 
 #[cfg(any(test, feature = "pg_test"))]
@@ -76,13 +74,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:25),\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
                 (ts:\"2020-01-02 00:00:00+00\",val:15),\
                 (ts:\"2020-01-05 00:00:00+00\",val:30)\
-            ]");
+            ])");
 
 
             let val = client.select(
@@ -92,13 +90,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:true,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-02 00:00:00+00\",val:15),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
                 (ts:\"2020-01-04 00:00:00+00\",val:25),\
                 (ts:\"2020-01-05 00:00:00+00\",val:30)\
-            ]");
+            ])");
         });
     }
 }

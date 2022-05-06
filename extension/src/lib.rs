@@ -15,7 +15,7 @@ pub mod range;
 pub mod state_aggregate;
 pub mod stats_agg;
 pub mod utilities;
-pub mod time_series;
+pub mod time_vector;
 pub mod frequency;
 
 mod palloc;

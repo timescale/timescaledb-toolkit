@@ -33,7 +33,7 @@ use Type::*;
 // FIXME check the grammar
 
 #[derive(pest_derive::Parser)]
-#[grammar = "time_series/pipeline/lambda/lambda_expr.pest"] // relative to src
+#[grammar = "time_vector/pipeline/lambda/lambda_expr.pest"] // relative to src
 pub struct ExpressionParser;
 
 pub fn parse_expression(input: &str) -> Expression {

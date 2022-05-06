@@ -419,7 +419,7 @@ dependencies = [
  "flat_serialize_macro",
  "serde",
  "stats_agg",
- "time_series",
+ "tspoint",
 ]
 
 [[package]]
@@ -2317,22 +2317,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "25eb0ca3468fc0acc11828786797f6ef9aa1555e4a211a60d64cc8e4d1be47d6"
 
 [[package]]
-name = "time_series"
-version = "0.1.0"
-dependencies = [
- "flat_serialize",
- "flat_serialize_macro",
- "serde",
-]
-
-[[package]]
 name = "time_weighted_average"
 version = "0.1.0"
 dependencies = [
  "flat_serialize",
  "flat_serialize_macro",
  "serde",
- "time_series",
+ "tspoint",
 ]
 
 [[package]]
@@ -2364,8 +2355,8 @@ dependencies = [
  "statrs",
  "stats_agg",
  "tdigest",
- "time_series",
  "time_weighted_average",
+ "tspoint",
  "uddsketch",
 ]
 
@@ -2535,6 +2526,15 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
+]
+
+[[package]]
+name = "tspoint"
+version = "0.1.0"
+dependencies = [
+ "flat_serialize",
+ "flat_serialize_macro",
+ "serde",
 ]
 
 [[package]]

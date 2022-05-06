@@ -51,16 +51,14 @@ CREATE VIEW daily_delta AS
     SELECT device,
         toolkit_experimental.timevector(time, temperature)
             -> (toolkit_experimental.sort()
-            ->  toolkit_experimental.resample_to_rate('trailing_average', '24 hours', true)
-            ->  toolkit_experimental.fill_holes('interpolate')
             ->  toolkit_experimental.delta()) AS deltas
     FROM test_data
     GROUP BY device;
 ```
 
-This command creates a timevector from the time and temperature columns (grouped by device), sorts them in increasing time, aggregates them as a daily average, interpolates the values for any missing days, and computes the deltas between days.  Now we can look at the deltas for a specific device:
+This command creates a timevector from the time and temperature columns (grouped by device), sorts them in increasing time, and computes the deltas between values.  Now we can look at the deltas for a specific device.  Note that the output for this test is inaccurate as we've removed some of the pipeline elements for the moment.
 
-```SQL
+```SQL,ignore-output
 SELECT time, value::numeric(4,2) AS delta FROM toolkit_experimental.unnest((SELECT deltas FROM daily_delta WHERE device = 3));
 ```
 ```output
@@ -104,7 +102,7 @@ SELECT (deltas -> toolkit_experimental.lttb(10))::TEXT FROM daily_delta where de
 ```output
                                                                             text
 --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-  [(ts:"2020-01-02 00:00:00+00",val:0.5555802022457712),(ts:"2020-01-05 00:00:00+00",val:-1.4688929826077484),(ts:"2020-01-08 00:00:00+00",val:2.416048415988122),(ts:"2020-01-09 00:00:00+00",val:-3.0046993833401174),(ts:"2020-01-14 00:00:00+00",val:0.22758839123397223),(ts:"2020-01-17 00:00:00+00",val:-2.1256090660578124),(ts:"2020-01-19 00:00:00+00",val:1.2272792346941657),(ts:"2020-01-25 00:00:00+00",val:-3.1053238977555324),(ts:"2020-01-26 00:00:00+00",val:1.2629388469236815),(ts:"2020-01-30 00:00:00+00",val:-0.7042437967407409)]
+  (version:1,num_points:10,is_sorted:true,internal_padding:(0,0,0),points:[(ts:"2020-01-01 01:25:10+00",val:6.071850341376361),(ts:"2020-01-01 06:42:42+00",val:-19.012231731606803),(ts:"2020-01-05 07:18:48+00",val:15.050657902599482),(ts:"2020-01-10 09:35:14+00",val:-17.350077317333685),(ts:"2020-01-13 05:26:49+00",val:17.4527246179904),(ts:"2020-01-17 06:52:46+00",val:-19.59155342245161),(ts:"2020-01-21 12:43:25+00",val:18.586476656935602),(ts:"2020-01-24 09:45:35+00",val:-17.787766631363837),(ts:"2020-01-30 14:00:56+00",val:-15.147139203422384),(ts:"2020-01-30 23:50:41+00",val:10.993553071510647)])
 ```
 
 ## Current Pipeline Elements(A-Z) <a id="timevector-pipeline-elements"></a>
@@ -113,9 +111,7 @@ As of the current timescale release, these elements are all [experimental](/docs
 
 
 > - [delta](#timevector_pipeline_delta)
-> - [fill_holes](#timevector_pipeline_fill_holes)
 > - [lttb](#timevector_pipeline_lttb)
-> - [resample_to_rate](#timevector_pipeline_resample_to_rate)
 > - [sort](#sort)
 
 
@@ -157,60 +153,6 @@ FROM toolkit_experimental.unnest(
  2020-01-04 00:00:00+00 |     5
  2020-01-05 00:00:00+00 |     7
  2020-01-06 00:00:00+00 |     9
-```
-
----
-
-## **fill_holes** <a id="timevector_pipeline_fill_holes"></a>
-```SQL ,ignore
-fill_holes(
-    fill_method TEXT
-) RETURNS TimevectorPipelineElement
-```
-
-This element will take in a normal timevector (such as the result of a [resample_to_rate](#timevector_pipeline_resample_to_rate) pipeline element), and fill in any implicit gaps according to the requested `fill_method`.  Calling this on a non-normal timevector will produce an error.
-
-Valid fill methods are:
-| Method | Description |
-|---|---|
-| `locf` | Fill gaps with the last valid preceeding value. |
-| `interpolate` | Compute the missing value linearly from the immediately bounding values |
-
-### Required Arguments <a id="timevector_pipeline_fill_holes-arguments"></a>
-|Name| Type |Description|
-|---|---|---|
-| `fill_method` | `TEXT` | Case insensitive match for one of the fill methods above. |
-<br>
-
-### Pipeline Execution Returns <a id="timevector_pipeline_fill_holes-returns"></a>
-
-|Column|Type|Description|
-|---|---|---|
-| `timevector` | `Timevector` | This creates a complete normal timevector (no missing values) from the input series.. |
-<br>
-
-### Sample Usage <a id="timevector_pipeline_fill_holes-examples"></a>
-```SQL
-SELECT time, value
-FROM toolkit_experimental.unnest(
-    (SELECT toolkit_experimental.timevector('2020-01-01'::timestamptz + step * step * '1 hour'::interval, step * step)
-        -> (toolkit_experimental.resample_to_rate('nearest', '1 hour', true)
-        ->  toolkit_experimental.fill_holes('locf'))
-    FROM generate_series(1, 3) step)
-);
-```
-```output
-          time          | value
-------------------------+-------
- 2020-01-01 01:00:00+00 |     1
- 2020-01-01 02:00:00+00 |     1
- 2020-01-01 03:00:00+00 |     1
- 2020-01-01 04:00:00+00 |     4
- 2020-01-01 05:00:00+00 |     4
- 2020-01-01 06:00:00+00 |     4
- 2020-01-01 07:00:00+00 |     4
- 2020-01-01 08:00:00+00 |     4
- 2020-01-01 09:00:00+00 |     9
 ```
 
 ---
@@ -261,65 +203,6 @@ FROM toolkit_experimental.unnest(
  2020-02-01 00:00:00+00 |  5.004324248633603
  2020-03-03 00:00:00+00 | 14.982710485116087
  2020-04-20 00:00:00+00 | 10.022128489940254
-```
-
----
-
-## **resample_to_rate** <a id="timevector_pipeline_resample_to_rate"></a>
-```SQL ,ignore
-resample_to_rate(
-    resample_method TEXT,
-    interval INTERVAL,
-    snap_to_rate BOOL
-) RETURNS TimevectorPipelineElement
-```
-
-This element will operate over a timevector, returning a new series with points exactly `interval` units apart.  The target timestamp for the first point of this range will either be the first timestamp from the input range if `snap_to_rate` is false, or the `interval` truncated timestamp containing that time if `snap_to_rate` is true.  The value for the new points will be computed from all the points in the input series which fall into the resulting interval, using the `resample_method` as follows:
-
-| Method | Description | Interval range |
-|---|---|---|
-| `average` | An average of all the values closest to the target timestamp | Each point of the result covers the values with times +/- `interval` / 2 in the input series |
-| `nearest` | The value of the closest point in the input series.  If the two nearest points are equdistant, this becomes the average of their values. | Only points +/- `interval` / 2 are considered candidates for `nearest`.  If there are no points in this range in the input series, the output series will not have a value for that timestamp |
-| `weighted_average` | Similar to average, but weights points on how close they are to the target time.  A point matching the target time would be full weight, while one on the edge of the interval only recieves 0.1 weight (weights for other values grow linearly between these extremes as they approach the target). | Like average, each point in the output series will aggregate the points of the input series with times +/- `interval` / 2 |
-| `trailing_average` | In this case, each point of the result is determined by the average of the points in the `interval` following the target time. | Each point covers the target time + `interval` in the input series |
-
-In all cases, if there are no points in the input series in the interval range of a particular target time, there will be no point at that time in the output series.
-
-### Required Arguments <a id="timevector_pipeline_resample_to_rate-arguments"></a>
-|Name| Type |Description|
-|---|---|---|
-| `resample_method` | `TEXT` | Case insensitive match for one of the methods above. |
-| `interval` | `INTERVAL` | The rate to resample to.  Note that this must be a stable interval, meaning it can't use time units greater than hours (days are unstable due to DST) |
-| `snap_to_rate` | `BOOL` | Whether the resulting points should be multiples of `interval` (if true), else `interval` offsets from the first point in the input series. |
-<br>
-
-### Pipeline Execution Returns <a id="timevector_pipeline_resample_to_rate-returns"></a>
-
-|Column|Type|Description|
-|---|---|---|
-| `timevector` | `Timevector` | A new pipeline with `interval` spaced points generated from the input series |
-<br>
-
-### Sample Usage <a id="timevector_pipeline_resample_to_rate-examples"></a>
-```SQL
-SELECT time, value::numeric(4,2)
-FROM toolkit_experimental.unnest(
-    (SELECT toolkit_experimental.timevector('2020-01-01'::TIMESTAMPTZ + step *step * step * '1 minute'::interval, step)
-        -> toolkit_experimental.resample_to_rate('weighted_average', '1 hour', true)
-    FROM generate_series(1,10) step)
-);
-```
-```output
-          time          | value
-------------------------+-------
- 2020-01-01 00:00:00+00 |  1.59
- 2020-01-01 01:00:00+00 |  4.00
- 2020-01-01 02:00:00+00 |  5.00
- 2020-01-01 04:00:00+00 |  6.00
- 2020-01-01 06:00:00+00 |  7.00
- 2020-01-01 09:00:00+00 |  8.00
- 2020-01-01 12:00:00+00 |  9.00
- 2020-01-01 17:00:00+00 | 10.00
 ```
 
 ---

@@ -7,9 +7,9 @@ use crate::{
     aggregate_utils::in_aggregate_context, palloc::{Internal, InternalAsValue, Inner, ToInternal},
 };
 
-use time_series::{TSPoint, GapfillMethod};
+use tspoint::TSPoint;
 
-use crate::time_series::{Timevector, TimevectorData, SeriesType};
+use crate::time_vector::{Timevector, TimevectorData};
 
 // This is included for debug purposes and probably should not leave experimental
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
@@ -109,13 +109,13 @@ fn find_downsample_interval(points: &[TSPoint], resolution: i64) -> i64 {
 fn asap_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
+) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
     asap_final_inner(unsafe{ state.to_inner() }, fcinfo)
 }
 fn asap_final_inner(
     state: Option<Inner<ASAPTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
+) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let state = match state {
@@ -135,23 +135,29 @@ fn asap_final_inner(
             } else {
                 (points.last().unwrap().ts - points.first().unwrap().ts) / points.len() as i64
             };
-            let mut normal = downsample_and_gapfill_to_normal_form(&points, downsample_interval, GapfillMethod::Linear);
+            let mut normal = downsample_and_gapfill_to_normal_form(&points, downsample_interval);
             let start_ts = points.first().unwrap().ts;
 
             // Drop the last value to match the reference implementation
             normal.pop();
             let values = asap_smooth(&normal, state.resolution as u32);
 
+            let interval = downsample_interval * normal.len() as i64 / values.len() as i64;
+            let points: Vec<_> = values
+                .into_iter()
+                .enumerate()
+                .map(|(i, val)| TSPoint {
+                    ts: start_ts + i as i64 * interval,
+                    val,
+                })
+                .collect();
+
             Some(crate::build! {
                 Timevector {
-                    series: SeriesType::Normal {
-                        start_ts,
-                        // Set the step interval for the asap result so that it covers the same interval
-                        // as the passed in data
-                        step_interval: downsample_interval * normal.len() as i64 / values.len() as i64,
-                        num_vals: values.len() as _,
-                        values: values.into(),
-                    }
+                    num_points: points.len() as u32,
+                    is_sorted: true,
+                    internal_padding: [0; 3],
+                    points: points.into(), 
                 }
             })
         })
@@ -160,61 +166,61 @@ fn asap_final_inner(
 
 #[pg_extern(name="asap_smooth", schema = "toolkit_experimental", immutable, parallel_safe)]
 pub fn asap_on_timevector(
-    mut series: crate::time_series::toolkit_experimental::Timevector<'static>,
+    mut series: crate::time_vector::toolkit_experimental::Timevector<'static>,
     resolution: i32
-) -> Option<crate::time_series::toolkit_experimental::Timevector<'static>> {
+) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
     // TODO: implement this using zero copy (requires sort, find_downsample_interval, and downsample_and_gapfill on Timevector)
-    let needs_sort = matches!(&series.series, SeriesType::Explicit{..});
-    let start_ts;
-    let downsample_interval;
-    let mut normal = match &mut series.series {
-        SeriesType::Explicit { points, .. } | SeriesType::Sorted { points, .. }
-        => {
-            if needs_sort {
-                points.as_owned().sort_by_key(|p| p.ts);
-            }
-            // TODO points.make_slice()?
-            downsample_interval = if points.len() >= 2 * resolution as usize {
-                find_downsample_interval(points.as_slice(), resolution as i64)
-            } else {
-                (points.as_slice().last().unwrap().ts - points.as_slice().first().unwrap().ts) / points.len() as i64
-            };
-            let normal = downsample_and_gapfill_to_normal_form(points.as_slice(), downsample_interval, GapfillMethod::Linear);
-            start_ts = points.as_slice().first().unwrap().ts;
-            normal
-        },
-        SeriesType::Normal { start_ts: start, step_interval, values, .. } => {
-            start_ts = *start;
-            downsample_interval = *step_interval;
-            values.clone().into_vec()
-        },
-        SeriesType::GappyNormal { .. } =>
-            panic!("Series must be gapfilled before running asap smoothing"),
+    let needs_sort = series.is_sorted();
+
+    if needs_sort {
+        series.points.as_owned().sort_by_key(|p| p.ts);
+    }
+    // TODO points.make_slice()?
+    let downsample_interval = if series.points.len() >= 2 * resolution as usize {
+        find_downsample_interval(series.points.as_slice(), resolution as i64)
+    } else {
+        (series.points.as_slice().last().unwrap().ts - series.points.as_slice().first().unwrap().ts) / series.points.len() as i64
     };
+    let mut normal = downsample_and_gapfill_to_normal_form(series.points.as_slice(), downsample_interval);
+    let start_ts = series.points.as_slice().first().unwrap().ts;
 
     // Drop the last value to match the reference implementation
     normal.pop();
 
     let result = asap_smooth(&normal, resolution as u32);
 
+    let interval = downsample_interval * normal.len() as i64 / result.len() as i64;
+    let points: Vec<_> = result
+        .into_iter()
+        .enumerate()
+        .map(|(i, val)| TSPoint {
+            ts: start_ts + i as i64 * interval,
+            val,
+        })
+        .collect();
+
     Some(crate::build! {
         Timevector {
-            series: SeriesType::Normal {
-                start_ts,
-                // Set the step interval for the asap result so that it covers the same interval
-                // as the passed in data
-                step_interval: downsample_interval * normal.len() as i64 / result.len() as i64,
-                num_vals: result.len() as _,
-                values: result.into(),
-            }
+            num_points: points.len() as u32,
+            is_sorted: true,
+            internal_padding: [0; 3],
+            points: points.into(),
         }
     })
 }
 
+// Adds the given number of points to the end of a non-empty NormalTimevector
+fn fill_normalized_series_gap(values: &mut Vec<f64>, points: i32, post_gap_val: f64) {
+    assert!(!values.is_empty());
+    let last_val = *values.last().unwrap();
+    for i in 1..=points {
+        values.push(last_val + (post_gap_val - last_val) * i as f64 / (points + 1) as f64);
+    }
+}
+
 fn downsample_and_gapfill_to_normal_form(
     points: &[TSPoint],
-    downsample_interval: i64,
-    gapfill_method: GapfillMethod
+    downsample_interval: i64
 ) -> Vec<f64> {
     if points.len() < 2 || points.last().unwrap().ts - points.first().unwrap().ts < downsample_interval {
         panic!("Not enough data to generate a smoothed representation")
@@ -234,7 +240,7 @@ fn downsample_and_gapfill_to_normal_form(
             let new_val = sum / count as f64;
             // If we missed any intervals prior to the current one, fill in the gap here
             if gap_count != 0 {
-                gapfill_method.fill_normalized_series_gap(&mut values, gap_count, new_val);
+                fill_normalized_series_gap(&mut values, gap_count, new_val);
                 gap_count = 0;
             }
             values.push(new_val);
@@ -255,7 +261,7 @@ fn downsample_and_gapfill_to_normal_form(
     assert!(count > 0);
     let new_val = sum / count as f64;
     if gap_count != 0 {
-        gapfill_method.fill_normalized_series_gap(&mut values, gap_count, new_val);
+        fill_normalized_series_gap(&mut values, gap_count, new_val);
     }
     values.push(sum / count as f64);
     values

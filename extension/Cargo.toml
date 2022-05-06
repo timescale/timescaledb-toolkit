@@ -28,7 +28,7 @@ uddsketch = {path="../crates/udd-sketch"}
 counter-agg = {path="../crates/counter-agg"}
 stats_agg = {path="../crates/stats-agg"}
 time_weighted_average = {path="../crates/time-weighted-average"}
-time_series = {path="../crates/time-series"}
+tspoint = {path="../crates/tspoint"}
 asap = {path="../crates/asap"}
 
 aggregate_builder = {path="../crates/aggregate_builder"}

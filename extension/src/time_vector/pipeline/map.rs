@@ -64,61 +64,11 @@ pub fn map_lambda_over_series(
     only_val: bool,
     mut func: impl FnMut(i64, f64) -> (Option<i64>, Option<f64>),
 ) {
-    use SeriesType::*;
-
-    match &mut series.series {
-        Sorted { points, .. } => if only_val {
-            let points = points.as_owned();
-            for point in points {
-                let (_, new_val) = func(point.ts, point.val);
-                *point = TSPoint {
-                    ts: point.ts,
-                    val: new_val.unwrap_or(point.val),
-                }
-            }
-        },
-        // Normal { values, .. } => if only_val {
-        //     // TODO
-        //     let values = values.as_owned();
-        //     for value in values {
-        //         *value = func(*value)
-        //     }
-        // },
-        Explicit { points, .. } => {
-            let points = points.as_owned();
-            // FIXME ensure sorted
-            for point in points {
-                let (new_time, new_val) = func(point.ts, point.val);
-                *point = TSPoint {
-                    ts: new_time.unwrap_or(point.ts),
-                    val: new_val.unwrap_or(point.val),
-                }
-            }
-        },
-        // GappyNormal { values, .. } => if only_val {
-        //     // TODO
-        //     let values = values.as_owned();
-        //     //FIXME add setjmp guard around loop
-        //     for value in values {
-        //         *value = func(*value)
-        //     }
-        // },
-        _ => {
-            let new_points: Vec<_> = series.iter().map(|point| {
-                let (new_time, new_val) = func(point.ts, point.val);
-                TSPoint {
-                    ts: new_time.unwrap_or(point.ts),
-                    val: new_val.unwrap_or(point.val),
-                }
-            }).collect();
-            *series = build! {
-                Timevector {
-                    series: Explicit {
-                        num_points: new_points.len() as _,
-                        points: new_points.into(),
-                    },
-                }
-            }
+    for point in series.points.as_owned() {
+        let (new_time, new_val) = func(point.ts, point.val);
+        *point = TSPoint {
+            ts: if only_val { point.ts } else { new_time.unwrap_or(point.ts) },
+            val: new_val.unwrap_or(point.val),
         }
     }
 }
@@ -152,11 +102,12 @@ pub fn check_user_function_type(function: pg_sys::regproc) {
         error!("invalid number of mapping function arguments, expected fn(timevector) RETURNS timevector")
     }
 
-    if unsafe { *argtypes } != *crate::time_series::TIMEVECTOR_OID {
+    assert!(!argtypes.is_null());
+    if unsafe { *argtypes } != *crate::time_vector::TIMEVECTOR_OID {
         error!("invalid argument type, expected fn(timevector) RETURNS timevector")
     }
 
-    if rettype != *crate::time_series::TIMEVECTOR_OID {
+    if rettype != *crate::time_vector::TIMEVECTOR_OID {
         error!("invalid return type, expected fn(timevector) RETURNS timevector")
     }
 }
@@ -263,65 +214,21 @@ pub fn apply_to(mut series: Timevector<'_>, func: pg_sys::RegProcedure)
 }
 
 pub fn map_series(series: &mut Timevector<'_>, mut func: impl FnMut(f64) -> f64) {
-    use SeriesType::*;
     use std::panic::AssertUnwindSafe;
 
-    match &mut series.series {
-        Sorted { points, .. } => {
-            let points = points.as_owned().iter_mut();
-            // setjump guard around the loop to reduce the amount we have to
-            // call it
-            // NOTE need to be careful that there's no allocation within the
-            //      loop body so it cannot leak
-            pgx::guard(AssertUnwindSafe(|| {
-                for point in points {
-                    *point = TSPoint {
-                        ts: point.ts,
-                        val: func(point.val),
-                    }
-                }
-            }))
-        },
-        Normal { values, .. } => {
-            let values = values.as_owned().iter_mut();
-            // setjump guard around the loop to reduce the amount we have to
-            // call it
-            // NOTE need to be careful that there's no allocation within the
-            //      loop body so it cannot leak
-            pgx::guard(AssertUnwindSafe(|| {
-                for value in values {
-                    *value = func(*value)
-                }
-            }))
-        },
-        Explicit { points, .. } => {
-            let points = points.as_owned().iter_mut();
-            // setjump guard around the loop to reduce the amount we have to
-            // call it
-            // NOTE need to be careful that there's not allocation within the
-            //      loop body so it cannot leak
-            pgx::guard(AssertUnwindSafe(|| {
-                for point in points {
-                    *point = TSPoint {
-                        ts: point.ts,
-                        val: func(point.val),
-                    }
-                }
-            }))
-        },
-        GappyNormal { values, .. } => {
-            let values = values.as_owned().iter_mut();
-            // setjump guard around the loop to reduce the amount we have to
-            // call it
-            // NOTE need to be careful that there's not allocation within the
-            //      loop body so it cannot leak
-            pgx::guard(AssertUnwindSafe(|| {
-                for value in values {
-                    *value = func(*value)
-                }
-            }))
-        },
-    }
+    let points = series.points.as_owned().iter_mut();
+    // setjump guard around the loop to reduce the amount we have to
+    // call it
+    // NOTE need to be careful that there's not allocation within the
+    //      loop body so it cannot leak
+    pgx::guard(AssertUnwindSafe(|| {
+        for point in points {
+            *point = TSPoint {
+                ts: point.ts,
+                val: func(point.val),
+            }
+        }
+    }))
 }
 
 #[cfg(any(test, feature = "pg_test"))]
@@ -363,13 +270,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:25),\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
                 (ts:\"2020-01-02 00:00:00+00\",val:15),\
                 (ts:\"2020-01-05 00:00:00+00\",val:30)\
-            ]");
+            ])");
 
             let val = client.select(
                 "SELECT (timevector(time, value) -> map($$ ($time + '1 day'i, $value * 2) $$))::TEXT FROM series",
@@ -378,13 +285,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-05 00:00:00+00\",val:50),\
                 (ts:\"2020-01-02 00:00:00+00\",val:20),\
                 (ts:\"2020-01-04 00:00:00+00\",val:40),\
                 (ts:\"2020-01-03 00:00:00+00\",val:30),\
                 (ts:\"2020-01-06 00:00:00+00\",val:60)\
-            ]");
+            ])");
         });
     }
 
@@ -421,21 +328,21 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:25),\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
                 (ts:\"2020-01-02 00:00:00+00\",val:15),\
                 (ts:\"2020-01-05 00:00:00+00\",val:30)\
-            ]");
+            ])");
 
-            let expected = "[\
+            let expected = "(version:1,num_points:5,is_sorted:false,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:725.7),\
                 (ts:\"2020-01-01 00:00:00+00\",val:166.2),\
                 (ts:\"2020-01-03 00:00:00+00\",val:489.2),\
                 (ts:\"2020-01-02 00:00:00+00\",val:302.7),\
                 (ts:\"2020-01-05 00:00:00+00\",val:1012.2)\
-            ]";
+            ])";
             let val = client.select(
                 "SELECT (timevector(time, value) \
                     -> map($$ ($time, $value^2 + $value * 2.3 + 43.2) $$))::TEXT \
@@ -495,13 +402,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:25),\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
                 (ts:\"2020-01-02 00:00:00+00\",val:15),\
                 (ts:\"2020-01-05 00:00:00+00\",val:30)\
-            ]");
+            ])");
 
             client.select(
                 "CREATE FUNCTION x2(double precision) RETURNS DOUBLE PRECISION AS 'SELECT $1 * 2;' LANGUAGE SQL",
@@ -517,13 +424,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:50),\
                 (ts:\"2020-01-01 00:00:00+00\",val:20),\
                 (ts:\"2020-01-03 00:00:00+00\",val:40),\
                 (ts:\"2020-01-02 00:00:00+00\",val:30),\
                 (ts:\"2020-01-05 00:00:00+00\",val:60)\
-            ]");
+            ])");
         });
     }
 
@@ -560,13 +467,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:25),\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
                 (ts:\"2020-01-02 00:00:00+00\",val:15),\
                 (ts:\"2020-01-05 00:00:00+00\",val:30)\
-            ]");
+            ])");
 
             client.select(
                 "CREATE FUNCTION jan_3_x3(timevector) RETURNS timevector AS $$\
@@ -586,7 +493,9 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[(ts:\"2020-01-03 00:00:00+00\",val:60)]");
+            assert_eq!(val.unwrap(), "(version:1,num_points:1,is_sorted:true,internal_padding:(0,0,0),points:[\
+                (ts:\"2020-01-03 00:00:00+00\",val:60)\
+            ])");
 
             let val = client.select(
                 "SELECT (timevector(time, value) ->> 'jan_3_x3')::TEXT FROM series",
@@ -595,7 +504,9 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[(ts:\"2020-01-03 00:00:00+00\",val:60)]");
+            assert_eq!(val.unwrap(), "(version:1,num_points:1,is_sorted:true,internal_padding:(0,0,0),points:[\
+                (ts:\"2020-01-03 00:00:00+00\",val:60)\
+            ])");
         });
     }
 
@@ -632,13 +543,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:25),\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
                 (ts:\"2020-01-02 00:00:00+00\",val:15),\
                 (ts:\"2020-01-05 00:00:00+00\",val:30)\
-            ]");
+            ])");
 
             client.select(
                 "CREATE FUNCTION serier(timevector) RETURNS timevector AS $$\

@@ -94,7 +94,7 @@ pub fn arrow_run_pipeline_then_unnest(
 {
     let series = run_pipeline_elements(timevector, pipeline.elements.iter())
         .0.into_owned();
-    crate::time_series::unnest(series.into())
+    crate::time_vector::unnest(series.into())
 }
 
 #[pg_extern(
@@ -230,7 +230,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[(ts:\"2020-01-04 00:00:00+00\",val:25),(ts:\"2020-01-01 00:00:00+00\",val:11),(ts:\"2020-01-03 00:00:00+00\",val:21),(ts:\"2020-01-02 00:00:00+00\",val:15),(ts:\"2020-01-05 00:00:00+00\",val:31)]");
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,internal_padding:(0,0,0),points:[\
+                (ts:\"2020-01-04 00:00:00+00\",val:25),\
+                (ts:\"2020-01-01 00:00:00+00\",val:11),\
+                (ts:\"2020-01-03 00:00:00+00\",val:21),\
+                (ts:\"2020-01-02 00:00:00+00\",val:15),\
+                (ts:\"2020-01-05 00:00:00+00\",val:31)\
+            ])");
         });
     }
 

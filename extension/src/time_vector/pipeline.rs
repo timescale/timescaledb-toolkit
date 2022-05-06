@@ -1,7 +1,5 @@
 
-mod fill_holes;
 mod fill_to;
-mod resample_to_rate;
 mod sort;
 mod delta;
 mod lambda;
@@ -21,19 +19,9 @@ use crate::{
     ron_inout_funcs, pg_type, flatten,
 };
 
-use fill_holes::{
-    fill_holes,
-    FillHolesMethod,
-};
-
 use fill_to::{
     fill_to,
     FillToMethod,
-};
-
-use resample_to_rate::{
-    resample_to_rate,
-    ResampleMethod,
 };
 
 use sort::sort_timevector;
@@ -51,7 +39,7 @@ pub use self::toolkit_experimental::*;
 #[pg_schema]
 pub mod toolkit_experimental {
     use super::*;
-    pub use crate::time_series::Timevector;
+    pub use crate::time_vector::Timevector;
     pub(crate) use crate::accessors::toolkit_experimental::AccessorDelta;
     pub(crate) use lambda::toolkit_experimental::{Lambda, LambdaData};
     // TODO once we start stabilizing elements, create a type TimevectorPipeline
@@ -73,14 +61,8 @@ pub mod toolkit_experimental {
             LTTB: 1 {
                 resolution: u64,
             },
-            ResampleToRate: 2 {
-                interval: i64,
-                resample_method: ResampleMethod,
-                snap_to_rate: i64, // padded bool
-            },
-            FillHoles: 3 {
-                fill_method: FillHolesMethod,
-            },
+            // 2 was for resample_to_rate
+            // 3 was for fill_holes
             Sort: 4 {
             },
             Delta: 5 {
@@ -168,10 +150,6 @@ pub fn execute_pipeline_element<'s>(
     match element {
         Element::LTTB{resolution} =>
             crate::lttb::lttb_ts(timevector, *resolution as _),
-        Element::ResampleToRate{..} =>
-            resample_to_rate(&timevector, element),
-        Element::FillHoles{..} =>
-            fill_holes(timevector, element),
         Element::Sort{..} =>
             sort_timevector(timevector),
         Element::Delta{..} =>
@@ -459,7 +437,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:17,is_sorted:true,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-11 00:00:00+00\",val:12.7015),\
                 (ts:\"2020-01-13 00:00:00+00\",val:11.8117),\
                 (ts:\"2020-01-22 00:00:00+00\",val:7.4757),\
@@ -477,7 +455,7 @@ mod tests {
                 (ts:\"2020-04-10 00:00:00+00\",val:5.8046),\
                 (ts:\"2020-04-14 00:00:00+00\",val:7.195),\
                 (ts:\"2020-04-20 00:00:00+00\",val:10.0221)\
-            ]");
+            ])");
 
             let val = client.select(
                 "SELECT (series -> lttb(8))::TEXT FROM lttb_pipe",
@@ -486,7 +464,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:8,is_sorted:true,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-11 00:00:00+00\",val:12.7015),\
                 (ts:\"2020-01-27 00:00:00+00\",val:5.7155),\
                 (ts:\"2020-02-06 00:00:00+00\",val:5.5162),\
@@ -495,7 +473,7 @@ mod tests {
                 (ts:\"2020-03-30 00:00:00+00\",val:5.6728),\
                 (ts:\"2020-04-09 00:00:00+00\",val:5.554),\
                 (ts:\"2020-04-20 00:00:00+00\",val:10.0221)\
-            ]");
+            ])");
 
             let val = client.select(
                 "SELECT (series -> lttb(8) -> lttb(8))::TEXT FROM lttb_pipe",
@@ -504,7 +482,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:8,is_sorted:true,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-11 00:00:00+00\",val:12.7015),\
                 (ts:\"2020-01-27 00:00:00+00\",val:5.7155),\
                 (ts:\"2020-02-06 00:00:00+00\",val:5.5162),\
@@ -513,7 +491,7 @@ mod tests {
                 (ts:\"2020-03-30 00:00:00+00\",val:5.6728),\
                 (ts:\"2020-04-09 00:00:00+00\",val:5.554),\
                 (ts:\"2020-04-20 00:00:00+00\",val:10.0221)\
-            ]");
+            ])");
 
             let val = client.select(
                 "SELECT (series -> (lttb(8) -> lttb(8) -> lttb(8)))::TEXT FROM lttb_pipe",
@@ -522,7 +500,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:8,is_sorted:true,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-11 00:00:00+00\",val:12.7015),\
                 (ts:\"2020-01-27 00:00:00+00\",val:5.7155),\
                 (ts:\"2020-02-06 00:00:00+00\",val:5.5162),\
@@ -531,7 +509,7 @@ mod tests {
                 (ts:\"2020-03-30 00:00:00+00\",val:5.6728),\
                 (ts:\"2020-04-09 00:00:00+00\",val:5.554),\
                 (ts:\"2020-04-20 00:00:00+00\",val:10.0221)\
-            ]");
+            ])");
         });
     }
 

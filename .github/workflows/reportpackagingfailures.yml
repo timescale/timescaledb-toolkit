@@ -1,0 +1,43 @@
+name: Report Build Package Failures
+on:
+  workflow_run:
+    workflows: [Build packages, CI]
+    types: [completed]
+
+jobs:
+  on-failure:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion != 'success' }}
+    steps:
+      - name: slack-send
+        uses: slackapi/slack-github-action@v1.19.0
+        with:
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "Workflow run <${{ github.event.workflow_run.html_url }}|${{ github.event.workflow.name}}#${{ github.event.workflow_run.run_number }}>"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Status*\n`${{ github.event.workflow_run.conclusion }}`"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Triggered By*\n<${{ github.event.sender.html_url }}|${{ github.event.sender.login }}>"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_NOTIFY_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+Loading

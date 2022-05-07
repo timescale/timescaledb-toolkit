@@ -36,44 +36,42 @@ pub fn install_all_versions(
         restore_from_cache(cache_dir, pg_config)?
     }
 
-    let base_checkout = get_current_checkout()?;
-    // Install the versions in reverse-time order.
-    // Since later versions tend to be supersets of old versions,
-    // I expect compilation to be faster this way - Josh
-    for version in old_versions.iter().rev() {
-        let force_reinstall = reinstall.contains(&**version);
-        if !force_reinstall && version_is_installed(pg_config, version)? {
-            eprintln!("{} {}", "Already Installed".blue(), version);
-            continue
-        }
-        eprintln!("{} {}", "Installing".bold().cyan(), version);
-        let tag_version = tag_version(version);
-        quietly_run(cmd!("git fetch origin tag {tag_version}"))?;
-        quietly_run(cmd!("git checkout tags/{tag_version}"))?;
-        let _d = defer(|| quietly_run(cmd!("git checkout {base_checkout}")));
+    {
         let _ext = pushd(&extension_dir)?;
-        let cargo_toml_contents =
-            std::fs::read_to_string("Cargo.toml").expect("unable to read Cargo.toml");
-        let pgx_version = get_pgx_version(&cargo_toml_contents);
-        install_toolkit(pgx_version)?;
-        post_install()?;
-        eprintln!("{} {}", "Finished".bold().green(), version);
-    }
+        let base_checkout = get_current_checkout()?;
+        let pgx_version = get_pgx_version(
+            &std::fs::read_to_string("Cargo.toml").expect("unable to read Cargo.toml"),
+        );
+        // Install the versions in reverse-time order.
+        // Since later versions tend to be supersets of old versions,
+        // I expect compilation to be faster this way - Josh
+        for version in old_versions.iter().rev() {
+            let force_reinstall = reinstall.contains(&**version);
+            if !force_reinstall && version_is_installed(pg_config, version)? {
+                eprintln!("{} {}", "Already Installed".blue(), version);
+                continue;
+            }
+            eprintln!("{} {}", "Installing".bold().cyan(), version);
+            let tag_version = tag_version(version);
+            quietly_run(cmd!("git fetch origin tag {tag_version}"))?;
+            quietly_run(cmd!("git checkout tags/{tag_version}"))?;
+            let _d = defer(|| quietly_run(cmd!("git checkout {base_checkout}")));
+            install_toolkit(&pgx_version)?;
+            post_install()?;
+            eprintln!("{} {}", "Finished".bold().green(), version);
+        }
+        if let Some(cache_dir) = cache_dir {
+            save_to_cache(cache_dir, pg_config)?;
+        }
 
-    if let Some(cache_dir) = cache_dir {
-        save_to_cache(cache_dir, pg_config)?;
+        eprintln!(
+            "{} {} ({})",
+            "Installing Current".bold().cyan(),
+            current_version,
+            base_checkout
+        );
+        install_toolkit(&pgx_version)?;
     }
-
-    eprintln!(
-        "{} {} ({})",
-        "Installing Current".bold().cyan(),
-        current_version,
-        base_checkout
-    );
-    let cargo_toml_contents =
-        std::fs::read_to_string("Cargo.toml").expect("unable to read Cargo.toml");
-    let pgx_version = get_pgx_version(&cargo_toml_contents);
-    install_toolkit(pgx_version)?;
     post_install()?;
     eprintln!("{}", "Finished Current".bold().green());
 

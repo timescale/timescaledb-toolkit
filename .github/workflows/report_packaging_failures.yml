@@ -1,7 +1,7 @@
 name: Report Build Package Failures
 on:
   workflow_run:
-    workflows: [Build packages, CI]
+    workflows: [Build packages, Build CI Image, CI]
     types: [completed]
 
 jobs:

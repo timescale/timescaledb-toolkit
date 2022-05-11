@@ -1,27 +1,30 @@
-use std::{
-    collections::HashSet,
-    path::Path,
-};
+use std::{collections::HashSet, path::Path};
 
 use colored::Colorize;
-
+use semver::Version;
+use toml_edit::Document;
 use xshell::{cmd, cp, mkdir_p, pushd, pushenv, read_dir};
 
 use crate::{defer, quietly_run};
 
+#[allow(clippy::too_many_arguments)]
 pub fn install_all_versions(
     root_dir: &str,
     cache_dir: Option<&str>,
     pg_config: &str,
+    cargo_pgx: &str,
+    cargo_pgx_old: &str,
     current_version: &str,
     old_versions: &[String],
     reinstall: &HashSet<&str>,
 ) -> xshell::Result<()> {
     let extension_dir = path!(root_dir / "extension");
-    let install_toolkit = || -> xshell::Result<()> {
-        let _d = pushd(&extension_dir)?;
+    let install_toolkit = |pgx_version: Version| -> xshell::Result<()> {
         let _e = pushenv("CARGO_TARGET_DIR", "../target/extension");
-        quietly_run(cmd!("cargo pgx install -c {pg_config}"))
+        match pgx_version >= Version::new(0, 4, 0) {
+            true => quietly_run(cmd!("{cargo_pgx} pgx install -c {pg_config}")),
+            false => quietly_run(cmd!("{cargo_pgx_old} pgx install -c {pg_config}")),
+        }
     };
     let post_install = || -> xshell::Result<()> {
         let _d = pushd(root_dir)?;
@@ -35,32 +38,46 @@ pub fn install_all_versions(
         restore_from_cache(cache_dir, pg_config)?
     }
 
-    let base_checkout = get_current_checkout()?;
-    // Install the versions in reverse-time order.
-    // Since later versions tend to be supersets of old versions,
-    // I expect compilation to be faster this way - Josh
-    for version in old_versions.iter().rev() {
-        let force_reinstall = reinstall.contains(&**version);
-        if !force_reinstall && version_is_installed(pg_config, version)? {
-            eprintln!("{} {}", "Already Installed".blue(), version);
-            continue
+    {
+        let _ext = pushd(&extension_dir)?;
+        let base_checkout = get_current_checkout()?;
+        let pgx_version = get_pgx_version(
+            &std::fs::read_to_string("Cargo.toml").expect("unable to read Cargo.toml"),
+        );
+        // Install the versions in reverse-time order.
+        // Since later versions tend to be supersets of old versions,
+        // I expect compilation to be faster this way - Josh
+        for version in old_versions.iter().rev() {
+            let force_reinstall = reinstall.contains(&**version);
+            if !force_reinstall && version_is_installed(pg_config, version)? {
+                eprintln!("{} {}", "Already Installed".blue(), version);
+                continue;
+            }
+            eprintln!("{} {}", "Installing".bold().cyan(), version);
+            let tag_version = tag_version(version);
+            quietly_run(cmd!("git fetch origin tag {tag_version}"))?;
+            quietly_run(cmd!("git checkout tags/{tag_version}"))?;
+            let _d = defer(|| quietly_run(cmd!("git checkout {base_checkout}")));
+            let pgx_version = get_pgx_version(
+                &std::fs::read_to_string("Cargo.toml").expect("unable to read Cargo.toml"),
+            );
+            install_toolkit(pgx_version)?;
+            post_install()?;
+            eprintln!("{} {}", "Finished".bold().green(), version);
         }
-        eprintln!("{} {}", "Installing".bold().cyan(), version);
-        let tag_version = tag_version(version);
-        quietly_run(cmd!("git fetch origin tag {tag_version}"))?;
-        quietly_run(cmd!("git checkout tags/{tag_version}"))?;
-        let _d = defer(|| quietly_run(cmd!("git checkout {base_checkout}")));
-        install_toolkit()?;
-        post_install()?;
-        eprintln!("{} {}", "Finished".bold().green(), version);
-    }
 
-    if let Some(cache_dir) = cache_dir {
-        save_to_cache(cache_dir, pg_config)?;
-    }
+        if let Some(cache_dir) = cache_dir {
+            save_to_cache(cache_dir, pg_config)?;
+        }
 
-    eprintln!("{} {} ({})", "Installing Current".bold().cyan(), current_version, base_checkout);
-    install_toolkit()?;
+        eprintln!(
+            "{} {} ({})",
+            "Installing Current".bold().cyan(),
+            current_version,
+            base_checkout
+        );
+        install_toolkit(pgx_version)?;
+    }
     post_install()?;
     eprintln!("{}", "Finished Current".bold().green());
 
@@ -75,6 +92,15 @@ fn get_current_checkout() -> xshell::Result<String> {
     }
 
     cmd!("git rev-parse --verify HEAD").read()
+}
+
+fn get_pgx_version(cargo_toml_contents: &str) -> Version {
+    let cargo = cargo_toml_contents
+        .parse::<Document>()
+        .expect("invalid Cargo.toml");
+    let mut version = cargo["dependencies"]["pgx"].to_string();
+    version = version.trim().trim_matches('"').to_string();
+    Version::parse(&version).expect("Cannot parse pgx version")
 }
 
 // We were unprincipled with some of our old versions, so the version from

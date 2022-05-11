@@ -4,13 +4,18 @@ RUN apt-get update \
     && apt-get install -y clang libclang1 sudo bash cmake \
     && rm -rf /var/lib/apt/lists/*
 
+# install cargo pgx
+RUN cargo install cargo-pgx --version '^0.2' --root /pgx/0.2 \
+    && cargo install cargo-pgx --version '^0.4' --root /pgx/0.4
+
+ENV PATH "/pgx/0.2/bin/:${PATH}"
+
+# install doctester
+RUN cargo install --git https://github.com/timescale/timescaledb-toolkit.git --branch main sql-doctester
+
 RUN useradd -ms /bin/bash postgres
 USER postgres
 
-# install cargo pgx
-RUN cargo install cargo-pgx --version '^0.2'
-
-# only use pg12 for now timescaledb doesn't support 13
 RUN set -ex \
     && cargo pgx init --pg12 download --pg13 download --pg14 download \
     && cargo pgx start pg12 \
@@ -19,6 +24,7 @@ RUN set -ex \
     && cargo pgx stop  pg13 \
     && cargo pgx start pg14 \
     && cargo pgx stop  pg14
+
 
 # install timescaledb
 # TODO make seperate image from ^
@@ -49,9 +55,6 @@ RUN set -ex \
         && echo "shared_preload_libraries = 'timescaledb'" >> ~/.pgx/data-14/postgresql.conf \
     && cd ~ \
     && rm -rf ~/timescaledb
-
-# install doctester
-RUN cargo install --git https://github.com/timescale/timescaledb-toolkit.git --branch main sql-doctester
 
 # add clippy
 RUN rustup component add clippy

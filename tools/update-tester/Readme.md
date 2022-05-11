@@ -25,7 +25,7 @@ the current version work correctly. At a high level:
 
 ```
 USAGE:
-    update-tester [OPTIONS] <dir> <pg_config>
+    update-tester [OPTIONS] <dir> <pg_config> <cargo_pgx> <cargo_pgx_old>
 
 FLAGS:
         --help       Prints help information
@@ -41,6 +41,8 @@ OPTIONS:
     -u, --user <username>        postgres user
 
 ARGS:
-    <dir>          Path in which to find the timescaledb-toolkit repo
-    <pg_config>    Path to pg_config for the DB we are using
+    <dir>              Path in which to find the timescaledb-toolkit repo
+    <pg_config>        Path to pg_config for the DB we are using
+    <cargo_pgx>        Path to cargo-pgx (must be 0.4 series or newer)
+    <cargo_pgx_old>    Path to cargo-pgx 0.2-0.3 series
 ```

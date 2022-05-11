@@ -48,6 +48,8 @@ fn main() {
         (@arg REINSTALL: --reinstall [versions] "comma-separated list of versions to force reinstall")
         (@arg ROOT_DIR: +required <dir> "Path in which to find the timescaledb-toolkit repo")
         (@arg PG_CONFIG: +required <pg_config> "Path to pg_config for the DB we are using")
+        (@arg CARGO_PGX: +required <cargo_pgx> "Path to cargo-pgx (must be 0.4 series or newer)")
+        (@arg CARGO_PGX_OLD: +required <cargo_pgx_old> "Path to cargo-pgx 0.2-0.3 series")
     )
     .get_matches();
 
@@ -71,8 +73,20 @@ fn main() {
         .unwrap_or_else(HashSet::new);
 
     let pg_config = matches.value_of("PG_CONFIG").expect("missing pg_config");
+    let cargo_pgx = matches.value_of("CARGO_PGX").expect("missing cargo_pgx");
+    let cargo_pgx_old = matches
+        .value_of("CARGO_PGX_OLD")
+        .expect("missing cargo_pgx_old");
 
-    let res = try_main(root_dir, cache_dir, &connection_config, pg_config, reinstall);
+    let res = try_main(
+        root_dir,
+        cache_dir,
+        &connection_config,
+        pg_config,
+        cargo_pgx,
+        cargo_pgx_old,
+        reinstall,
+    );
     if let Err(err) = res {
         eprintln!("{}", err);
         process::exit(1);
@@ -84,6 +98,8 @@ fn try_main(
     cache_dir: Option<&str>,
     db_conn: &ConnectionConfig<'_>,
     pg_config: &str,
+    cargo_pgx: &str,
+    cargo_pgx_old: &str,
     reinstall: HashSet<&str>,
 ) -> xshell::Result<()> {
     let (current_version, old_versions) = get_version_info(root_dir)?;
@@ -97,6 +113,8 @@ fn try_main(
         root_dir,
         cache_dir,
         pg_config,
+        cargo_pgx,
+        cargo_pgx_old,
         &current_version,
         &old_versions,
         &reinstall,

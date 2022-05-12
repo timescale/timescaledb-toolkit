@@ -16,7 +16,7 @@ die() {
 }
 
 usage() {
-    die 'build [ -n -pg1[234] ] ( test-crates | test-extension | test-post-install | test-doc | clippy )'
+    die 'build [ -n -pg1[234] ] ( test-crates | test-extension | test-post-install | test-doc | test-updates | clippy)'
 }
 
 require_pg_version() {
@@ -37,6 +37,15 @@ find_pg_config() {
     fi
     [ -x "$pg_config" ] || die "$pg_config not executable"
 }
+
+require_cargo_pgx() {
+    [ -n "$cargo_pgx" ] || die 'specify path to cargo-pgx (0.4 series or newer)'
+}
+
+require_cargo_pgx_old() {
+    [ -n "$cargo_pgx_old" ] || die 'specify path to cargo-pgx (0.2-0.3 series)'
+}
+
 
 [ $# -ge 1 ] || usage
 
@@ -74,6 +83,16 @@ while [ $# -gt 0 ]; do
 
         -pgconfig)
             pg_config="$1"
+            shift
+            ;;
+
+        -cargo-pgx)
+            cargo_pgx="$1"
+            shift
+            ;;
+
+        -cargo-pgx-old)
+            cargo_pgx_old="$1"
             shift
             ;;
 
@@ -139,6 +158,8 @@ while [ $# -gt 0 ]; do
         test-updates)
             require_pg_version
             find_pg_config
+            require_cargo_pgx
+            require_cargo_pgx_old
             (
                 export CARGO_TARGET_DIR="$top_CARGO_TARGET_DIR"
                 $nop cargo pgx start $pg
@@ -147,7 +168,9 @@ while [ $# -gt 0 ]; do
                  -p $pg_port \
                  --cache old-versions \
                  . \
-                 "$pg_config"
+                 "$pg_config" \
+                 "$cargo_pgx" \
+                 "$cargo_pgx_old"
             )
             ;;
 

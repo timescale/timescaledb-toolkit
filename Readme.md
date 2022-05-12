@@ -37,8 +37,10 @@ sudo apt-get install make gcc pkg-config clang postgresql-server-dev-13 libssl-d
 ```
 and finally, [pgx](https://github.com/tcdi/pgx), which can be installed with
 ```bash
-cargo install --version 0.4.3 cargo-pgx && cargo pgx init --pg13 pg_config
+cargo install --version 0.4.4 cargo-pgx && cargo pgx init --pg13 pg_config
 ```
+
+Installing from source is also available on macOS and requires the same set of prerequisites and set up commands listed above.
 
 ### 💾 Building and Installing the extension ###
 
@@ -71,8 +73,7 @@ hop on the [Discussions forum](https://github.com/timescale/timescaledb-toolkit/
 
 See above for prerequisites and installation instructions.
 
-You can run tests against a postgres version
-`pg12`, or `pg13` using
+You can run tests against a postgres version `pg12`, `pg13`, or `pg14` using
 
 ```
 cargo pgx test ${postgres_version}

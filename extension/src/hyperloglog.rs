@@ -673,6 +673,100 @@ mod tests {
         })
     }
 
+    #[pg_test]
+    fn en_US_collation() {
+        Spi::execute(|client| {
+            client.select(
+                r#"
+create table sensor_data( 
+time timestamptz not null, 
+sensor_id integer not null, 
+cpu double precision null,
+temperature double precision null,
+operation_tag varchar(64) not null )
+                "#,
+                None,
+                None,
+            );
+            client.select(
+                r#"
+INSERT INTO sensor_data
+SELECT
+time + (INTERVAL '1 minute' * random()) AS time,
+sensor_id,
+random() AS cpu,
+random()* 100 AS temperature,
+concat('Operation ', sensor_id)
+FROM
+generate_series(now() - INTERVAL '1 months', now() - INTERVAL '1 week', INTERVAL '10 minute') AS g1(time),
+generate_series(1, 100, 1 ) AS g2(sensor_id)
+ORDER BY
+time
+                "#,
+                None,
+                None,
+            );
+            assert_eq!(
+                "108",
+                client.select(
+                    r#"SELECT distinct_count(hyperloglog(64,operation_tag COLLATE "en_US"))::TEXT FROM sensor_data"#,
+                    None,
+                    None,
+                )
+                    .first()
+                    .get_one::<&str>()
+                    .unwrap()
+                );
+        });
+    }
+
+    #[pg_test]
+    fn en_US_UTF_8_collation() {
+        Spi::execute(|client| {
+            client.select(
+                r#"
+create table sensor_data( 
+time timestamptz not null, 
+sensor_id integer not null, 
+cpu double precision null,
+temperature double precision null,
+operation_tag varchar(64) not null )
+                "#,
+                None,
+                None,
+            );
+            client.select(
+                r#"
+INSERT INTO sensor_data
+SELECT
+time + (INTERVAL '1 minute' * random()) AS time,
+sensor_id,
+random() AS cpu,
+random()* 100 AS temperature,
+concat('Operation ', sensor_id)
+FROM
+generate_series(now() - INTERVAL '1 months', now() - INTERVAL '1 week', INTERVAL '10 minute') AS g1(time),
+generate_series(1, 100, 1 ) AS g2(sensor_id)
+ORDER BY
+time
+                "#,
+                None,
+                None,
+            );
+            assert_eq!(
+                "108",
+                client.select(
+                    r#"SELECT distinct_count(hyperloglog(64,operation_tag COLLATE "en_US.UTF-8"))::TEXT FROM sensor_data;"#,
+                    None,
+                    None,
+                )
+                    .first()
+                    .get_one::<&str>()
+                    .unwrap()
+                );
+        });
+    }
+
 
     //TODO test continuous aggregates
 }

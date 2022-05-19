@@ -12,29 +12,32 @@ on:
   workflow_dispatch:
 
 jobs:
-  clippy:
-    name: Clippy Test
+  testpostgres:
+    name: Test Postgres
     runs-on: ubuntu-latest
     container:
       image: timescaledev/rust-pgx:latest
-      env:
-        # Must keep in sync with `path: target` in cache entry below
-        CARGO_TARGET_DIR_NAME: target
-        # TODO Why?  Cargo default is to pass `-C incremental` to rustc; why don't we want that?
-        #   https://doc.rust-lang.org/rustc/codegen-options/index.html#incremental
-        #   Well turning it off takes the extension target size down from 3G to 2G...
-        CARGO_INCREMENTAL: 0
-        # TODO Why?  If we're concerned about trouble fetching crates, why not
-        #  just fetch them once at the time we select a dependency?
-        #  Errors fetching crates are probably rare enough that we don't see the
-        #  need to bother, but then why not just let the build fail?
-        CARGO_NET_RETRY: 10
-        # TODO What reads this?  It's not listed on
-        #  https://doc.rust-lang.org/cargo/reference/environment-variables.html
-        CI: 1
-        RUST_BACKTRACE: short
-        # TODO We don't seem to run rustup, nor does it seem like we should.
-        RUSTUP_MAX_RETRIES: 10
+    strategy:
+      matrix:
+        pgversion: [12, 13, 14]
+    env:
+      # Must keep in sync with `path: target` in cache entry below
+      CARGO_TARGET_DIR_NAME: target
+      # TODO Why?  Cargo default is to pass `-C incremental` to rustc; why don't we want that?
+      #   https://doc.rust-lang.org/rustc/codegen-options/index.html#incremental
+      #   Well turning it off takes the extension target size down from 3G to 2G...
+      CARGO_INCREMENTAL: 0
+      # TODO Why?  If we're concerned about trouble fetching crates, why not
+      #  just fetch them once at the time we select a dependency?
+      #  Errors fetching crates are probably rare enough that we don't see the
+      #  need to bother, but then why not just let the build fail?
+      CARGO_NET_RETRY: 10
+      # TODO What reads this?  It's not listed on
+      #  https://doc.rust-lang.org/cargo/reference/environment-variables.html
+      CI: 1
+      RUST_BACKTRACE: short
+      # TODO We don't seem to run rustup, nor does it seem like we should.
+      RUSTUP_MAX_RETRIES: 10
 
     steps:
     - name: Checkout Repository
@@ -52,53 +55,6 @@ jobs:
     # stay root to update, but the parts we need to update (.crates.toml,
     # .crates2.json, .package-cache, git, registry) are already owned by
     # `postgres` in the image.
-    - name: Cache cargo directories
-      uses: actions/cache@v2
-      with:
-        path: |
-          /usr/local/cargo/registry
-          /usr/local/cargo/git
-        key: ${{ runner.os }}-clippy-cargo-1.7
-        restore-keys: ${{ runner.os }}-clippy-cargo-1.5
-
-    - name: Cache cargo target dir
-      uses: actions/cache@v2
-      with:
-        path: target
-        key: ${{ runner.os }}-clippy-target-1.7
-        restore-keys: ${{ runner.os }}-clippy-target-1.5
-
-    - name: Run Clippy
-      # Github captures stdout and stderr separately and then intermingles them
-      # in the wrong order.  We don't actually care to distinguish, so redirect
-      # stderr to stdout so we get the proper order.
-      run: su postgres -c 'sh tools/build clippy 2>&1'
-
-  testpostgres:
-    name: Test Postgres
-    runs-on: ubuntu-latest
-    container:
-      image: timescaledev/rust-pgx:latest
-    strategy:
-      matrix:
-        pgversion: [12, 13, 14]
-    env:
-      CARGO_TARGET_DIR_NAME: target
-      CARGO_INCREMENTAL: 0
-      CARGO_NET_RETRY: 10
-      CI: 1
-      RUST_BACKTRACE: short
-      RUSTUP_MAX_RETRIES: 10
-
-    steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v2
-      with:
-        ref: ${{ github.event.pull_request.head.sha }}
-
-    - name: chown Repository
-      run: chown -R postgres .
-
     - name: Cache cargo directories
       uses: actions/cache@v2
       with:

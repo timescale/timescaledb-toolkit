@@ -41,7 +41,6 @@ jobs:
         with:
           platforms: linux/amd64,linux/arm64
           push: false
-          load: true
           context: .
           file: ./docker/ci/Dockerfile
           tags: timescaledev/rust-pgx:latest

@@ -316,4 +316,4 @@ jobs:
         #restore-keys: ${{ runner.os }}-test-old-versions-PREVIOUS
 
     - name: Run Update Tests
-      run: su postgres -c 'sh tools/build -pg$PGVERSION -cargo-pgx /pgx/0.4/bin/cargo-pgx -cargo-pgx-old /pgx/0.2/bin/cargo-pgx test-updates 2>&1'
+      run: su postgres -c 'sh tools/build -pg$PGVERSION -cargo-pgx /home/postgres/pgx/0.4/bin/cargo-pgx -cargo-pgx-old /home/postgres/pgx/0.2/bin/cargo-pgx test-updates 2>&1'

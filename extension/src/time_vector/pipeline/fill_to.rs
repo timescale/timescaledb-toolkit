@@ -112,9 +112,8 @@ pub fn fill_to<'s>(
     build!{
         Timevector {
             num_points: result.len() as _,
-            is_sorted: true,
             flags: series.flags,
-            internal_padding: [0; 2],
+            internal_padding: [0; 3],
             points: result.into(),
             null_val: std::vec::from_elem(0 as u8, nulls_len).into(),
         }
@@ -162,7 +161,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:9,is_sorted:true,flags:0,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:9,flags:1,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-02 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
@@ -181,7 +180,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:9,is_sorted:true,flags:0,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:9,flags:1,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-02 00:00:00+00\",val:15),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
@@ -200,7 +199,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:9,is_sorted:true,flags:0,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:9,flags:1,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-02 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
@@ -219,7 +218,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:22,is_sorted:true,flags:0,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:22,flags:1,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-01 10:00:00+00\",val:10),\
                 (ts:\"2020-01-01 20:00:00+00\",val:10),\

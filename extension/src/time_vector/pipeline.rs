@@ -437,7 +437,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:17,is_sorted:true,flags:0,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:17,flags:1,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-11 00:00:00+00\",val:12.7015),\
                 (ts:\"2020-01-13 00:00:00+00\",val:11.8117),\
                 (ts:\"2020-01-22 00:00:00+00\",val:7.4757),\
@@ -464,7 +464,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:8,is_sorted:true,flags:0,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:8,flags:1,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-11 00:00:00+00\",val:12.7015),\
                 (ts:\"2020-01-27 00:00:00+00\",val:5.7155),\
                 (ts:\"2020-02-06 00:00:00+00\",val:5.5162),\
@@ -482,7 +482,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:8,is_sorted:true,flags:0,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:8,flags:1,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-11 00:00:00+00\",val:12.7015),\
                 (ts:\"2020-01-27 00:00:00+00\",val:5.7155),\
                 (ts:\"2020-02-06 00:00:00+00\",val:5.5162),\
@@ -500,7 +500,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:8,is_sorted:true,flags:0,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:8,flags:1,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-11 00:00:00+00\",val:12.7015),\
                 (ts:\"2020-01-27 00:00:00+00\",val:5.7155),\
                 (ts:\"2020-02-06 00:00:00+00\",val:5.5162),\

@@ -23,7 +23,8 @@ use crate::raw::bytea;
 pub use toolkit_experimental::{Timevector, TimevectorData};
 
 // Bit flags stored in Timevector flags
-const FLAG_HAS_NULLS : u8 = 0x01;
+pub const FLAG_IS_SORTED : u8 = 0x01;
+pub const FLAG_HAS_NULLS : u8 = 0x01 << 1;
 
 #[pg_schema]
 pub mod toolkit_experimental {
@@ -32,9 +33,8 @@ pub mod toolkit_experimental {
         #[derive(Debug)]
         struct Timevector<'input> {
             num_points: u32,
-            is_sorted: bool,
             flags: u8,         // extra information about the stored data
-            internal_padding: [u8; 2],  // required to be aligned
+            internal_padding: [u8; 3],  // required to be aligned
             points: [TSPoint; self.num_points],
             null_val: [u8; (self.num_points + 7)/ 8], // bit vector, must be last element for alignment purposes
         }
@@ -60,7 +60,7 @@ impl<'input> Timevector<'input> {
 
     #[inline]
     pub fn is_sorted(&self) -> bool {
-        self.is_sorted
+        self.flags & FLAG_IS_SORTED != 0
     }
 
     #[inline]
@@ -158,9 +158,8 @@ pub fn timevector_trans_inner(
                 None => Inner::from(build! {
                     Timevector {
                         num_points: 0,
-                        is_sorted: true,
-                        flags: 0,
-                        internal_padding: [0; 2],
+                        flags: FLAG_IS_SORTED,
+                        internal_padding: [0; 3],
                         points: vec![].into(),
                         null_val: vec![].into(),
                     }
@@ -168,7 +167,9 @@ pub fn timevector_trans_inner(
                 Some(state) => state,
             };
             if let Some(last_point) = state.points.as_slice().last() {
-                state.is_sorted = state.is_sorted && last_point.ts <= time;
+                if state.is_sorted() && last_point.ts > time {
+                    state.flags ^= FLAG_IS_SORTED;
+                }
             }
             if state.num_points % 8 == 0 {
                 state.null_val.as_owned().push(0);
@@ -214,10 +215,12 @@ pub fn inner_compound_trans<'b>(
             (Some(state), None) => Some(state),
             (None, Some(series)) => Some(series.clone_owned().into()),
             (Some(mut state), Some(series)) => {
-                state.is_sorted = state.is_sorted
-                    && series.is_sorted
-                    && state.points.as_slice().last().unwrap().ts
-                        <= series.points.as_slice().first().unwrap().ts;
+                if state.is_sorted() {
+                    if !series.is_sorted() 
+                    || state.points.as_slice().last().unwrap().ts > series.points.as_slice().first().unwrap().ts {
+                        state.flags ^= FLAG_IS_SORTED
+                    }
+                }
                 state
                     .points
                     .as_owned()
@@ -260,13 +263,16 @@ pub fn combine(first: Timevector<'_>, second: Timevector<'_>) -> Timevector<'sta
         return first.clone_owned();
     }
 
-    let is_sorted = first.is_sorted
-        && second.is_sorted
+    let is_sorted = first.is_sorted()
+        && second.is_sorted()
         && first.points.as_slice().last().unwrap().ts
             <= second.points.as_slice().first().unwrap().ts;
     let points: Vec<_> = first.iter().chain(second.iter()).collect();
 
-    let flags = (first.flags | FLAG_HAS_NULLS) | (second.flags | FLAG_HAS_NULLS);
+    let mut flags = (first.flags | FLAG_HAS_NULLS) | (second.flags | FLAG_HAS_NULLS);
+    if is_sorted {
+        flags |= FLAG_IS_SORTED;
+    }
 
     let null_val = if flags & FLAG_HAS_NULLS == 0 {
         std::vec::from_elem(0 as u8, (points.len() + 7) / 8)
@@ -289,9 +295,8 @@ pub fn combine(first: Timevector<'_>, second: Timevector<'_>) -> Timevector<'sta
     build! {
         Timevector {
             num_points: points.len() as _,
-            is_sorted,
             flags,
-            internal_padding: [0; 2],
+            internal_padding: [0; 3],
             points: points.into(),
             null_val: null_val.into(),
         }

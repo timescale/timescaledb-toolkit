@@ -4,7 +4,7 @@ use asap::*;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    aggregate_utils::in_aggregate_context, palloc::{Internal, InternalAsValue, Inner, ToInternal},
+    aggregate_utils::in_aggregate_context, palloc::{Internal, InternalAsValue, Inner, ToInternal}, time_vector,
 };
 
 use tspoint::TSPoint;
@@ -157,9 +157,8 @@ fn asap_final_inner(
             Some(crate::build! {
                 Timevector {
                     num_points: points.len() as u32,
-                    is_sorted: true,
-                    flags: 0,
-                    internal_padding: [0; 2],
+                    flags: time_vector::FLAG_IS_SORTED,
+                    internal_padding: [0; 3],
                     points: points.into(), 
                     null_val: std::vec::from_elem(0 as u8, nulls_len).into(),
                 }
@@ -208,9 +207,8 @@ pub fn asap_on_timevector(
     Some(crate::build! {
         Timevector {
             num_points: points.len() as u32,
-            is_sorted: true,
-            flags: 0,
-            internal_padding: [0; 2],
+            flags: time_vector::FLAG_IS_SORTED,
+            internal_padding: [0; 3],
             points: points.into(),
             null_val: std::vec::from_elem(0 as u8, nulls_len).into(),
         }

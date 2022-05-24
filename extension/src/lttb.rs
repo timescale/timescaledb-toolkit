@@ -3,7 +3,7 @@ use pgx::*;
 use std::borrow::Cow;
 
 use crate::{
-    aggregate_utils::in_aggregate_context, flatten, palloc::{Internal, InternalAsValue, Inner, ToInternal},
+    aggregate_utils::in_aggregate_context, flatten, palloc::{Internal, InternalAsValue, Inner, ToInternal}, time_vector,
 };
 
 use tspoint::TSPoint;
@@ -84,9 +84,8 @@ pub fn lttb_final_inner(
             flatten!(
                 Timevector {
                     num_points: downsampled.len() as u32,
-                    is_sorted: true,
-                    flags: 0,
-                    internal_padding: [0; 2],
+                    flags: time_vector::FLAG_IS_SORTED,
+                    internal_padding: [0; 3],
                     points: (&*downsampled).into(),
                     null_val: std::vec::from_elem(0 as u8, (downsampled.len() + 7) / 8).into()
                 }
@@ -277,9 +276,8 @@ pub fn lttb_ts(
     crate::build! {
         Timevector {
             num_points: sampled.len() as _,
-            is_sorted: true,
-            flags: 0,
-            internal_padding: [0; 2],
+            flags: time_vector::FLAG_IS_SORTED,
+            internal_padding: [0; 3],
             points: sampled.into(),
             null_val: std::vec::from_elem(0 as u8, nulls_len).into(),
         }

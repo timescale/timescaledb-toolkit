@@ -296,7 +296,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,flags:0,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:26),\
                 (ts:\"2020-01-01 00:00:00+00\",val:11),\
                 (ts:\"2020-01-03 00:00:00+00\",val:21),\
@@ -311,7 +311,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,flags:0,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:22),\
                 (ts:\"2020-01-01 00:00:00+00\",val:7),\
                 (ts:\"2020-01-03 00:00:00+00\",val:17),\
@@ -326,7 +326,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,flags:0,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:50),\
                 (ts:\"2020-01-01 00:00:00+00\",val:20),\
                 (ts:\"2020-01-03 00:00:00+00\",val:40),\
@@ -341,7 +341,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,flags:0,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:5),\
                 (ts:\"2020-01-01 00:00:00+00\",val:2),\
                 (ts:\"2020-01-03 00:00:00+00\",val:4),\
@@ -356,7 +356,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,flags:0,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:0),\
                 (ts:\"2020-01-01 00:00:00+00\",val:0),\
                 (ts:\"2020-01-03 00:00:00+00\",val:0),\
@@ -371,7 +371,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,flags:0,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:625),\
                 (ts:\"2020-01-01 00:00:00+00\",val:100),\
                 (ts:\"2020-01-03 00:00:00+00\",val:400),\
@@ -387,7 +387,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,flags:0,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:1.3979400086720375),\
                 (ts:\"2020-01-01 00:00:00+00\",val:1),\
                 (ts:\"2020-01-03 00:00:00+00\",val:1.301029995663981),\
@@ -421,7 +421,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,flags:0,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:25.5),\
                 (ts:\"2020-01-01 00:00:00+00\",val:10.1),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20.2),\
@@ -452,7 +452,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,flags:0,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:26),\
                 (ts:\"2020-01-01 00:00:00+00\",val:-10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:21),\
@@ -467,7 +467,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,flags:0,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:25),\
                 (ts:\"2020-01-01 00:00:00+00\",val:-11),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
@@ -516,7 +516,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,flags:0,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:26),\
                 (ts:\"2020-01-01 00:00:00+00\",val:-10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
@@ -531,7 +531,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,flags:0,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:1),\
                 (ts:\"2020-01-01 00:00:00+00\",val:-1),\
                 (ts:\"2020-01-03 00:00:00+00\",val:1),\
@@ -562,7 +562,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:5,is_sorted:false,flags:0,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:25),\
                 (ts:\"2020-01-01 00:00:00+00\",val:-10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\

@@ -46,9 +46,8 @@ pub fn sort_timevector(
         version: 1,
         padding: [0; 3],
         num_points: points.len() as u32,
-        is_sorted: true,
-        flags: series.flags,
-        internal_padding: [0; 2],
+        flags: series.flags | FLAG_IS_SORTED,
+        internal_padding: [0; 3],
         points: points.into(),
         null_val: null_val.into()
     }.into()
@@ -94,7 +93,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:6,is_sorted:false,flags:1,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:6,flags:2,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:25),\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
@@ -111,7 +110,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:6,is_sorted:true,flags:1,internal_padding:(0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:6,flags:3,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-02 00:00:00+00\",val:15),\
                 (ts:\"2020-01-02 12:00:00+00\",val:NaN),\

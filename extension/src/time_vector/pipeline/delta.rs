@@ -31,6 +31,9 @@ pub fn timevector_delta<'s>(
     if !series.is_sorted() {
         panic!("can only compute deltas for sorted timevector");
     }
+    if series.has_nulls() {
+        panic!("Unable to compute deltas over timevector containing nulls");
+    }
 
     let mut it = series.iter();
     let mut prev = it.next().unwrap().val;
@@ -40,13 +43,17 @@ pub fn timevector_delta<'s>(
         delta_points.push(TSPoint{ts: pt.ts, val: pt.val - prev});
         prev = pt.val;
     }
+    
+    let nulls_len = (delta_points.len() + 7) / 8;
 
     build!(
         Timevector {
             num_points: delta_points.len() as u32,
             is_sorted: true,
-            internal_padding: [0; 3],
+            flags: series.flags,
+            internal_padding: [0; 2],
             points: delta_points.into(),
+            null_val: std::vec::from_elem(0 as u8, nulls_len).into(),
         }
     )
 }
@@ -94,7 +101,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:8,is_sorted:true,internal_padding:(0,0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:8,is_sorted:true,flags:0,internal_padding:(0,0),points:[\
                 (ts:\"2020-01-02 00:00:00+00\",val:15),\
                 (ts:\"2020-01-03 00:00:00+00\",val:-5),\
                 (ts:\"2020-01-04 00:00:00+00\",val:72),\
@@ -103,7 +110,7 @@ mod tests {
                 (ts:\"2020-01-07 00:00:00+00\",val:0),\
                 (ts:\"2020-01-08 00:00:00+00\",val:0.09999999999999787),\
                 (ts:\"2020-01-09 00:00:00+00\",val:-458.09999999999997)\
-            ])");
+            ],null_val:[0])");
         });
     }
 }

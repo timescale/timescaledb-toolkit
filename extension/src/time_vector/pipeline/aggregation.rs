@@ -124,6 +124,9 @@ pub fn arrow_run_pipeline_then_stats_agg(
     mut timevector: toolkit_experimental::Timevector,
     pipeline: toolkit_experimental::PipelineThenStatsAgg,
 ) -> StatsSummary1D<'static> {
+    if timevector.has_nulls() {
+        panic!("Unable to compute stats aggregate over timevector containing nulls");
+    }
     timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
     let mut stats = InternalStatsSummary1D::new();
     for TSPoint{ val, ..} in timevector.iter() {

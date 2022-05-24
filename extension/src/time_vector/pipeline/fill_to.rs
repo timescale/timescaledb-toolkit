@@ -77,7 +77,12 @@ pub fn fill_to<'s>(
     };
 
     if !series.is_sorted() {
-        panic!("Timeseries must be sorted prior to passing to fill_to")
+        panic!("Timevector must be sorted prior to passing to fill_to")
+    }
+
+    if series.has_nulls() {
+        // TODO: This should be supportable outside of FillMode::Interpolate
+        panic!("Fill_to requires a timevector to not have NULL values")
     }
 
     let mut result = vec![];
@@ -102,12 +107,16 @@ pub fn fill_to<'s>(
 
     let mut result: Vec<TSPoint> = series.iter().chain(result.into_iter()).collect();
     result.sort_by_key(|p| p.ts);
+    
+    let nulls_len = (result.len() + 7) / 8;
     build!{
         Timevector {
             num_points: result.len() as _,
             is_sorted: true,
-            internal_padding: [0; 3],
+            flags: series.flags,
+            internal_padding: [0; 2],
             points: result.into(),
+            null_val: std::vec::from_elem(0 as u8, nulls_len).into(),
         }
     }
 }
@@ -153,7 +162,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:9,is_sorted:true,internal_padding:(0,0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:9,is_sorted:true,flags:0,internal_padding:(0,0),points:[\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-02 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
@@ -163,7 +172,7 @@ mod tests {
                 (ts:\"2020-01-07 00:00:00+00\",val:30),\
                 (ts:\"2020-01-08 00:00:00+00\",val:30),\
                 (ts:\"2020-01-09 00:00:00+00\",val:40)\
-            ])");
+            ],null_val:[0,0])");
 
             let val = client.select(
                 "SELECT (timevector(time, value) -> fill_to('24 hours', 'linear'))::TEXT FROM series",
@@ -172,7 +181,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:9,is_sorted:true,internal_padding:(0,0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:9,is_sorted:true,flags:0,internal_padding:(0,0),points:[\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-02 00:00:00+00\",val:15),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
@@ -182,7 +191,7 @@ mod tests {
                 (ts:\"2020-01-07 00:00:00+00\",val:33.33333333333334),\
                 (ts:\"2020-01-08 00:00:00+00\",val:36.66666666666667),\
                 (ts:\"2020-01-09 00:00:00+00\",val:40)\
-            ])");
+            ],null_val:[0,0])");
 
             let val = client.select(
                 "SELECT (timevector(time, value) -> fill_to('24 hours', 'nearest'))::TEXT FROM series",
@@ -191,7 +200,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:9,is_sorted:true,internal_padding:(0,0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:9,is_sorted:true,flags:0,internal_padding:(0,0),points:[\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-02 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
@@ -201,7 +210,7 @@ mod tests {
                 (ts:\"2020-01-07 00:00:00+00\",val:30),\
                 (ts:\"2020-01-08 00:00:00+00\",val:40),\
                 (ts:\"2020-01-09 00:00:00+00\",val:40)\
-            ])");
+            ],null_val:[0,0])");
 
             let val = client.select(
                 "SELECT (timevector(time, value) -> fill_to('10 hours', 'nearest'))::TEXT FROM series",
@@ -210,7 +219,7 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:22,is_sorted:true,internal_padding:(0,0,0),points:[\
+            assert_eq!(val.unwrap(), "(version:1,num_points:22,is_sorted:true,flags:0,internal_padding:(0,0),points:[\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-01 10:00:00+00\",val:10),\
                 (ts:\"2020-01-01 20:00:00+00\",val:10),\
@@ -233,7 +242,7 @@ mod tests {
                 (ts:\"2020-01-08 12:00:00+00\",val:40),\
                 (ts:\"2020-01-08 22:00:00+00\",val:40),\
                 (ts:\"2020-01-09 00:00:00+00\",val:40)\
-            ])");
+            ],null_val:[0,0,0])");
         });
     }
 }

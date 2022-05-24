@@ -152,12 +152,16 @@ fn asap_final_inner(
                 })
                 .collect();
 
+            let nulls_len = (points.len() + 7) / 8;
+
             Some(crate::build! {
                 Timevector {
                     num_points: points.len() as u32,
                     is_sorted: true,
-                    internal_padding: [0; 3],
+                    flags: 0,
+                    internal_padding: [0; 2],
                     points: points.into(), 
+                    null_val: std::vec::from_elem(0 as u8, nulls_len).into(),
                 }
             })
         })
@@ -199,12 +203,16 @@ pub fn asap_on_timevector(
         })
         .collect();
 
+    let nulls_len = (points.len() + 7) / 8;
+
     Some(crate::build! {
         Timevector {
             num_points: points.len() as u32,
             is_sorted: true,
-            internal_padding: [0; 3],
+            flags: 0,
+            internal_padding: [0; 2],
             points: points.into(),
+            null_val: std::vec::from_elem(0 as u8, nulls_len).into(),
         }
     })
 }

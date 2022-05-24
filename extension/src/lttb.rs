@@ -85,8 +85,10 @@ pub fn lttb_final_inner(
                 Timevector {
                     num_points: downsampled.len() as u32,
                     is_sorted: true,
-                    internal_padding: [0; 3],
+                    flags: 0,
+                    internal_padding: [0; 2],
                     points: (&*downsampled).into(),
+                    null_val: std::vec::from_elem(0 as u8, (downsampled.len() + 7) / 8).into()
                 }
             ).into()
         })
@@ -269,13 +271,17 @@ pub fn lttb_ts(
 
     // Always add the last point.
     sampled.push(data.get(data.num_points() - 1).unwrap());
+    
+    let nulls_len = (sampled.len() + 7) / 8;
 
     crate::build! {
         Timevector {
             num_points: sampled.len() as _,
             is_sorted: true,
-            internal_padding: [0; 3],
+            flags: 0,
+            internal_padding: [0; 2],
             points: sampled.into(),
+            null_val: std::vec::from_elem(0 as u8, nulls_len).into(),
         }
     }
 }

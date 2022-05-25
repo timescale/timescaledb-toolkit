@@ -58,18 +58,15 @@ jobs:
         path: |
           /usr/local/cargo/registry
           /usr/local/cargo/git
-        key: ${{ runner.os }}-clippy-cargo-1.5
-        # TODO Commented out because we have no working keys yet.
-        #  At release time, we should increment the number above and put the old below.
-        #  Not commented-out from that point on, of course.
-        #restore-keys: ${{ runner.os }}-clippy-cargo-PREVIOUS
+        key: ${{ runner.os }}-clippy-cargo-1.7
+        restore-keys: ${{ runner.os }}-clippy-cargo-1.5
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-clippy-target-1.5
-        #restore-keys: ${{ runner.os }}-clippy-target-PREVIOUS
+        key: ${{ runner.os }}-clippy-target-1.7
+        restore-keys: ${{ runner.os }}-clippy-target-1.5
 
     - name: Run Clippy
       # Github captures stdout and stderr separately and then intermingles them
@@ -107,15 +104,15 @@ jobs:
         path: |
           /usr/local/cargo/registry
           /usr/local/cargo/git
-        key: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo-1.5
-        #restore-keys: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo-PREVIOUS
+        key: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo-1.7
+        restore-keys: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo-1.5
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-target-1.5
-        #restore-keys: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-target-PREVIOUS
+        key: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-target-1.7
+        restore-keys: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-target-1.5
 
     - name: Run pgx tests
       run: su postgres -c 'sh tools/build -pg$PGVERSION test-extension 2>&1'
@@ -159,15 +156,15 @@ jobs:
         path: |
           /usr/local/cargo/registry
           /usr/local/cargo/git
-        key: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo-1.5
-        #restore-keys: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo-PREVIOUS
+        key: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo-1.7
+        restore-keys: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo-1.5
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-target-1.5
-        #restore-keys: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-target-PREVIOUS
+        key: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-target-1.7
+        restore-keys: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-target-1.5
 
     - name: Run pgx tests
       run: su postgres -c "sh tools/build -pg$PGVERSION test-extension 2>&1"
@@ -208,15 +205,15 @@ jobs:
         path: |
           /usr/local/cargo/registry
           /usr/local/cargo/git
-        key: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo-1.5
-        #restore-keys: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo-PREVIOUS
+        key: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo-1.7
+        restore-keys: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-cargo-1.5
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-target-1.5
-        #restore-keys: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-target-PREVIOUS
+        key: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-target-1.7
+        restore-keys: ${{ runner.os }}-test-pg${{ env.PGVERSION }}-target-1.5
 
     - name: Run pgx tests
       run: su postgres -c "sh tools/build -pg$PGVERSION test-extension 2>&1"
@@ -255,15 +252,15 @@ jobs:
         path: |
           /usr/local/cargo/registry
           /usr/local/cargo/git
-        key: ${{ runner.os }}-test-crates-cargo-1.5
-        #restore-keys: ${{ runner.os }}-test-crates-cargo-PREVIOUS
+        key: ${{ runner.os }}-test-crates-cargo-1.7
+        restore-keys: ${{ runner.os }}-test-crates-cargo-1.5
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-test-crates-target-1.5
-        #restore-keys: ${{ runner.os }}-test-crates-target-PREVIOUS
+        key: ${{ runner.os }}-test-crates-target-1.7
+        restore-keys: ${{ runner.os }}-test-crates-target-1.5
 
     - name: Run Crates Tests
       run: su postgres -c 'sh tools/build test-crates 2>&1'
@@ -298,22 +295,22 @@ jobs:
         path: |
           /usr/local/cargo/registry
           /usr/local/cargo/git
-        key: ${{ runner.os }}-test-updates-cargo-1.6_a
-        #restore-keys: ${{ runner.os }}-test-crates-cargo-PREVIOUS
+        key: ${{ runner.os }}-test-updates-cargo-1.7
+        restore-keys: ${{ runner.os }}-test-crates-cargo-1.6_a
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-test-updates-target-1.6_a
-        #restore-keys: ${{ runner.os }}-test-crates-target-PREVIOUS
+        key: ${{ runner.os }}-test-updates-target-1.7
+        restore-keys: ${{ runner.os }}-test-crates-target-1.6_a
 
     - name: Cache old versions dir
       uses: actions/cache@v2
       with:
         path: old-versions
-        key: ${{ runner.os }}-test-old-versions-1.6_a
-        #restore-keys: ${{ runner.os }}-test-old-versions-PREVIOUS
+        key: ${{ runner.os }}-test-old-versions-1.7
+        restore-keys: ${{ runner.os }}-test-old-versions-1.6_a
 
     - name: Run Update Tests
       run: su postgres -c 'sh tools/build -pg$PGVERSION -cargo-pgx /home/postgres/pgx/0.4/bin/cargo-pgx -cargo-pgx-old /home/postgres/pgx/0.2/bin/cargo-pgx test-updates 2>&1'

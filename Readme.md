@@ -37,7 +37,7 @@ sudo apt-get install make gcc pkg-config clang postgresql-server-dev-13 libssl-d
 ```
 and finally, [pgx](https://github.com/tcdi/pgx), which can be installed with
 ```bash
-cargo install --version '=0.4.4' cargo-pgx && cargo pgx init --pg13 pg_config
+cargo install --version '=0.4.5' cargo-pgx && cargo pgx init --pg13 pg_config
 ```
 
 Installing from source is also available on macOS and requires the same set of prerequisites and set up commands listed above.

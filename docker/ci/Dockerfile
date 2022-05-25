@@ -8,8 +8,9 @@ RUN useradd -ms /bin/bash postgres
 USER postgres
 
 # install cargo pgx
-RUN cargo install cargo-pgx --version '^0.2' --root /home/postgres/pgx/0.2 \
-    && cargo install cargo-pgx --version '^0.4' --root /home/postgres/pgx/0.4
+# Keep synchronized with `cargo install --version N.N.N cargo-pgx` in Readme.md and Cargo.toml
+RUN cargo install cargo-pgx --version '=0.2.4' --root /home/postgres/pgx/0.2 \
+    && cargo install cargo-pgx --version '=0.4.5' --root /home/postgres/pgx/0.4
 
 ENV PATH "/home/postgres/pgx/0.2/bin/:${PATH}"
 

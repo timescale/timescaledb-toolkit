@@ -103,6 +103,7 @@ fn get_pgx_version(cargo_toml_contents: &str) -> Version {
     cargo["dependencies"]["pgx"]
         .as_str()
         .expect("expected pgx to only have a version")
+        .trim_start_matches(['=', '^', '~'].as_slice())
         .parse()
         .expect("cannot parse pgx version")
 }

@@ -8,6 +8,7 @@ RUN apt-get update \
 RUN cargo install cargo-pgx --version '^0.2' --root /pgx/0.2 \
     && cargo install cargo-pgx --version '^0.4' --root /pgx/0.4
 
+# TODO After we upgrade to 0.4 change this to 0.4 and remove the hack in tools/build .
 ENV PATH "/pgx/0.2/bin/:${PATH}"
 
 # install doctester

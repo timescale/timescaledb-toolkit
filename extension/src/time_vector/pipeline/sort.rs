@@ -27,11 +27,11 @@ pub fn sort_timevector(
         let mut points = std::mem::take(series.points.as_owned());
         points.sort_by(|a, b| a.ts.cmp(&b.ts));
         let nulls_len = (points.len() + 7) / 8;
-        (points, std::vec::from_elem(0 as u8, nulls_len).into())
+        (points, std::vec::from_elem(0_u8, nulls_len))
     } else {
         let mut points : Vec<(usize, TSPoint)> = std::mem::take(series.points.as_owned()).into_iter().enumerate().collect();
         points.sort_by(|(_,a),(_,b)| a.ts.cmp(&b.ts));
-        let mut null_val = std::vec::from_elem(0 as u8, (points.len() + 7) / 8);
+        let mut null_val = std::vec::from_elem(0_u8, (points.len() + 7) / 8);
         let points = points.into_iter().enumerate().map(|(new_idx, (old_idx, ts))| {
             if series.is_null_val(old_idx) {
                 null_val[new_idx / 8] |= 1 << (new_idx % 8);

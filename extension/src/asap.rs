@@ -160,7 +160,7 @@ fn asap_final_inner(
                     flags: time_vector::FLAG_IS_SORTED,
                     internal_padding: [0; 3],
                     points: points.into(), 
-                    null_val: std::vec::from_elem(0 as u8, nulls_len).into(),
+                    null_val: std::vec::from_elem(0_u8, nulls_len).into(),
                 }
             })
         })
@@ -210,7 +210,7 @@ pub fn asap_on_timevector(
             flags: time_vector::FLAG_IS_SORTED,
             internal_padding: [0; 3],
             points: points.into(),
-            null_val: std::vec::from_elem(0 as u8, nulls_len).into(),
+            null_val: std::vec::from_elem(0_u8, nulls_len).into(),
         }
     })
 }

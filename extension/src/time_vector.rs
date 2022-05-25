@@ -215,11 +215,10 @@ pub fn inner_compound_trans<'b>(
             (Some(state), None) => Some(state),
             (None, Some(series)) => Some(series.clone_owned().into()),
             (Some(mut state), Some(series)) => {
-                if state.is_sorted() {
-                    if !series.is_sorted() 
-                    || state.points.as_slice().last().unwrap().ts > series.points.as_slice().first().unwrap().ts {
-                        state.flags ^= FLAG_IS_SORTED
-                    }
+                if state.is_sorted()
+                 && (!series.is_sorted() 
+                     || state.points.as_slice().last().unwrap().ts > series.points.as_slice().first().unwrap().ts) {
+                    state.flags ^= FLAG_IS_SORTED
                 }
                 state
                     .points
@@ -275,7 +274,7 @@ pub fn combine(first: Timevector<'_>, second: Timevector<'_>) -> Timevector<'sta
     }
 
     let null_val = if flags & FLAG_HAS_NULLS == 0 {
-        std::vec::from_elem(0 as u8, (points.len() + 7) / 8)
+        std::vec::from_elem(0_u8, (points.len() + 7) / 8)
     } else {
         let mut v = first.null_val.as_slice().to_vec();
         v.resize((points.len() + 7) / 8, 0);

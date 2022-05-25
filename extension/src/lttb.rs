@@ -87,7 +87,7 @@ pub fn lttb_final_inner(
                     flags: time_vector::FLAG_IS_SORTED,
                     internal_padding: [0; 3],
                     points: (&*downsampled).into(),
-                    null_val: std::vec::from_elem(0 as u8, (downsampled.len() + 7) / 8).into()
+                    null_val: std::vec::from_elem(0_u8, (downsampled.len() + 7) / 8).into()
                 }
             ).into()
         })
@@ -279,7 +279,7 @@ pub fn lttb_ts(
             flags: time_vector::FLAG_IS_SORTED,
             internal_padding: [0; 3],
             points: sampled.into(),
-            null_val: std::vec::from_elem(0 as u8, nulls_len).into(),
+            null_val: std::vec::from_elem(0_u8, nulls_len).into(),
         }
     }
 }

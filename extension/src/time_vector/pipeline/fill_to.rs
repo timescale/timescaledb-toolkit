@@ -115,7 +115,7 @@ pub fn fill_to<'s>(
             flags: series.flags,
             internal_padding: [0; 3],
             points: result.into(),
-            null_val: std::vec::from_elem(0 as u8, nulls_len).into(),
+            null_val: std::vec::from_elem(0_u8, nulls_len).into(),
         }
     }
 }

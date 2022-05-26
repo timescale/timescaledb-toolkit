@@ -76,7 +76,7 @@ impl DatumFromSerializedTextReader {
     }
 
     pub fn read_datum(&mut self, datum_str: &str) -> Datum {
-        let cstr = std::ffi::CString::new(datum_str).unwrap(); // TODO: error handling
+        let cstr = pgx::cstr_core::CString::new(datum_str).unwrap(); // TODO: error handling
         let cstr_ptr = cstr.as_ptr() as *mut std::os::raw::c_char;
         unsafe { pg_sys::InputFunctionCall(&mut self.flinfo, cstr_ptr, self.typ_io_param, -1) }
     }
@@ -90,7 +90,7 @@ impl Serialize for TextSerializeableDatum {
         S: serde::Serializer,
     {
         let chars = unsafe { pg_sys::OutputFunctionCall(self.1, self.0) };
-        let cstr = unsafe { std::ffi::CStr::from_ptr(chars) };
+        let cstr = unsafe { pgx::cstr_core::CStr::from_ptr(chars) };
         serializer.serialize_str(cstr.to_str().unwrap())
     }
 }

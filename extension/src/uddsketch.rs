@@ -268,7 +268,7 @@ impl<'input> InOutFuncs for UddSketch<'input> {
         }
     }
 
-    fn input(input: &std::ffi::CStr) -> Self
+    fn input(input: &pgx::cstr_core::CStr) -> Self
     where
         Self: Sized,
     {

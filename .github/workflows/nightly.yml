@@ -1,0 +1,105 @@
+name: nightly
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/nightly.yml'
+  workflow_dispatch:
+  schedule:
+    # we build at 8am UTC
+    - cron:  '0 8 * * 1-4'
+
+jobs:
+  test-linux-aarch64:
+    name: Test Linux/AARCH64
+    runs-on: ubuntu-latest
+    # Not setting `container` here because we run docker directly below.
+
+    env:
+      # We only test PostgreSQL 14 for now.
+      PGVERSION: 14
+      CARGO_TARGET_DIR_NAME: target
+      # TODO Unsure about any of these, copied from ci.yml, in which see TODO.
+      CARGO_INCREMENTAL: 0
+      CARGO_NET_RETRY: 10
+      CI: 1
+      RUST_BACKTRACE: short
+      RUSTUP_MAX_RETRIES: 10
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    - name: Create CARGO_HOME
+      # We're running as uid 1001 and presumably the cache restore step next does as well so:
+      run: sudo install -o 1001 -d /usr/local/cargo
+
+    # TODO Not sure why yet but building on the restore cache doesn't work:
+    #   test aggregate_builder_tests::tests::pg_test_anything_in_experimental_and_returns_first ... FAILED
+    #   error: test failed, to rerun pass '--lib'
+    # It takes >30 minutes for null build on warm cache to get to that error
+    # anyway, so we don't want to run this on every pull request, only nightly,
+    # which means we can afford to skip caching for now.
+    # - name: Cache CARGO_HOME
+    #   uses: actions/cache@v2
+    #   with:
+    #     # TODO Caching the 252 MB registry but not the 14 MB bin doesn't make sense.
+    #     #  "Cache only those dependencies managed by `cargo update`" is a fine
+    #     #  cache policy, but I think "Cache $CARGO_HOME" is as justifiable.
+    #     path: |
+    #       /usr/local/cargo/bin
+    #       /usr/local/cargo/registry
+    #       /usr/local/cargo/git
+    #     key: linux-aarch64-test3-pg${{ env.PGVERSION }}-cargo-1.5
+
+    # - name: Cache cargo target dir
+    #   uses: actions/cache@v2
+    #   with:
+    #     path: target
+    #     key: linux-aarch64-test3-pg${{ env.PGVERSION }}-target-1.5
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v1
+      with:
+        platforms: arm64
+
+    # The first `docker run` pulls it, but this separates the time cost.
+    - name: Pull timescaledev/rust-pgx image
+      run: docker pull --platform linux/arm64 timescaledev/rust-pgx:testing
+
+    - name: Prepare directories
+      # Github Actions has prepared is running all our `run` scripts as uid 1001
+      # in a container, and may have restored cached directories.  We want to
+      # run as uid 1000 under our own (aarch64) container.
+      #
+      # The `actions/checkout` step above checked out our repository and changed
+      # the working directory to that checkout.  That means we'll use `..` as
+      # `/home/postgres` under our container (aside, for the record: `.` is
+      # `/home/runner/work/timescaledb-toolkit/timescaledb-toolkit`).
+      #
+      # We want to cache `/usr/local/cargo` and `target`, so we'll need to
+      # expose those into our container with `-v` (done below).  But in the case
+      # of cache miss, we need to prime those directories with the contents of
+      # our image.
+      #
+      # `/usr/local/cargo` may have been restored from cache and should be owned
+      # by 1000, but we may as well chown it too, just in case.
+      #
+      # Putting it all together:
+      # 1. Make `..` and `/usr/local/cargo` owned by uid 1000
+      # 2. Copy `pgx` and `.pgx` out of our image (unconditional; we don't cache these)
+      # 3. On cache miss, copy /usr/local/cargo/* out of our image
+      run: (sudo chown -R 1000 .. /usr/local/cargo && docker run --platform linux/arm64 -v $PWD/..:/home/postgres.cache -v /usr/local/cargo:/usr/local/cargo.cache timescaledev/rust-pgx:testing su - postgres -c 'cp -r pgx .pgx ../postgres.cache && cd /usr/local && ls && (ls -al cargo.cache; :) && if [ -e cargo.cache/bin/rustfmt ]; then echo WARM CACHE; else cp -r cargo/bin cargo.cache; fi') 2>&1
+
+    - name: Build & test
+      # TODO image will default to 0.4 soon
+      run: docker run --platform linux/arm64 -v $PWD/..:/home/postgres -v /usr/local/cargo:/usr/local/cargo -e CARGO_TARGET_DIR_NAME timescaledev/rust-pgx:testing su postgres -c "PATH=/home/postgres/pgx/0.4/bin/:/usr/local/cargo/bin:/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/bin && cd ~/timescaledb-toolkit && sh tools/build -pg$PGVERSION test-extension && sh tools/build -pg$PGVERSION test-post-install && sh tools/build -pg$PGVERSION test-doc" 2>&1
+
+    # See above TODO about caching.
+    # - name: Finish directories for cache save
+    #   # Github Actions needs to read everything as uid 1001 but many of the
+    #   # files we created are only readable by 1000.  We could set the umask
+    #   # first but I don't trust cargo or pgx not to muck with it.
+    #   run: sudo chmod -R a+rX target /usr/local/cargo 2>&1

@@ -16,9 +16,6 @@ USER postgres
 RUN cargo install cargo-pgx --version '=0.2.4' --root /home/postgres/pgx/0.2
 RUN cargo install cargo-pgx --version '=0.4.5' --root /home/postgres/pgx/0.4
 
-# fail on purpose
-RUN false
-
 ENV PATH "/home/postgres/pgx/0.4/bin:${PATH}"
 
 RUN set -ex \

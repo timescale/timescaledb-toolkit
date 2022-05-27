@@ -55,9 +55,6 @@ RUN set -ex \
     && cd ~ \
     && rm -rf ~/timescaledb
 
-# install doctester
-RUN cargo install --git https://github.com/timescale/timescaledb-toolkit.git --branch main sql-doctester
-
 # add clippy
 RUN rustup component add clippy
 

@@ -1,17 +1,25 @@
-FROM rust:1.60 AS pgx_builder
+FROM rust:1.60
 
-RUN apt-get update \
-    && apt-get install -y clang libclang1 sudo bash cmake \
-    && rm -rf /var/lib/apt/lists/*
+RUN echo SOMETHING HAPPENED
+RUN id
+RUN uname -a
+
+RUN apt-get update
+RUN apt-get install -y clang libclang1
 
 RUN useradd -ms /bin/bash postgres
+
 USER postgres
 
 # install cargo pgx
-RUN cargo install cargo-pgx --version '^0.2' --root /home/postgres/pgx/0.2 \
-    && cargo install cargo-pgx --version '^0.4' --root /home/postgres/pgx/0.4
+# Keep synchronized with `cargo install --version N.N.N cargo-pgx` in Readme.md and Cargo.toml
+RUN cargo install cargo-pgx --version '=0.2.4' --root /home/postgres/pgx/0.2
+RUN cargo install cargo-pgx --version '=0.4.5' --root /home/postgres/pgx/0.4
 
-ENV PATH "/home/postgres/pgx/0.2/bin/:${PATH}"
+# fail on purpose
+RUN false
+
+ENV PATH "/home/postgres/pgx/0.4/bin:${PATH}"
 
 RUN set -ex \
     && cargo pgx init --pg12 download --pg13 download --pg14 download \
@@ -55,7 +63,5 @@ RUN set -ex \
 
 # add clippy
 RUN rustup component add clippy
-
-FROM pgx_builder AS rust-pgx
 
 USER root

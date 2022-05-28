@@ -1,11 +1,7 @@
 FROM rust:1.60
 
-RUN echo SOMETHING HAPPENED
-RUN id
-RUN uname -a
-
 RUN apt-get update
-RUN apt-get install -y clang libclang1
+RUN apt-get install -y clang libclang1 cmake
 
 RUN useradd -ms /bin/bash postgres
 
@@ -27,36 +23,34 @@ RUN set -ex \
     && cargo pgx start pg14 \
     && cargo pgx stop  pg14
 
-
 # install timescaledb
 # TODO make seperate image from ^
-RUN set -ex \
-    && cd ~ \
-    && git clone https://github.com/timescale/timescaledb.git \
+# TODO move complex script to stand-alone shell script we can ADD and then RUN
+#  ADD tools/install-timescaledb /
+#  RUN /install-timescaledb
+#  RUN rm /install-timescaledb
+RUN jobs="-j$(nproc)" \
+    && cd \
+    && git clone -q -b 2.5.x --depth 1 https://github.com/timescale/timescaledb.git \
     && cd timescaledb \
-    && git checkout 2.5.x \
-    && cd ~/timescaledb \
         && ./bootstrap -DPG_CONFIG=~/.pgx/12.11/pgx-install/bin/pg_config -DCMAKE_BUILD_TYPE="RelWithDebInfo" -DUSE_OPENSSL=false -DSEND_TELEMETRY_DEFAULT=false -DREGRESS_CHECKS=false \
         && cd build \
-        && make -j4 \
-        && make -j4 install \
+        && make $jobs install \
         && echo "shared_preload_libraries = 'timescaledb'" >> ~/.pgx/data-12/postgresql.conf \
     && cd .. \
     && rm -rf ./build \
         && ./bootstrap -DPG_CONFIG=~/.pgx/13.7/pgx-install/bin/pg_config -DCMAKE_BUILD_TYPE="RelWithDebInfo" -DUSE_OPENSSL=false -DSEND_TELEMETRY_DEFAULT=false -DREGRESS_CHECKS=false \
         && cd build \
-        && make -j4 \
-        && make -j4 install \
+        && make $jobs install \
         && echo "shared_preload_libraries = 'timescaledb'" >> ~/.pgx/data-13/postgresql.conf \
     && cd .. \
     && rm -rf ./build \
         && ./bootstrap -DPG_CONFIG=~/.pgx/14.3/pgx-install/bin/pg_config -DCMAKE_BUILD_TYPE="RelWithDebInfo" -DUSE_OPENSSL=false -DSEND_TELEMETRY_DEFAULT=false -DREGRESS_CHECKS=false \
         && cd build \
-        && make -j4 \
-        && make -j4 install \
-        && echo "shared_preload_libraries = 'timescaledb'" >> ~/.pgx/data-14/postgresql.conf \
-    && cd ~ \
-    && rm -rf ~/timescaledb
+        && make $jobs install
+RUN rm -rf ~/timescaledb
+
+RUN echo "shared_preload_libraries = 'timescaledb'" >> ~/.pgx/data-14/postgresql.conf
 
 # add clippy
 RUN rustup component add clippy

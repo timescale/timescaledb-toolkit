@@ -2,9 +2,6 @@
 
 set -ex
 
-# TODO After we upgrade to 0.4 make this change in docker/ci/Dockerfile and then remove this line.
-export PATH=/home/postgres/pgx/0.4/bin:$PATH
-
 print() {
     printf '%s\n' "$*"
 }

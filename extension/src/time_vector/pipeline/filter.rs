@@ -1,4 +1,3 @@
-
 use pgx::*;
 
 use super::*;
@@ -7,8 +6,8 @@ use super::*;
 #[pg_extern(
     immutable,
     parallel_safe,
-    name="filter",
-    schema="toolkit_experimental"
+    name = "filter",
+    schema = "toolkit_experimental"
 )]
 pub fn filter_lambda_pipeline_element<'l, 'e>(
     lambda: toolkit_experimental::Lambda<'l>,
@@ -18,18 +17,22 @@ pub fn filter_lambda_pipeline_element<'l, 'e>(
         panic!("invalid lambda type: the lambda must return a BOOLEAN")
     }
 
-    Element::FilterLambda { lambda: lambda.into_data() }.flatten()
+    Element::FilterLambda {
+        lambda: lambda.into_data(),
+    }
+    .flatten()
 }
 
-pub fn apply_lambda_to<'a>(mut series: Timevector<'a>, lambda: &lambda::LambdaData<'_>)
--> Timevector<'a> {
+pub fn apply_lambda_to<'a>(
+    mut series: Timevector<'a>,
+    lambda: &lambda::LambdaData<'_>,
+) -> Timevector<'a> {
     let expression = lambda.parse();
     if expression.ty() != &lambda::Type::Bool {
         panic!("invalid lambda type: the lambda must return a BOOLEAN")
     }
 
     let mut executor = lambda::ExpressionExecutor::new(&expression);
-
 
     let invoke = |time: i64, value: f64| {
         use lambda::Value::*;
@@ -65,13 +68,21 @@ mod tests {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
-            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            let sp = client
+                .select(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             client.select(
                 "CREATE TABLE series(time timestamptz, value double precision)",
                 None,
-                None
+                None,
             );
             client.select(
                 "INSERT INTO series \
@@ -82,23 +93,27 @@ mod tests {
                     ('2020-01-02 UTC'::TIMESTAMPTZ, 15.0), \
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)",
                 None,
-                None
+                None,
             );
 
-            let val = client.select(
-                "SELECT (timevector(time, value))::TEXT FROM series",
-                None,
-                None
-            )
+            let val = client
+                .select(
+                    "SELECT (timevector(time, value))::TEXT FROM series",
+                    None,
+                    None,
+                )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
+            assert_eq!(
+                val.unwrap(),
+                "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-04 00:00:00+00\",val:25),\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20),\
                 (ts:\"2020-01-02 00:00:00+00\",val:15),\
                 (ts:\"2020-01-05 00:00:00+00\",val:30)\
-            ],null_val:[0])");
+            ],null_val:[0])"
+            );
 
             let val = client.select(
                 "SELECT (timevector(time, value) -> filter($$ $time != '2020-01-05't and ($value = 10 or $value = 20) $$))::TEXT FROM series",
@@ -107,10 +122,13 @@ mod tests {
             )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:2,flags:0,internal_padding:(0,0,0),points:[\
+            assert_eq!(
+                val.unwrap(),
+                "(version:1,num_points:2,flags:0,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-01 00:00:00+00\",val:10),\
                 (ts:\"2020-01-03 00:00:00+00\",val:20)\
-            ],null_val:[0])");
+            ],null_val:[0])"
+            );
         });
     }
 }

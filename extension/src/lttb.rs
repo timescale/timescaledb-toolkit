@@ -1,15 +1,16 @@
-
 use pgx::*;
 use std::borrow::Cow;
 
 use crate::{
-    aggregate_utils::in_aggregate_context, flatten, palloc::{Internal, InternalAsValue, Inner, ToInternal}, time_vector,
+    aggregate_utils::in_aggregate_context,
+    flatten,
+    palloc::{Inner, Internal, InternalAsValue, ToInternal},
+    time_vector,
 };
 
 use tspoint::TSPoint;
 
-use crate::time_vector::{TimevectorData, Timevector};
-
+use crate::time_vector::{Timevector, TimevectorData};
 
 pub struct LttbTrans {
     series: Vec<TSPoint>,
@@ -24,7 +25,7 @@ pub fn lttb_trans(
     resolution: i32,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    lttb_trans_inner(unsafe{ state.to_inner() }, time, val, resolution, fcinfo).internal()
+    lttb_trans_inner(unsafe { state.to_inner() }, time, val, resolution, fcinfo).internal()
 }
 pub fn lttb_trans_inner(
     state: Option<Inner<LttbTrans>>,
@@ -48,8 +49,9 @@ pub fn lttb_trans_inner(
                     LttbTrans {
                         series: vec![],
                         resolution: resolution as usize,
-                    }.into()
-                },
+                    }
+                    .into()
+                }
             };
 
             state.series.push(TSPoint {
@@ -66,7 +68,7 @@ pub fn lttb_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
-    lttb_final_inner(unsafe{ state.to_inner() }, fcinfo)
+    lttb_final_inner(unsafe { state.to_inner() }, fcinfo)
 }
 pub fn lttb_final_inner(
     state: Option<Inner<LttbTrans>>,
@@ -81,15 +83,14 @@ pub fn lttb_final_inner(
             state.series.sort_by_key(|point| point.ts);
             let series = Cow::from(&state.series);
             let downsampled = lttb(&*series, state.resolution);
-            flatten!(
-                Timevector {
-                    num_points: downsampled.len() as u32,
-                    flags: time_vector::FLAG_IS_SORTED,
-                    internal_padding: [0; 3],
-                    points: (&*downsampled).into(),
-                    null_val: std::vec::from_elem(0_u8, (downsampled.len() + 7) / 8).into()
-                }
-            ).into()
+            flatten!(Timevector {
+                num_points: downsampled.len() as u32,
+                flags: time_vector::FLAG_IS_SORTED,
+                internal_padding: [0; 3],
+                points: (&*downsampled).into(),
+                null_val: std::vec::from_elem(0_u8, (downsampled.len() + 7) / 8).into()
+            })
+            .into()
         })
     }
 }
@@ -105,12 +106,11 @@ name = "lttb_agg",
 requires = [lttb_trans, lttb_final],
 );
 
-
 // based on https://github.com/jeromefroe/lttb-rs version 0.2.0
 pub fn lttb(data: &[TSPoint], threshold: usize) -> Cow<'_, [TSPoint]> {
     if threshold >= data.len() || threshold == 0 {
         // Nothing to do.
-        return Cow::Borrowed(data)
+        return Cow::Borrowed(data);
     }
 
     let mut sampled = Vec::with_capacity(threshold);
@@ -181,7 +181,12 @@ pub fn lttb(data: &[TSPoint], threshold: usize) -> Cow<'_, [TSPoint]> {
     Cow::Owned(sampled)
 }
 
-#[pg_extern(name="lttb", schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(
+    name = "lttb",
+    schema = "toolkit_experimental",
+    immutable,
+    parallel_safe
+)]
 pub fn lttb_on_timevector(
     series: crate::time_vector::toolkit_experimental::Timevector<'static>,
     threshold: i32,
@@ -192,17 +197,15 @@ pub fn lttb_on_timevector(
 // based on https://github.com/jeromefroe/lttb-rs version 0.2.0
 pub fn lttb_ts(
     data: crate::time_vector::toolkit_experimental::Timevector,
-    threshold: usize
-)
--> crate::time_vector::toolkit_experimental::Timevector
-{
+    threshold: usize,
+) -> crate::time_vector::toolkit_experimental::Timevector {
     if !data.is_sorted() {
         panic!("lttb requires sorted timevector");
     }
 
     if threshold >= data.num_points() || threshold == 0 {
         // Nothing to do.
-        return data.in_current_context();  // can we avoid this copy???
+        return data.in_current_context(); // can we avoid this copy???
     }
 
     let mut sampled = Vec::with_capacity(threshold);
@@ -270,7 +273,7 @@ pub fn lttb_ts(
 
     // Always add the last point.
     sampled.push(data.get(data.num_points() - 1).unwrap());
-    
+
     let nulls_len = (sampled.len() + 7) / 8;
 
     crate::build! {
@@ -293,21 +296,36 @@ mod tests {
     #[pg_test]
     fn test_lttb_equivalence() {
         Spi::execute(|client| {
-            client.select("CREATE TABLE test(time TIMESTAMPTZ, value DOUBLE PRECISION);", None, None);
+            client.select(
+                "CREATE TABLE test(time TIMESTAMPTZ, value DOUBLE PRECISION);",
+                None,
+                None,
+            );
             client.select(
                 "INSERT INTO test
                 SELECT time, value
                 FROM toolkit_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, NULL);", None, None);
 
-            client.select("CREATE TABLE results1(time TIMESTAMPTZ, value DOUBLE PRECISION);", None, None);
+            client.select(
+                "CREATE TABLE results1(time TIMESTAMPTZ, value DOUBLE PRECISION);",
+                None,
+                None,
+            );
             client.select(
                 "INSERT INTO results1
                 SELECT time, value
                 FROM toolkit_experimental.unnest(
                     (SELECT toolkit_experimental.lttb(time, value, 100) FROM test)
-                );", None, None);
+                );",
+                None,
+                None,
+            );
 
-            client.select("CREATE TABLE results2(time TIMESTAMPTZ, value DOUBLE PRECISION);", None, None);
+            client.select(
+                "CREATE TABLE results2(time TIMESTAMPTZ, value DOUBLE PRECISION);",
+                None,
+                None,
+            );
             client.select(
                 "INSERT INTO results2
                 SELECT time, value
@@ -315,7 +333,10 @@ mod tests {
                     (SELECT toolkit_experimental.lttb(
                         (SELECT toolkit_experimental.timevector(time, value) FROM test), 100)
                     )
-                );", None, None);
+                );",
+                None,
+                None,
+            );
 
             let delta = client
                 .select("SELECT count(*)  FROM results1 r1 FULL OUTER JOIN results2 r2 ON r1 = r2 WHERE r1 IS NULL OR r2 IS NULL;" , None, None)

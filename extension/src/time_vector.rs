@@ -23,8 +23,8 @@ use crate::raw::bytea;
 pub use toolkit_experimental::{Timevector, TimevectorData};
 
 // Bit flags stored in Timevector flags
-pub const FLAG_IS_SORTED : u8 = 0x01;
-pub const FLAG_HAS_NULLS : u8 = 0x01 << 1;
+pub const FLAG_IS_SORTED: u8 = 0x01;
+pub const FLAG_HAS_NULLS: u8 = 0x01 << 1;
 
 #[pg_schema]
 pub mod toolkit_experimental {
@@ -181,13 +181,10 @@ pub fn timevector_trans_inner(
                         ts: time,
                         val: f64::NAN,
                     });
-                    let byte_idx = state.num_points % 8;  // off by 1, but num_points isn't yet incremented
+                    let byte_idx = state.num_points % 8; // off by 1, but num_points isn't yet incremented
                     *state.null_val.as_owned().last_mut().unwrap() |= 1 << byte_idx;
-                },
-                Some(val) => state.points.as_owned().push(TSPoint {
-                    ts: time,
-                    val,
-                }),
+                }
+                Some(val) => state.points.as_owned().push(TSPoint { ts: time, val }),
             };
             state.num_points += 1;
             Some(state)
@@ -216,8 +213,10 @@ pub fn inner_compound_trans<'b>(
             (None, Some(series)) => Some(series.clone_owned().into()),
             (Some(mut state), Some(series)) => {
                 if state.is_sorted()
-                 && (!series.is_sorted() 
-                     || state.points.as_slice().last().unwrap().ts > series.points.as_slice().first().unwrap().ts) {
+                    && (!series.is_sorted()
+                        || state.points.as_slice().last().unwrap().ts
+                            > series.points.as_slice().first().unwrap().ts)
+                {
                     state.flags ^= FLAG_IS_SORTED
                 }
                 state

@@ -1627,8 +1627,8 @@ mod tests {
             check_agg_equivalence(state, &client, &pg2d_agg("regr_intercept"), &tk2d_agg("intercept"), EPS1);
             // check_agg_equivalence(&state, &client, &pg2d_agg(""), &tk2d_agg("x_intercept"), 0.0000001); !!! No postgres equivalent for x_intercept
             check_agg_equivalence(state, &client, &pg2d_agg("regr_r2"), &tk2d_agg("determination_coeff"), EPS1);
-            check_agg_equivalence(state, &client, &pg2d_agg("covar_pop"), &tk2d_agg_arg("covariance", "population"), EPS1);
-            check_agg_equivalence(state, &client, &pg2d_agg("covar_samp"), &tk2d_agg_arg("covariance", "sample"), EPS1);
+            check_agg_equivalence(state, &client, &pg2d_agg("covar_pop"), &tk2d_agg_arg("covariance", "population"), BILLIONTH);
+            check_agg_equivalence(state, &client, &pg2d_agg("covar_samp"), &tk2d_agg_arg("covariance", "sample"), BILLIONTH);
 
             // Skewness and kurtosis don't have aggregate functions in postgres, but we can compute them
             check_agg_equivalence(state, &client, &pg_moment_pop_query(3, "test_x"), &tk1d_agg_arg("skewness", "population"), BILLIONTH);

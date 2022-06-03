@@ -1,13 +1,12 @@
-
-mod fill_to;
-mod sort;
+mod aggregation;
+mod arithmetic;
 mod delta;
+mod expansion;
+mod fill_to;
+mod filter;
 mod lambda;
 mod map;
-mod filter;
-mod arithmetic;
-mod aggregation;
-mod expansion;
+mod sort;
 
 use std::convert::TryInto;
 
@@ -15,32 +14,23 @@ use pgx::*;
 
 use super::*;
 
-use crate::{
-    ron_inout_funcs, pg_type, flatten,
-};
+use crate::{flatten, pg_type, ron_inout_funcs};
 
-use fill_to::{
-    fill_to,
-    FillToMethod,
-};
+use fill_to::{fill_to, FillToMethod};
 
-use sort::sort_timevector;
 use delta::timevector_delta;
+use sort::sort_timevector;
 
-use map::{
-    map_series_element,
-    check_user_function_type,
-    apply_to_series,
-};
+use map::{apply_to_series, check_user_function_type, map_series_element};
 
-use crate::serialization::PgProcId;
 pub use self::toolkit_experimental::*;
+use crate::serialization::PgProcId;
 
 #[pg_schema]
 pub mod toolkit_experimental {
     use super::*;
-    pub use crate::time_vector::Timevector;
     pub(crate) use crate::accessors::toolkit_experimental::AccessorDelta;
+    pub use crate::time_vector::Timevector;
     pub(crate) use lambda::toolkit_experimental::{Lambda, LambdaData};
     // TODO once we start stabilizing elements, create a type TimevectorPipeline
     //      stable elements will create a stable pipeline, but adding an unstable
@@ -129,13 +119,12 @@ pub fn arrow_run_pipeline(
     timevector: toolkit_experimental::Timevector,
     pipeline: toolkit_experimental::UnstableTimevectorPipeline,
 ) -> toolkit_experimental::Timevector<'static> {
-    run_pipeline_elements(timevector, pipeline.elements.iter())
-        .in_current_context()
+    run_pipeline_elements(timevector, pipeline.elements.iter()).in_current_context()
 }
 
 pub fn run_pipeline_elements<'s, 'j, 'i>(
     mut timevector: Timevector<'s>,
-    pipeline: impl Iterator<Item=Element<'j>> + 'i,
+    pipeline: impl Iterator<Item = Element<'j>> + 'i,
 ) -> Timevector<'s> {
     for element in pipeline {
         timevector = execute_pipeline_element(timevector, &element);
@@ -145,27 +134,18 @@ pub fn run_pipeline_elements<'s, 'j, 'i>(
 
 pub fn execute_pipeline_element<'s>(
     timevector: Timevector<'s>,
-    element: &Element
+    element: &Element,
 ) -> Timevector<'s> {
     match element {
-        Element::LTTB{resolution} =>
-            crate::lttb::lttb_ts(timevector, *resolution as _),
-        Element::Sort{..} =>
-            sort_timevector(timevector),
-        Element::Delta{..} =>
-            timevector_delta(&timevector),
-        Element::MapData { function } =>
-            map::apply_to(timevector, function.0),
-        Element::MapSeries { function } =>
-            map::apply_to_series(timevector, function.0),
-        Element::MapLambda{ lambda } =>
-            map::apply_lambda_to(timevector, lambda),
-        Element::FilterLambda{ lambda } =>
-            filter::apply_lambda_to(timevector, lambda),
-        Element::Arithmetic{ function, rhs } =>
-            arithmetic::apply(timevector, *function, *rhs),
-        Element::FillTo{..} =>
-            fill_to(timevector, element),
+        Element::LTTB { resolution } => crate::lttb::lttb_ts(timevector, *resolution as _),
+        Element::Sort { .. } => sort_timevector(timevector),
+        Element::Delta { .. } => timevector_delta(&timevector),
+        Element::MapData { function } => map::apply_to(timevector, function.0),
+        Element::MapSeries { function } => map::apply_to_series(timevector, function.0),
+        Element::MapLambda { lambda } => map::apply_lambda_to(timevector, lambda),
+        Element::FilterLambda { lambda } => filter::apply_lambda_to(timevector, lambda),
+        Element::Arithmetic { function, rhs } => arithmetic::apply(timevector, *function, *rhs),
+        Element::FillTo { .. } => fill_to(timevector, element),
     }
 }
 
@@ -184,15 +164,15 @@ pub fn arrow_add_unstable_element<'p>(
 #[pg_extern(
     immutable,
     parallel_safe,
-    schema="toolkit_experimental",
-    name="toolkit_pipeline_support",
+    schema = "toolkit_experimental",
+    name = "toolkit_pipeline_support"
 )]
-pub unsafe fn pipeline_support(input: Internal)
--> Internal {
+pub unsafe fn pipeline_support(input: Internal) -> Internal {
     pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
-        let new_element = UnstableTimevectorPipeline::from_datum(new_element, false, 0)
-            .unwrap();
-        arrow_add_unstable_element(old_pipeline, new_element).into_datum().unwrap()
+        let new_element = UnstableTimevectorPipeline::from_datum(new_element, false, 0).unwrap();
+        arrow_add_unstable_element(old_pipeline, new_element)
+            .into_datum()
+            .unwrap()
     })
 }
 
@@ -205,7 +185,7 @@ pub(crate) unsafe fn pipeline_support_helper(
     let input = input.unwrap().unwrap();
     let input: *mut pg_sys::Node = input as _;
     if !pgx::is_a(input, pg_sys::NodeTag_T_SupportRequestSimplify) {
-        return no_change()
+        return no_change();
     }
 
     let req: *mut pg_sys::SupportRequestSimplify = input.cast();
@@ -216,22 +196,24 @@ pub(crate) unsafe fn pipeline_support_helper(
     let arg1 = original_args.head().unwrap();
     let arg2 = original_args.tail().unwrap();
 
-    let (executor_id, lhs_args) =
-        if is_a(arg1, pg_sys::NodeTag_T_OpExpr) {
-            let old_executor: *mut pg_sys::OpExpr = arg1.cast();
-            ((*old_executor).opfuncid, (*old_executor).args)
-        } else if is_a(arg1, pg_sys::NodeTag_T_FuncExpr) {
-            let old_executor: *mut pg_sys::FuncExpr = arg1.cast();
-            ((*old_executor).funcid, (*old_executor).args)
-        } else {
-            return no_change()
-        };
+    let (executor_id, lhs_args) = if is_a(arg1, pg_sys::NodeTag_T_OpExpr) {
+        let old_executor: *mut pg_sys::OpExpr = arg1.cast();
+        ((*old_executor).opfuncid, (*old_executor).args)
+    } else if is_a(arg1, pg_sys::NodeTag_T_FuncExpr) {
+        let old_executor: *mut pg_sys::FuncExpr = arg1.cast();
+        ((*old_executor).funcid, (*old_executor).args)
+    } else {
+        return no_change();
+    };
 
     // check old_executor operator fn is 'run_pipeline' above
-    static RUN_PIPELINE_OID: once_cell::sync::OnceCell<pg_sys::Oid> = once_cell::sync::OnceCell::new();
+    static RUN_PIPELINE_OID: once_cell::sync::OnceCell<pg_sys::Oid> =
+        once_cell::sync::OnceCell::new();
     match RUN_PIPELINE_OID.get() {
-        Some(oid) => if executor_id != *oid {
-            return no_change()
+        Some(oid) => {
+            if executor_id != *oid {
+                return no_change();
+            }
         }
         None => {
             let executor_fn = {
@@ -249,12 +231,10 @@ pub(crate) unsafe fn pipeline_support_helper(
             match executor_fn {
                 None => return no_change(),
                 // FIXME the direct comparison should work
-                Some(func) if func as usize != expected_executor =>
-                    return no_change(),
-                Some(_) => RUN_PIPELINE_OID.get_or_init(|| executor_id)
+                Some(func) if func as usize != expected_executor => return no_change(),
+                Some(_) => RUN_PIPELINE_OID.get_or_init(|| executor_id),
             };
-        },
-
+        }
     }
 
     let lhs_args = PgList::from_pg(lhs_args);
@@ -263,18 +243,19 @@ pub(crate) unsafe fn pipeline_support_helper(
     let old_const = lhs_args.tail().unwrap();
 
     if !is_a(old_const, pg_sys::NodeTag_T_Const) {
-        return no_change()
+        return no_change();
     }
 
     let old_const: *mut pg_sys::Const = old_const.cast();
 
     if !is_a(arg2, pg_sys::NodeTag_T_Const) {
-        return no_change()
+        return no_change();
     }
 
     let new_element_const: *mut pg_sys::Const = arg2.cast();
 
-    let old_pipeline = UnstableTimevectorPipeline::from_datum((*old_const).constvalue, false, 0).unwrap();
+    let old_pipeline =
+        UnstableTimevectorPipeline::from_datum((*old_const).constvalue, false, 0).unwrap();
     let new_pipeline = make_new_pipeline(old_pipeline, (*new_element_const).constvalue);
 
     let new_const = pg_sys::palloc(size_of::<pg_sys::Const>()).cast();
@@ -300,15 +281,16 @@ fn no_change() -> pgx::Internal {
 // using this instead of pg_operator since the latter doesn't support schemas yet
 // FIXME there is no CREATE OR REPLACE OPERATOR need to update post-install.rs
 //       need to ensure this works with out unstable warning
-extension_sql!(r#"
+extension_sql!(
+    r#"
 ALTER FUNCTION "arrow_run_pipeline" SUPPORT toolkit_experimental.toolkit_pipeline_support;
 ALTER FUNCTION "arrow_add_unstable_element" SUPPORT toolkit_experimental.toolkit_pipeline_support;
 "#,
-name="pipe_support",
-requires= [pipeline_support],
+    name = "pipe_support",
+    requires = [pipeline_support],
 );
 
-#[pg_extern(stable, parallel_safe, schema="toolkit_experimental")]
+#[pg_extern(stable, parallel_safe, schema = "toolkit_experimental")]
 pub fn run_user_pipeline_element(
     timevector: toolkit_experimental::Timevector,
     function: crate::raw::regproc,
@@ -317,7 +299,7 @@ pub fn run_user_pipeline_element(
     apply_to_series(timevector, function.0.try_into().unwrap()).in_current_context()
 }
 
-#[pg_extern(stable, parallel_safe, schema="toolkit_experimental")]
+#[pg_extern(stable, parallel_safe, schema = "toolkit_experimental")]
 pub fn build_unstable_user_pipeline(
     first: crate::raw::regproc,
     second: crate::raw::regproc,
@@ -334,12 +316,14 @@ pub fn build_unstable_user_pipeline(
     }
 }
 
-#[pg_extern(stable, parallel_safe, schema="toolkit_experimental")]
+#[pg_extern(stable, parallel_safe, schema = "toolkit_experimental")]
 pub fn add_user_pipeline_element(
     pipeline: toolkit_experimental::UnstableTimevectorPipeline,
     function: crate::raw::regproc,
 ) -> toolkit_experimental::UnstableTimevectorPipeline {
-    let elements: Vec<_> = pipeline.elements.iter()
+    let elements: Vec<_> = pipeline
+        .elements
+        .iter()
         .chain(Some(map_series_element(function.0.try_into().unwrap())))
         .collect();
     build! {
@@ -360,7 +344,8 @@ pub fn add_user_pipeline_element(
 // that there's no risk of collision...
 // FIXME there is no CREATE OR REPLACE OPERATOR need to update post-install.rs
 //       need to ensure this works with out unstable warning
-extension_sql!(r#"
+extension_sql!(
+    r#"
 CREATE OPERATOR ->> (
     PROCEDURE=toolkit_experimental."run_user_pipeline_element",
     LEFTARG=toolkit_experimental.Timevector,
@@ -379,23 +364,29 @@ CREATE OPERATOR ->> (
     RIGHTARG=regproc
 );
 "#,
-name="user_arrows",
-requires= [Timevector, run_user_pipeline_element, build_unstable_user_pipeline, add_user_pipeline_element],
+    name = "user_arrows",
+    requires = [
+        Timevector,
+        run_user_pipeline_element,
+        build_unstable_user_pipeline,
+        add_user_pipeline_element
+    ],
 );
 
 // TODO is (immutable, parallel_safe) correct?
 #[pg_extern(
     immutable,
     parallel_safe,
-    name="lttb",
-    schema="toolkit_experimental"
+    name = "lttb",
+    schema = "toolkit_experimental"
 )]
 pub fn lttb_pipeline_element(
     resolution: i32,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     Element::LTTB {
         resolution: resolution.try_into().unwrap(),
-    }.flatten()
+    }
+    .flatten()
 }
 
 #[cfg(any(test, feature = "pg_test"))]
@@ -410,14 +401,18 @@ mod tests {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
-            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            let sp = client
+                .select(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
-            client.select(
-                "CREATE TABLE lttb_pipe (series timevector)",
-                None,
-                None
-            );
+            client.select("CREATE TABLE lttb_pipe (series timevector)", None, None);
             client.select(
                 "INSERT INTO lttb_pipe \
                 SELECT timevector(time, val) FROM ( \
@@ -430,14 +425,17 @@ mod tests {
                 None
             );
 
-            let val = client.select(
-                "SELECT (series -> lttb(17))::TEXT FROM lttb_pipe",
-                None,
-                None
-            )
+            let val = client
+                .select(
+                    "SELECT (series -> lttb(17))::TEXT FROM lttb_pipe",
+                    None,
+                    None,
+                )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:17,is_sorted:true,internal_padding:(0,0,0),points:[\
+            assert_eq!(
+                val.unwrap(),
+                "(version:1,num_points:17,flags:1,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-11 00:00:00+00\",val:12.7015),\
                 (ts:\"2020-01-13 00:00:00+00\",val:11.8117),\
                 (ts:\"2020-01-22 00:00:00+00\",val:7.4757),\
@@ -455,16 +453,20 @@ mod tests {
                 (ts:\"2020-04-10 00:00:00+00\",val:5.8046),\
                 (ts:\"2020-04-14 00:00:00+00\",val:7.195),\
                 (ts:\"2020-04-20 00:00:00+00\",val:10.0221)\
-            ])");
+            ],null_val:[0,0,0])"
+            );
 
-            let val = client.select(
-                "SELECT (series -> lttb(8))::TEXT FROM lttb_pipe",
-                None,
-                None
-            )
+            let val = client
+                .select(
+                    "SELECT (series -> lttb(8))::TEXT FROM lttb_pipe",
+                    None,
+                    None,
+                )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:8,is_sorted:true,internal_padding:(0,0,0),points:[\
+            assert_eq!(
+                val.unwrap(),
+                "(version:1,num_points:8,flags:1,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-11 00:00:00+00\",val:12.7015),\
                 (ts:\"2020-01-27 00:00:00+00\",val:5.7155),\
                 (ts:\"2020-02-06 00:00:00+00\",val:5.5162),\
@@ -473,16 +475,20 @@ mod tests {
                 (ts:\"2020-03-30 00:00:00+00\",val:5.6728),\
                 (ts:\"2020-04-09 00:00:00+00\",val:5.554),\
                 (ts:\"2020-04-20 00:00:00+00\",val:10.0221)\
-            ])");
+            ],null_val:[0])"
+            );
 
-            let val = client.select(
-                "SELECT (series -> lttb(8) -> lttb(8))::TEXT FROM lttb_pipe",
-                None,
-                None
-            )
+            let val = client
+                .select(
+                    "SELECT (series -> lttb(8) -> lttb(8))::TEXT FROM lttb_pipe",
+                    None,
+                    None,
+                )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:8,is_sorted:true,internal_padding:(0,0,0),points:[\
+            assert_eq!(
+                val.unwrap(),
+                "(version:1,num_points:8,flags:1,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-11 00:00:00+00\",val:12.7015),\
                 (ts:\"2020-01-27 00:00:00+00\",val:5.7155),\
                 (ts:\"2020-02-06 00:00:00+00\",val:5.5162),\
@@ -491,16 +497,20 @@ mod tests {
                 (ts:\"2020-03-30 00:00:00+00\",val:5.6728),\
                 (ts:\"2020-04-09 00:00:00+00\",val:5.554),\
                 (ts:\"2020-04-20 00:00:00+00\",val:10.0221)\
-            ])");
+            ],null_val:[0])"
+            );
 
-            let val = client.select(
-                "SELECT (series -> (lttb(8) -> lttb(8) -> lttb(8)))::TEXT FROM lttb_pipe",
-                None,
-                None
-            )
+            let val = client
+                .select(
+                    "SELECT (series -> (lttb(8) -> lttb(8) -> lttb(8)))::TEXT FROM lttb_pipe",
+                    None,
+                    None,
+                )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,num_points:8,is_sorted:true,internal_padding:(0,0,0),points:[\
+            assert_eq!(
+                val.unwrap(),
+                "(version:1,num_points:8,flags:1,internal_padding:(0,0,0),points:[\
                 (ts:\"2020-01-11 00:00:00+00\",val:12.7015),\
                 (ts:\"2020-01-27 00:00:00+00\",val:5.7155),\
                 (ts:\"2020-02-06 00:00:00+00\",val:5.5162),\
@@ -509,7 +519,8 @@ mod tests {
                 (ts:\"2020-03-30 00:00:00+00\",val:5.6728),\
                 (ts:\"2020-04-09 00:00:00+00\",val:5.554),\
                 (ts:\"2020-04-20 00:00:00+00\",val:10.0221)\
-            ])");
+            ],null_val:[0])"
+            );
         });
     }
 
@@ -519,7 +530,15 @@ mod tests {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
-            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            let sp = client
+                .select(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             let output = client.select(

@@ -1,4 +1,3 @@
-
 use std::mem::take;
 
 use pgx::*;
@@ -8,36 +7,28 @@ use counter_agg::CounterSummaryBuilder;
 use super::*;
 
 use crate::{
-    ron_inout_funcs, pg_type, build,
-    stats_agg::{self, InternalStatsSummary1D, StatsSummary1D},
+    build,
     counter_agg::CounterSummary,
     hyperloglog::HyperLogLog,
+    pg_type, ron_inout_funcs,
+    stats_agg::{self, InternalStatsSummary1D, StatsSummary1D},
     uddsketch::UddSketch,
 };
 
 use self::toolkit_experimental::{
-    PipelineThenStatsAgg,
-    PipelineThenStatsAggData,
-    PipelineThenSum,
+    PipelineThenAverage, PipelineThenAverageData, PipelineThenCounterAgg,
+    PipelineThenCounterAggData, PipelineThenHyperLogLog, PipelineThenHyperLogLogData,
+    PipelineThenNumVals, PipelineThenNumValsData, PipelineThenPercentileAgg,
+    PipelineThenPercentileAggData, PipelineThenStatsAgg, PipelineThenStatsAggData, PipelineThenSum,
     PipelineThenSumData,
-    PipelineThenAverage,
-    PipelineThenAverageData,
-    PipelineThenNumVals,
-    PipelineThenNumValsData,
-    PipelineThenCounterAgg,
-    PipelineThenCounterAggData,
-    PipelineThenHyperLogLog,
-    PipelineThenHyperLogLogData,
-    PipelineThenPercentileAgg,
-    PipelineThenPercentileAggData,
 };
 
 #[pg_schema]
 pub mod toolkit_experimental {
     use super::*;
-    pub(crate) use crate::time_vector::Timevector;
-    pub(crate) use crate::time_vector::pipeline::UnstableTimevectorPipeline;
     pub(crate) use crate::accessors::toolkit_experimental::*;
+    pub(crate) use crate::time_vector::pipeline::UnstableTimevectorPipeline;
+    pub(crate) use crate::time_vector::Timevector;
 
     pg_type! {
         #[derive(Debug)]
@@ -49,7 +40,6 @@ pub mod toolkit_experimental {
 
     ron_inout_funcs!(PipelineThenStatsAgg);
 
-
     pg_type! {
         #[derive(Debug)]
         struct PipelineThenSum<'input> {
@@ -59,7 +49,6 @@ pub mod toolkit_experimental {
     }
 
     ron_inout_funcs!(PipelineThenSum);
-
 
     pg_type! {
         #[derive(Debug)]
@@ -71,7 +60,6 @@ pub mod toolkit_experimental {
 
     ron_inout_funcs!(PipelineThenAverage);
 
-
     pg_type! {
         #[derive(Debug)]
         struct PipelineThenNumVals<'input> {
@@ -81,8 +69,6 @@ pub mod toolkit_experimental {
     }
 
     ron_inout_funcs!(PipelineThenNumVals);
-
-
 
     pg_type! {
         #[derive(Debug)]
@@ -94,7 +80,6 @@ pub mod toolkit_experimental {
 
     ron_inout_funcs!(PipelineThenCounterAgg);
 
-
     pg_type! {
         #[derive(Debug)]
         struct PipelineThenHyperLogLog<'input> {
@@ -105,7 +90,6 @@ pub mod toolkit_experimental {
     }
 
     ron_inout_funcs!(PipelineThenHyperLogLog);
-
 
     pg_type! {
         #[derive(Debug)]
@@ -124,27 +108,32 @@ pub fn arrow_run_pipeline_then_stats_agg(
     mut timevector: toolkit_experimental::Timevector,
     pipeline: toolkit_experimental::PipelineThenStatsAgg,
 ) -> StatsSummary1D<'static> {
+    if timevector.has_nulls() {
+        panic!("Unable to compute stats aggregate over timevector containing nulls");
+    }
     timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
     let mut stats = InternalStatsSummary1D::new();
-    for TSPoint{ val, ..} in timevector.iter() {
+    for TSPoint { val, .. } in timevector.iter() {
         stats.accum(val).expect("error while running stats_agg");
     }
     StatsSummary1D::from_internal(stats)
 }
 
-#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn finalize_with_stats_agg<'e>(
     mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'e>,
     then_stats_agg: toolkit_experimental::PipelineThenStatsAgg<'e>,
 ) -> toolkit_experimental::PipelineThenStatsAgg<'e> {
     if then_stats_agg.num_elements == 0 {
         // flatten immediately so we don't need a temporary allocation for elements
-        return unsafe {flatten! {
-            PipelineThenStatsAgg {
-                num_elements: pipeline.0.num_elements,
-                elements: pipeline.0.elements,
+        return unsafe {
+            flatten! {
+                PipelineThenStatsAgg {
+                    num_elements: pipeline.0.num_elements,
+                    elements: pipeline.0.elements,
+                }
             }
-        }}
+        };
     }
 
     let mut elements = take(pipeline.elements.as_owned());
@@ -160,8 +149,8 @@ pub fn finalize_with_stats_agg<'e>(
 #[pg_extern(
     immutable,
     parallel_safe,
-    name="stats_agg",
-    schema="toolkit_experimental"
+    name = "stats_agg",
+    schema = "toolkit_experimental"
 )]
 pub fn pipeline_stats_agg() -> toolkit_experimental::PipelineThenStatsAgg<'static> {
     build! {
@@ -172,41 +161,38 @@ pub fn pipeline_stats_agg() -> toolkit_experimental::PipelineThenStatsAgg<'stati
     }
 }
 
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    schema="toolkit_experimental"
-)]
-pub unsafe fn pipeline_stats_agg_support(input: Internal)
--> Internal {
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub unsafe fn pipeline_stats_agg_support(input: Internal) -> Internal {
     pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
-        let new_element = PipelineThenStatsAgg::from_datum(new_element, false, 0)
-            .unwrap();
-        finalize_with_stats_agg(old_pipeline, new_element).into_datum().unwrap()
+        let new_element = PipelineThenStatsAgg::from_datum(new_element, false, 0).unwrap();
+        finalize_with_stats_agg(old_pipeline, new_element)
+            .into_datum()
+            .unwrap()
     })
 }
 
 // using this instead of pg_operator since the latter doesn't support schemas yet
 // FIXME there is no CREATE OR REPLACE OPERATOR need to update post-install.rs
 //       need to ensure this works with out unstable warning
-extension_sql!(r#"
+extension_sql!(
+    r#"
 ALTER FUNCTION "arrow_run_pipeline_then_stats_agg" SUPPORT toolkit_experimental.pipeline_stats_agg_support;
 "#,
-name="pipeline_stats_agg_support",
-requires= [pipeline_stats_agg_support],
+    name = "pipeline_stats_agg_support",
+    requires = [pipeline_stats_agg_support],
 );
 
 #[pg_extern(
     immutable,
     parallel_safe,
-    name="sum_cast",
-    schema="toolkit_experimental"
+    name = "sum_cast",
+    schema = "toolkit_experimental"
 )]
 pub fn sum_pipeline_element(
     accessor: toolkit_experimental::AccessorSum,
 ) -> toolkit_experimental::PipelineThenSum {
     let _ = accessor;
-    build ! {
+    build! {
         PipelineThenSum {
             num_elements: 0,
             elements: vec![].into(),
@@ -214,13 +200,14 @@ pub fn sum_pipeline_element(
     }
 }
 
-extension_sql!(r#"
+extension_sql!(
+    r#"
     CREATE CAST (toolkit_experimental.AccessorSum AS toolkit_experimental.PipelineThenSum)
         WITH FUNCTION toolkit_experimental.sum_cast
         AS IMPLICIT;
 "#,
-name="sum_pipe_cast",
-requires= [AccessorSum, PipelineThenSum, sum_pipeline_element],
+    name = "sum_pipe_cast",
+    requires = [AccessorSum, PipelineThenSum, sum_pipeline_element],
 );
 
 #[pg_operator(immutable, parallel_safe)]
@@ -248,12 +235,14 @@ pub fn finalize_with_sum<'e>(
 ) -> toolkit_experimental::PipelineThenSum<'e> {
     if then_stats_agg.num_elements == 0 {
         // flatten immediately so we don't need a temporary allocation for elements
-        return unsafe {flatten! {
-            PipelineThenSum {
-                num_elements: pipeline.0.num_elements,
-                elements: pipeline.0.elements,
+        return unsafe {
+            flatten! {
+                PipelineThenSum {
+                    num_elements: pipeline.0.num_elements,
+                    elements: pipeline.0.elements,
+                }
             }
-        }}
+        };
     }
 
     let mut elements = take(pipeline.elements.as_owned());
@@ -266,40 +255,30 @@ pub fn finalize_with_sum<'e>(
     }
 }
 
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    schema="toolkit_experimental"
-)]
-pub unsafe fn pipeline_sum_support(input: Internal)
--> Internal {
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub unsafe fn pipeline_sum_support(input: Internal) -> Internal {
     pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
-        let new_element = PipelineThenSum::from_datum(new_element, false, 0)
-            .unwrap();
-        finalize_with_sum(old_pipeline, new_element).into_datum().unwrap()
+        let new_element = PipelineThenSum::from_datum(new_element, false, 0).unwrap();
+        finalize_with_sum(old_pipeline, new_element)
+            .into_datum()
+            .unwrap()
     })
 }
 
-extension_sql!(r#"
+extension_sql!(
+    r#"
 ALTER FUNCTION "arrow_pipeline_then_sum" SUPPORT toolkit_experimental.pipeline_sum_support;
 "#,
-name="arrow_then_sum_support",
-requires= [pipeline_sum_support],
+    name = "arrow_then_sum_support",
+    requires = [pipeline_sum_support],
 );
 
-
-
-
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    schema="toolkit_experimental"
-)]
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn average_pipeline_element(
     accessor: toolkit_experimental::AccessorAverage,
 ) -> toolkit_experimental::PipelineThenAverage {
     let _ = accessor;
-    build ! {
+    build! {
         PipelineThenAverage {
             num_elements: 0,
             elements: vec![].into(),
@@ -307,13 +286,18 @@ pub fn average_pipeline_element(
     }
 }
 
-extension_sql!(r#"
+extension_sql!(
+    r#"
     CREATE CAST (toolkit_experimental.AccessorAverage AS toolkit_experimental.PipelineThenAverage)
         WITH FUNCTION toolkit_experimental.average_pipeline_element
         AS IMPLICIT;
 "#,
-name="avg_pipe_cast",
-requires= [AccessorAverage, PipelineThenAverage, average_pipeline_element],
+    name = "avg_pipe_cast",
+    requires = [
+        AccessorAverage,
+        PipelineThenAverage,
+        average_pipeline_element
+    ],
 );
 
 #[pg_operator(immutable, parallel_safe)]
@@ -341,12 +325,14 @@ pub fn finalize_with_average<'e>(
 ) -> toolkit_experimental::PipelineThenAverage<'e> {
     if then_stats_agg.num_elements == 0 {
         // flatten immediately so we don't need a temporary allocation for elements
-        return unsafe {flatten! {
-            PipelineThenAverage {
-                num_elements: pipeline.0.num_elements,
-                elements: pipeline.0.elements,
+        return unsafe {
+            flatten! {
+                PipelineThenAverage {
+                    num_elements: pipeline.0.num_elements,
+                    elements: pipeline.0.elements,
+                }
             }
-        }}
+        };
     }
 
     let mut elements = take(pipeline.elements.as_owned());
@@ -359,40 +345,35 @@ pub fn finalize_with_average<'e>(
     }
 }
 
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    schema="toolkit_experimental"
-)]
-pub unsafe fn pipeline_average_support(input: Internal)
--> Internal {
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub unsafe fn pipeline_average_support(input: Internal) -> Internal {
     pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
-        let new_element = PipelineThenAverage::from_datum(new_element, false, 0)
-            .unwrap();
-        finalize_with_average(old_pipeline, new_element).into_datum().unwrap()
+        let new_element = PipelineThenAverage::from_datum(new_element, false, 0).unwrap();
+        finalize_with_average(old_pipeline, new_element)
+            .into_datum()
+            .unwrap()
     })
 }
 
-extension_sql!(r#"
+extension_sql!(
+    r#"
 ALTER FUNCTION "arrow_pipeline_then_average" SUPPORT toolkit_experimental.pipeline_average_support;
 "#,
-name="pipe_avg_support",
-requires= [pipeline_average_support],
+    name = "pipe_avg_support",
+    requires = [pipeline_average_support],
 );
-
-
 
 #[pg_extern(
     immutable,
     parallel_safe,
-    name="num_vals_cast",
-    schema="toolkit_experimental"
+    name = "num_vals_cast",
+    schema = "toolkit_experimental"
 )]
 pub fn num_vals_pipeline_element(
     accessor: toolkit_experimental::AccessorNumVals,
 ) -> toolkit_experimental::PipelineThenNumVals {
     let _ = accessor;
-    build ! {
+    build! {
         PipelineThenNumVals {
             num_elements: 0,
             elements: vec![].into(),
@@ -400,13 +381,18 @@ pub fn num_vals_pipeline_element(
     }
 }
 
-extension_sql!(r#"
+extension_sql!(
+    r#"
     CREATE CAST (toolkit_experimental.AccessorNumVals AS toolkit_experimental.PipelineThenNumVals)
         WITH FUNCTION toolkit_experimental.num_vals_cast
         AS IMPLICIT;
 "#,
-name="num_vals_pipe_cast",
-requires= [AccessorNumVals, PipelineThenNumVals, num_vals_pipeline_element],
+    name = "num_vals_pipe_cast",
+    requires = [
+        AccessorNumVals,
+        PipelineThenNumVals,
+        num_vals_pipeline_element
+    ],
 );
 
 #[pg_operator(immutable, parallel_safe)]
@@ -415,8 +401,7 @@ pub fn arrow_pipeline_then_num_vals(
     timevector: toolkit_experimental::Timevector,
     pipeline: toolkit_experimental::PipelineThenNumVals,
 ) -> i64 {
-    run_pipeline_elements(timevector, pipeline.elements.iter())
-        .num_vals() as _
+    run_pipeline_elements(timevector, pipeline.elements.iter()).num_vals() as _
 }
 
 #[pg_operator(immutable, parallel_safe)]
@@ -427,12 +412,14 @@ pub fn finalize_with_num_vals<'e>(
 ) -> toolkit_experimental::PipelineThenNumVals<'e> {
     if then_stats_agg.num_elements == 0 {
         // flatten immediately so we don't need a temporary allocation for elements
-        return unsafe {flatten! {
-            PipelineThenNumVals {
-                num_elements: pipeline.0.num_elements,
-                elements: pipeline.0.elements,
+        return unsafe {
+            flatten! {
+                PipelineThenNumVals {
+                    num_elements: pipeline.0.num_elements,
+                    elements: pipeline.0.elements,
+                }
             }
-        }}
+        };
     }
 
     let mut elements = take(pipeline.elements.as_owned());
@@ -445,25 +432,22 @@ pub fn finalize_with_num_vals<'e>(
     }
 }
 
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    schema="toolkit_experimental"
-)]
-pub unsafe fn pipeline_num_vals_support(input: Internal)
--> Internal {
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub unsafe fn pipeline_num_vals_support(input: Internal) -> Internal {
     pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
-        let new_element = PipelineThenNumVals::from_datum(new_element, false, 0)
-            .unwrap();
-        finalize_with_num_vals(old_pipeline, new_element).into_datum().unwrap()
+        let new_element = PipelineThenNumVals::from_datum(new_element, false, 0).unwrap();
+        finalize_with_num_vals(old_pipeline, new_element)
+            .into_datum()
+            .unwrap()
     })
 }
 
-extension_sql!(r#"
+extension_sql!(
+    r#"
 ALTER FUNCTION "arrow_pipeline_then_num_vals" SUPPORT toolkit_experimental.pipeline_num_vals_support;
 "#,
-name="pipe_then_num_vals",
-requires= [pipeline_num_vals_support],
+    name = "pipe_then_num_vals",
+    requires = [pipeline_num_vals_support],
 );
 
 // TODO support gauge
@@ -475,29 +459,35 @@ pub fn arrow_run_pipeline_then_counter_agg(
 ) -> Option<CounterSummary<'static>> {
     timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
     if timevector.num_points() == 0 {
-        return None
+        return None;
     }
     let mut it = timevector.iter();
     let mut summary = CounterSummaryBuilder::new(&it.next().unwrap(), None);
     for point in it {
-        summary.add_point(&point).expect("error while running counter_agg");
+        summary
+            .add_point(&point)
+            .expect("error while running counter_agg");
     }
-    Some(CounterSummary::from_internal_counter_summary(summary.build()))
+    Some(CounterSummary::from_internal_counter_summary(
+        summary.build(),
+    ))
 }
 
-#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn finalize_with_counter_agg<'e>(
     mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'e>,
     then_counter_agg: toolkit_experimental::PipelineThenCounterAgg<'e>,
 ) -> toolkit_experimental::PipelineThenCounterAgg<'e> {
     if then_counter_agg.num_elements == 0 {
         // flatten immediately so we don't need a temporary allocation for elements
-        return unsafe {flatten! {
-            PipelineThenCounterAgg {
-                num_elements: pipeline.0.num_elements,
-                elements: pipeline.0.elements,
+        return unsafe {
+            flatten! {
+                PipelineThenCounterAgg {
+                    num_elements: pipeline.0.num_elements,
+                    elements: pipeline.0.elements,
+                }
             }
-        }}
+        };
     }
 
     let mut elements = take(pipeline.elements.as_owned());
@@ -513,8 +503,8 @@ pub fn finalize_with_counter_agg<'e>(
 #[pg_extern(
     immutable,
     parallel_safe,
-    name="counter_agg",
-    schema="toolkit_experimental"
+    name = "counter_agg",
+    schema = "toolkit_experimental"
 )]
 pub fn pipeline_counter_agg() -> toolkit_experimental::PipelineThenCounterAgg<'static> {
     build! {
@@ -525,30 +515,26 @@ pub fn pipeline_counter_agg() -> toolkit_experimental::PipelineThenCounterAgg<'s
     }
 }
 
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    schema="toolkit_experimental"
-)]
-pub unsafe fn pipeline_counter_agg_support(input: Internal)
--> Internal {
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub unsafe fn pipeline_counter_agg_support(input: Internal) -> Internal {
     pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
-        let new_element = PipelineThenCounterAgg::from_datum(new_element, false, 0)
-            .unwrap();
-        finalize_with_counter_agg(old_pipeline, new_element).into_datum().unwrap()
+        let new_element = PipelineThenCounterAgg::from_datum(new_element, false, 0).unwrap();
+        finalize_with_counter_agg(old_pipeline, new_element)
+            .into_datum()
+            .unwrap()
     })
 }
 
 // using this instead of pg_operator since the latter doesn't support schemas yet
 // FIXME there is no CREATE OR REPLACE OPERATOR need to update post-install.rs
 //       need to ensure this works with out unstable warning
-extension_sql!(r#"
+extension_sql!(
+    r#"
 ALTER FUNCTION "arrow_run_pipeline_then_counter_agg" SUPPORT toolkit_experimental.pipeline_counter_agg_support;
 "#,
-name="pipe_then_counter_agg",
-requires= [pipeline_counter_agg_support],
+    name = "pipe_then_counter_agg",
+    requires = [pipeline_counter_agg_support],
 );
-
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
@@ -557,27 +543,32 @@ pub fn arrow_run_pipeline_then_hyperloglog(
     pipeline: toolkit_experimental::PipelineThenHyperLogLog,
 ) -> HyperLogLog<'static> {
     timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
-    HyperLogLog::build_from(pipeline.hll_size as i32,
+    HyperLogLog::build_from(
+        pipeline.hll_size as i32,
         PgBuiltInOids::FLOAT8OID as u32,
         None,
-        timevector.iter().map(|point| point.val.into_datum().unwrap())
+        timevector
+            .iter()
+            .map(|point| point.val.into_datum().unwrap()),
     )
 }
 
-#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn finalize_with_hyperloglog<'e>(
     mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'e>,
     then_hyperloglog: toolkit_experimental::PipelineThenHyperLogLog<'e>,
 ) -> toolkit_experimental::PipelineThenHyperLogLog<'e> {
     if then_hyperloglog.num_elements == 0 {
         // flatten immediately so we don't need a temporary allocation for elements
-        return unsafe {flatten! {
-            PipelineThenHyperLogLog {
-                hll_size: then_hyperloglog.hll_size,
-                num_elements: pipeline.0.num_elements,
-                elements: pipeline.0.elements,
+        return unsafe {
+            flatten! {
+                PipelineThenHyperLogLog {
+                    hll_size: then_hyperloglog.hll_size,
+                    num_elements: pipeline.0.num_elements,
+                    elements: pipeline.0.elements,
+                }
             }
-        }}
+        };
     }
 
     let mut elements = take(pipeline.elements.as_owned());
@@ -594,8 +585,8 @@ pub fn finalize_with_hyperloglog<'e>(
 #[pg_extern(
     immutable,
     parallel_safe,
-    name="hyperloglog",
-    schema="toolkit_experimental"
+    name = "hyperloglog",
+    schema = "toolkit_experimental"
 )]
 pub fn pipeline_hyperloglog(size: i32) -> toolkit_experimental::PipelineThenHyperLogLog<'static> {
     build! {
@@ -607,31 +598,26 @@ pub fn pipeline_hyperloglog(size: i32) -> toolkit_experimental::PipelineThenHype
     }
 }
 
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    schema="toolkit_experimental"
-)]
-pub unsafe fn pipeline_hyperloglog_support(input: Internal)
--> Internal {
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub unsafe fn pipeline_hyperloglog_support(input: Internal) -> Internal {
     pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
-        let new_element = PipelineThenHyperLogLog::from_datum(new_element, false, 0)
-            .unwrap();
-        finalize_with_hyperloglog(old_pipeline, new_element).into_datum().unwrap()
+        let new_element = PipelineThenHyperLogLog::from_datum(new_element, false, 0).unwrap();
+        finalize_with_hyperloglog(old_pipeline, new_element)
+            .into_datum()
+            .unwrap()
     })
 }
 
 // using this instead of pg_operator since the latter doesn't support schemas yet
 // FIXME there is no CREATE OR REPLACE OPERATOR need to update post-install.rs
 //       need to ensure this works with out unstable warning
-extension_sql!(r#"
+extension_sql!(
+    r#"
 ALTER FUNCTION "arrow_run_pipeline_then_hyperloglog" SUPPORT toolkit_experimental.pipeline_hyperloglog_support;
 "#,
-name="pipe_then_hll",
-requires= [pipeline_hyperloglog_support],
+    name = "pipe_then_hll",
+    requires = [pipeline_hyperloglog_support],
 );
-
-
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
@@ -643,19 +629,21 @@ pub fn arrow_run_pipeline_then_percentile_agg(
     UddSketch::from_iter(timevector.into_iter().map(|p| p.val))
 }
 
-#[pg_extern(immutable, parallel_safe, schema="toolkit_experimental")]
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn finalize_with_percentile_agg<'e>(
     mut pipeline: toolkit_experimental::UnstableTimevectorPipeline<'e>,
     then_hyperloglog: toolkit_experimental::PipelineThenPercentileAgg<'e>,
 ) -> toolkit_experimental::PipelineThenPercentileAgg<'e> {
     if then_hyperloglog.num_elements == 0 {
         // flatten immediately so we don't need a temporary allocation for elements
-        return unsafe {flatten! {
-            PipelineThenPercentileAgg {
-                num_elements: pipeline.0.num_elements,
-                elements: pipeline.0.elements,
+        return unsafe {
+            flatten! {
+                PipelineThenPercentileAgg {
+                    num_elements: pipeline.0.num_elements,
+                    elements: pipeline.0.elements,
+                }
             }
-        }}
+        };
     }
 
     let mut elements = take(pipeline.elements.as_owned());
@@ -671,8 +659,8 @@ pub fn finalize_with_percentile_agg<'e>(
 #[pg_extern(
     immutable,
     parallel_safe,
-    name="percentile_agg",
-    schema="toolkit_experimental"
+    name = "percentile_agg",
+    schema = "toolkit_experimental"
 )]
 pub fn pipeline_percentile_agg() -> toolkit_experimental::PipelineThenPercentileAgg<'static> {
     build! {
@@ -683,30 +671,26 @@ pub fn pipeline_percentile_agg() -> toolkit_experimental::PipelineThenPercentile
     }
 }
 
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    schema="toolkit_experimental"
-)]
-pub unsafe fn pipeline_percentile_agg_support(input: Internal)
--> Internal {
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub unsafe fn pipeline_percentile_agg_support(input: Internal) -> Internal {
     pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
-        let new_element = PipelineThenPercentileAgg::from_datum(new_element, false, 0)
-            .unwrap();
-        finalize_with_percentile_agg(old_pipeline, new_element).into_datum().unwrap()
+        let new_element = PipelineThenPercentileAgg::from_datum(new_element, false, 0).unwrap();
+        finalize_with_percentile_agg(old_pipeline, new_element)
+            .into_datum()
+            .unwrap()
     })
 }
 
 // using this instead of pg_operator since the latter doesn't support schemas yet
 // FIXME there is no CREATE OR REPLACE OPERATOR need to update post-install.rs
 //       need to ensure this works with out unstable warning
-extension_sql!(r#"
+extension_sql!(
+    r#"
 ALTER FUNCTION "arrow_run_pipeline_then_percentile_agg" SUPPORT toolkit_experimental.pipeline_percentile_agg_support;
 "#,
-name="pipe_then_percentile",
-requires= [pipeline_percentile_agg_support],
+    name = "pipe_then_percentile",
+    requires = [pipeline_percentile_agg_support],
 );
-
 
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
@@ -720,7 +704,15 @@ mod tests {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
-            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            let sp = client
+                .select(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             // we use a subselect to guarantee order
@@ -731,14 +723,21 @@ mod tests {
                     ('2020-01-02 UTC'::TIMESTAMPTZ, 15.0), \
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)) as v(time, value)";
 
-            let val = client.select(
-                &format!("SELECT (series -> stats_agg())::TEXT FROM ({}) s", create_series),
-                None,
-                None
-            )
+            let val = client
+                .select(
+                    &format!(
+                        "SELECT (series -> stats_agg())::TEXT FROM ({}) s",
+                        create_series
+                    ),
+                    None,
+                    None,
+                )
                 .first()
                 .get_one::<String>();
-            assert_eq!(val.unwrap(), "(version:1,n:5,sx:100,sx2:250,sx3:0,sx4:21250)");
+            assert_eq!(
+                val.unwrap(),
+                "(version:1,n:5,sx:100,sx2:250,sx3:0,sx4:21250)"
+            );
         });
     }
 
@@ -748,20 +747,32 @@ mod tests {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
-            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            let sp = client
+                .select(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
-            let output = client.select(
-                "EXPLAIN (verbose) SELECT \
+            let output = client
+                .select(
+                    "EXPLAIN (verbose) SELECT \
                 timevector('1930-04-05'::timestamptz, 123.0) \
                 -> ceil() -> abs() -> floor() \
                 -> stats_agg() -> average();",
-                None,
-                None
-            ).nth(1)
+                    None,
+                    None,
+                )
+                .nth(1)
                 .unwrap()
-                .by_ordinal(1).unwrap()
-                .value::<String>().unwrap();
+                .by_ordinal(1)
+                .unwrap()
+                .value::<String>()
+                .unwrap();
             assert_eq!(output.trim(), "Output: (\
                 arrow_run_pipeline_then_stats_agg(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
@@ -774,14 +785,21 @@ mod tests {
         });
     }
 
-
     #[pg_test]
     fn test_sum_finalizer() {
         Spi::execute(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
-            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            let sp = client
+                .select(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             // we use a subselect to guarantee order
@@ -792,14 +810,15 @@ mod tests {
                     ('2020-01-02 UTC'::TIMESTAMPTZ, 15.0), \
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)) as v(time, value)";
 
-            let val = client.select(
-                &format!("SELECT (series -> sum())::TEXT FROM ({}) s", create_series),
-                None,
-                None
-            )
+            let val = client
+                .select(
+                    &format!("SELECT (series -> sum())::TEXT FROM ({}) s", create_series),
+                    None,
+                    None,
+                )
                 .first()
                 .get_one::<String>();
-                assert_eq!(val.unwrap(), "100");
+            assert_eq!(val.unwrap(), "100");
         });
     }
 
@@ -809,20 +828,32 @@ mod tests {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
-            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            let sp = client
+                .select(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
-            let output = client.select(
-                "EXPLAIN (verbose) SELECT \
+            let output = client
+                .select(
+                    "EXPLAIN (verbose) SELECT \
                 timevector('1930-04-05'::timestamptz, 123.0) \
                 -> ceil() -> abs() -> floor() \
                 -> sum();",
-                None,
-                None
-            ).nth(1)
+                    None,
+                    None,
+                )
+                .nth(1)
                 .unwrap()
-                .by_ordinal(1).unwrap()
-                .value::<String>().unwrap();
+                .by_ordinal(1)
+                .unwrap()
+                .value::<String>()
+                .unwrap();
             assert_eq!(output.trim(), "Output: \
                 arrow_pipeline_then_sum(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
@@ -841,7 +872,15 @@ mod tests {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
-            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            let sp = client
+                .select(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             // we use a subselect to guarantee order
@@ -852,11 +891,15 @@ mod tests {
                     ('2020-01-02 UTC'::TIMESTAMPTZ, 15.0), \
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)) as v(time, value)";
 
-            let val = client.select(
-                &format!("SELECT (series -> average())::TEXT FROM ({}) s", create_series),
-                None,
-                None
-            )
+            let val = client
+                .select(
+                    &format!(
+                        "SELECT (series -> average())::TEXT FROM ({}) s",
+                        create_series
+                    ),
+                    None,
+                    None,
+                )
                 .first()
                 .get_one::<String>();
             assert_eq!(val.unwrap(), "20");
@@ -869,20 +912,32 @@ mod tests {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
-            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            let sp = client
+                .select(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
-            let output = client.select(
-                "EXPLAIN (verbose) SELECT \
+            let output = client
+                .select(
+                    "EXPLAIN (verbose) SELECT \
                 timevector('1930-04-05'::timestamptz, 123.0) \
                 -> ceil() -> abs() -> floor() \
                 -> average();",
-                None,
-                None
-            ).nth(1)
+                    None,
+                    None,
+                )
+                .nth(1)
                 .unwrap()
-                .by_ordinal(1).unwrap()
-                .value::<String>().unwrap();
+                .by_ordinal(1)
+                .unwrap()
+                .value::<String>()
+                .unwrap();
             assert_eq!(output.trim(), "Output: \
                 arrow_pipeline_then_average(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
@@ -901,7 +956,15 @@ mod tests {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
-            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            let sp = client
+                .select(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             // we use a subselect to guarantee order
@@ -912,11 +975,15 @@ mod tests {
                     ('2020-01-02 UTC'::TIMESTAMPTZ, 15.0), \
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)) as v(time, value)";
 
-            let val = client.select(
-                &format!("SELECT (series -> num_vals())::TEXT FROM ({}) s", create_series),
-                None,
-                None
-            )
+            let val = client
+                .select(
+                    &format!(
+                        "SELECT (series -> num_vals())::TEXT FROM ({}) s",
+                        create_series
+                    ),
+                    None,
+                    None,
+                )
                 .first()
                 .get_one::<String>();
             assert_eq!(val.unwrap(), "5");
@@ -929,20 +996,32 @@ mod tests {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
-            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            let sp = client
+                .select(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
-            let output = client.select(
-                "EXPLAIN (verbose) SELECT \
+            let output = client
+                .select(
+                    "EXPLAIN (verbose) SELECT \
                 timevector('1930-04-05'::timestamptz, 123.0) \
                 -> ceil() -> abs() -> floor() \
                 -> num_vals();",
-                None,
-                None
-            ).nth(1)
+                    None,
+                    None,
+                )
+                .nth(1)
                 .unwrap()
-                .by_ordinal(1).unwrap()
-                .value::<String>().unwrap();
+                .by_ordinal(1)
+                .unwrap()
+                .value::<String>()
+                .unwrap();
             assert_eq!(output.trim(), "Output: \
                 arrow_pipeline_then_num_vals(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
@@ -961,7 +1040,15 @@ mod tests {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
-            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            let sp = client
+                .select(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             // we use a subselect to guarantee order
@@ -972,11 +1059,15 @@ mod tests {
                 ('2020-01-02 UTC'::TIMESTAMPTZ, 25.0), \
                 ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)) as v(time, value)";
 
-            let val = client.select(
-                &format!("SELECT (series -> sort() -> counter_agg())::TEXT FROM ({}) s", create_series),
-                None,
-                None
-            )
+            let val = client
+                .select(
+                    &format!(
+                        "SELECT (series -> sort() -> counter_agg())::TEXT FROM ({}) s",
+                        create_series
+                    ),
+                    None,
+                    None,
+                )
                 .first()
                 .get_one::<String>();
             assert_eq!(val.unwrap(), "(version:1,stats:(n:5,sx:3156624000,sx2:74649600000,sx3:0,sx4:1894671345254400000000,sy:215,sy2:2280,sy3:6720.000000000007,sy4:1788960,sxy:12960000),first:(ts:\"2020-01-01 00:00:00+00\",val:15),second:(ts:\"2020-01-02 00:00:00+00\",val:25),penultimate:(ts:\"2020-01-04 00:00:00+00\",val:10),last:(ts:\"2020-01-05 00:00:00+00\",val:30),reset_sum:45,num_resets:2,num_changes:4,bounds:(is_present:0,has_left:0,has_right:0,padding:(0,0,0,0,0),left:None,right:None))");
@@ -990,18 +1081,21 @@ mod tests {
                 .get_one::<f64>().unwrap();
             assert!((val - 67.5).abs() < f64::EPSILON);
 
-
-            let output = client.select(
-                "EXPLAIN (verbose) SELECT \
+            let output = client
+                .select(
+                    "EXPLAIN (verbose) SELECT \
                 timevector('1930-04-05'::timestamptz, 123.0) \
                 -> ceil() -> abs() -> floor() \
                 -> counter_agg();",
-                None,
-                None
-            ).nth(1)
+                    None,
+                    None,
+                )
+                .nth(1)
                 .unwrap()
-                .by_ordinal(1).unwrap()
-                .value::<String>().unwrap();
+                .by_ordinal(1)
+                .unwrap()
+                .value::<String>()
+                .unwrap();
             assert_eq!(output.trim(), "Output: \
                 arrow_run_pipeline_then_counter_agg(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
@@ -1020,7 +1114,15 @@ mod tests {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
-            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            let sp = client
+                .select(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             // we use a subselect to guarantee order
@@ -1036,35 +1138,48 @@ mod tests {
                 ('2020-01-09 UTC'::TIMESTAMPTZ, 10.0), \
                 ('2020-01-10 UTC'::TIMESTAMPTZ, 5.0)) as v(time, value)";
 
-            let val = client.select(
-                &format!("SELECT (series -> hyperloglog(100))::TEXT FROM ({}) s", create_series),
-                None,
-                None
-            )
+            let val = client
+                .select(
+                    &format!(
+                        "SELECT (series -> hyperloglog(100))::TEXT FROM ({}) s",
+                        create_series
+                    ),
+                    None,
+                    None,
+                )
                 .first()
                 .get_one::<String>();
             assert_eq!(val.unwrap(), "(version:1,log:Sparse(num_compressed:7,element_type:FLOAT8,collation:None,compressed_bytes:28,precision:7,compressed:[136,188,20,7,8,30,244,43,72,69,89,2,72,255,97,27,72,83,248,27,200,110,35,5,8,37,85,12]))");
 
-            let val = client.select(
-                &format!("SELECT series -> hyperloglog(100) -> distinct_count() FROM ({}) s", create_series),
-                None,
-                None
-            )
+            let val = client
+                .select(
+                    &format!(
+                        "SELECT series -> hyperloglog(100) -> distinct_count() FROM ({}) s",
+                        create_series
+                    ),
+                    None,
+                    None,
+                )
                 .first()
-                .get_one::<i32>().unwrap();
+                .get_one::<i32>()
+                .unwrap();
             assert_eq!(val, 7);
 
-            let output = client.select(
-                "EXPLAIN (verbose) SELECT \
+            let output = client
+                .select(
+                    "EXPLAIN (verbose) SELECT \
                 timevector('1930-04-05'::timestamptz, 123.0) \
                 -> ceil() -> abs() -> floor() \
                 -> hyperloglog(100);",
-                None,
-                None
-            ).nth(1)
+                    None,
+                    None,
+                )
+                .nth(1)
                 .unwrap()
-                .by_ordinal(1).unwrap()
-                .value::<String>().unwrap();
+                .by_ordinal(1)
+                .unwrap()
+                .value::<String>()
+                .unwrap();
             assert_eq!(output.trim(), "Output: \
                 arrow_run_pipeline_then_hyperloglog(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
@@ -1083,7 +1198,15 @@ mod tests {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
-            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            let sp = client
+                .select(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             // we use a subselect to guarantee order
@@ -1094,11 +1217,15 @@ mod tests {
                     ('2020-01-02 UTC'::TIMESTAMPTZ, 15.0), \
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)) as v(time, value)";
 
-            let val = client.select(
-                &format!("SELECT (series -> percentile_agg())::TEXT FROM ({}) s", create_series),
-                None,
-                None
-            )
+            let val = client
+                .select(
+                    &format!(
+                        "SELECT (series -> percentile_agg())::TEXT FROM ({}) s",
+                        create_series
+                    ),
+                    None,
+                    None,
+                )
                 .first()
                 .get_one::<String>();
             assert_eq!(
@@ -1128,20 +1255,32 @@ mod tests {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
-            let sp = client.select("SELECT format(' %s, toolkit_experimental',current_setting('search_path'))", None, None).first().get_one::<String>().unwrap();
+            let sp = client
+                .select(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
-            let output = client.select(
-                "EXPLAIN (verbose) SELECT \
+            let output = client
+                .select(
+                    "EXPLAIN (verbose) SELECT \
                 timevector('1930-04-05'::timestamptz, 123.0) \
                 -> ceil() -> abs() -> floor() \
                 -> percentile_agg();",
-                None,
-                None
-            ).nth(1)
+                    None,
+                    None,
+                )
+                .nth(1)
                 .unwrap()
-                .by_ordinal(1).unwrap()
-                .value::<String>().unwrap();
+                .by_ordinal(1)
+                .unwrap()
+                .value::<String>()
+                .unwrap();
             assert_eq!(output.trim(), "Output: \
                 arrow_run_pipeline_then_percentile_agg(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \

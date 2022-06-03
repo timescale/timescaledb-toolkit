@@ -22,6 +22,10 @@ use crate::raw::bytea;
 
 pub use toolkit_experimental::{Timevector, TimevectorData};
 
+// Bit flags stored in Timevector flags
+pub const FLAG_IS_SORTED: u8 = 0x01;
+pub const FLAG_HAS_NULLS: u8 = 0x01 << 1;
+
 #[pg_schema]
 pub mod toolkit_experimental {
     use super::*;
@@ -29,9 +33,10 @@ pub mod toolkit_experimental {
         #[derive(Debug)]
         struct Timevector<'input> {
             num_points: u32,
-            is_sorted: bool,
+            flags: u8,         // extra information about the stored data
             internal_padding: [u8; 3],  // required to be aligned
             points: [TSPoint; self.num_points],
+            null_val: [u8; (self.num_points + 7)/ 8], // bit vector, must be last element for alignment purposes
         }
     }
 
@@ -53,8 +58,23 @@ impl<'input> Timevector<'input> {
         Some(self.points.as_slice()[index])
     }
 
+    #[inline]
     pub fn is_sorted(&self) -> bool {
-        self.is_sorted
+        self.flags & FLAG_IS_SORTED != 0
+    }
+
+    #[inline]
+    pub fn has_nulls(&self) -> bool {
+        self.flags & FLAG_HAS_NULLS != 0
+    }
+
+    pub fn is_null_val(&self, index: usize) -> bool {
+        assert!(index < self.num_points()); // should we handle this better
+
+        let byte_id = index / 8;
+        let byte_idx = index % 8;
+
+        self.null_val.as_slice()[byte_id] & (1 << byte_idx) != 0
     }
 
     fn clone_owned(&self) -> Timevector<'static> {
@@ -134,28 +154,38 @@ pub fn timevector_trans_inner(
                 None => return state,
                 Some(time) => time.into(),
             };
-            let value = match value {
-                None => return state, // Should we support NULL values?
-                Some(value) => value,
-            };
             let mut state = match state {
                 None => Inner::from(build! {
                     Timevector {
                         num_points: 0,
-                        is_sorted: true,
+                        flags: FLAG_IS_SORTED,
                         internal_padding: [0; 3],
                         points: vec![].into(),
+                        null_val: vec![].into(),
                     }
                 }),
                 Some(state) => state,
             };
             if let Some(last_point) = state.points.as_slice().last() {
-                state.is_sorted = state.is_sorted && last_point.ts <= time;
+                if state.is_sorted() && last_point.ts > time {
+                    state.flags ^= FLAG_IS_SORTED;
+                }
             }
-            state.points.as_owned().push(TSPoint {
-                ts: time,
-                val: value,
-            });
+            if state.num_points % 8 == 0 {
+                state.null_val.as_owned().push(0);
+            }
+            match value {
+                None => {
+                    state.flags |= FLAG_HAS_NULLS;
+                    state.points.as_owned().push(TSPoint {
+                        ts: time,
+                        val: f64::NAN,
+                    });
+                    let byte_idx = state.num_points % 8; // off by 1, but num_points isn't yet incremented
+                    *state.null_val.as_owned().last_mut().unwrap() |= 1 << byte_idx;
+                }
+                Some(val) => state.points.as_owned().push(TSPoint { ts: time, val }),
+            };
             state.num_points += 1;
             Some(state)
         })
@@ -182,10 +212,13 @@ pub fn inner_compound_trans<'b>(
             (Some(state), None) => Some(state),
             (None, Some(series)) => Some(series.clone_owned().into()),
             (Some(mut state), Some(series)) => {
-                state.is_sorted = state.is_sorted
-                    && series.is_sorted
-                    && state.points.as_slice().last().unwrap().ts
-                        <= series.points.as_slice().first().unwrap().ts;
+                if state.is_sorted()
+                    && (!series.is_sorted()
+                        || state.points.as_slice().last().unwrap().ts
+                            > series.points.as_slice().first().unwrap().ts)
+                {
+                    state.flags ^= FLAG_IS_SORTED
+                }
                 state
                     .points
                     .as_owned()
@@ -228,18 +261,42 @@ pub fn combine(first: Timevector<'_>, second: Timevector<'_>) -> Timevector<'sta
         return first.clone_owned();
     }
 
-    let is_sorted = first.is_sorted
-        && second.is_sorted
+    let is_sorted = first.is_sorted()
+        && second.is_sorted()
         && first.points.as_slice().last().unwrap().ts
             <= second.points.as_slice().first().unwrap().ts;
     let points: Vec<_> = first.iter().chain(second.iter()).collect();
 
+    let mut flags = (first.flags | FLAG_HAS_NULLS) | (second.flags | FLAG_HAS_NULLS);
+    if is_sorted {
+        flags |= FLAG_IS_SORTED;
+    }
+
+    let null_val = if flags & FLAG_HAS_NULLS == 0 {
+        std::vec::from_elem(0_u8, (points.len() + 7) / 8)
+    } else {
+        let mut v = first.null_val.as_slice().to_vec();
+        v.resize((points.len() + 7) / 8, 0);
+        if second.has_nulls() {
+            for i in 0..second.num_points {
+                if second.is_null_val(i as usize) {
+                    let idx = i + first.num_points;
+                    let byte_id = idx / 8;
+                    let byte_idx = idx % 8;
+                    v[byte_id as usize] |= 1 << byte_idx;
+                }
+            }
+        }
+        v
+    };
+
     build! {
         Timevector {
             num_points: points.len() as _,
-            is_sorted,
+            flags,
             internal_padding: [0; 3],
             points: points.into(),
+            null_val: null_val.into(),
         }
     }
 }

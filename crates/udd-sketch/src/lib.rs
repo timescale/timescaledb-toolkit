@@ -290,7 +290,7 @@ impl UDDSketch {
         assert!(
             (self.gamma.powf(1.0 / f64::powi(2.0, self.compactions as i32)) - 
              other.gamma.powf(1.0 / f64::powi(2.0, other.compactions as i32))
-            ).abs() < f64::EPSILON
+            ).abs() < 1e-9 // f64::EPSILON too small, see issue #396
         );
         assert!(self.max_buckets == other.max_buckets);
 

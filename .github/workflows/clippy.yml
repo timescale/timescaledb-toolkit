@@ -1,0 +1,69 @@
+name: Clippy
+on:
+  pull_request:
+    paths-ignore:
+    - '**/Dockerfile'
+    - '**.md'
+    - '**.txt'
+    - '**.yml'
+  push:
+    branches:
+    - main
+    - staging
+    - trying
+    paths-ignore:
+    - '**/Dockerfile'
+    - '**.md'
+    - '**.txt'
+    - '**.yml'
+  schedule:
+    # we build at 8am UTC, 3am Eastern, midnight Pacific
+    - cron:  '0 8 * * 1-4'
+  workflow_dispatch:
+
+jobs:
+  clippy:
+    name: Clippy Test
+    runs-on: ubuntu-latest
+    container:
+      image: timescaledev/rust-pgx:latest
+      env:
+        # TODO: See TODOs on duplicate block in ci.yml
+        # Must keep in sync with `path: target` in "Cache cargo target dir" job
+        CARGO_TARGET_DIR_NAME: target
+        CARGO_INCREMENTAL: 0
+        CARGO_NET_RETRY: 10
+        CI: 1
+        RUST_BACKTRACE: short
+        RUSTUP_MAX_RETRIES: 10
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+
+    - name: chown Repository
+      run: chown -R postgres .
+
+    - name: Cache cargo directories
+      uses: actions/cache@v2
+      with:
+        path: |
+          /usr/local/cargo/registry
+          /usr/local/cargo/git
+        key: ${{ runner.os }}-clippy-cargo-1.7
+        restore-keys: ${{ runner.os }}-clippy-cargo-PREVIOUS
+
+    - name: Cache cargo target dir
+      uses: actions/cache@v2
+      with:
+        path: target
+        key: ${{ runner.os }}-clippy-target-1.7
+        restore-keys: ${{ runner.os }}-clippy-target-PREVIOUS
+
+    - name: Run Clippy
+      # Github captures stdout and stderr separately and then intermingles them
+      # in the wrong order.  We don't actually care to distinguish, so redirect
+      # stderr to stdout so we get the proper order.
+      run: su postgres -c 'sh tools/build clippy 2>&1'

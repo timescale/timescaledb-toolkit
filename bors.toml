@@ -1,3 +1,8 @@
-status = ["Clippy Test", "Test PG 12", "Test PG 13", "Test PG 14"]
+status = [
+    "Clippy Test",
+    "Test Postgres (12)",
+    "Test Postgres (13)",
+    "Test Postgres (14)",
+]
 delete-merged-branches = true
 timeout_sec = 3600 # 60 min

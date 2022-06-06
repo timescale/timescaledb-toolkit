@@ -21,10 +21,14 @@ RUN curl https://sh.rustup.rs -sSf | bash -s -- -y --profile=minimal -c rustfmt
 ENV PATH="/build/.cargo/bin:${PATH}"
 
 #install pgx
+# Keep synchronized with `cargo install --version N.N.N cargo-pgx` in:
+# - Cargo.toml
+# - Readme.md
+# - docker/ci/Dockerfile
 RUN set -ex \
     && rm -rf "${CARGO_HOME}/registry" "${CARGO_HOME}/git" \
     && chown postgres:postgres -R "${CARGO_HOME}" \
-    && cargo install cargo-pgx --version '^0.2' \
+    && cargo install cargo-pgx --version '=0.4.5' \
     # initdb fails as root so generate the correct config ourselves
     # && cargo pgx init --pg13 /usr/lib/postgresql/13/bin/pg_config
     && mkdir -p /root/.pgx \

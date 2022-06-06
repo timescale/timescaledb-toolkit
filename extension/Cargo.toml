@@ -16,7 +16,10 @@ pg14 = ["pgx/pg14", "pgx-tests/pg14"]
 pg_test = ["approx"]
 
 [dependencies]
-# Keep synchronized with `cargo install --version N.N.N cargo-pgx` in Readme.md and docker/ci/Dockerfile
+# Keep synchronized with `cargo install --version N.N.N cargo-pgx` in:
+# - Readme.md
+# - docker/ci/Dockerfile
+# - docker/patch/Dockerfile
 # Also `pgx-tests` down below in `dev-dependencies`.
 pgx = "=0.4.5"
 pgx-macros = "=0.4.5"

@@ -151,7 +151,7 @@ while [ $# -gt 0 ]; do
             $nop cargo run -p sql-doctester -- \
                  -h localhost \
                  -p $pg_port \
-                 -s "CREATE EXTENSION timescaledb; CREATE EXTENSION timescaledb_toolkit; SET SESSION TIMEZONE TO 'UTC'" \
+                 -s "DROP EXTENSION IF EXISTS timescaledb; DROP EXTENSION IF EXISTS timescaledb_toolkit; CREATE EXTENSION timescaledb; CREATE EXTENSION timescaledb_toolkit; SET SESSION TIMEZONE TO 'UTC'" \
                  docs
             ;;
 

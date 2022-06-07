@@ -10,6 +10,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      CARGO_TARGET_DIR_NAME: target
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -46,7 +48,7 @@ jobs:
       - name: Run Doc Tests
         run: |
           docker run -d --name toolkit_test -e POSTGRES_HOST_AUTH_METHOD=trust -p 5432:5432 timescaledev/timescale-analytics:nightly
-          cargo run --manifest-path ./tools/sql-doctester/Cargo.toml -- -h localhost -s "CREATE EXTENSION timescaledb_toolkit; SET SESSION TIMEZONE TO 'UTC'" -p 5432 docs
+          tools/build -pg13 -pgport 5432 test-doc
       #TODO can/should we run our other tests also?
 
       - name: Push

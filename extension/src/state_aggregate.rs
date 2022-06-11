@@ -33,20 +33,59 @@ pub mod toolkit_experimental {
             states_len: u64, // TODO JOSH this and durations_len can be 32
             durations_len: u64,
             durations: [DurationInState; self.durations_len],
+            first_time: i64,
+            last_time: i64,
+            first_state: u32,
+            last_state: u32,  // first/last state are idx into durations, keep together for alignment
             states: [u8; self.states_len],
         }
     }
 
     impl StateAgg<'_> {
-        pub fn new(states: String, durations: Vec<DurationInState>) -> Self {
+        pub(super) fn new(
+            states: String,
+            durations: Vec<DurationInState>,
+            first: Option<Record>,
+            last: Option<Record>,
+        ) -> Self {
+            assert!(
+                (durations.is_empty() && first.is_none() && last.is_none())
+                    || (!durations.is_empty() && first.is_some() && last.is_some())
+            );
             let states_len = states.len() as u64;
             let durations_len = durations.len() as u64;
+            let mut first_state = durations.len();
+            let mut last_state = durations.len();
+            if !durations.is_empty() {
+                for (i, d) in durations.iter().enumerate() {
+                    let s = states
+                        .get(d.state_beg as usize..d.state_end as usize)
+                        .unwrap();
+                    if s.eq(&first.as_ref().unwrap().state) {
+                        first_state = i;
+                        if last_state < durations.len() {
+                            break;
+                        }
+                    }
+                    if s.eq(&last.as_ref().unwrap().state) {
+                        last_state = i;
+                        if first_state < durations.len() {
+                            break;
+                        }
+                    }
+                }
+                assert!(first_state < durations.len() && last_state < durations.len());
+            }
             unsafe {
                 flatten!(StateAgg {
                     states_len,
                     states: states.into_bytes().into(),
                     durations_len,
                     durations: (&*durations).into(),
+                    first_time: first.map_or(0, |s| s.time),
+                    last_time: last.map_or(0, |s| s.time),
+                    first_state: first_state as u32,
+                    last_state: last_state as u32,
                 })
             }
         }
@@ -120,7 +159,8 @@ impl toolkit_experimental::state_agg {
         state.map(|s| {
             let mut states = String::new();
             let mut durations: Vec<DurationInState> = vec![];
-            for (state, duration) in s.drain_to_duration_map() {
+            let (map, first, last) = s.drain_to_duration_map_and_bounds();
+            for (state, duration) in map {
                 let state_beg = states.len() as u32;
                 let state_end = state_beg + state.len() as u32;
                 states.push_str(&state);
@@ -130,7 +170,7 @@ impl toolkit_experimental::state_agg {
                     state_end,
                 });
             }
-            StateAgg::new(states, durations)
+            StateAgg::new(states, durations, first, last)
         })
     }
 }
@@ -154,8 +194,14 @@ impl StateAggTransState {
         self.records.append(&mut other.records)
     }
 
-    /// Drain accumulated state, sort, and return map of states to durations.
-    fn drain_to_duration_map(&mut self) -> std::collections::HashMap<String, i64> {
+    /// Drain accumulated state, sort, and return tuple of map of states to durations along with first and last record.
+    fn drain_to_duration_map_and_bounds(
+        &mut self,
+    ) -> (
+        std::collections::HashMap<String, i64>,
+        Option<Record>,
+        Option<Record>,
+    ) {
         self.records.sort_by(|a, b| {
             if a.time == b.time {
                 // TODO JOSH do we care about instantaneous state changes?
@@ -172,12 +218,16 @@ impl StateAggTransState {
                 a.time.cmp(&b.time)
             }
         });
+        let (first, last) = (self.records.first(), self.records.last());
+        let first = first.map(|x| x.clone());
+        let last = last.map(|x| x.clone());
         let mut duration_state = DurationState::new();
         for record in self.records.drain(..) {
             duration_state.handle_record(record.state, record.time);
         }
+        duration_state.finalize();
         // TODO BRIAN sort this by decreasing duration will make it easier to implement a TopN states
-        duration_state.durations
+        (duration_state.durations, first, last)
     }
 }
 
@@ -256,6 +306,17 @@ impl DurationState {
                         *duration = new_duration;
                     }
                 }
+            }
+        }
+    }
+
+    // It's possible that our last seen state was unique, in which case we'll have to
+    // add a 0 duration entry so that we can handle rollup and interpolation calls
+    fn finalize(&mut self) {
+        if self.last_state.is_some() {
+            let (last_state, _) = self.last_state.take().unwrap();
+            if !self.durations.contains_key(&last_state) {
+                self.durations.insert(last_state, 0);
             }
         }
     }

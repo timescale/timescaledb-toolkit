@@ -1,21 +1,11 @@
 name: Clippy
 on:
   pull_request:
-    paths-ignore:
-    - '**/Dockerfile'
-    - '**.md'
-    - '**.txt'
-    - '**.yml'
   push:
     branches:
     - main
     - staging
     - trying
-    paths-ignore:
-    - '**/Dockerfile'
-    - '**.md'
-    - '**.txt'
-    - '**.yml'
   schedule:
     # we build at 8am UTC, 3am Eastern, midnight Pacific
     - cron:  '0 8 * * 1-4'

@@ -31,12 +31,21 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v2
       with:
-        ref: ${{ github.event.pull_request.head.sha }}
+        fetch-depth: 0
+
+    - name: Get specific changed files
+      id: changed-files-specific
+      uses: tj-actions/changed-files@v23
+      with:
+        files: |
+          **/*.rs
 
     - name: chown Repository
+      if: steps.changed-files-specific.outputs.any_changed == 'true'
       run: chown -R postgres .
 
     - name: Cache cargo directories
+      if: steps.changed-files-specific.outputs.any_changed == 'true'
       uses: actions/cache@v2
       with:
         path: |
@@ -46,6 +55,7 @@ jobs:
         restore-keys: ${{ runner.os }}-clippy-cargo-PREVIOUS
 
     - name: Cache cargo target dir
+      if: steps.changed-files-specific.outputs.any_changed == 'true'
       uses: actions/cache@v2
       with:
         path: target
@@ -53,6 +63,7 @@ jobs:
         restore-keys: ${{ runner.os }}-clippy-target-PREVIOUS
 
     - name: Run Clippy
+      if: steps.changed-files-specific.outputs.any_changed == 'true'
       # Github captures stdout and stderr separately and then intermingles them
       # in the wrong order.  We don't actually care to distinguish, so redirect
       # stderr to stdout so we get the proper order.

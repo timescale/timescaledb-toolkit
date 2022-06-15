@@ -59,6 +59,13 @@ pub fn hyperloglog_trans_inner(
                     //      ints? floats? uuids? other primitive types?
                     let size: usize = size.try_into().unwrap();
                     let b = size.checked_next_power_of_two().unwrap().trailing_zeros();
+
+                    if !(4..=18).contains(&b) {
+                        error!("Invalid value for size {}. \
+                            Size must be between 16 and 262144, \
+                            though less than 1024 not recommended", size)
+                    }
+
                     let typ = pgx::get_getarg_type(fc, 2);
                     let collation = get_collation(fc);
                     let hasher = DatumHashBuilder::from_type_id(typ, collation);
@@ -673,6 +680,68 @@ mod tests {
         })
     }
 
+
+    // FIXME these tests don't run on CI
+    // #[pg_test(error = "Invalid value for size 2. Size must be between 16 and 262144, though less than 1024 not recommended")]
+    // fn test_hll_error_too_small() {
+    //     Spi::execute(|client| {
+    //         let output = client
+    //             .select(
+    //                 "SELECT hyperloglog(2, 'foo'::text)::TEXT",
+    //                 None,
+    //                 None,
+    //             )
+    //             .first()
+    //             .get_one::<String>();
+    //         assert_eq!(output, None)
+    //     })
+    // }
+
+    #[pg_test]
+    fn test_hll_size_min() {
+        Spi::execute(|client| {
+            let output = client
+                .select(
+                    "SELECT hyperloglog(16, 'foo'::text)::TEXT",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>();
+            assert!(output.is_some())
+        })
+    }
+
+    #[pg_test]
+    fn test_hll_size_max() {
+        Spi::execute(|client| {
+            let output = client
+                .select(
+                    "SELECT hyperloglog(262144, 'foo'::text)::TEXT",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>();
+            assert!(output.is_some())
+        })
+    }
+
+    // FIXME these tests don't run on CI
+    // #[pg_test(error = "Invalid value for size 262145. Size must be between 16 and 262144, though less than 1024 not recommended")]
+    // fn test_hll_error_too_large() {
+    //     Spi::execute(|client| {
+    //         let output = client
+    //             .select(
+    //                 "SELECT hyperloglog(262145, 'foo'::text)::TEXT",
+    //                 None,
+    //                 None,
+    //             )
+    //             .first()
+    //             .get_one::<String>();
+    //         assert_eq!(output, None)
+    //     })
+    // }
 
     //TODO test continuous aggregates
 }

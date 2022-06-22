@@ -14,7 +14,7 @@ on:
 jobs:
   clippy:
     name: Clippy Test
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     container:
       image: timescaledev/rust-pgx:latest
       env:

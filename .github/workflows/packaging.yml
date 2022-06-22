@@ -10,7 +10,7 @@ jobs:
   package:
     env:
       GITHUB_TOKEN: ${{ secrets.API_TOKEN_GITHUB_PACKAGE }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - name: Set env
         run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV

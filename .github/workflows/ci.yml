@@ -14,7 +14,7 @@ on:
 jobs:
   testpostgres:
     name: Test Postgres
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     container:
       image: timescaledev/rust-pgx:latest
     strategy:
@@ -85,7 +85,7 @@ jobs:
 
   testcrates:
     name: Test Crates
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     container:
       image: timescaledev/rust-pgx:latest
       env:
@@ -126,7 +126,7 @@ jobs:
 
   testupdates:
     name: Test Updates
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     container:
       image: timescaledev/rust-pgx:latest
       env:

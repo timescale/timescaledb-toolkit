@@ -3,20 +3,21 @@
 #![allow(clippy::not_unsafe_ptr_arg_deref)]  // every function calling in_aggregate_context should be unsafe
 
 pub mod accessors;
-pub mod tdigest;
-pub mod hyperloglog;
-pub mod uddsketch;
-pub mod time_weighted_average;
 pub mod asap;
-pub mod lttb;
 pub mod counter_agg;
+pub mod forecast;
+pub mod frequency;
 pub mod gauge_agg;
+pub mod hyperloglog;
+pub mod lttb;
 pub mod range;
 pub mod state_aggregate;
 pub mod stats_agg;
-pub mod utilities;
+pub mod tdigest;
 pub mod time_vector;
-pub mod frequency;
+pub mod time_weighted_average;
+pub mod uddsketch;
+pub mod utilities;
 
 mod palloc;
 mod aggregate_utils;

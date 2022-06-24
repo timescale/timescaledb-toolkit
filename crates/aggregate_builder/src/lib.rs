@@ -671,6 +671,8 @@ impl AggregateFn {
             #state_type_check
             #return_type_check
 
+            // Sometimes we need to accept more parameters from users than clippy likes. ¯\_(ツ)_/¯
+            #[allow(clippy::too_many_arguments)]
             #[pgx::pg_extern(immutable, parallel_safe #schema)]
             pub fn #outer_ident(
                 #input_var: pgx::Internal,

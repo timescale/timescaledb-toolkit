@@ -6,6 +6,7 @@ members = [
     "crates/encodings",
     "crates/flat_serialize/flat_serialize_macro",
     "crates/flat_serialize/flat_serialize",
+    "crates/forecast",
     "crates/t-digest",
     "crates/hyperloglog",
     "crates/hyperloglogplusplus",

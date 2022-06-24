@@ -23,6 +23,7 @@ pgx-macros = "=0.4.5"
 encodings = {path="../crates/encodings"}
 flat_serialize = {path="../crates/flat_serialize/flat_serialize"}
 flat_serialize_macro = {path="../crates/flat_serialize/flat_serialize_macro"}
+forecast = {path="../crates/forecast"}
 tdigest = {path="../crates/t-digest"}
 hyperloglogplusplus = {path="../crates/hyperloglogplusplus"}
 uddsketch = {path="../crates/udd-sketch"}

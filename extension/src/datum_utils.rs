@@ -31,6 +31,23 @@ pub(crate) unsafe fn deep_copy_datum(datum: Datum, typoid: Oid) -> Datum {
     }
 }
 
+// TODO: is there a better place for this?
+// Note that this requires an reference time to deal with variable length intervals (days or months)
+pub fn interval_to_ms(ref_time: &crate::raw::TimestampTz, interval: &crate::raw::Interval) -> i64 {
+    extern "C" {
+        fn timestamptz_pl_interval(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
+    }
+    let bound = unsafe {
+        pg_sys::DirectFunctionCall2Coll(
+            Some(timestamptz_pl_interval),
+            pg_sys::InvalidOid,
+            ref_time.0,
+            interval.0,
+        )
+    };
+    bound as i64 - ref_time.0 as i64
+}
+
 pub struct TextSerializableDatumWriter {
     flinfo: pg_sys::FmgrInfo,
 }

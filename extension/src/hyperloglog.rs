@@ -38,13 +38,29 @@ pub fn hyperloglog_trans(
     fc: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     // let state: Internal = Internal::from_datum();
-    hyperloglog_trans_inner(unsafe{ state.to_inner() }, size, value, fc).internal()
+    hyperloglog_trans_inner(unsafe{ state.to_inner() }, size, value, fc,unsafe {pgx::get_getarg_type(fc, 2)}).internal()
 }
+
+const APPROX_COUNT_DISTINCT_DEFAULT_SIZE: i32 = 32678;
+
+/// Similar to hyperloglog_trans(), except size is set to a default of 32,678
+#[pg_extern(immutable, parallel_safe,schema = "toolkit_experimental")]
+pub fn approx_count_distinct_trans(
+    state: Internal,
+    // TODO we want to use crate::raw::AnyElement but it doesn't work for some reason...
+    value: Option<AnyElement>,
+    fc: pg_sys::FunctionCallInfo,
+) -> Option<Internal> {
+    // let state: Internal = Internal::from_datum();
+    hyperloglog_trans_inner(unsafe{ state.to_inner() }, APPROX_COUNT_DISTINCT_DEFAULT_SIZE, value, fc,unsafe {pgx::get_getarg_type(fc,1)}).internal()
+}
+
 pub fn hyperloglog_trans_inner(
     state: Option<Inner<HyperLogLogTrans>>,
     size: i32,
     value: Option<AnyElement>,
     fc: pg_sys::FunctionCallInfo,
+    arg_type: pg_sys::Oid
 ) -> Option<Inner<HyperLogLogTrans>> {
     unsafe {
         in_aggregate_context(fc, || {
@@ -66,7 +82,9 @@ pub fn hyperloglog_trans_inner(
                             though less than 1024 not recommended", size)
                     }
 
-                    let typ = pgx::get_getarg_type(fc, 2);
+                    // TODO check if 1 works and breaks hll
+                    // pass along the arg type this needs as a parameter since trhis is called by internal functions, call by 1 from my fuction and 2 from existing
+                    let typ = arg_type;
                     let collation = get_collation(fc);
                     let hasher = DatumHashBuilder::from_type_id(typ, collation);
                     let trans = HyperLogLogTrans {
@@ -177,6 +195,9 @@ mod toolkit_experimental {
 
 ron_inout_funcs!(HyperLogLog);
 
+// ron_inout_funcs!(ApproxCountDistinct);
+
+
 #[pg_extern(immutable, parallel_safe)]
 fn hyperloglog_final(
     state: Internal,
@@ -214,6 +235,22 @@ extension_sql!("\n\
 ",
 name = "hll_agg",
 requires = [hyperloglog_trans, hyperloglog_final, hyperloglog_combine, hyperloglog_serialize, hyperloglog_deserialize],
+);
+
+extension_sql!("\n\
+    CREATE AGGREGATE toolkit_experimental.approx_count_distinct(value AnyElement)\n\
+    (\n\
+        stype = internal,\n\
+        sfunc = toolkit_experimental.approx_count_distinct_trans,\n\
+        finalfunc = hyperloglog_final,\n\
+        combinefunc = hyperloglog_combine,\n\
+        serialfunc = hyperloglog_serialize,\n\
+        deserialfunc = hyperloglog_deserialize,\n\
+        parallel = safe\n\
+    );\n\
+",
+name = "approx_count_distinct_agg",
+requires = [approx_count_distinct_trans, hyperloglog_final, hyperloglog_combine, hyperloglog_serialize, hyperloglog_deserialize],
 );
 
 #[pg_extern(immutable, parallel_safe)]
@@ -435,6 +472,62 @@ mod tests {
                         hyperloglog(32, v::float)\
                     ), \
                     hyperloglog(32, v::float)->toolkit_experimental.distinct_count() \
+                    FROM generate_series(1, 100) v", None, None)
+                .first()
+                .get_two::<i32, i32>();
+            assert_eq!(count, Some(132));
+            assert_eq!(count, arrow_count);
+
+            let count2 = client
+                .select(
+                    &format!(
+                        "SELECT distinct_count('{}')",
+                        expected
+                    ),
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<i32>();
+            assert_eq!(count2, count);
+        });
+    }
+
+    #[pg_test]
+    // Should have same results as test_hll_distinct_aggregate running with 32 as the number of buckets
+    fn test_approx_count_distinct_aggregate() {
+        Spi::execute(|client| {
+            let text = client
+                .select(
+                    "SELECT \
+                        toolkit_experimental.approx_count_distinct(v::float)::TEXT \
+                        FROM generate_series(1, 10000) v",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>();
+
+            let expected = "(\
+                version:1,\
+                log:Dense(\
+                    element_type:FLOAT8,\
+                    collation:None,\
+                    precision:5,\
+                    registers:[\
+                        20,64,132,12,81,1,8,64,133,4,64,136,4,82,3,12,17,\
+                        65,24,32,197,16,32,132,255\
+                    ]\
+                )\
+            )";
+            assert_eq!(text.unwrap(), expected);
+
+            let (count, arrow_count) = client
+                .select("SELECT \
+                    distinct_count(\
+                        toolkit_experimental.approx_count_distinct(v::float)\
+                    ), \
+                    toolkit_experimental.approx_count_distinct(v::float)->toolkit_experimental.distinct_count() \
                     FROM generate_series(1, 100) v", None, None)
                 .first()
                 .get_two::<i32, i32>();

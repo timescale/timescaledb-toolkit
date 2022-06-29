@@ -18,6 +18,7 @@ pub mod utilities;
 pub mod time_vector;
 pub mod frequency;
 pub mod saturation;
+pub mod countminsketch;
 
 mod palloc;
 mod aggregate_utils;

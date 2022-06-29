@@ -31,6 +31,7 @@ stats_agg = {path="../crates/stats-agg"}
 time_weighted_average = {path="../crates/time-weighted-average"}
 tspoint = {path="../crates/tspoint"}
 asap = {path="../crates/asap"}
+countminsketch = {path="../crates/count-min-sketch"}
 
 aggregate_builder = {path="../crates/aggregate_builder"}
 

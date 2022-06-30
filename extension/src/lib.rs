@@ -17,6 +17,7 @@ pub mod stats_agg;
 pub mod utilities;
 pub mod time_vector;
 pub mod frequency;
+pub mod saturation;
 
 mod palloc;
 mod aggregate_utils;

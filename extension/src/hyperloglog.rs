@@ -82,8 +82,6 @@ pub fn hyperloglog_trans_inner(
                             though less than 1024 not recommended", size)
                     }
 
-                    // TODO check if 1 works and breaks hll
-                    // pass along the arg type this needs as a parameter since trhis is called by internal functions, call by 1 from my fuction and 2 from existing
                     let typ = arg_type;
                     let collation = get_collation(fc);
                     let hasher = DatumHashBuilder::from_type_id(typ, collation);
@@ -194,9 +192,6 @@ mod toolkit_experimental {
 }
 
 ron_inout_funcs!(HyperLogLog);
-
-// ron_inout_funcs!(ApproxCountDistinct);
-
 
 #[pg_extern(immutable, parallel_safe)]
 fn hyperloglog_final(

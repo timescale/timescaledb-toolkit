@@ -21,7 +21,7 @@ members = [
     "crates/stats-agg",
     "crates/aggregate_builder",
     "crates/scripting-utilities/*",
-
+    "crates/count-min-sketch",
 ]
 
 [profile.release]

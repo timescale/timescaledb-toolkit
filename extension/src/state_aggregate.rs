@@ -33,20 +33,74 @@ pub mod toolkit_experimental {
             states_len: u64, // TODO JOSH this and durations_len can be 32
             durations_len: u64,
             durations: [DurationInState; self.durations_len],
+            first_time: i64,
+            last_time: i64,
+            first_state: u32,
+            last_state: u32,  // first/last state are idx into durations, keep together for alignment
             states: [u8; self.states_len],
         }
     }
 
     impl StateAgg<'_> {
-        pub fn new(states: String, durations: Vec<DurationInState>) -> Self {
+        pub(super) fn new(
+            states: String,
+            durations: Vec<DurationInState>,
+            first: Option<Record>,
+            last: Option<Record>,
+        ) -> Self {
+            if durations.is_empty() {
+                assert!(first.is_none() && last.is_none() && states.is_empty());
+
+                return unsafe {
+                    flatten!(StateAgg {
+                        states_len: 0,
+                        states: Slice::Slice(&[]),
+                        durations_len: 0,
+                        durations: Slice::Slice(&[]),
+                        first_time: 0,
+                        last_time: 0,
+                        first_state: 0,
+                        last_state: 0,
+                    })
+                };
+            }
+
+            assert!(first.is_some() && last.is_some());
+            let first = first.unwrap();
+            let last = last.unwrap();
             let states_len = states.len() as u64;
             let durations_len = durations.len() as u64;
+            let mut first_state = durations.len();
+            let mut last_state = durations.len();
+
+            // Find first and last state
+            for (i, d) in durations.iter().enumerate() {
+                let s = &states[d.state_beg as usize..d.state_end as usize];
+                if s == first.state {
+                    first_state = i;
+                    if last_state < durations.len() {
+                        break;
+                    }
+                }
+                if s == last.state {
+                    last_state = i;
+                    if first_state < durations.len() {
+                        break;
+                    }
+                }
+            }
+            assert!(first_state < durations.len() && last_state < durations.len());
+                
             unsafe {
                 flatten!(StateAgg {
                     states_len,
                     states: states.into_bytes().into(),
                     durations_len,
                     durations: (&*durations).into(),
+                    first_time: first.time,
+                    last_time: last.time,
+                    first_state: first_state as u32,
+                    last_state: last_state as u32,
                 })
             }
         }
@@ -70,6 +124,85 @@ pub mod toolkit_experimental {
             let beg = record.state_beg as usize;
             let end = record.state_end as usize;
             &self.states_as_str()[beg..end]
+        }
+
+        pub(super) fn interpolate(
+            &self,
+            interval_start: i64,
+            interval_len: i64,
+            prev: Option<StateAgg>,
+            has_next: bool,
+        ) -> StateAgg {
+            if self.durations.is_empty() {
+                pgx::error!("unable to interpolate interval on state aggregate with no data");
+            }
+
+            let mut states = std::str::from_utf8(self.states.as_slice())
+                .unwrap()
+                .to_string();
+            let mut durations: Vec<DurationInState> =
+                self.durations.iter().collect();
+
+            let first = match prev 
+            {   
+                Some(prev) if interval_start < self.first_time => {
+                    if prev.last_state < prev.durations.len() as u32 {
+                        let start_interval = self.first_time - interval_start;
+                        let start_state =
+                            prev.state_str(&prev.durations.as_slice()[prev.last_state as usize]);
+                        match durations.iter_mut().find(|x| {
+                            states[x.state_beg as usize..x.state_end as usize].eq(start_state)
+                        }) {
+                            Some(dis) => dis.duration += start_interval,
+                            None => {
+                                durations.push(DurationInState {
+                                    duration: start_interval,
+                                    state_beg: states.len() as u32,
+                                    state_end: (states.len() + start_state.len() - 1) as u32,
+                                });
+                                states += start_state;
+                            }
+                        };
+
+                        Record {
+                            state: start_state.to_string(),
+                            time: interval_start,
+                        }
+                    } else {
+                        pgx::error!("unable to interpolate interval on state aggregate where previous agg has no data")
+                    }
+                },
+                _ => Record {
+                    state: self
+                        .state_str(&self.durations.as_slice()[self.first_state as usize])
+                        .to_string(),
+                    time: self.first_time,
+                }
+            };
+
+            let last = if interval_start + interval_len > self.last_time && has_next {
+                let last_interval = interval_start + interval_len - self.last_time;
+                match durations.get_mut(self.last_state as usize) {
+                    None => pgx::error!("poorly formed StateAgg, last_state out of starts"),
+                    Some(dis) => {
+                        dis.duration += last_interval;
+                        Record {
+                            state: states[dis.state_beg as usize..dis.state_end as usize]
+                                .to_string(),
+                            time: interval_start + interval_len,
+                        }
+                    }
+                }
+            } else {
+                Record {
+                    state: self
+                        .state_str(&self.durations.as_slice()[self.last_state as usize])
+                        .to_string(),
+                    time: self.last_time,
+                }
+            };
+
+            StateAgg::new(states, durations, Some(first), Some(last))
         }
     }
 
@@ -120,7 +253,8 @@ impl toolkit_experimental::state_agg {
         state.map(|s| {
             let mut states = String::new();
             let mut durations: Vec<DurationInState> = vec![];
-            for (state, duration) in s.drain_to_duration_map() {
+            let (map, first, last) = s.drain_to_duration_map_and_bounds();
+            for (state, duration) in map {
                 let state_beg = states.len() as u32;
                 let state_end = state_beg + state.len() as u32;
                 states.push_str(&state);
@@ -130,7 +264,7 @@ impl toolkit_experimental::state_agg {
                     state_end,
                 });
             }
-            StateAgg::new(states, durations)
+            StateAgg::new(states, durations, first, last)
         })
     }
 }
@@ -154,8 +288,14 @@ impl StateAggTransState {
         self.records.append(&mut other.records)
     }
 
-    /// Drain accumulated state, sort, and return map of states to durations.
-    fn drain_to_duration_map(&mut self) -> std::collections::HashMap<String, i64> {
+    /// Drain accumulated state, sort, and return tuple of map of states to durations along with first and last record.
+    fn drain_to_duration_map_and_bounds(
+        &mut self,
+    ) -> (
+        std::collections::HashMap<String, i64>,
+        Option<Record>,
+        Option<Record>,
+    ) {
         self.records.sort_by(|a, b| {
             if a.time == b.time {
                 // TODO JOSH do we care about instantaneous state changes?
@@ -172,12 +312,16 @@ impl StateAggTransState {
                 a.time.cmp(&b.time)
             }
         });
+        let (first, last) = (self.records.first(), self.records.last());
+        let first = first.cloned();
+        let last = last.cloned();
         let mut duration_state = DurationState::new();
         for record in self.records.drain(..) {
             duration_state.handle_record(record.state, record.time);
         }
+        duration_state.finalize();
         // TODO BRIAN sort this by decreasing duration will make it easier to implement a TopN states
-        duration_state.durations
+        (duration_state.durations, first, last)
     }
 }
 
@@ -206,6 +350,29 @@ pub fn duration_in(state: String, aggregate: Option<StateAgg>) -> crate::raw::In
     let function_args = vec![Some(interval as pg_sys::Datum)];
     unsafe { pgx::direct_function_call(pg_sys::interval_justify_hours, function_args) }
         .expect("interval_justify_hours does not return None")
+}
+
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub fn interpolated_duration_in(
+    state: String,
+    aggregate: Option<StateAgg>,
+    start: TimestampTz,
+    interval: crate::raw::Interval,
+    prev: Option<StateAgg>,
+    next: Option<StateAgg>,
+) -> crate::raw::Interval {
+    match aggregate {
+        None => pgx::error!("when interpolating data between grouped data, all groups must contain some data"),
+        Some(aggregate) => {
+            let interval = crate::datum_utils::interval_to_ms(&start, &interval);
+            duration_in(
+                state,
+                Some(
+                    aggregate.interpolate(start.into(), interval, prev, next.is_some()),
+                )
+            )
+        }
+    }
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
@@ -257,6 +424,14 @@ impl DurationState {
                     }
                 }
             }
+        }
+    }
+
+    // It's possible that our last seen state was unique, in which case we'll have to
+    // add a 0 duration entry so that we can handle rollup and interpolation calls
+    fn finalize(&mut self) {
+        if let Some((last_state, _)) = self.last_state.take() {
+            self.durations.entry(last_state).or_insert(0); 
         }
     }
 }
@@ -610,6 +785,58 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
                 (Some("00:01:00"), Some("00:01:00"), Some("00:00:00"))
             );
         })
+    }
+
+    #[pg_test]
+    fn interpolated_duration() {
+        Spi::execute(|client| {
+            client.select(
+                "CREATE TABLE inttest(time TIMESTAMPTZ, state TEXT, bucket INT)",
+                None,
+                None,
+            );
+            client.select(
+                r#"INSERT INTO inttest VALUES
+                ('2020-1-1 10:00'::timestamptz, 'one', 1),
+                ('2020-1-1 12:00'::timestamptz, 'two', 1), 
+                ('2020-1-1 16:00'::timestamptz, 'three', 1), 
+                ('2020-1-2 2:00'::timestamptz, 'one', 2), 
+                ('2020-1-2 12:00'::timestamptz, 'two', 2), 
+                ('2020-1-2 20:00'::timestamptz, 'three', 2), 
+                ('2020-1-3 10:00'::timestamptz, 'one', 3), 
+                ('2020-1-3 12:00'::timestamptz, 'two', 3), 
+                ('2020-1-3 16:00'::timestamptz, 'three', 3)"#,
+                None,
+                None,
+            );
+
+            // Interpolate time spent in state "three" each day
+            let mut durations = client.select(
+                r#"SELECT
+                toolkit_experimental.interpolated_duration_in(
+                    'three', 
+                    agg, 
+                    '2019-12-31 0:00'::timestamptz + (bucket * '1 day'::interval), '1 day'::interval, 
+                    LAG(agg) OVER (ORDER BY bucket), 
+                    LEAD(agg) OVER (ORDER BY bucket)
+                )::TEXT FROM (
+                    SELECT bucket, toolkit_experimental.state_agg(time, state) as agg 
+                    FROM inttest 
+                    GROUP BY bucket
+                ) s
+                ORDER BY bucket"#,
+                None,
+                None,
+            );
+
+            // Day 1, in "three" from "16:00" to end of day
+            assert_eq!(durations.next().unwrap()[1].value(), Some("08:00:00"));
+            // Day 2, in "three" from start of day to "2:00" and "20:00" to end of day
+            assert_eq!(durations.next().unwrap()[1].value(), Some("06:00:00"));
+            // Day 3, in "three" from start of day to "10:00"; end in that state, but no following point
+            assert_eq!(durations.next().unwrap()[1].value(), Some("10:00:00"));
+            assert!(durations.next().is_none());
+        });
     }
 
     // TODO why doesn't this catch the error under github actions?

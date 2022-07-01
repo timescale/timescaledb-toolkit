@@ -38,6 +38,50 @@ impl<'input> TimeWeightSummary<'input> {
             w_sum: self.weighted_sum,
         }
     }
+
+    pub(super) fn interpolate(
+        &self,
+        interval_start: i64,
+        interval_len: i64,
+        prev: Option<TimeWeightSummary>,
+        next: Option<TimeWeightSummary>,
+    ) -> TimeWeightSummary<'static> {
+        assert!(interval_start <= self.first.ts && interval_start + interval_len >= self.last.ts);
+        let mut new_sum = self.weighted_sum;
+        let new_start = match prev {
+            Some(prev) if interval_start < self.first.ts => {
+                let new_start = 
+                    self.method
+                    .interpolate(prev.last, Some(self.first), interval_start)
+                    .expect("unable to interpolate start of interval");
+                new_sum += self.method.weighted_sum(new_start, self.first);
+                new_start
+            },
+            _ => self.first
+        };
+        let new_end = match next {
+            Some(next) if self.last.ts < interval_start + interval_len => {
+                let new_end = 
+                    self.method
+                    .interpolate(self.last, Some(next.first), interval_start + interval_len)
+                    .expect("unable to interpolate end of interval");
+                new_sum += self.method.weighted_sum(self.last, new_end);
+                new_end
+            },
+            _ => self.last
+        };
+
+        unsafe { 
+            crate::flatten!( 
+                TimeWeightSummary {
+                    first: new_start,
+                    last: new_end,
+                    weighted_sum: new_sum,
+                    method: self.method,
+                }
+            ) 
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
@@ -327,6 +371,25 @@ pub fn time_weighted_average_average(
     }
 }
 
+#[pg_extern(immutable, parallel_safe, name = "interpolated_average", schema = "toolkit_experimental")]
+pub fn time_weighted_average_interpolated_average(
+    tws: Option<TimeWeightSummary>,
+    start: crate::raw::TimestampTz,
+    interval: crate::raw::Interval,
+    prev: Option<TimeWeightSummary>,
+    next: Option<TimeWeightSummary>,
+) -> Option<f64> {
+    let target = match tws {
+        None => None,
+        Some(tws) => {
+            let interval = crate::datum_utils::interval_to_ms(&start, &interval);
+            Some(tws.interpolate(start.into(), interval, prev, next))
+        }
+    };
+
+    time_weighted_average_average(target)
+}
+
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
@@ -508,5 +571,65 @@ mod tests {
             control.combine_summaries();  // Serialized form is always combined
             assert_eq!(&*new_state, &*control);
         }
+    }
+
+    #[pg_test]
+    fn test_time_weight_interpolation() {
+        Spi::execute(|client| {
+            client.select(
+                "CREATE TABLE test(time timestamptz, value double precision, bucket timestamptz)",
+                None,
+                None,
+            );
+            client.select(
+                r#"INSERT INTO test VALUES
+                ('2020-1-1 8:00'::timestamptz, 10.0, '2020-1-1'::timestamptz),
+                ('2020-1-1 12:00'::timestamptz, 40.0, '2020-1-1'::timestamptz),
+                ('2020-1-1 16:00'::timestamptz, 20.0, '2020-1-1'::timestamptz),
+                ('2020-1-2 2:00'::timestamptz, 15.0, '2020-1-2'::timestamptz),
+                ('2020-1-2 12:00'::timestamptz, 50.0, '2020-1-2'::timestamptz),
+                ('2020-1-2 20:00'::timestamptz, 25.0, '2020-1-2'::timestamptz),
+                ('2020-1-3 10:00'::timestamptz, 30.0, '2020-1-3'::timestamptz),
+                ('2020-1-3 12:00'::timestamptz, 0.0, '2020-1-3'::timestamptz), 
+                ('2020-1-3 16:00'::timestamptz, 35.0, '2020-1-3'::timestamptz)"#,
+                None,
+                None,
+            );
+
+            let mut averages = client.select(
+                r#"SELECT
+                toolkit_experimental.interpolated_average(
+                    agg,
+                    bucket,
+                    '1 day'::interval, 
+                    LAG(agg) OVER (ORDER BY bucket), 
+                    LEAD(agg) OVER (ORDER BY bucket)
+                ) FROM (
+                    SELECT bucket, time_weight('LOCF', time, value) as agg 
+                    FROM test 
+                    GROUP BY bucket
+                ) s
+                ORDER BY bucket"#,
+                None,
+                None,
+            );
+
+            // Day 1, 4 hours @ 10, 4 @ 40, 8 @ 20
+            assert_eq!(
+                averages.next().unwrap()[1].value(), 
+                Some((4. * 10. + 4. * 40. + 8. * 20.) / 16.)
+            );
+            // Day 2, 2 hours @ 20, 10 @ 15, 8 @ 50, 4 @ 25
+            assert_eq!(
+                averages.next().unwrap()[1].value(), 
+                Some((2. * 20. + 10. * 15. + 8. * 50. + 4. * 25.) / 24.)
+            );
+            // Day 3, 10 hours @ 25, 2 @ 30, 4 @ 0
+            assert_eq!(
+                averages.next().unwrap()[1].value(), 
+                Some((10. * 25. + 2. * 30.) / 16.)
+            );
+            assert!(averages.next().is_none());
+        });
     }
 }

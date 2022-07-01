@@ -58,4 +58,5 @@ SELECT state, duration FROM toolkit_experimental.into_values(
  ERROR |   3000000
  OK    | 106000000
  START |  11000000
+ STOP  |         0
 ```

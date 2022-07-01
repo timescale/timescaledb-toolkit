@@ -44,6 +44,53 @@ mod toolkit_experimental {
         }
     }
 
+    impl<'input> GaugeSummary<'input> {
+        pub(super) fn interpolate(
+            &self,
+            interval_start: i64,
+            interval_len: i64,
+            prev: Option<GaugeSummary>,
+            next: Option<GaugeSummary>,
+        ) -> GaugeSummary<'static> {
+            let this = MetricSummary::from(self.clone());
+            let prev = prev.map(MetricSummary::from);
+            let next = next.map(MetricSummary::from);
+    
+            let prev = prev.map(|summary| 
+                time_weighted_average::TimeWeightMethod::Linear
+                .interpolate(summary.last, Some(this.first), interval_start)
+                .expect("unable to interpolate lower bound")
+            );
+
+            let next = next.map(|summary| 
+                time_weighted_average::TimeWeightMethod::Linear
+                .interpolate(this.last, Some(summary.first), interval_start + interval_len)
+                .expect("unable to interpolate upper bound")
+            );
+
+            let builder = prev.map(|pt| GaugeSummaryBuilder::new(&pt, None));
+            let mut builder = builder.map_or_else(
+                || {
+                    let mut summary = this.clone();
+                    summary.bounds = None;
+                    summary.into()
+                },
+                |mut builder| {
+                    builder
+                        .combine(&this)
+                        .expect("unable to add data to interpolation");
+                    builder
+                }
+            );
+            
+            if let Some(next) = next {
+                builder.add_point(&next).expect("unable to add final interpolated point");
+            }
+    
+            builder.build().into()
+        }
+    }
+
     ron_inout_funcs!(GaugeSummary);
 
     // hack to allow us to qualify names with "toolkit_experimental"
@@ -499,6 +546,21 @@ fn extrapolated_delta(summary: GaugeSummary) -> Option<f64> {
     MetricSummary::from(summary).prometheus_delta().unwrap()
 }
 
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+fn interpolated_delta(
+    summary: GaugeSummary,
+    start: crate::raw::TimestampTz,
+    interval: crate::raw::Interval,
+    prev: Option<GaugeSummary>,
+    next: Option<GaugeSummary>,
+)-> f64 {
+    let interval = crate::datum_utils::interval_to_ms(&start, &interval);
+    MetricSummary::from(
+        summary.interpolate(start.into(), interval, prev, next)
+    )
+        .delta()
+}
+
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 fn arrow_extrapolated_rate(
@@ -511,6 +573,21 @@ fn arrow_extrapolated_rate(
 #[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
 fn extrapolated_rate(summary: GaugeSummary) -> Option<f64> {
     MetricSummary::from(summary).prometheus_rate().unwrap()
+}
+
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+fn interpolated_rate(
+    summary: GaugeSummary,
+    start: crate::raw::TimestampTz,
+    interval: crate::raw::Interval,
+    prev: Option<GaugeSummary>,
+    next: Option<GaugeSummary>,
+)-> Option<f64> {
+    let interval = crate::datum_utils::interval_to_ms(&start, &interval);
+    MetricSummary::from(
+        summary.interpolate(start.into(), interval, prev, next)
+    )
+        .rate()
 }
 
 #[pg_operator(immutable, parallel_safe)]
@@ -878,6 +955,99 @@ mod tests {
             let stmt = "WITH t as (SELECT date_trunc('minute', ts), toolkit_experimental.gauge_agg(ts, val) as agg FROM test group by 1 ) SELECT toolkit_experimental.rollup(agg) FROM t";
             let b = select_one!(client, stmt, GaugeSummary);
             assert_close_enough(&a.into(), &b.into());
+        });
+    }
+
+    #[pg_test]
+    fn gauge_agg_interpolation() {
+        Spi::execute(|client| {
+            client.select(
+                "CREATE TABLE test(time timestamptz, value double precision, bucket timestamptz)",
+                None,
+                None,
+            );
+            client.select(
+                r#"INSERT INTO test VALUES
+                ('2020-1-1 10:00'::timestamptz, 10.0, '2020-1-1'::timestamptz),
+                ('2020-1-1 12:00'::timestamptz, 40.0, '2020-1-1'::timestamptz),
+                ('2020-1-1 16:00'::timestamptz, 20.0, '2020-1-1'::timestamptz),
+                ('2020-1-2 2:00'::timestamptz, 15.0, '2020-1-2'::timestamptz),
+                ('2020-1-2 12:00'::timestamptz, 50.0, '2020-1-2'::timestamptz),
+                ('2020-1-2 20:00'::timestamptz, 25.0, '2020-1-2'::timestamptz),
+                ('2020-1-3 4:00'::timestamptz, 30.0, '2020-1-3'::timestamptz),
+                ('2020-1-3 12:00'::timestamptz, 0.0, '2020-1-3'::timestamptz), 
+                ('2020-1-3 16:00'::timestamptz, 35.0, '2020-1-3'::timestamptz)"#,
+                None,
+                None,
+            );
+
+            let mut deltas = client.select(
+                r#"SELECT
+                toolkit_experimental.interpolated_delta(
+                    agg,
+                    bucket,
+                    '1 day'::interval, 
+                    LAG(agg) OVER (ORDER BY bucket), 
+                    LEAD(agg) OVER (ORDER BY bucket)
+                ) FROM (
+                    SELECT bucket, toolkit_experimental.gauge_agg(time, value) as agg 
+                    FROM test 
+                    GROUP BY bucket
+                ) s
+                ORDER BY bucket"#,
+                None,
+                None,
+            );
+
+            // Day 1, start at 10, interpolated end of day is 16
+            assert_eq!(
+                deltas.next().unwrap()[1].value(), 
+                Some(16. - 10.)
+            );
+            // Day 2, interpolated start is 16, interpolated end is 27.5
+            assert_eq!(
+                deltas.next().unwrap()[1].value(), 
+                Some(27.5 - 16.)
+            );
+            // Day 3, interpolated start is 27.5, end is 35
+            assert_eq!(
+                deltas.next().unwrap()[1].value(), 
+                Some(35. - 27.5)
+            );
+
+            let mut rates = client.select(
+                r#"SELECT
+                toolkit_experimental.interpolated_rate(
+                    agg,
+                    bucket,
+                    '1 day'::interval, 
+                    LAG(agg) OVER (ORDER BY bucket), 
+                    LEAD(agg) OVER (ORDER BY bucket)
+                ) FROM (
+                    SELECT bucket, toolkit_experimental.gauge_agg(time, value) as agg 
+                    FROM test 
+                    GROUP BY bucket
+                ) s
+                ORDER BY bucket"#,
+                None,
+                None,
+            );
+
+            // Day 1, 14 hours (rate is per second)
+            assert_eq!(
+                rates.next().unwrap()[1].value(), 
+                Some((16. - 10.)/(14. * 60. * 60.))
+            );
+            // Day 2, 24 hours
+            assert_eq!(
+                rates.next().unwrap()[1].value(), 
+                Some((27.5 - 16.)/(24. * 60. * 60.))
+            );
+            // Day 3, 16 hours
+            assert_eq!(
+                rates.next().unwrap()[1].value(), 
+                Some((35. - 27.5)/(16. * 60. * 60.))
+            );
         });
     }
 

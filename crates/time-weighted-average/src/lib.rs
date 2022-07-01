@@ -192,7 +192,7 @@ impl TimeWeightSummary {
 }
 
 impl TimeWeightMethod {
-    fn interpolate(
+    pub fn interpolate(
         &self,
         first: TSPoint,
         second: Option<TSPoint>,
@@ -219,7 +219,7 @@ impl TimeWeightMethod {
         Ok(pt)
     }
 
-    fn weighted_sum(&self, first: TSPoint, second: TSPoint) -> f64 {
+    pub fn weighted_sum(&self, first: TSPoint, second: TSPoint) -> f64 {
         debug_assert!(second.ts > first.ts);
         let duration = (second.ts - first.ts) as f64;
         match self {

@@ -16,7 +16,9 @@ in this repository at [`docs`](https://github.com/timescale/timescaledb-toolkit/
 
 ## 🖥 Try It Out ##
 
-The extension comes pre-installed on all [Timescale Cloud](https://www.timescale.com/products#timescale-cloud) instances and also on our full-featured [`timescale/timescaledb-ha` docker image](https://hub.docker.com/r/timescale/timescaledb-ha). If DEB and RPM packages are a better fit for your situation, refer to the [documentation](https://docs.timescale.com/timescaledb/latest/how-to-guides/hyperfunctions/install-toolkit/#install-toolkit-on-self-hosted-timescaledb) for install and update.
+The extension comes pre-installed on all [Timescale Cloud](https://www.timescale.com/products#timescale-cloud) instances and also on our full-featured [`timescale/timescaledb-ha` docker image](https://hub.docker.com/r/timescale/timescaledb-ha). 
+
+If DEB and RPM packages are a better fit for your situation, refer to the [Install Toolkit on self-hosted TimescaleDB](https://docs.timescale.com/timescaledb/latest/how-to-guides/hyperfunctions/install-toolkit/#install-toolkit-on-self-hosted-timescaledb) how-to guide for further instructions on installing the extension via your package manager.
 
 All versions of the extension contain experimental features in the `toolkit_experimental` schema. See [our docs section on experimental features](/docs/README.md#tag-notes) for more details.
 

@@ -16,10 +16,9 @@ in this repository at [`docs`](https://github.com/timescale/timescaledb-toolkit/
 
 ## 🖥 Try It Out ##
 
-The extension comes pre-installed on all [Timescale Cloud](https://www.timescale.com/products#timescale-cloud) instances and also on our full-featured [`timescale/timescaledb-ha` docker image](https://hub.docker.com/r/timescale/timescaledb-ha).
+The extension comes pre-installed on all [Timescale Cloud](https://www.timescale.com/products#timescale-cloud) instances and also on our full-featured [`timescale/timescaledb-ha` docker image](https://hub.docker.com/r/timescale/timescaledb-ha). If DEB and RPM packages are a better fit for your situation, refer to the [documentation](https://docs.timescale.com/timescaledb/latest/how-to-guides/hyperfunctions/install-toolkit/#install-toolkit-on-self-hosted-timescaledb) for install and update.
 
-All versions of the extension contain experimental features in the `toolkit_experimental`, schema see [our docs section on experimental features](/docs/README.md#tag-notes) for
-more details.
+All versions of the extension contain experimental features in the `toolkit_experimental` schema. See [our docs section on experimental features](/docs/README.md#tag-notes) for more details.
 
 ## 💿 Installing From Source ##
 
@@ -33,11 +32,11 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 and build tools, the postgres headers, in the preferred manner for your system. You may also need to install OpenSSl.
 For Ubuntu you can follow the [postgres install instructions](https://www.postgresql.org/download/linux/ubuntu/) then run
 ```bash
-sudo apt-get install make gcc pkg-config clang postgresql-server-dev-13 libssl-dev
+sudo apt-get install make gcc pkg-config clang postgresql-server-dev-14 libssl-dev
 ```
 and finally, [pgx](https://github.com/tcdi/pgx), which can be installed with
 ```bash
-cargo install --version '=0.4.5' cargo-pgx && cargo pgx init --pg13 pg_config
+cargo install --version '=0.4.5' cargo-pgx && cargo pgx init --pg14 pg_config
 ```
 
 Installing from source is also available on macOS and requires the same set of prerequisites and set up commands listed above.
@@ -86,7 +85,7 @@ cargo pgx test ${postgres_version}
 **distributed time-series database built on PostgreSQL** that scales to
 over 10 million of metrics per second, supports native compression,
 handles high cardinality, and offers native time-series capabilities,
-such as data-retention policies, continuous aggregate views,
+such as data retention policies, continuous aggregate views,
 downsampling, data gap-filling and interpolation.
 
 TimescaleDB also supports full SQL, a variety of data types (numerics,
@@ -95,5 +94,5 @@ capabilities include high availability, streaming backups, upgrades over
 time, roles and permissions, and security.
 
 TimescaleDB has a **large and active user community** (tens of millions
-of downloads, hundreds of thousands of active deployments, Slack channel
+of downloads, hundreds of thousands of active deployments, Slack channels
 with thousands of members).

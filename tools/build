@@ -139,10 +139,7 @@ while [ $# -gt 0 ]; do
             find_pg_config
             (
                 export CARGO_TARGET_DIR="$top_CARGO_TARGET_DIR"
-                $nop cargo pgx stop $pg
-                $nop cargo pgx start $pg
                 $nop cargo run --manifest-path tools/post-install/Cargo.toml "$pg_config"
-                $nop cargo run --manifest-path tools/testrunner/Cargo.toml -- -h localhost -p $pg_port
             )
             ;;
 

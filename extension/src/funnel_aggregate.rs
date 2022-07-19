@@ -169,6 +169,44 @@ impl FunnelAggTransState {
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub fn consecutive(
+    event1_name: String,
+    event2_name: String,
+    agg: FunnelAgg<'_>,
+) -> impl std::iter::Iterator<Item = Handle> + '_ {
+    // TODO Implement as Iterator rather than buffering results first.
+    let mut result = vec![];
+    struct Scratch {
+        hit: bool,
+        last_event_name: Option<String>,
+    }
+    let mut scratch = std::collections::HashMap::new();
+    for event in agg.events.iter() {
+        let scratch = scratch.entry(event.handle).or_insert(Scratch {
+            hit: false,
+            last_event_name: None,
+        });
+        if scratch.hit {
+            continue;
+        }
+        let name = agg.event_name(&event);
+        // First, check this event against event2_name if we already found event1.
+        if let Some(last_event_name) = &scratch.last_event_name {
+            if name == event2_name && last_event_name == &event1_name {
+                result.push(event.handle);
+                scratch.hit = true;
+                continue;
+            }
+        }
+        // Second, check this event against event1_name.  Second because we
+        // may be looking for two occurrences of the same event, in which case
+        // we need the last event1 time, not THIS one, for event2 checking.
+        scratch.last_event_name = Some(name.to_owned());
+    }
+    result.into_iter()
+}
+
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn within_interval(
     event1_name: String,
     event2_name: String,
@@ -207,7 +245,6 @@ pub fn within_interval(
         // we need the last event1 time, not THIS one, for event2 checking.
         if name == event1_name {
             scratch.last_event1_time = Some(event.time);
-            continue;
         }
     }
     result.into_iter()

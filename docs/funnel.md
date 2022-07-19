@@ -30,7 +30,13 @@ INSERT INTO funnel_test VALUES
 	('2020-01-03 00:00:00+00', 2, 'LOGIN'),
 	('2020-01-03 01:00:00+00', 2, 'SEARCH'),
 	('2020-01-03 01:30:00+00', 2, 'BUY'),
-	('2020-01-20 00:00:00+00', 2, 'LOGIN');
+	('2020-01-20 00:00:00+00', 2, 'LOGIN'),
+
+	('2020-02-01 01:00:00+00', 3, 'SEARCH'),
+	('2020-02-14 01:30:00+00', 3, 'BUY'),
+
+	('2020-02-15 00:00:00+00', 4, 'LOGIN'),
+	('2020-02-28 00:00:00+00', 4, 'LOGIN');
 ```
 
 ### within_interval
@@ -69,6 +75,47 @@ SELECT toolkit_experimental.within_interval(
 	       2
 ```
 
+### consecutive
+
+Looking for rows where events occur consecutively, e.g.
+- two LOGIN events in a row
+- BUY event immediately following SEARCH
+
+#### two LOGIN events in a row
+
+```SQL
+SELECT toolkit_experimental.consecutive(
+	'LOGIN', 'LOGIN',
+	toolkit_experimental.funnel_agg("user", event, time))
+	userid
+	FROM funnel_test
+	ORDER BY userid;
+```
+```output
+ userid
+--------
+      1
+	  4
+```
+
+#### BUY event immediately following SEARCH
+
+```SQL
+SELECT toolkit_experimental.consecutive(
+	'SEARCH', 'BUY',
+	toolkit_experimental.funnel_agg("user", event, time))
+	userid
+	FROM funnel_test
+	ORDER BY userid;
+```
+```output
+ userid
+--------
+	  1
+      2
+      3
+```
+
 ### into_values
 
 ```SQL
@@ -80,14 +127,18 @@ SELECT handle, event, time FROM
 ```output
  handle |  event | time
 --------+--------+------------------------
-      1 |  LOGIN | 2020-01-01 00:00:00+00
-      1 |  LOGIN | 2020-01-02 00:00:00+00
-      1 | SEARCH | 2020-01-02 01:00:00+00
-      1 |	 BUY | 2020-01-02 03:00:00+00
-      2 |  LOGIN | 2020-01-03 00:00:00+00
-      2 | SEARCH | 2020-01-03 01:00:00+00
-      2 |	 BUY | 2020-01-03 01:30:00+00
-      2 |  LOGIN | 2020-01-20 00:00:00+00
+	  1 |  LOGIN | 2020-01-01 00:00:00+00
+	  1 |  LOGIN | 2020-01-02 00:00:00+00
+	  1 | SEARCH | 2020-01-02 01:00:00+00
+	  1 |	 BUY | 2020-01-02 03:00:00+00
+	  2 |  LOGIN | 2020-01-03 00:00:00+00
+	  2 | SEARCH | 2020-01-03 01:00:00+00
+	  2 |	 BUY | 2020-01-03 01:30:00+00
+	  2 |  LOGIN | 2020-01-20 00:00:00+00
+	  3 | SEARCH | 2020-02-01 01:00:00+00
+	  3 |	 BUY | 2020-02-14 01:30:00+00
+	  4 |  LOGIN | 2020-02-15 00:00:00+00
+	  4 |  LOGIN | 2020-02-28 00:00:00+00
 ```
 
 ## Implementation
@@ -98,6 +149,8 @@ This is just an exploratory prototype.
 
 Time to implement a new function over `FunnelAggregate` is on the order of a
 week.  If `FunnelAggregate` is insufficient as is, time to implement goes up.
+
+Currently requires rows to appear ordered by time.
 
 ### Next steps
 

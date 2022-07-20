@@ -58,6 +58,28 @@ pub mod toolkit_experimental {
     }
 
     ron_inout_funcs!(FunnelAgg);
+
+    pg_type! {
+        #[derive(Debug)]
+        struct FunnelAgg2<'input> {
+            events_len: u64,
+            events: [FunnelEvent2; self.events_len],
+        }
+    }
+
+    impl FunnelAgg2<'_> {
+        pub fn new(events: Vec<FunnelEvent2>) -> Self {
+            let events_len = events.len() as u64;
+            unsafe {
+                flatten!(FunnelAgg2 {
+                    events_len,
+                    events: (&*events).into(),
+                })
+            }
+        }
+    }
+
+    ron_inout_funcs!(FunnelAgg2);
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize, FlatSerializable)]
@@ -314,4 +336,159 @@ impl<'a> StringPacker<'a> {
             }
         }
     }
+}
+
+use toolkit_experimental::FunnelAgg2;
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize, Serialize, FlatSerializable)]
+#[repr(C)]
+pub struct FunnelEvent2 {
+    time: i64,
+    handle: Handle,
+    id: i32,
+}
+
+#[aggregate]
+impl toolkit_experimental::funnel_agg2 {
+    type State = FunnelAgg2TransState;
+
+    const PARALLEL_SAFE: bool = true;
+
+    fn transition(
+        state: Option<State>,
+        #[sql_type("integer")] handle: Handle,
+        #[sql_type("integer")] event: Option<i32>,
+        #[sql_type("timestamptz")] ts: TimestampTz,
+    ) -> Option<State> {
+        let event = match event {
+            None => return state,
+            Some(event) => event,
+        };
+        let mut state = state.unwrap_or_else(FunnelAgg2TransState::new);
+        state.record(handle, event, ts.into());
+        Some(state)
+    }
+
+    fn combine(a: Option<&State>, b: Option<&State>) -> Option<State> {
+        match (a, b) {
+            (None, None) => None,
+            (None, Some(only)) | (Some(only), None) => Some(only.clone()),
+            (Some(a), Some(b)) => {
+                let (mut a, mut b) = (a.clone(), b.clone());
+                a.append(&mut b);
+                Some(a)
+            }
+        }
+    }
+
+    fn serialize(state: &mut State) -> bytea {
+        crate::do_serialize!(state)
+    }
+
+    fn deserialize(bytes: bytea) -> State {
+        crate::do_deserialize!(bytes, FunnelAgg2TransState)
+    }
+
+    fn finally(state: Option<&mut State>) -> Option<FunnelAgg2<'static>> {
+        state.map(|s| {
+            let mut events = vec![];
+            {
+                let mut by_handle = std::collections::HashMap::new();
+                for event in s.drain(..) {
+                    let entry = by_handle.entry(event.handle).or_insert_with(Vec::new);
+                    entry.push((event.id, event.time));
+                }
+                for (handle, mut events_for_handle) in by_handle.drain() {
+                    for (id, time) in events_for_handle.drain(..) {
+                        events.push(FunnelEvent2 {
+                            handle,
+                            id,
+                            time,
+                            ..Default::default()
+                        });
+                    }
+                }
+            }
+            FunnelAgg2::new(events)
+        })
+    }
+}
+
+// Intermediate state kept in postgres.
+#[derive(Clone, Debug, Default, PartialEq, Deserialize, Serialize)]
+pub struct FunnelAgg2TransState {
+    events: Vec<TransEvent2>,
+}
+
+impl FunnelAgg2TransState {
+    fn new() -> Self {
+        Self { events: vec![] }
+    }
+
+    fn record(&mut self, handle: Handle, id: i32, time: i64) {
+        self.events.push(TransEvent2 { handle, id, time });
+    }
+
+    fn append(&mut self, other: &mut Self) {
+        self.events.append(&mut other.events)
+    }
+
+    fn drain<R: std::ops::RangeBounds<usize>>(&mut self, range: R) -> std::vec::Drain<TransEvent2> {
+        self.events.drain(range)
+    }
+}
+
+#[pg_extern(
+    immutable,
+    name = "within_interval",
+    parallel_safe,
+    schema = "toolkit_experimental"
+)]
+pub fn within_interval2(
+    event1_id: i32,
+    event2_id: i32,
+    interval: crate::raw::Interval,
+    agg: FunnelAgg2<'_>,
+) -> impl std::iter::Iterator<Item = Handle> + '_ {
+    // TODO Implement as Iterator rather than buffering results first.
+    let mut result = vec![];
+    struct Scratch {
+        hit: bool,
+        last_event1_time: Option<i64>,
+    }
+    let mut scratch = std::collections::HashMap::new();
+    for event in agg.events.iter() {
+        let scratch = scratch.entry(event.handle).or_insert(Scratch {
+            hit: false,
+            last_event1_time: None,
+        });
+        if scratch.hit {
+            continue;
+        }
+        // First, check this event against event2_id if we already found event1.
+        if let Some(last_event1_time) = scratch.last_event1_time {
+            if event.id == event2_id {
+                let interval_ms = interval_to_ms(&TimestampTz::from(last_event1_time), &interval);
+                if event.time - last_event1_time <= interval_ms {
+                    result.push(event.handle);
+                    scratch.hit = true;
+                    continue;
+                }
+            }
+        }
+        // Second, check this event against event1_id.  Second because we
+        // may be looking for two occurrences of the same event, in which case
+        // we need the last event1 time, not THIS one, for event2 checking.
+        if event.id == event1_id {
+            scratch.last_event1_time = Some(event.time);
+        }
+    }
+    result.into_iter()
+}
+
+#[derive(Clone, Debug, Default, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+struct TransEvent2 {
+    handle: Handle,
+    id: i32,
+    time: i64,
 }

@@ -225,7 +225,7 @@ event id rather than name.  See "Event id" under "Alternatives", below.
 
 How much burden is this on the user?  If they have a table like this:
 
-```SQL ,ignore
+```SQL ,non-transactional
 DROP TABLE IF EXISTS funnel_events;
 CREATE TABLE funnel_events(
 	"id" INTEGER,
@@ -239,16 +239,21 @@ A query like this seems to work (I didn't try it out all the way, just hacked
 what I had to accept `INTEGER` instead of `TEXT` with hard-coded result and
 that much at least worked!):
 
-```SQL ,ignore
+```SQL
 SELECT toolkit_experimental.within_interval(
 	(SELECT id FROM funnel_events WHERE name = 'LOGIN'),
 	(SELECT id FROM funnel_events WHERE name = 'LOGIN'),
 	'1 week',
-	toolkit_experimental.funnel_agg(
+	toolkit_experimental.funnel_agg2(
 		"user",
 		(SELECT id FROM funnel_events WHERE name = event),
 		time))
 	FROM funnel_test;
+```
+```output
+ within_interval
+-----------------
+               1
 ```
 
 If we're only looking at processing 1 million rows, we're only talking about

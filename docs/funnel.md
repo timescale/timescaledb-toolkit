@@ -226,3 +226,10 @@ If we're only looking at processing 1 million rows, we're only talking about
 savings of megabytes, which is probably not worth the effort nowadays.  But if
 we're talking about billions of rows and reducing 10s of gigabytes to only a
 few gigabytes, that starts to sound worth it.
+
+I implemented this and tracked the resident set size of this and the strings
+version of the program with 10 million rows of data and found the int form to
+consume only 20% the memory the strings form consumes:
+
+- 3136 MB for strings
+-  641 MB for ints

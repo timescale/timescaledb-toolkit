@@ -58,7 +58,7 @@ SELECT toolkit_experimental.within_interval(
 ```output
  within_interval
 -----------------
-	       1
+               1
 ```
 
 #### BUY event within one hour of SEARCH
@@ -72,7 +72,7 @@ SELECT toolkit_experimental.within_interval(
 ```output
  within_interval
 -----------------
-	       2
+               2
 ```
 
 ### consecutive
@@ -95,7 +95,7 @@ SELECT toolkit_experimental.consecutive(
  userid
 --------
       1
-	  4
+      4
 ```
 
 #### BUY event immediately following SEARCH
@@ -111,9 +111,38 @@ SELECT toolkit_experimental.consecutive(
 ```output
  userid
 --------
-	  1
+      1
       2
       3
+```
+
+### from David
+
+https://github.com/timescale/timescaledb-toolkit/pull/474#discussion_r925692902
+
+```SQL ,ignore
+CREATE MATERIALIZED VIEW funnels AS SELECT user, toolkit_experimental.funnel_agg(event, time) funnel
+FROM funnel_test
+GROUP BY user;
+
+-- Then we can search with the WHERE clause:
+
+SELECT * FROM funnels p
+
+WHERE funnel ? event('LOGIN') -> event('SEARCH', within => '1 hour'::interval)
+OR funnel ? event('LOGIN') -> event('LOGIN', within => '1 hour'::interval, consecutive => true);
+```
+
+Trying to inch my way toward this.  This works, but output is empty!  Huh?
+
+```SQL
+CREATE MATERIALIZED VIEW funnels AS SELECT user, toolkit_experimental.funnel_agg("user", event, time) funnel
+FROM funnel_test
+GROUP BY user;
+
+SELECT * FROM funnels;
+```
+```output
 ```
 
 ### into_values
@@ -127,18 +156,18 @@ SELECT handle, event, time FROM
 ```output
  handle |  event | time
 --------+--------+------------------------
-	  1 |  LOGIN | 2020-01-01 00:00:00+00
-	  1 |  LOGIN | 2020-01-02 00:00:00+00
-	  1 | SEARCH | 2020-01-02 01:00:00+00
-	  1 |	 BUY | 2020-01-02 03:00:00+00
-	  2 |  LOGIN | 2020-01-03 00:00:00+00
-	  2 | SEARCH | 2020-01-03 01:00:00+00
-	  2 |	 BUY | 2020-01-03 01:30:00+00
-	  2 |  LOGIN | 2020-01-20 00:00:00+00
-	  3 | SEARCH | 2020-02-01 01:00:00+00
-	  3 |	 BUY | 2020-02-14 01:30:00+00
-	  4 |  LOGIN | 2020-02-15 00:00:00+00
-	  4 |  LOGIN | 2020-02-28 00:00:00+00
+      1 |  LOGIN | 2020-01-01 00:00:00+00
+      1 |  LOGIN | 2020-01-02 00:00:00+00
+      1 | SEARCH | 2020-01-02 01:00:00+00
+      1 |    BUY | 2020-01-02 03:00:00+00
+      2 |  LOGIN | 2020-01-03 00:00:00+00
+      2 | SEARCH | 2020-01-03 01:00:00+00
+      2 |    BUY | 2020-01-03 01:30:00+00
+      2 |  LOGIN | 2020-01-20 00:00:00+00
+      3 | SEARCH | 2020-02-01 01:00:00+00
+      3 |    BUY | 2020-02-14 01:30:00+00
+      4 |  LOGIN | 2020-02-15 00:00:00+00
+      4 |  LOGIN | 2020-02-28 00:00:00+00
 ```
 
 ## Implementation

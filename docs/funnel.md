@@ -9,7 +9,7 @@ TODO
 
 ## Use cases
 
-TODO
+TODO - the examples below are just speculative.
 
 ### Test Data
 
@@ -39,15 +39,26 @@ INSERT INTO funnel_test VALUES
 	('2020-02-28 00:00:00+00', 4, 'LOGIN');
 ```
 
-### within_interval
+### two LOGIN events within one week
 
-Name is terrible, this is just a first test.
-
-Looking for rows where one event occurs within an interval of another, e.g.
-- two LOGIN events within one week
-- BUY event within one hour of SEARCH
-
-#### two LOGIN events within one week
+```SQL
+SELECT a.user
+FROM funnel_test AS a
+    JOIN funnel_test AS b
+    ON a.user = b.user
+WHERE
+    a.event = 'LOGIN'
+    AND b.event = 'LOGIN'
+    AND a.time <> b.time
+    AND a.time - b.time > '0 week'::interval
+    AND a.time - b.time < '1 week'::interval
+;
+```
+```output
+ userid
+--------
+      1
+```
 
 ```SQL
 SELECT toolkit_experimental.within_interval(
@@ -56,32 +67,34 @@ SELECT toolkit_experimental.within_interval(
 	FROM funnel_test;
 ```
 ```output
- within_interval
------------------
-               1
+ userid
+--------
+      1
 ```
 
-#### BUY event within one hour of SEARCH
+### two LOGIN events in a row
 
 ```SQL
-SELECT toolkit_experimental.within_interval(
-	'SEARCH', 'BUY', '1 hour',
-	toolkit_experimental.funnel_agg("user", event, time))
-	FROM funnel_test;
+WITH t AS (
+    SELECT *, row_number() OVER (PARTITION BY f.user ORDER BY time)
+    FROM funnel_test AS f
+)
+SELECT a.user
+FROM t AS a
+    JOIN t AS b ON a.user = b.user
+WHERE
+    a.event = 'LOGIN'
+    AND b.event = 'LOGIN'
+    AND a.row_number - b.row_number > 0
+    AND a.row_number - b.row_number <= 1
+;
 ```
 ```output
- within_interval
------------------
-               2
+ user
+------
+    1
+    4
 ```
-
-### consecutive
-
-Looking for rows where events occur consecutively, e.g.
-- two LOGIN events in a row
-- BUY event immediately following SEARCH
-
-#### two LOGIN events in a row
 
 ```SQL
 SELECT toolkit_experimental.consecutive(
@@ -98,7 +111,21 @@ SELECT toolkit_experimental.consecutive(
       4
 ```
 
-#### BUY event immediately following SEARCH
+### BUY event within one hour of SEARCH
+
+```SQL
+SELECT toolkit_experimental.within_interval(
+	'SEARCH', 'BUY', '1 hour',
+	toolkit_experimental.funnel_agg("user", event, time))
+	FROM funnel_test;
+```
+```output
+ within_interval
+-----------------
+               2
+```
+
+### BUY event immediately following SEARCH
 
 ```SQL
 SELECT toolkit_experimental.consecutive(

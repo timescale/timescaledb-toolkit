@@ -163,7 +163,7 @@ pub fn pipeline_stats_agg() -> toolkit_experimental::PipelineThenStatsAgg<'stati
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_stats_agg_support(input: Internal) -> Internal {
-    pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
+    pipeline_support_helper(input, |old_pipeline, new_element| {
         let new_element = PipelineThenStatsAgg::from_datum(new_element, false, 0).unwrap();
         finalize_with_stats_agg(old_pipeline, new_element)
             .into_datum()
@@ -257,7 +257,7 @@ pub fn finalize_with_sum<'e>(
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_sum_support(input: Internal) -> Internal {
-    pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
+    pipeline_support_helper(input, |old_pipeline, new_element| {
         let new_element = PipelineThenSum::from_datum(new_element, false, 0).unwrap();
         finalize_with_sum(old_pipeline, new_element)
             .into_datum()
@@ -347,7 +347,7 @@ pub fn finalize_with_average<'e>(
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_average_support(input: Internal) -> Internal {
-    pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
+    pipeline_support_helper(input, |old_pipeline, new_element| {
         let new_element = PipelineThenAverage::from_datum(new_element, false, 0).unwrap();
         finalize_with_average(old_pipeline, new_element)
             .into_datum()
@@ -434,7 +434,7 @@ pub fn finalize_with_num_vals<'e>(
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_num_vals_support(input: Internal) -> Internal {
-    pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
+    pipeline_support_helper(input, |old_pipeline, new_element| {
         let new_element = PipelineThenNumVals::from_datum(new_element, false, 0).unwrap();
         finalize_with_num_vals(old_pipeline, new_element)
             .into_datum()
@@ -517,7 +517,7 @@ pub fn pipeline_counter_agg() -> toolkit_experimental::PipelineThenCounterAgg<'s
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_counter_agg_support(input: Internal) -> Internal {
-    pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
+    pipeline_support_helper(input, |old_pipeline, new_element| {
         let new_element = PipelineThenCounterAgg::from_datum(new_element, false, 0).unwrap();
         finalize_with_counter_agg(old_pipeline, new_element)
             .into_datum()
@@ -600,7 +600,7 @@ pub fn pipeline_hyperloglog(size: i32) -> toolkit_experimental::PipelineThenHype
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_hyperloglog_support(input: Internal) -> Internal {
-    pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
+    pipeline_support_helper(input, |old_pipeline, new_element| {
         let new_element = PipelineThenHyperLogLog::from_datum(new_element, false, 0).unwrap();
         finalize_with_hyperloglog(old_pipeline, new_element)
             .into_datum()
@@ -673,7 +673,7 @@ pub fn pipeline_percentile_agg() -> toolkit_experimental::PipelineThenPercentile
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_percentile_agg_support(input: Internal) -> Internal {
-    pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
+    pipeline_support_helper(input, |old_pipeline, new_element| {
         let new_element = PipelineThenPercentileAgg::from_datum(new_element, false, 0).unwrap();
         finalize_with_percentile_agg(old_pipeline, new_element)
             .into_datum()

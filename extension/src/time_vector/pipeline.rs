@@ -168,7 +168,7 @@ pub fn arrow_add_unstable_element<'p>(
     name = "toolkit_pipeline_support"
 )]
 pub unsafe fn pipeline_support(input: Internal) -> Internal {
-    pipeline_support_helper(input, |old_pipeline, new_element| unsafe {
+    pipeline_support_helper(input, |old_pipeline, new_element| {
         let new_element = UnstableTimevectorPipeline::from_datum(new_element, false, 0).unwrap();
         arrow_add_unstable_element(old_pipeline, new_element)
             .into_datum()

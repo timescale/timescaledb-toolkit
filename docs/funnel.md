@@ -190,15 +190,15 @@ function (or functions).
 
 What use cases do we want to support?
 
-Is storing an `INTEGER` handle right for those?  I'm not sure what users need
-to join matching events with.  Examples above treat `handle` as a direct user
-id, but it could also be a session id which is joined with some other table to
-match to a user, class of user, etc.
+Is storing an `INTEGER` handle right for those?  No.  Aggregate should only
+cover event and time, with users (or sessions) coming from GROUP BY (see
+David's example above).  At that point this looks a lot like a timevector, and
+the duplication is a shame (but it only supports floats...).
 
 Which use case do we want to start with?
 
 `within_interval` is just off the top of epg's head.  What does a useful
-interface look like?
+interface look like?  David offered an idea above.
 
 ## Performance (aspirational)
 

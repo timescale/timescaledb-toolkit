@@ -14,12 +14,15 @@ on:
 jobs:
   testpostgres:
     name: Test Postgres
-    runs-on: ubuntu-20.04
+    runs-on: ${{ matrix.runner }}
     container:
       image: timescaledev/rust-pgx:latest
     strategy:
       matrix:
         pgversion: [12, 13, 14]
+        runner:
+          - ubuntu-20.04
+          - [self-hosted, Linux, ARM64]
     env:
       # Must keep in sync with `path: target` in cache entry below
       CARGO_TARGET_DIR_NAME: target

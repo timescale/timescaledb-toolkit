@@ -158,7 +158,7 @@ pub mod toolkit_experimental {
                                 durations.push(DurationInState {
                                     duration: start_interval,
                                     state_beg: states.len() as u32,
-                                    state_end: (states.len() + start_state.len() - 1) as u32,
+                                    state_end: (states.len() + start_state.len()) as u32,
                                 });
                                 states += start_state;
                             }
@@ -863,6 +863,45 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
                 None,
                 None,
             );
+        })
+    }
+
+    #[pg_test]
+    fn interpolate_introduces_state() {
+        Spi::execute(|client| {
+            client.select("CREATE TABLE states(time TIMESTAMPTZ, state TEXT, bucket INT)", None, None);
+            client.select(
+                r#"INSERT INTO states VALUES
+                ('1-1-2020 10:00', 'starting', 1),
+                ('1-1-2020 10:30', 'running', 1),
+                ('1-2-2020 16:00', 'error', 2),
+                ('1-3-2020 18:30', 'starting', 3),
+                ('1-3-2020 19:30', 'running', 3),
+                ('1-4-2020 12:00', 'stopping', 4)"#, 
+            None, None);
+
+            let mut durations = client.select(
+                r#"SELECT 
+                toolkit_experimental.interpolated_duration_in(
+                  'running',
+                  agg,
+                  '2019-12-31 0:00'::timestamptz + (bucket * '1 day'::interval), '1 day'::interval,
+                  LAG(agg) OVER (ORDER BY bucket),
+                  LEAD(agg) OVER (ORDER BY bucket)
+                )::TEXT FROM (
+                    SELECT bucket, toolkit_experimental.state_agg(time, state) as agg
+                    FROM states
+                    GROUP BY bucket
+                ) s
+                ORDER BY bucket"#,
+                None,
+                None,
+            );
+
+            assert_eq!(durations.next().unwrap()[1].value(), Some("13:30:00"));
+            assert_eq!(durations.next().unwrap()[1].value(), Some("16:00:00"));
+            assert_eq!(durations.next().unwrap()[1].value(), Some("04:30:00"));
+            assert_eq!(durations.next().unwrap()[1].value(), Some("12:00:00"));
         })
     }
 }

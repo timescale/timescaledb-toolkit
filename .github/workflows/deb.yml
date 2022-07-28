@@ -1,0 +1,77 @@
+name: Build Debian Packages
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release'
+        required: true
+      upload-artifacts:
+        description: 'Upload artifacts to PackageCloud'
+        required: false
+        default: false
+      
+jobs:
+  build-deb:
+    runs-on: ${{ matrix.runner }}
+    container:
+      image: timescaledev/rust-pgx:latest
+    strategy:
+      matrix:
+        pgversion: [12, 13, 14]
+        runner:
+          - ubuntu-18.04
+          - ubuntu-20.04
+          - ubuntu-22.04
+    env:
+      OUTDIR: target/release/timescaledb_toolkit-pg${{ pgversion }}
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v2
+        with:
+          ref: ${{ github.event.inputs.version }}
+
+      - name: Cache cargo directories
+        uses: actions/cache@v2
+        with:
+          path: |
+            /usr/local/cargo/registry
+            /usr/local/cargo/git
+          key: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-cargo-1.8
+          restore-keys: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-cargo-1.5
+
+      - name: Cache cargo target dir
+        uses: actions/cache@v2
+        with:
+          path: target
+          key: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-1.8
+          restore-keys: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-1.5
+
+      - name: Build the package files
+        run: |
+          cargo pgx package --manifest-path=extension/Cargo.toml --out-dir=$OUTDIR
+          cargo run --manifest-path=tools/post-install/Cargo.toml -- pg_config --dir=$OUTDIR
+
+      - name: Build Debian Package
+        id: package
+        uses: timescale/build-actions/build-deb@v1
+        with:
+          package: timescaledb_toolkit-pg${{ pgversion }}
+          version: ${{ github.event.inputs.version }}
+          arch: amd64
+          dependencies: postgresql-${{ pgversion }}
+          description: |
+            Library of analytical hyperfunctions, time-series
+            pipelining, and other SQL utilities, compatible with
+            TimescaleDB and PostgreSQL
+          tree: $OUTDIR
+          
+      - name: Upload Package to PackageCloud
+        if: ${{ github.event.inputs.upload-artifacts }}
+        env:
+          DISTRO: ${{ matrix.distro }}
+          NAME: ${{ matrix.name }}
+        uses: docker://lpenz/ghaction-packagecloud:0.4
+        with:
+          repository: timescale/timescaledb/$DISTRO/$NAME
+        env:
+          PACKAGECLOUD_TOKEN: ${{ secrets.PACKAGECLOUD_TOKEN }}

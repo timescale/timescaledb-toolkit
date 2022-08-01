@@ -5,7 +5,8 @@ use std::{
     process,
 };
 
-use clap::clap_app;
+use clap::Arg;
+use clap::Command;
 
 use colored::Colorize;
 
@@ -34,62 +35,204 @@ mod installer;
 mod testrunner;
 
 fn main() {
-    let matches = clap_app!(("update-tester") =>
-        (@arg HOST: -h --host [hostname] conflicts_with[URL] "postgres host")
-        (@arg PORT: -p --port [portnumber] conflicts_with[URL] "postgres port")
-        (@arg USER: -u --user [username] conflicts_with[URL] "postgres user")
-        (@arg PASSWORD: -a --password [password] conflicts_with[URL] "postgres password")
-        (@arg DB: -d --database [database] conflicts_with[URL] "postgres database the root \
-            connection should use. By default this DB will only be used \
-            to spawn the individual test databases; no tests will run against \
-            it.")
-        (@arg CACHE: -c --cache [cache_dir] "Directory in which to look-for/store \
-            old versions of the Toolkit.")
-        (@arg REINSTALL: --reinstall [versions] "comma-separated list of versions to force reinstall")
-        (@arg ROOT_DIR: +required <dir> "Path in which to find the timescaledb-toolkit repo")
-        (@arg PG_CONFIG: +required <pg_config> "Path to pg_config for the DB we are using")
-        (@arg CARGO_PGX: +required <cargo_pgx> "Path to cargo-pgx (must be 0.4 series or newer)")
-        (@arg CARGO_PGX_OLD: +required <cargo_pgx_old> "Path to cargo-pgx 0.2-0.3 series")
+    let matches = Command::new("update-tester")
+        .about("Update tester for toolkit releases")
+        .subcommand_required(true)
+        .arg_required_else_help(true)
+	.subcommand(
+            Command::new("full-update-test-source")
+            .long_flag("full-update-test-source")
+            .about("Run update-test, building toolkit from source unless a local cache is supplied")
+            .arg(
+                Arg::new("HOST")
+                    .short('h')
+                    .long("host")
+                    .takes_value(true)
+            )
+            .arg(
+                Arg::new("PORT")
+                    .short('p')
+                    .long("port")
+                    .takes_value(true)
+            )
+            .arg(
+                Arg::new("USER")
+                    .short('u')
+                    .long("user")
+                    .takes_value(true)
+            )
+            .arg(
+                Arg::new("PASSWORD")
+                    .short('a')
+                    .long("password")
+                    .takes_value(true)
+            )
+            .arg(
+                Arg::new("DB")
+                    .short('d')
+                    .long("database")
+                    .takes_value(true)
+            )
+            .arg(Arg::new("CACHE").short('c').long("cache").takes_value(true))
+            .arg(Arg::new("REINSTALL").long("reinstall").takes_value(true))
+            .arg(Arg::new("ROOT_DIR").takes_value(true))
+            .arg(Arg::new("PG_CONFIG").takes_value(true))
+            .arg(Arg::new("CARGO_PGX").takes_value(true))
+            .arg(Arg::new("CARGO_PGX_OLD").takes_value(true)),
     )
-    .get_matches();
+	.subcommand(
+	    Command::new("create-test-objects")
+            .long_flag("create-test-objects")
+            .about("Creates test objects in a db using the currently installed version of Toolkit")
+            .arg(
+                Arg::new("HOST")
+                    .short('h')
+                    .long("host")
+                    .takes_value(true)
+            )
+            .arg(
+                Arg::new("PORT")
+                    .short('p')
+                    .long("port")
+                    .takes_value(true)
+            )
+            .arg(
+                Arg::new("USER")
+                    .short('u')
+                    .long("user")
+                    .takes_value(true)
+            )
+            .arg(
+                Arg::new("PASSWORD")
+                    .short('a')
+                    .long("password")
+                    .takes_value(true)
+            )
+            .arg(
+                Arg::new("DB")
+                    .short('d')
+                    .long("database")
+                    .takes_value(true)
+            )
+	)
+	.subcommand(
+	    Command::new("validate-test-objects")
+            .long_flag("validate-test-objects")
+            .about("Runs a series of checks on the objects created by create-test-objects using the currently installed version of Toolkit")
+            .arg(
+                Arg::new("HOST")
+                    .short('h')
+                    .long("host")
+                    .takes_value(true)
+            )
+            .arg(
+                Arg::new("PORT")
+                    .short('p')
+                    .long("port")
+                    .takes_value(true)
+            )
+            .arg(
+                Arg::new("USER")
+                    .short('u')
+                    .long("user")
+                    .takes_value(true)
+            )
+            .arg(
+                Arg::new("PASSWORD")
+                    .short('a')
+                    .long("password")
+                    .takes_value(true)
+            )
+            .arg(
+                Arg::new("DB")
+                    .short('d')
+                    .long("database")
+                    .takes_value(true)
+            )
+	)
+// Mutates help, removing the short flag (-h) so that it can be used by HOST
+	.mut_arg("help", |_h| {
+      Arg::new("help")
+          .long("help")
+  })
+	.get_matches();
 
-    let connection_config = ConnectionConfig {
-        host: matches.value_of("HOST"),
-        port: matches.value_of("PORT"),
-        user: matches.value_of("USER"),
-        password: matches.value_of("PASSWORD"),
-        database: matches.value_of("DB"),
-    };
+    match matches.subcommand() {
+        Some(("full-update-test-source", full_update_matches)) => {
+            let connection_config = ConnectionConfig {
+                host: full_update_matches.value_of("HOST"),
+                port: full_update_matches.value_of("PORT"),
+                user: full_update_matches.value_of("USER"),
+                password: full_update_matches.value_of("PASSWORD"),
+                database: full_update_matches.value_of("DB"),
+            };
 
-    let cache_dir = matches.value_of("CACHE");
+            let cache_dir = full_update_matches.value_of("CACHE");
 
-    let root_dir = matches
-        .value_of("ROOT_DIR")
-        .expect("missing path to root of the toolkit repo");
+            let root_dir = full_update_matches
+                .value_of("ROOT_DIR")
+                .expect("missing path to root of the toolkit repo");
 
-    let reinstall = matches
-        .value_of("REINSTALL")
-        .map(|r| r.split_terminator(',').collect())
-        .unwrap_or_else(HashSet::new);
+            let reinstall = full_update_matches
+                .value_of("REINSTALL")
+                .map(|r| r.split_terminator(',').collect())
+                .unwrap_or_else(HashSet::new);
 
-    let pg_config = matches.value_of("PG_CONFIG").expect("missing pg_config");
-    let cargo_pgx = matches.value_of("CARGO_PGX").expect("missing cargo_pgx");
-    let cargo_pgx_old = matches
-        .value_of("CARGO_PGX_OLD")
-        .expect("missing cargo_pgx_old");
+            let pg_config = full_update_matches
+                .value_of("PG_CONFIG")
+                .expect("missing pg_config");
+            let cargo_pgx = full_update_matches
+                .value_of("CARGO_PGX")
+                .expect("missing cargo_pgx");
+            let cargo_pgx_old = full_update_matches
+                .value_of("CARGO_PGX_OLD")
+                .expect("missing cargo_pgx_old");
 
-    let res = try_main(
-        root_dir,
-        cache_dir,
-        &connection_config,
-        pg_config,
-        cargo_pgx,
-        cargo_pgx_old,
-        reinstall,
-    );
-    if let Err(err) = res {
-        eprintln!("{}", err);
-        process::exit(1);
+            let res = try_main(
+                root_dir,
+                cache_dir,
+                &connection_config,
+                pg_config,
+                cargo_pgx,
+                cargo_pgx_old,
+                reinstall,
+            );
+            if let Err(err) = res {
+                eprintln!("{}", err);
+                process::exit(1);
+            }
+        }
+        Some(("create-test-objects", create_test_object_matches)) => {
+            let connection_config = ConnectionConfig {
+                host: create_test_object_matches.value_of("HOST"),
+                port: create_test_object_matches.value_of("PORT"),
+                user: create_test_object_matches.value_of("USER"),
+                password: create_test_object_matches.value_of("PASSWORD"),
+                database: create_test_object_matches.value_of("DB"),
+            };
+
+            let res = try_create_objects(&connection_config);
+            if let Err(err) = res {
+                eprintln!("{}", err);
+                process::exit(1);
+            }
+        }
+        Some(("validate-test-objects", validate_test_object_matches)) => {
+            let connection_config = ConnectionConfig {
+                host: validate_test_object_matches.value_of("HOST"),
+                port: validate_test_object_matches.value_of("PORT"),
+                user: validate_test_object_matches.value_of("USER"),
+                password: validate_test_object_matches.value_of("PASSWORD"),
+                database: validate_test_object_matches.value_of("DB"),
+            };
+
+            let res = try_validate_objects(&connection_config);
+            if let Err(err) = res {
+                eprintln!("{}", err);
+                process::exit(1);
+            }
+        }
+        _ => unreachable!(), // if all subcommands are defined, anything else is unreachable
     }
 }
 
@@ -121,6 +264,15 @@ fn try_main(
     )?;
 
     testrunner::run_update_tests(db_conn, current_version, old_versions)
+}
+fn try_create_objects(db_conn: &ConnectionConfig<'_>) -> xshell::Result<()> {
+    testrunner::create_test_objects_for_package_testing(db_conn);
+    Ok(())
+}
+
+fn try_validate_objects(db_conn: &ConnectionConfig<'_>) -> xshell::Result<()> {
+    testrunner::update_to_and_validate_new_toolkit_version(db_conn);
+    Ok(())
 }
 
 fn get_version_info(root_dir: &str) -> xshell::Result<(String, Vec<String>)> {

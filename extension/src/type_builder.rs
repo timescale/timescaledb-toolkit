@@ -137,6 +137,7 @@ macro_rules! pg_type_impl {
             impl<$lifetemplate> [<$name Data>] $(<$inlife>)? {
                 #[allow(clippy::missing_safety_doc)]
                 pub unsafe fn flatten<'any>(&self) -> $name<'any> {
+                    use flat_serialize::FlatSerializable as _;
                     use $crate::type_builder::CachedDatum::Flattened;
                     // if we already have a CachedDatum::Flattened can just
                     // return it without re-flattening?
@@ -158,6 +159,7 @@ macro_rules! pg_type_impl {
 
                 pub fn to_pg_bytes(&self) -> &'static [u8] {
                     use std::{mem::MaybeUninit, slice};
+                    use flat_serialize::FlatSerializable as _;
                     unsafe {
                         let len = self.num_bytes();
                         // valena tyes have a maximum size
@@ -180,6 +182,7 @@ macro_rules! pg_type_impl {
                 where
                     Self: Sized,
                 {
+                    use flat_serialize::FlatSerializable as _;
                     if is_null {
                         return None;
                     }

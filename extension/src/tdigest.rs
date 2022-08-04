@@ -5,8 +5,6 @@ use serde::{Serialize, Deserialize};
 
 use pgx::*;
 
-use flat_serialize::*;
-
 use crate::{
     aggregate_utils::in_aggregate_context,
     ron_inout_funcs,

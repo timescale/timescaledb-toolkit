@@ -623,7 +623,6 @@ mod tests {
     use super::*;
     use crate::{build, palloc::Inner, pg_type, ron_inout_funcs};
     use aggregate_builder::*;
-    use flat_serialize::*;
     use pgx_macros::pg_test;
 
     #[pg_schema]

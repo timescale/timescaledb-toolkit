@@ -9,8 +9,6 @@ use serde::{Deserialize, Serialize};
 use pg_sys::{Datum, Oid};
 use pgx::*;
 
-use flat_serialize::*;
-
 use crate::{
     aggregate_utils::{get_collation, in_aggregate_context},
     datum_utils::DatumHashBuilder,

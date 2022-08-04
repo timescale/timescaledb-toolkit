@@ -6,7 +6,6 @@ use crate::{
     aggregate_utils::in_aggregate_context, flatten, ron_inout_funcs, palloc::{Internal, InternalAsValue, Inner, ToInternal}, pg_type,
     accessors::toolkit_experimental,
 };
-use flat_serialize::*;
 use pgx::*;
 
 use tspoint::TSPoint;

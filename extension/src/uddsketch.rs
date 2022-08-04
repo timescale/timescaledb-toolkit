@@ -1,8 +1,6 @@
 
 use pgx::*;
 
-use flat_serialize::*;
-
 use encodings::{delta, prefix_varint};
 
 use uddsketch::{SketchHashKey, UDDSketch as UddSketchInternal};

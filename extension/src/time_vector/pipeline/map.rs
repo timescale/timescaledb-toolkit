@@ -553,21 +553,6 @@ mod tests {
                 (ts:\"2020-01-03 00:00:00+00\",val:60)\
             ],null_val:[0])"
             );
-
-            let val = client
-                .select(
-                    "SELECT (timevector(time, value) ->> 'jan_3_x3')::TEXT FROM series",
-                    None,
-                    None,
-                )
-                .first()
-                .get_one::<String>();
-            assert_eq!(
-                val.unwrap(),
-                "(version:1,num_points:1,flags:1,internal_padding:(0,0,0),points:[\
-                (ts:\"2020-01-03 00:00:00+00\",val:60)\
-            ],null_val:[0])"
-            );
         });
     }
 
@@ -654,7 +639,7 @@ mod tests {
                 num_elements:1,\
                 elements:[\
                     MapSeries(\
-                        function:\"public.serier(toolkit_experimental.timevector)\"\
+                        function:\"public.serier(public.timevector)\"\
                     )\
                 ]\
             )";

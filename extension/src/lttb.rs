@@ -67,13 +67,13 @@ pub fn lttb_trans_inner(
 pub fn lttb_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
+) -> Option<Timevector<'static>> {
     lttb_final_inner(unsafe { state.to_inner() }, fcinfo)
 }
 pub fn lttb_final_inner(
     state: Option<Inner<LttbTrans>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
+) -> Option<Timevector<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let mut state = match state {
@@ -188,17 +188,17 @@ pub fn lttb(data: &[TSPoint], threshold: usize) -> Cow<'_, [TSPoint]> {
     parallel_safe
 )]
 pub fn lttb_on_timevector(
-    series: crate::time_vector::toolkit_experimental::Timevector<'static>,
+    series: Timevector<'static>,
     threshold: i32,
-) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
+) -> Option<Timevector<'static>> {
     lttb_ts(series, threshold as usize).into()
 }
 
 // based on https://github.com/jeromefroe/lttb-rs version 0.2.0
 pub fn lttb_ts(
-    data: crate::time_vector::toolkit_experimental::Timevector,
+    data: Timevector,
     threshold: usize,
-) -> crate::time_vector::toolkit_experimental::Timevector {
+) -> Timevector {
     if !data.is_sorted() {
         panic!("lttb requires sorted timevector");
     }
@@ -314,7 +314,7 @@ mod tests {
             client.select(
                 "INSERT INTO results1
                 SELECT time, value
-                FROM toolkit_experimental.unnest(
+                FROM unnest(
                     (SELECT toolkit_experimental.lttb(time, value, 100) FROM test)
                 );",
                 None,
@@ -329,9 +329,9 @@ mod tests {
             client.select(
                 "INSERT INTO results2
                 SELECT time, value
-                FROM toolkit_experimental.unnest(
+                FROM unnest(
                     (SELECT toolkit_experimental.lttb(
-                        (SELECT toolkit_experimental.timevector(time, value) FROM test), 100)
+                        (SELECT timevector(time, value) FROM test), 100)
                     )
                 );",
                 None,

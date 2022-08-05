@@ -21,8 +21,6 @@ use fill_to::{fill_to, FillToMethod};
 use delta::timevector_delta;
 use sort::sort_timevector;
 
-use map::{apply_to_series, check_user_function_type, map_series_element};
-
 pub use self::toolkit_experimental::*;
 use crate::serialization::PgProcId;
 
@@ -116,9 +114,9 @@ pub mod toolkit_experimental {
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_run_pipeline(
-    timevector: toolkit_experimental::Timevector,
+    timevector: Timevector,
     pipeline: toolkit_experimental::UnstableTimevectorPipeline,
-) -> toolkit_experimental::Timevector<'static> {
+) -> Timevector<'static> {
     run_pipeline_elements(timevector, pipeline.elements.iter()).in_current_context()
 }
 
@@ -288,89 +286,6 @@ ALTER FUNCTION "arrow_add_unstable_element" SUPPORT toolkit_experimental.toolkit
 "#,
     name = "pipe_support",
     requires = [pipeline_support],
-);
-
-#[pg_extern(stable, parallel_safe, schema = "toolkit_experimental")]
-pub fn run_user_pipeline_element(
-    timevector: toolkit_experimental::Timevector,
-    function: crate::raw::regproc,
-) -> toolkit_experimental::Timevector<'static> {
-    check_user_function_type(function.0.try_into().unwrap());
-    apply_to_series(timevector, function.0.try_into().unwrap()).in_current_context()
-}
-
-#[pg_extern(stable, parallel_safe, schema = "toolkit_experimental")]
-pub fn build_unstable_user_pipeline(
-    first: crate::raw::regproc,
-    second: crate::raw::regproc,
-) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
-    let elements: Vec<_> = vec![
-        map_series_element(first.0.try_into().unwrap()),
-        map_series_element(second.0.try_into().unwrap()),
-    ];
-    build! {
-        UnstableTimevectorPipeline {
-            num_elements: 2,
-            elements: elements.into(),
-        }
-    }
-}
-
-#[pg_extern(stable, parallel_safe, schema = "toolkit_experimental")]
-pub fn add_user_pipeline_element(
-    pipeline: toolkit_experimental::UnstableTimevectorPipeline,
-    function: crate::raw::regproc,
-) -> toolkit_experimental::UnstableTimevectorPipeline {
-    let elements: Vec<_> = pipeline
-        .elements
-        .iter()
-        .chain(Some(map_series_element(function.0.try_into().unwrap())))
-        .collect();
-    build! {
-        UnstableTimevectorPipeline {
-            num_elements: elements.len().try_into().unwrap(),
-            elements: elements.into(),
-        }
-    }
-}
-
-// using this instead of pg_operator since the latter doesn't support schemas yet
-// if we use `->` for both this and and the regular timevector elements trying
-// to do `series -> 'custom_element'` gets an ambiguous operator error
-// `timevector -> unknown` is not unique. For now we just use a different
-// operator for user-defined pipeline elements. In the future we could consider
-// changing the element input function to fallback to checking if the input is
-// a regproc if it doesn't recognize it; the formats should be different enough
-// that there's no risk of collision...
-// FIXME there is no CREATE OR REPLACE OPERATOR need to update post-install.rs
-//       need to ensure this works with out unstable warning
-extension_sql!(
-    r#"
-CREATE OPERATOR ->> (
-    PROCEDURE=toolkit_experimental."run_user_pipeline_element",
-    LEFTARG=toolkit_experimental.Timevector,
-    RIGHTARG=regproc
-);
-
-CREATE OPERATOR ->> (
-    PROCEDURE=toolkit_experimental."build_unstable_user_pipeline",
-    LEFTARG=regproc,
-    RIGHTARG=regproc
-);
-
-CREATE OPERATOR ->> (
-    PROCEDURE=toolkit_experimental."add_user_pipeline_element",
-    LEFTARG=toolkit_experimental.UnstableTimevectorPipeline,
-    RIGHTARG=regproc
-);
-"#,
-    name = "user_arrows",
-    requires = [
-        Timevector,
-        run_user_pipeline_element,
-        build_unstable_user_pipeline,
-        add_user_pipeline_element
-    ],
 );
 
 // TODO is (immutable, parallel_safe) correct?

@@ -547,3 +547,22 @@ pub mod toolkit_experimental {
         }
     }
 }
+
+pg_type! {
+    #[derive(Debug)]
+    struct AccessorUnnest {
+    }
+}
+
+ron_inout_funcs!(AccessorUnnest);
+
+// Note that this should be able to replace the timescale_experimental.unnest function
+// and related object in src/timevector/pipeline/expansion.rs
+#[pg_extern(immutable, parallel_safe, name="unnest")]
+pub fn accessor_unnest(
+) -> AccessorUnnest<'static> {
+    build!{
+        AccessorUnnest {
+        }
+    }
+}

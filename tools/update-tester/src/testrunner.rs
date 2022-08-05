@@ -214,7 +214,8 @@ impl TestClient {
                     time_weight('locf', ts, val) AS twa, \
                     uddsketch(100, 0.001, val) as udd, \
                     tdigest(100, val) as tdig, \
-                    stats_agg(val) as stats \
+                    stats_agg(val) as stats, \
+                    timevector(ts, val) as tvec \
                 FROM test_data;\
         ";
         self.simple_query(create_test_view)
@@ -228,8 +229,14 @@ impl TestClient {
                 average(twa), \
                 approx_percentile(0.1, udd), \
                 approx_percentile(0.1, tdig), \
-                kurtosis(stats) \
-            FROM regression_view;\
+                kurtosis(stats),
+                valsum \
+            FROM regression_view JOIN (
+                SELECT sum(value) AS valsum 
+                FROM unnest(
+                    (SELECT tvec FROM regression_view)
+                )
+            ) s ON true;\
         ";
         let view_output = self
             .simple_query(query_test_view)

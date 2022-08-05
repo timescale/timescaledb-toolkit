@@ -82,7 +82,7 @@ pub fn arrow_finalize_with_unnest<'p>(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_run_pipeline_then_unnest(
-    timevector: toolkit_experimental::Timevector,
+    timevector: Timevector,
     pipeline: toolkit_experimental::PipelineThenUnnest,
 ) -> impl Iterator<Item = (name!(time, crate::raw::TimestampTz), name!(value, f64))> {
     let series = run_pipeline_elements(timevector, pipeline.elements.iter())
@@ -137,7 +137,7 @@ pub fn arrow_force_materialize<'e>(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_run_pipeline_then_materialize(
-    timevector: toolkit_experimental::Timevector,
+    timevector: Timevector,
     pipeline: toolkit_experimental::PipelineForceMaterialize,
 ) -> toolkit_experimental::Timevector<'static> {
     run_pipeline_elements(timevector, pipeline.elements.iter()).in_current_context()

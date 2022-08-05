@@ -3,6 +3,7 @@
 use pgx::*;
 
 use crate::{
+    accessors::AccessorUnnest,
     aggregate_utils::in_aggregate_context,
     build,
     palloc::{Inner, Internal, InternalAsValue, ToInternal},
@@ -20,28 +21,22 @@ mod pipeline;
 
 use crate::raw::bytea;
 
-pub use toolkit_experimental::{Timevector, TimevectorData};
-
 // Bit flags stored in Timevector flags
 pub const FLAG_IS_SORTED: u8 = 0x01;
 pub const FLAG_HAS_NULLS: u8 = 0x01 << 1;
 
-#[pg_schema]
-pub mod toolkit_experimental {
-    use super::*;
-    pg_type! {
-        #[derive(Debug)]
-        struct Timevector<'input> {
-            num_points: u32,
-            flags: u8,         // extra information about the stored data
-            internal_padding: [u8; 3],  // required to be aligned
-            points: [TSPoint; self.num_points],
-            null_val: [u8; (self.num_points + 7)/ 8], // bit vector, must be last element for alignment purposes
-        }
+pg_type! {
+    #[derive(Debug)]
+    struct Timevector<'input> {
+        num_points: u32,
+        flags: u8,         // extra information about the stored data
+        internal_padding: [u8; 3],  // required to be aligned
+        points: [TSPoint; self.num_points],
+        null_val: [u8; (self.num_points + 7)/ 8], // bit vector, must be last element for alignment purposes
     }
-
-    ron_inout_funcs!(Timevector);
 }
+
+ron_inout_funcs!(Timevector);
 
 impl<'input> Timevector<'input> {
     pub fn num_points(&self) -> usize {
@@ -109,9 +104,9 @@ impl<'a> IntoIterator for Timevector<'a> {
 pub static TIMEVECTOR_OID: once_cell::sync::Lazy<pg_sys::Oid> =
     once_cell::sync::Lazy::new(Timevector::type_oid);
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn unnest(
-    series: toolkit_experimental::Timevector<'_>,
+    series: Timevector<'_>,
 ) -> impl std::iter::Iterator<Item = (name!(time, crate::raw::TimestampTz), name!(value, f64))> + '_
 {
     series
@@ -119,20 +114,29 @@ pub fn unnest(
         .map(|points| (points.ts.into(), points.val))
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe, strict)]
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_timevector_unnest<'a>(
+    series: Timevector<'a>,
+    _accessor: AccessorUnnest,
+) -> impl std::iter::Iterator<Item = (name!(time, crate::raw::TimestampTz), name!(value, f64))> + 'a {
+    unnest(series)
+}
+
+#[pg_extern(immutable, parallel_safe, strict)]
 pub fn timevector_serialize(state: Internal) -> bytea {
     // FIXME: This might duplicate the version and padding bits
     let state: &TimevectorData = unsafe { state.get().unwrap() };
     crate::do_serialize!(state)
 }
 
-#[pg_extern(schema = "toolkit_experimental", strict, immutable, parallel_safe)]
+#[pg_extern(strict, immutable, parallel_safe)]
 pub fn timevector_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
     let data: Timevector<'static> = crate::do_deserialize!(bytes, TimevectorData);
     Inner::from(data).internal()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn timevector_trans(
     state: Internal,
     time: Option<crate::raw::TimestampTz>,
@@ -192,10 +196,10 @@ pub fn timevector_trans_inner(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn timevector_compound_trans(
     state: Internal,
-    series: Option<toolkit_experimental::Timevector>,
+    series: Option<Timevector>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     inner_compound_trans(unsafe { state.to_inner() }, series, fcinfo).internal()
@@ -203,7 +207,7 @@ pub fn timevector_compound_trans(
 
 pub fn inner_compound_trans<'b>(
     state: Option<Inner<Timevector<'static>>>,
-    series: Option<toolkit_experimental::Timevector<'b>>,
+    series: Option<Timevector<'b>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<Timevector<'static>>> {
     unsafe {
@@ -211,25 +215,15 @@ pub fn inner_compound_trans<'b>(
             (None, None) => None,
             (Some(state), None) => Some(state),
             (None, Some(series)) => Some(series.clone_owned().into()),
-            (Some(mut state), Some(series)) => {
-                if state.is_sorted()
-                    && (!series.is_sorted()
-                        || state.points.as_slice().last().unwrap().ts
-                            > series.points.as_slice().first().unwrap().ts)
-                {
-                    state.flags ^= FLAG_IS_SORTED
-                }
-                state
-                    .points
-                    .as_owned()
-                    .extend_from_slice(series.points.slice());
-                Some(state)
+            (Some(state), Some(series)) => {
+                // TODO: this should be doable without cloning 'state'
+                Some(combine(state.clone(), series.clone()).into())
             }
         })
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn timevector_combine(
     state1: Internal,
     state2: Internal,
@@ -301,18 +295,18 @@ pub fn combine(first: Timevector<'_>, second: Timevector<'_>) -> Timevector<'sta
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn timevector_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
+) -> Option<Timevector<'static>> {
     unsafe { timevector_final_inner(state.to_inner(), fcinfo) }
 }
 
 pub fn timevector_final_inner<'a>(
     state: Option<Inner<Timevector<'a>>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
+) -> Option<Timevector<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let state = match state {
@@ -326,13 +320,13 @@ pub fn timevector_final_inner<'a>(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.timevector(ts TIMESTAMPTZ, value DOUBLE PRECISION) (\n\
-        sfunc = toolkit_experimental.timevector_trans,\n\
+    CREATE AGGREGATE timevector(ts TIMESTAMPTZ, value DOUBLE PRECISION) (\n\
+        sfunc = timevector_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.timevector_final,\n\
-        combinefunc = toolkit_experimental.timevector_combine,\n\
-        serialfunc = toolkit_experimental.timevector_serialize,\n\
-        deserialfunc = toolkit_experimental.timevector_deserialize,\n\
+        finalfunc = timevector_final,\n\
+        combinefunc = timevector_combine,\n\
+        serialfunc = timevector_serialize,\n\
+        deserialfunc = timevector_deserialize,\n\
         parallel = safe\n\
     );\n\
 ",
@@ -348,15 +342,15 @@ extension_sql!(
 
 extension_sql!(
     "\n\
-CREATE AGGREGATE toolkit_experimental.rollup(\n\
-    toolkit_experimental.timevector\n\
+CREATE AGGREGATE rollup(\n\
+    timevector\n\
 ) (\n\
-    sfunc = toolkit_experimental.timevector_compound_trans,\n\
+    sfunc = timevector_compound_trans,\n\
     stype = internal,\n\
-    finalfunc = toolkit_experimental.timevector_final,\n\
-    combinefunc = toolkit_experimental.timevector_combine,\n\
-    serialfunc = toolkit_experimental.timevector_serialize,\n\
-    deserialfunc = toolkit_experimental.timevector_deserialize,\n\
+    finalfunc = timevector_final,\n\
+    combinefunc = timevector_combine,\n\
+    serialfunc = timevector_serialize,\n\
+    deserialfunc = timevector_deserialize,\n\
     parallel = safe\n\
 );\n\
 ",
@@ -369,3 +363,133 @@ CREATE AGGREGATE toolkit_experimental.rollup(\n\
         timevector_deserialize
     ],
 );
+
+#[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
+mod tests {
+    use pgx::*;
+    use pgx_macros::pg_test;
+
+    #[pg_test]
+    pub fn test_unnest() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            client.select("CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION)", None, None);
+            client.select(r#"INSERT INTO data VALUES
+                    ('1-1-2020', 30.0),
+                    ('1-2-2020', 45.0),
+                    ('1-3-2020', NULL),
+                    ('1-4-2020', 55.5),
+                    ('1-5-2020', 10.0)"#,
+                None, None);
+
+            let mut unnest = client.select("SELECT unnest(timevector(time, value))::TEXT FROM data", None, None);
+
+            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-01 00:00:00+00\",30)"));
+            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-02 00:00:00+00\",45)"));
+            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-03 00:00:00+00\",NaN)"));
+            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-04 00:00:00+00\",55.5)"));
+            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-05 00:00:00+00\",10)"));
+            assert!(unnest.next().is_none());
+        })
+    }
+
+    #[pg_test]
+    pub fn timevector_io() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            client.select("CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION)", None, None);
+            client.select(r#"INSERT INTO data VALUES
+                    ('1-1-2020', 30.0),
+                    ('1-2-2020', 45.0),
+                    ('1-3-2020', NULL),
+                    ('1-4-2020', 55.5),
+                    ('1-5-2020', 10.0)"#,
+                None, None);
+
+            let tvec = client.select("SELECT timevector(time,value)::TEXT FROM data", None, None).first().get_one::<String>().unwrap();
+            let expected = r#"(version:1,num_points:5,flags:3,internal_padding:(0,0,0),points:[(ts:"2020-01-01 00:00:00+00",val:30),(ts:"2020-01-02 00:00:00+00",val:45),(ts:"2020-01-03 00:00:00+00",val:NaN),(ts:"2020-01-04 00:00:00+00",val:55.5),(ts:"2020-01-05 00:00:00+00",val:10)],null_val:[4])"#;
+
+            assert_eq!(tvec, expected);
+
+            let mut unnest = client.select(
+                &format!(
+                    "SELECT unnest('{}'::timevector)::TEXT",
+                    expected
+                ), None, None);
+
+            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-01 00:00:00+00\",30)"));
+            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-02 00:00:00+00\",45)"));
+            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-03 00:00:00+00\",NaN)"));
+            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-04 00:00:00+00\",55.5)"));
+            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-05 00:00:00+00\",10)"));
+            assert!(unnest.next().is_none());
+        })
+    }
+
+    #[pg_test]
+    pub fn test_arrow_equivalence() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            client.select("CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION)", None, None);
+            client.select(r#"INSERT INTO data VALUES
+                    ('1-1-2020', 30.0),
+                    ('1-2-2020', 45.0),
+                    ('1-3-2020', NULL),
+                    ('1-4-2020', 55.5),
+                    ('1-5-2020', 10.0)"#,
+                None, None);
+
+            let mut func = client.select("SELECT unnest(timevector(time, value))::TEXT FROM data", None, None);
+            let mut op = client.select("SELECT (timevector(time, value) -> unnest())::TEXT FROM data", None, None);
+
+            let mut test = true;
+            while test {
+                match (func.next(), op.next()) {
+                    (None, None) => test = false,
+                    (Some(a), Some(b)) =>
+                        assert_eq!(a[1].value::<&str>(), b[1].value::<&str>()),
+                    _ => panic!("Arrow operator didn't contain the same number of elements as nested function"),
+                };
+            };
+        })
+    }
+
+    #[pg_test]
+    pub fn test_rollup() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            client.select("CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION, bucket INTEGER)", None, None);
+            client.select(r#"INSERT INTO data VALUES
+                    ('1-1-2020', 30.0, 1),
+                    ('1-2-2020', 45.0, 1),
+                    ('1-3-2020', NULL, 2),
+                    ('1-4-2020', 55.5, 2),
+                    ('1-5-2020', 10.0, 3),
+                    ('1-6-2020', 13.0, 3),
+                    ('1-7-2020', 71.0, 4),
+                    ('1-8-2020', 0.0, 4)"#,
+                None, None);
+                
+            let mut unnest = client.select(
+                    "SELECT unnest(rollup(tvec))::TEXT
+                        FROM (
+                            SELECT timevector(time, value) AS tvec
+                            FROM data 
+                            GROUP BY bucket 
+                            ORDER BY bucket
+                        ) s",
+                    None, None);
+
+            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-01 00:00:00+00\",30)"));
+            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-02 00:00:00+00\",45)"));
+            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-03 00:00:00+00\",NaN)"));
+            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-04 00:00:00+00\",55.5)"));
+            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-05 00:00:00+00\",10)"));
+            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-06 00:00:00+00\",13)"));
+            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-07 00:00:00+00\",71)"));
+            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-08 00:00:00+00\",0)"));
+            assert!(unnest.next().is_none());
+        })
+    }
+}

@@ -34,14 +34,14 @@ INSERT 0 4032
 Now lets capture this data into a time series which we'll store in a view.
 
 ```SQL ,non-transactional,ignore-output
-CREATE VIEW series AS SELECT toolkit_experimental.timevector(time, value) FROM test;
+CREATE VIEW series AS SELECT timevector(time, value) FROM test;
 ```
 
 We can now use this timevector to efficiently move the data around to other functions.
 
 ```SQL
 SELECT time, value::numeric(10,2) FROM
-toolkit_experimental.unnest((SELECT toolkit_experimental.lttb(timevector, 20) FROM series));
+unnest((SELECT toolkit_experimental.lttb(timevector, 20) FROM series));
 ```
 ```output
           time          |       value
@@ -108,7 +108,7 @@ This will construct and return timevector object containing the passed in time, 
 For this example, assume we have a table 'samples' with two columns, 'time' and 'weight'.  The following will return that table as a timevector.
 
 ```SQL ,ignore
-SELECT toolkit_experimental.timevector(time, weight) FROM samples;
+SELECT timevector(time, weight) FROM samples;
 ```
 
 ---
@@ -142,7 +142,7 @@ This example assumes a table 'samples' with columns 'time', 'data', and 'batch'.
 CREATE VIEW series AS
     SELECT
         batch,
-        toolkit_experimental.timevector(time, data) as batch_series
+        timevector(time, data) as batch_series
     FROM samples
     GROUP BY batch;
 ```
@@ -181,8 +181,8 @@ The unnest function is used to get the (time, value) pairs back out of a timevec
 ### Sample Usage <a id="timevector_unnest-examples"></a>
 
 ```SQL
-SELECT toolkit_experimental.unnest(
-    (SELECT toolkit_experimental.timevector(a.time, a.value)
+SELECT unnest(
+    (SELECT timevector(a.time, a.value)
     FROM
         (SELECT time, value
         FROM toolkit_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, 45654))

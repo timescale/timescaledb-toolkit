@@ -83,9 +83,9 @@ pub fn fillto_pipeline_element<'e>(
 }
 
 pub fn fill_to<'s>(
-    series: toolkit_experimental::Timevector<'s>,
+    series: Timevector<'s>,
     element: &toolkit_experimental::Element,
-) -> toolkit_experimental::Timevector<'s> {
+) -> Timevector<'s> {
     let (interval, method) = match element {
         Element::FillTo {
             interval,

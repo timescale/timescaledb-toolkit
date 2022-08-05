@@ -26,8 +26,8 @@ extension_sql!(
 );
 
 pub fn timevector_delta<'s>(
-    series: &toolkit_experimental::Timevector<'s>,
-) -> toolkit_experimental::Timevector<'s> {
+    series: &Timevector<'s>,
+) -> Timevector<'s> {
     if !series.is_sorted() {
         panic!("can only compute deltas for sorted timevector");
     }

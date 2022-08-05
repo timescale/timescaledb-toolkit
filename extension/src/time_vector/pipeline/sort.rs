@@ -14,8 +14,8 @@ pub fn sort_pipeline_element<'p, 'e>() -> toolkit_experimental::UnstableTimevect
 }
 
 pub fn sort_timevector(
-    mut series: toolkit_experimental::Timevector<'_>,
-) -> toolkit_experimental::Timevector<'_> {
+    mut series: Timevector<'_>,
+) -> Timevector<'_> {
     if series.is_sorted() {
         return series;
     }

@@ -9,7 +9,7 @@ on:
         description: 'Upload artifacts to PackageCloud'
         required: false
         default: false
-      
+
 jobs:
   build-deb:
     runs-on: ${{ matrix.runner }}
@@ -24,6 +24,7 @@ jobs:
           - ubuntu-22.04
     env:
       OUTDIR: target/release/timescaledb_toolkit-pg${{ pgversion }}
+      PG_CONFIG: /usr/lib/postgresql/${{ matrix.pgversion }}/bin/pg_config
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v2
@@ -46,16 +47,21 @@ jobs:
           key: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-1.8
           restore-keys: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-1.5
 
+      - name: Install PGX
+        run: |
+          cargo install --version '=0.4.5' cargo-pgx
+          cargo pgx init --pg${{ matrix.pgversion }} /usr/lib/postgresql/${{ matrix.pgversion }}/bin/pg_config
+
       - name: Build the package files
         run: |
-          cargo pgx package --manifest-path=extension/Cargo.toml --out-dir=$OUTDIR
-          cargo run --manifest-path=tools/post-install/Cargo.toml -- pg_config --dir=$OUTDIR
+          cargo pgx package --manifest-path=extension/Cargo.toml
+          cargo run --manifest-path=tools/post-install/Cargo.toml -- $PG_CONFIG --dir=$OUTDIR
 
       - name: Build Debian Package
         id: package
         uses: timescale/build-actions/build-deb@v1
         with:
-          package: timescaledb_toolkit-pg${{ pgversion }}
+          package: timescaledb-toolkit-pg${{ pgversion }}
           version: ${{ github.event.inputs.version }}
           arch: amd64
           dependencies: postgresql-${{ pgversion }}
@@ -64,7 +70,7 @@ jobs:
             pipelining, and other SQL utilities, compatible with
             TimescaleDB and PostgreSQL
           tree: $OUTDIR
-          
+
       - name: Upload Package to PackageCloud
         if: ${{ github.event.inputs.upload-artifacts }}
         env:

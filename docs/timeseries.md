@@ -41,7 +41,7 @@ We can now use this timevector to efficiently move the data around to other func
 
 ```SQL
 SELECT time, value::numeric(10,2) FROM
-unnest((SELECT toolkit_experimental.lttb(timevector, 20) FROM series));
+unnest((SELECT lttb(timevector, 20) FROM series));
 ```
 ```output
           time          |       value

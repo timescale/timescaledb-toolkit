@@ -41,7 +41,7 @@ to 34 points
 ```SQL
 SELECT time, value::numeric(10,2)
 FROM unnest((
-    SELECT toolkit_experimental.lttb(time, val, 34)
+    SELECT lttb(time, val, 34)
     FROM sample_data))
 ```
 
@@ -102,7 +102,7 @@ resulting data looks less and less like the original
 ```SQL
 SELECT time, value::numeric(10,2)
 FROM unnest((
-    SELECT toolkit_experimental.lttb(time, val, 17)
+    SELECT lttb(time, val, 17)
     FROM sample_data))
 ```
 ```output
@@ -133,7 +133,7 @@ FROM unnest((
 ```SQL
 SELECT time, value::numeric(10,2)
 FROM unnest((
-    SELECT toolkit_experimental.lttb(time, val, 8)
+    SELECT lttb(time, val, 8)
     FROM sample_data))
 ```
 ```output
@@ -157,7 +157,7 @@ FROM unnest((
 ---
 ## **lttb** <a id="lttb"></a>
 ```SQL,ignore
-toolkit_experimental.lttb(
+lttb(
     time TIMESTAMPTZ,
     value DOUBLE PRECISION,
     resolution INTEGER
@@ -181,7 +181,7 @@ extract the `(time, value)` pairs from this series
 ```SQL
 SELECT time, value
 FROM unnest((
-    SELECT toolkit_experimental.lttb(time, val, 4)
+    SELECT lttb(time, val, 4)
     FROM sample_data))
 ```
 ```output

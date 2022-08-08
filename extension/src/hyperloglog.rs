@@ -847,6 +847,23 @@ mod tests {
         })
     }
 
+    #[pg_test]
+    fn stderror_arrow_match() {
+        Spi::execute(|client| {
+            let (count, arrow_count) = client
+                .select("SELECT \
+                    stderror(\
+                        hyperloglog(32, v::float)\
+                    ), \
+                    hyperloglog(32, v::float)->toolkit_experimental.stderror() \
+                    FROM generate_series(1, 100) v", None, None)
+                .first()
+                .get_two::<i32, i32>();
+            assert_eq!(Some(-788581389), count);
+            assert_eq!(count, arrow_count);
+        });
+    }
+
     // FIXME these tests don't run on CI
     // #[pg_test(error = "Invalid value for size 262145. Size must be between 16 and 262144, though less than 1024 not recommended")]
     // fn test_hll_error_too_large() {

@@ -330,7 +330,7 @@ impl TestClient {
                 .unwrap_or_else(|e| panic!("error checking type existence: {}", e));
         }
 
-        for operator in stabilization::STABLE_OPERATORS {
+        for operator in stabilization::STABLE_OPERATORS() {
             let check_existence = format!("SELECT '{}'::regoperator;", operator);
             self.simple_query(&check_existence)
                 .unwrap_or_else(|e| panic!("error checking operator existence: {}", e));

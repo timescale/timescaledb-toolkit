@@ -1,269 +1,97 @@
-
-use counter_agg::range::I64Range;
-use pgx::*;
-
 use std::convert::TryInto as _;
 
-use crate::{
-    build, flatten,
-    pg_type,
-    ron_inout_funcs,
-};
+use pgx::*;
+
+use counter_agg::range::I64Range;
+
+use crate::{build, flatten, pg_type, ron_inout_funcs};
+
+macro_rules! accessor {
+    (
+        $name: ident (
+            $($field:ident : $typ: tt),* $(,)?
+        )
+    ) => {
+        ::paste::paste! {
+            $crate::pg_type!{
+                // TODO Move into pg_type as we don't care to vary it.
+                #[derive(Debug)]
+                struct [<Accessor $name:camel>] {
+                $($field: $typ,)*
+                }
+            }
+            $crate::ron_inout_funcs!([<Accessor $name:camel>]);
+        }
+        accessor_fn_impl! { $name( $( $field: $typ),* ) }
+    };
+}
+
+macro_rules! accessor_fn_impl {
+    (
+        $name: ident (
+            $( $field:ident : $typ: tt ),*
+                $(,)?
+        )
+    ) => {
+        ::paste::paste!{
+            #[pg_extern(immutable, parallel_safe, name = "" $name "")]
+            fn [<accessor_ $name >](
+                $( $field: $typ ),*
+            ) -> [<Accessor $name:camel>]<'static> {
+                $crate::build! {
+                    [<Accessor $name:camel>] {
+                        $( $field ),*
+                    }
+                }
+            }
+        }
+    };
+}
 
 #[pg_schema]
 pub mod toolkit_experimental {
     pub use super::*;
 
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorApproxPercentile {
-            percentile: f64,
-        }
-    }
-
-    ron_inout_funcs!(AccessorApproxPercentile);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="approx_percentile")]
-    pub fn accessor_approx_percentile(
+    accessor! { approx_percentile(
         percentile: f64,
-    ) -> toolkit_experimental::AccessorApproxPercentile<'static> {
-        build!{
-            AccessorApproxPercentile {
-                percentile,
-            }
-        }
-    }
+    ) }
 
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorApproxRank {
-            value: f64,
-        }
-    }
-
-    ron_inout_funcs!(AccessorApproxRank);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="approx_percentile_rank")]
-    pub fn accessor_approx_rank(
+    accessor! { approx_percentile_rank(
         value: f64,
-    ) -> toolkit_experimental::AccessorApproxRank<'static> {
-        build!{
-            AccessorApproxRank {
-                value,
-            }
-        }
-    }
+    ) }
 
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorNumVals {
-        }
-    }
-
-    ron_inout_funcs!(AccessorNumVals);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="num_vals")]
-    pub fn accessor_num_vals(
-    ) -> toolkit_experimental::AccessorNumVals<'static> {
-        build!{
-            AccessorNumVals {
-            }
-        }
-    }
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorMean {
-        }
-    }
-
-    ron_inout_funcs!(AccessorMean);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="mean")]
-    pub fn accessor_mean(
-    ) -> toolkit_experimental::AccessorMean<'static> {
-        build!{
-            AccessorMean {
-            }
-        }
-    }
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorError {
-        }
-    }
-
-    ron_inout_funcs!(AccessorError);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="error")]
-    pub fn accessor_error(
-    ) -> toolkit_experimental::AccessorError<'static> {
-        build!{
-            AccessorError {
-            }
-        }
-    }
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorMin {
-        }
-    }
-
-    ron_inout_funcs!(AccessorMin);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="min_val")]
-    pub fn accessor_min(
-    ) -> toolkit_experimental::AccessorMin<'static> {
-        build!{
-            AccessorMin {
-            }
-        }
-    }
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorMax {
-        }
-    }
-
-    ron_inout_funcs!(AccessorMax);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="max_val")]
-    pub fn accessor_max(
-    ) -> toolkit_experimental::AccessorMax<'static> {
-        build!{
-            AccessorMax {
-            }
-        }
-    }
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorAverage {
-        }
-    }
-
-    ron_inout_funcs!(AccessorAverage);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="average")]
-    pub fn accessor_average(
-    ) -> toolkit_experimental::AccessorAverage<'static> {
-        build!{
-            AccessorAverage {
-            }
-        }
-    }
+    accessor! { num_vals() }
+    accessor! { mean() }
+    accessor! { error() }
+    accessor! { min_val() }
+    accessor! { max_val() }
+    accessor! { average() }
+    accessor! { average_x() }
+    accessor! { average_y() }
+    accessor! { sum() }
+    accessor! { sum_x() }
+    accessor! { sum_y() }
+    accessor! { slope() }
+    accessor! { corr() }
+    accessor! { intercept() }
+    accessor! { x_intercept() }
+    accessor! { determination_coeff() }
+    accessor! { distinct_count() }
+    accessor! { stderror() }
+    accessor! { delta() }
+    accessor! { time_delta() }
+    accessor! { rate() }
+    accessor! { irate_left() }
+    accessor! { irate_right() }
+    accessor! { idelta_left() }
+    accessor! { idelta_right() }
+    accessor! { num_elements() }
+    accessor! { num_changes() }
+    accessor! { num_resets() }
+    accessor! { counter_zero_time() }
 
 
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorAverageX {
-        }
-    }
-
-    ron_inout_funcs!(AccessorAverageX);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="average_x")]
-    pub fn accessor_average_x(
-    ) -> toolkit_experimental::AccessorAverageX<'static> {
-        build!{
-            AccessorAverageX {
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorAverageY {
-        }
-    }
-
-    ron_inout_funcs!(AccessorAverageY);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="average_y")]
-    pub fn accessor_average_y(
-    ) -> toolkit_experimental::AccessorAverageY<'static> {
-        build!{
-            AccessorAverageY {
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorSum {
-        }
-    }
-
-    ron_inout_funcs!(AccessorSum);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="sum")]
-    pub fn accessor_sum(
-    ) -> toolkit_experimental::AccessorSum<'static> {
-        build!{
-            AccessorSum {
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorSumX {
-        }
-    }
-
-    ron_inout_funcs!(AccessorSumX);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="sum_x")]
-    pub fn accessor_sum_x(
-    ) -> toolkit_experimental::AccessorSumX<'static> {
-        build!{
-            AccessorSumX {
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorSumY {
-        }
-    }
-
-    ron_inout_funcs!(AccessorSumY);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="sum_y")]
-    pub fn accessor_sum_y(
-    ) -> toolkit_experimental::AccessorSumY<'static> {
-        build!{
-            AccessorSumY {
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorSlope {
-        }
-    }
-
-    ron_inout_funcs!(AccessorSlope);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="slope")]
-    pub fn accessor_slope(
-    ) -> toolkit_experimental::AccessorSlope<'static> {
-        build!{
-            AccessorSlope {
-            }
-        }
-    }
-
+    // The rest are more complex, with String or other challenges.  Leaving alone for now.
 
     pg_type! {
         #[derive(Debug)]
@@ -584,78 +412,6 @@ pub mod toolkit_experimental {
 
     pg_type! {
         #[derive(Debug)]
-        struct AccessorCorr {
-        }
-    }
-
-    ron_inout_funcs!(AccessorCorr);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="corr")]
-    pub fn accessor_corr(
-    ) -> toolkit_experimental::AccessorCorr<'static> {
-        build!{
-            AccessorCorr {
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorIntercept {
-        }
-    }
-
-    ron_inout_funcs!(AccessorIntercept);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="intercept")]
-    pub fn accessor_intercept(
-    ) -> toolkit_experimental::AccessorIntercept<'static> {
-        build!{
-            AccessorIntercept {
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorXIntercept {
-        }
-    }
-
-    ron_inout_funcs!(AccessorXIntercept);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="x_intercept")]
-    pub fn accessor_x_intercept(
-    ) -> toolkit_experimental::AccessorXIntercept<'static> {
-        build!{
-            AccessorXIntercept {
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorDeterminationCoeff {
-        }
-    }
-
-    ron_inout_funcs!(AccessorDeterminationCoeff);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="determination_coeff")]
-    pub fn accessor_determination_coeff(
-    ) -> toolkit_experimental::AccessorDeterminationCoeff<'static> {
-        build!{
-            AccessorDeterminationCoeff {
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
         struct AccessorCovar<'input> {
             len: u32,
             bytes: [u8; self.len],
@@ -676,240 +432,6 @@ pub mod toolkit_experimental {
                     len: method.len().try_into().unwrap(),
                     bytes: method.as_bytes().into(),
                 }
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorDistinctCount {
-        }
-    }
-
-    ron_inout_funcs!(AccessorDistinctCount);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="distinct_count")]
-    pub fn accessor_distinct_count(
-    ) -> toolkit_experimental::AccessorDistinctCount<'static> {
-        build!{
-            AccessorDistinctCount {
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorStdError {
-        }
-    }
-
-    ron_inout_funcs!(AccessorStdError);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="stderror")]
-    pub fn accessor_stderror(
-    ) -> toolkit_experimental::AccessorStdError<'static> {
-        build!{
-            AccessorStdError {
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorDelta {
-        }
-    }
-
-    ron_inout_funcs!(AccessorDelta);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="delta")]
-    pub fn accessor_delta(
-    ) -> toolkit_experimental::AccessorDelta<'static> {
-        build!{
-            AccessorDelta {
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorTimeDelta {
-        }
-    }
-
-    ron_inout_funcs!(AccessorTimeDelta);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="time_delta")]
-    pub fn accessor_time_delta(
-    ) -> toolkit_experimental::AccessorTimeDelta<'static> {
-        build!{
-            AccessorTimeDelta {
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorRate {
-        }
-    }
-
-    ron_inout_funcs!(AccessorRate);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="rate")]
-    pub fn accessor_rate(
-    ) -> toolkit_experimental::AccessorRate<'static> {
-        build!{
-            AccessorRate {
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorIRateLeft {
-        }
-    }
-
-    ron_inout_funcs!(AccessorIRateLeft);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="irate_left")]
-    pub fn accessor_irate_left(
-    ) -> toolkit_experimental::AccessorIRateLeft<'static> {
-        build!{
-            AccessorIRateLeft {
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorIRateRight {
-        }
-    }
-
-    ron_inout_funcs!(AccessorIRateRight);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="irate_right")]
-    pub fn accessor_irate_right(
-    ) -> toolkit_experimental::AccessorIRateRight<'static> {
-        build!{
-            AccessorIRateRight {
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorIDeltaLeft {
-        }
-    }
-
-    ron_inout_funcs!(AccessorIDeltaLeft);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="idelta_left")]
-    pub fn accessor_idelta_left(
-    ) -> toolkit_experimental::AccessorIDeltaLeft<'static> {
-        build!{
-            AccessorIDeltaLeft {
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorIDeltaRight {
-        }
-    }
-
-    ron_inout_funcs!(AccessorIDeltaRight);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="idelta_right")]
-    pub fn accessor_idelta_right(
-    ) -> toolkit_experimental::AccessorIDeltaRight<'static> {
-        build!{
-            AccessorIDeltaRight {
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorNumElements {
-        }
-    }
-
-    ron_inout_funcs!(AccessorNumElements);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="num_elements")]
-    pub fn accessor_num_elements(
-    ) -> toolkit_experimental::AccessorNumElements<'static> {
-        build!{
-            AccessorNumElements {
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorNumChanges {
-        }
-    }
-
-    ron_inout_funcs!(AccessorNumChanges);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="num_changes")]
-    pub fn accessor_num_changes(
-    ) -> toolkit_experimental::AccessorNumChanges<'static> {
-        build!{
-            AccessorNumChanges {
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorNumResets {
-        }
-    }
-
-    ron_inout_funcs!(AccessorNumResets);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="num_resets")]
-    pub fn accessor_num_resets(
-    ) -> toolkit_experimental::AccessorNumResets<'static> {
-        build!{
-            AccessorNumResets {
-            }
-        }
-    }
-
-
-    pg_type! {
-        #[derive(Debug)]
-        struct AccessorZeroTime {
-        }
-    }
-
-    ron_inout_funcs!(AccessorZeroTime);
-
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="counter_zero_time")]
-    pub fn accessor_zero_time(
-    ) -> toolkit_experimental::AccessorZeroTime<'static> {
-        build!{
-            AccessorZeroTime {
             }
         }
     }
@@ -1012,7 +534,7 @@ pub mod toolkit_experimental {
         accessor
     }
 
-    impl<'i> AccessorWithBounds<'i> {
+    impl AccessorWithBounds<'_> {
         pub fn bounds(&self) -> Option<I64Range> {
             if self.range_null != 0{
                 return None

@@ -552,7 +552,7 @@ pub fn uddsketch_approx_percentile(
 #[opname(->)]
 pub fn arrow_uddsketch_approx_rank(
     sketch: UddSketch,
-    accessor: toolkit_experimental::AccessorApproxRank,
+    accessor: toolkit_experimental::AccessorApproxPercentileRank,
 ) -> f64 {
     uddsketch_approx_percentile_rank(accessor.value, sketch)
 }

@@ -342,7 +342,7 @@ pub fn hyperloglog_count(
 #[opname(->)]
 pub fn arrow_hyperloglog_error(
     sketch: HyperLogLog,
-    accessor: toolkit_experimental::AccessorStdError,
+    accessor: toolkit_experimental::AccessorStderror,
 ) -> f64 {
     let _ = accessor;
     hyperloglog_error(sketch)

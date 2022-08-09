@@ -370,7 +370,7 @@ pub fn tdigest_quantile(
 #[opname(->)]
 pub fn arrow_tdigest_approx_rank(
     sketch: TDigest,
-    accessor: toolkit_experimental::AccessorApproxRank,
+    accessor: toolkit_experimental::AccessorApproxPercentileRank,
 ) -> f64 {
     tdigest_quantile_at_value(accessor.value, sketch)
 }
@@ -406,7 +406,7 @@ pub fn tdigest_count(
 #[opname(->)]
 pub fn arrow_tdigest_min(
     sketch: TDigest,
-    accessor: toolkit_experimental::AccessorMin,
+    accessor: toolkit_experimental::AccessorMinVal,
 ) -> f64 {
     let _ = accessor;
     tdigest_min(sketch)
@@ -425,7 +425,7 @@ pub fn tdigest_min(
 #[opname(->)]
 pub fn arrow_tdigest_max(
     sketch: TDigest,
-    accessor: toolkit_experimental::AccessorMax,
+    accessor: toolkit_experimental::AccessorMaxVal,
 ) -> f64 {
     let _ = accessor;
     tdigest_max(sketch)

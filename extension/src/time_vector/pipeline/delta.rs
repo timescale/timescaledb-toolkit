@@ -26,8 +26,8 @@ extension_sql!(
 );
 
 pub fn timevector_delta<'s>(
-    series: &Timevector<'s>,
-) -> Timevector<'s> {
+    series: &Timevector_TSTZ_F64<'s>,
+) -> Timevector_TSTZ_F64<'s> {
     if !series.is_sorted() {
         panic!("can only compute deltas for sorted timevector");
     }
@@ -49,7 +49,7 @@ pub fn timevector_delta<'s>(
 
     let nulls_len = (delta_points.len() + 7) / 8;
 
-    build!(Timevector {
+    build!(Timevector_TSTZ_F64 {
         num_points: delta_points.len() as u32,
         flags: series.flags,
         internal_padding: [0; 3],

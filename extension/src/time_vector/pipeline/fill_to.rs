@@ -83,9 +83,9 @@ pub fn fillto_pipeline_element<'e>(
 }
 
 pub fn fill_to<'s>(
-    series: Timevector<'s>,
+    series: Timevector_TSTZ_F64<'s>,
     element: &toolkit_experimental::Element,
-) -> Timevector<'s> {
+) -> Timevector_TSTZ_F64<'s> {
     let (interval, method) = match element {
         Element::FillTo {
             interval,
@@ -128,7 +128,7 @@ pub fn fill_to<'s>(
 
     let nulls_len = (result.len() + 7) / 8;
     build! {
-        Timevector {
+        Timevector_TSTZ_F64 {
             num_points: result.len() as _,
             flags: series.flags,
             internal_padding: [0; 3],

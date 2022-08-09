@@ -10,7 +10,7 @@ use crate::{
 
 use tspoint::TSPoint;
 
-use crate::time_vector::{Timevector, TimevectorData};
+use crate::time_vector::{Timevector_TSTZ_F64, Timevector_TSTZ_F64Data};
 
 pub struct LttbTrans {
     series: Vec<TSPoint>,
@@ -67,13 +67,13 @@ pub fn lttb_trans_inner(
 pub fn lttb_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Timevector<'static>> {
+) -> Option<Timevector_TSTZ_F64<'static>> {
     lttb_final_inner(unsafe { state.to_inner() }, fcinfo)
 }
 pub fn lttb_final_inner(
     state: Option<Inner<LttbTrans>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Timevector<'static>> {
+) -> Option<Timevector_TSTZ_F64<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let mut state = match state {
@@ -83,7 +83,7 @@ pub fn lttb_final_inner(
             state.series.sort_by_key(|point| point.ts);
             let series = Cow::from(&state.series);
             let downsampled = lttb(&*series, state.resolution);
-            flatten!(Timevector {
+            flatten!(Timevector_TSTZ_F64 {
                 num_points: downsampled.len() as u32,
                 flags: time_vector::FLAG_IS_SORTED,
                 internal_padding: [0; 3],
@@ -188,17 +188,17 @@ pub fn lttb(data: &[TSPoint], threshold: usize) -> Cow<'_, [TSPoint]> {
     parallel_safe
 )]
 pub fn lttb_on_timevector(
-    series: Timevector<'static>,
+    series: Timevector_TSTZ_F64<'static>,
     threshold: i32,
-) -> Option<Timevector<'static>> {
+) -> Option<Timevector_TSTZ_F64<'static>> {
     lttb_ts(series, threshold as usize).into()
 }
 
 // based on https://github.com/jeromefroe/lttb-rs version 0.2.0
 pub fn lttb_ts(
-    data: Timevector,
+    data: Timevector_TSTZ_F64,
     threshold: usize,
-) -> Timevector {
+) -> Timevector_TSTZ_F64 {
     if !data.is_sorted() {
         panic!("lttb requires sorted timevector");
     }
@@ -277,7 +277,7 @@ pub fn lttb_ts(
     let nulls_len = (sampled.len() + 7) / 8;
 
     crate::build! {
-        Timevector {
+        Timevector_TSTZ_F64 {
             num_points: sampled.len() as _,
             flags: time_vector::FLAG_IS_SORTED,
             internal_padding: [0; 3],

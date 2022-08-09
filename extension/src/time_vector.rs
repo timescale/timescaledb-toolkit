@@ -27,7 +27,8 @@ pub const FLAG_HAS_NULLS: u8 = 0x01 << 1;
 
 pg_type! {
     #[derive(Debug)]
-    struct Timevector<'input> {
+    #[allow(non_camel_case_types)]
+    struct Timevector_TSTZ_F64<'input> {
         num_points: u32,
         flags: u8,         // extra information about the stored data
         internal_padding: [u8; 3],  // required to be aligned
@@ -36,9 +37,9 @@ pg_type! {
     }
 }
 
-ron_inout_funcs!(Timevector);
+ron_inout_funcs!(Timevector_TSTZ_F64);
 
-impl<'input> Timevector<'input> {
+impl<'input> Timevector_TSTZ_F64<'input> {
     pub fn num_points(&self) -> usize {
         self.num_points as usize
     }
@@ -72,12 +73,12 @@ impl<'input> Timevector<'input> {
         self.null_val.as_slice()[byte_id] & (1 << byte_idx) != 0
     }
 
-    fn clone_owned(&self) -> Timevector<'static> {
-        TimevectorData::clone(&*self).into_owned().into()
+    fn clone_owned(&self) -> Timevector_TSTZ_F64<'static> {
+        Timevector_TSTZ_F64Data::clone(&*self).into_owned().into()
     }
 }
 
-impl<'a> Timevector<'a> {
+impl<'a> Timevector_TSTZ_F64<'a> {
     pub fn iter(&self) -> Iter<'_> {
         Iter::Slice {
             iter: self.points.iter(),
@@ -89,7 +90,7 @@ impl<'a> Timevector<'a> {
     }
 }
 
-impl<'a> IntoIterator for Timevector<'a> {
+impl<'a> IntoIterator for Timevector_TSTZ_F64<'a> {
     type Item = TSPoint;
     type IntoIter = Iter<'a>;
 
@@ -102,11 +103,11 @@ impl<'a> IntoIterator for Timevector<'a> {
 }
 
 pub static TIMEVECTOR_OID: once_cell::sync::Lazy<pg_sys::Oid> =
-    once_cell::sync::Lazy::new(Timevector::type_oid);
+    once_cell::sync::Lazy::new(Timevector_TSTZ_F64::type_oid);
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn unnest(
-    series: Timevector<'_>,
+    series: Timevector_TSTZ_F64<'_>,
 ) -> impl std::iter::Iterator<Item = (name!(time, crate::raw::TimestampTz), name!(value, f64))> + '_
 {
     series
@@ -117,7 +118,7 @@ pub fn unnest(
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_timevector_unnest<'a>(
-    series: Timevector<'a>,
+    series: Timevector_TSTZ_F64<'a>,
     _accessor: AccessorUnnest,
 ) -> impl std::iter::Iterator<Item = (name!(time, crate::raw::TimestampTz), name!(value, f64))> + 'a {
     unnest(series)
@@ -126,18 +127,18 @@ pub fn arrow_timevector_unnest<'a>(
 #[pg_extern(immutable, parallel_safe, strict)]
 pub fn timevector_serialize(state: Internal) -> bytea {
     // FIXME: This might duplicate the version and padding bits
-    let state: &TimevectorData = unsafe { state.get().unwrap() };
+    let state: &Timevector_TSTZ_F64Data = unsafe { state.get().unwrap() };
     crate::do_serialize!(state)
 }
 
 #[pg_extern(strict, immutable, parallel_safe)]
 pub fn timevector_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
-    let data: Timevector<'static> = crate::do_deserialize!(bytes, TimevectorData);
+    let data: Timevector_TSTZ_F64<'static> = crate::do_deserialize!(bytes, Timevector_TSTZ_F64Data);
     Inner::from(data).internal()
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn timevector_trans(
+pub fn timevector_tstz_f64_trans(
     state: Internal,
     time: Option<crate::raw::TimestampTz>,
     value: Option<f64>,
@@ -147,11 +148,11 @@ pub fn timevector_trans(
 }
 
 pub fn timevector_trans_inner(
-    state: Option<Inner<Timevector<'_>>>,
+    state: Option<Inner<Timevector_TSTZ_F64<'_>>>,
     time: Option<crate::raw::TimestampTz>,
     value: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<Timevector<'_>>> {
+) -> Option<Inner<Timevector_TSTZ_F64<'_>>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let time: pg_sys::TimestampTz = match time {
@@ -160,7 +161,7 @@ pub fn timevector_trans_inner(
             };
             let mut state = match state {
                 None => Inner::from(build! {
-                    Timevector {
+                    Timevector_TSTZ_F64 {
                         num_points: 0,
                         flags: FLAG_IS_SORTED,
                         internal_padding: [0; 3],
@@ -197,19 +198,19 @@ pub fn timevector_trans_inner(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn timevector_compound_trans(
+pub fn timevector_tstz_f64_compound_trans(
     state: Internal,
-    series: Option<Timevector>,
+    series: Option<Timevector_TSTZ_F64>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     inner_compound_trans(unsafe { state.to_inner() }, series, fcinfo).internal()
 }
 
 pub fn inner_compound_trans<'b>(
-    state: Option<Inner<Timevector<'static>>>,
-    series: Option<Timevector<'b>>,
+    state: Option<Inner<Timevector_TSTZ_F64<'static>>>,
+    series: Option<Timevector_TSTZ_F64<'b>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<Timevector<'static>>> {
+) -> Option<Inner<Timevector_TSTZ_F64<'static>>> {
     unsafe {
         in_aggregate_context(fcinfo, || match (state, series) {
             (None, None) => None,
@@ -233,10 +234,10 @@ pub fn timevector_combine(
 }
 
 pub fn inner_combine<'a, 'b>(
-    state1: Option<Inner<Timevector<'a>>>,
-    state2: Option<Inner<Timevector<'b>>>,
+    state1: Option<Inner<Timevector_TSTZ_F64<'a>>>,
+    state2: Option<Inner<Timevector_TSTZ_F64<'b>>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<Timevector<'static>>> {
+) -> Option<Inner<Timevector_TSTZ_F64<'static>>> {
     unsafe {
         in_aggregate_context(fcinfo, || match (state1, state2) {
             (None, None) => None,
@@ -247,7 +248,7 @@ pub fn inner_combine<'a, 'b>(
     }
 }
 
-pub fn combine(first: Timevector<'_>, second: Timevector<'_>) -> Timevector<'static> {
+pub fn combine(first: Timevector_TSTZ_F64<'_>, second: Timevector_TSTZ_F64<'_>) -> Timevector_TSTZ_F64<'static> {
     if first.num_vals() == 0 {
         return second.clone_owned();
     }
@@ -285,7 +286,7 @@ pub fn combine(first: Timevector<'_>, second: Timevector<'_>) -> Timevector<'sta
     };
 
     build! {
-        Timevector {
+        Timevector_TSTZ_F64 {
             num_points: points.len() as _,
             flags,
             internal_padding: [0; 3],
@@ -299,14 +300,14 @@ pub fn combine(first: Timevector<'_>, second: Timevector<'_>) -> Timevector<'sta
 pub fn timevector_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Timevector<'static>> {
+) -> Option<Timevector_TSTZ_F64<'static>> {
     unsafe { timevector_final_inner(state.to_inner(), fcinfo) }
 }
 
 pub fn timevector_final_inner<'a>(
-    state: Option<Inner<Timevector<'a>>>,
+    state: Option<Inner<Timevector_TSTZ_F64<'a>>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Timevector<'static>> {
+) -> Option<Timevector_TSTZ_F64<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let state = match state {
@@ -321,7 +322,7 @@ pub fn timevector_final_inner<'a>(
 extension_sql!(
     "\n\
     CREATE AGGREGATE timevector(ts TIMESTAMPTZ, value DOUBLE PRECISION) (\n\
-        sfunc = timevector_trans,\n\
+        sfunc = timevector_tstz_f64_trans,\n\
         stype = internal,\n\
         finalfunc = timevector_final,\n\
         combinefunc = timevector_combine,\n\
@@ -330,9 +331,9 @@ extension_sql!(
         parallel = safe\n\
     );\n\
 ",
-    name = "timevector_agg",
+    name = "timevector_tstz_f64_agg",
     requires = [
-        timevector_trans,
+        timevector_tstz_f64_trans,
         timevector_final,
         timevector_combine,
         timevector_serialize,
@@ -343,9 +344,9 @@ extension_sql!(
 extension_sql!(
     "\n\
 CREATE AGGREGATE rollup(\n\
-    timevector\n\
+    timevector_tstz_f64\n\
 ) (\n\
-    sfunc = timevector_compound_trans,\n\
+    sfunc = timevector_tstz_f64_compound_trans,\n\
     stype = internal,\n\
     finalfunc = timevector_final,\n\
     combinefunc = timevector_combine,\n\
@@ -354,9 +355,9 @@ CREATE AGGREGATE rollup(\n\
     parallel = safe\n\
 );\n\
 ",
-    name = "timevector_rollup",
+    name = "timevector_tstz_f64_rollup",
     requires = [
-        timevector_compound_trans,
+        timevector_tstz_f64_compound_trans,
         timevector_final,
         timevector_combine,
         timevector_serialize,
@@ -414,7 +415,7 @@ mod tests {
 
             let mut unnest = client.select(
                 &format!(
-                    "SELECT unnest('{}'::timevector)::TEXT",
+                    "SELECT unnest('{}'::timevector_tstz_f64)::TEXT",
                     expected
                 ), None, None);
 

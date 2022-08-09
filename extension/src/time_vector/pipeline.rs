@@ -28,7 +28,7 @@ use crate::serialization::PgProcId;
 pub mod toolkit_experimental {
     use super::*;
     pub(crate) use crate::accessors::toolkit_experimental::AccessorDelta;
-    pub use crate::time_vector::Timevector;
+    pub use crate::time_vector::Timevector_TSTZ_F64;
     pub(crate) use lambda::toolkit_experimental::{Lambda, LambdaData};
     // TODO once we start stabilizing elements, create a type TimevectorPipeline
     //      stable elements will create a stable pipeline, but adding an unstable
@@ -114,16 +114,16 @@ pub mod toolkit_experimental {
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_run_pipeline(
-    timevector: Timevector,
+    timevector: Timevector_TSTZ_F64,
     pipeline: toolkit_experimental::UnstableTimevectorPipeline,
-) -> Timevector<'static> {
+) -> Timevector_TSTZ_F64<'static> {
     run_pipeline_elements(timevector, pipeline.elements.iter()).in_current_context()
 }
 
 pub fn run_pipeline_elements<'s, 'j, 'i>(
-    mut timevector: Timevector<'s>,
+    mut timevector: Timevector_TSTZ_F64<'s>,
     pipeline: impl Iterator<Item = Element<'j>> + 'i,
-) -> Timevector<'s> {
+) -> Timevector_TSTZ_F64<'s> {
     for element in pipeline {
         timevector = execute_pipeline_element(timevector, &element);
     }
@@ -131,9 +131,9 @@ pub fn run_pipeline_elements<'s, 'j, 'i>(
 }
 
 pub fn execute_pipeline_element<'s>(
-    timevector: Timevector<'s>,
+    timevector: Timevector_TSTZ_F64<'s>,
     element: &Element,
-) -> Timevector<'s> {
+) -> Timevector_TSTZ_F64<'s> {
     match element {
         Element::LTTB { resolution } => crate::lttb::lttb_ts(timevector, *resolution as _),
         Element::Sort { .. } => sort_timevector(timevector),
@@ -327,7 +327,7 @@ mod tests {
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
-            client.select("CREATE TABLE lttb_pipe (series timevector)", None, None);
+            client.select("CREATE TABLE lttb_pipe (series timevector_tstz_f64)", None, None);
             client.select(
                 "INSERT INTO lttb_pipe \
                 SELECT timevector(time, val) FROM ( \

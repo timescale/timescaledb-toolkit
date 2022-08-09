@@ -31,9 +31,9 @@ pub fn map_lambda_pipeline_element<'l, 'e>(
 }
 
 pub fn apply_lambda_to<'a>(
-    mut series: Timevector<'a>,
+    mut series: Timevector_TSTZ_F64<'a>,
     lambda: &lambda::LambdaData<'_>,
-) -> Timevector<'a> {
+) -> Timevector_TSTZ_F64<'a> {
     let expression = lambda.parse();
     let only_val = expression.ty() == &lambda::Type::Double;
     if !only_val && !expression.ty_is_ts_point() {
@@ -63,7 +63,7 @@ pub fn apply_lambda_to<'a>(
 }
 
 pub fn map_lambda_over_series(
-    series: &mut Timevector<'_>,
+    series: &mut Timevector_TSTZ_F64<'_>,
     only_val: bool,
     mut func: impl FnMut(i64, f64) -> (Option<i64>, Option<f64>),
 ) {
@@ -119,7 +119,7 @@ pub fn check_user_function_type(function: pg_sys::regproc) {
     }
 }
 
-pub fn apply_to_series(mut series: Timevector<'_>, func: pg_sys::RegProcedure) -> Timevector<'_> {
+pub fn apply_to_series(mut series: Timevector_TSTZ_F64<'_>, func: pg_sys::RegProcedure) -> Timevector_TSTZ_F64<'_> {
     let mut flinfo: pg_sys::FmgrInfo = unsafe { MaybeUninit::zeroed().assume_init() };
     unsafe {
         pg_sys::fmgr_info(func, &mut flinfo);
@@ -134,7 +134,7 @@ pub fn apply_to_series(mut series: Timevector<'_>, func: pg_sys::RegProcedure) -
             //        and the sub-function will allocate the returned timevector
             series.cached_datum_or_flatten(),
         );
-        Timevector::from_datum(res, false, pg_sys::InvalidOid)
+        Timevector_TSTZ_F64::from_datum(res, false, pg_sys::InvalidOid)
             .expect("unexpected NULL in timevector mapping function")
     }
 }
@@ -173,7 +173,7 @@ pub fn map_data_pipeline_element<'e>(
     .flatten()
 }
 
-pub fn apply_to(mut series: Timevector<'_>, func: pg_sys::RegProcedure) -> Timevector<'_> {
+pub fn apply_to(mut series: Timevector_TSTZ_F64<'_>, func: pg_sys::RegProcedure) -> Timevector_TSTZ_F64<'_> {
     let mut flinfo: pg_sys::FmgrInfo = unsafe { MaybeUninit::zeroed().assume_init() };
 
     let fn_addr: unsafe extern "C" fn(*mut pg_sys::FunctionCallInfoBaseData) -> usize;
@@ -213,7 +213,7 @@ pub fn apply_to(mut series: Timevector<'_>, func: pg_sys::RegProcedure) -> Timev
     series
 }
 
-pub fn map_series(series: &mut Timevector<'_>, mut func: impl FnMut(f64) -> f64) {
+pub fn map_series(series: &mut Timevector_TSTZ_F64<'_>, mut func: impl FnMut(f64) -> f64) {
     use std::panic::AssertUnwindSafe;
 
     let points = series.points.as_owned().iter_mut();
@@ -530,7 +530,7 @@ mod tests {
             );
 
             client.select(
-                "CREATE FUNCTION jan_3_x3(timevector) RETURNS timevector AS $$\
+                "CREATE FUNCTION jan_3_x3(timevector_tstz_f64) RETURNS timevector_tstz_f64 AS $$\
                     SELECT timevector(time, value * 3) \
                     FROM (SELECT (unnest($1)).*) a \
                     WHERE time='2020-01-03 00:00:00+00';\
@@ -610,7 +610,7 @@ mod tests {
             );
 
             client.select(
-                "CREATE FUNCTION serier(timevector) RETURNS timevector AS $$\
+                "CREATE FUNCTION serier(timevector_tstz_f64) RETURNS timevector_tstz_f64 AS $$\
                     SELECT $1;\
                 $$ LANGUAGE SQL",
                 None,
@@ -639,7 +639,7 @@ mod tests {
                 num_elements:1,\
                 elements:[\
                     MapSeries(\
-                        function:\"public.serier(public.timevector)\"\
+                        function:\"public.serier(public.timevector_tstz_f64)\"\
                     )\
                 ]\
             )";

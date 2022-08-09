@@ -2,9 +2,7 @@
 use counter_agg::range::I64Range;
 use pgx::*;
 
-use flat_serialize::*;
-
-use std::convert::TryInto;
+use std::convert::TryInto as _;
 
 use crate::{
     build, flatten,

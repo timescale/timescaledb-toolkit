@@ -2,7 +2,6 @@ use pgx::*;
 
 use aggregate_builder::aggregate;
 use countminsketch::{CountMinHashFn, CountMinSketch as CountMinSketchInternal};
-use flat_serialize::*;
 
 use crate::{
     flatten,

@@ -12,8 +12,6 @@ use serde::{
     Deserialize, Serialize,
 };
 
-use flat_serialize::*;
-
 use crate::{
     aggregate_utils::{get_collation, in_aggregate_context},
     build,

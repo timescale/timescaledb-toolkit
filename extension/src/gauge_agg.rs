@@ -2,7 +2,6 @@ use pgx::*;
 use serde::{Deserialize, Serialize};
 
 use counter_agg::{range::I64Range, GaugeSummaryBuilder, MetricSummary};
-use flat_serialize::FlatSerializable;
 use flat_serialize_macro::FlatSerializable;
 use stats_agg::stats2d::StatsSummary2D;
 use tspoint::TSPoint;

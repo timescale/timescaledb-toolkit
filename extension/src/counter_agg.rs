@@ -864,13 +864,11 @@ mod tests {
     #[pg_test]
     fn test_counter_aggregate() {
         Spi::execute(|client| {
-            client.select("CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)", None, None);
             // set search_path after defining our table so we don't pollute the wrong schema
             let stmt = "SELECT format('toolkit_experimental, %s',current_setting('search_path'))";
             let search_path = select_one!(client, stmt, String);
             client.select(&format!("SET LOCAL search_path TO {}", search_path), None, None);
-            let stmt = "INSERT INTO test VALUES('2020-01-01 00:00:00+00', 10.0), ('2020-01-01 00:01:00+00', 20.0)";
-            client.select(stmt, None, None);
+            make_test_table(&client, "test");
 
             // NULL bounds are equivalent to none provided
             let stmt = "SELECT counter_agg(ts, val) FROM test";
@@ -1277,6 +1275,101 @@ mod tests {
         });
     }
 
+    #[pg_test]
+    fn irate_left_arrow_match() {
+        Spi::execute(|client| {
+            make_test_table(&client, "test");
+
+            assert_relative_eq!(
+                select_and_check_one!(
+                    client,
+                    "SELECT \
+                       irate_left(counter_agg(ts, val)), \
+                       counter_agg(ts, val) -> toolkit_experimental.irate_left() \
+                     FROM test",
+                    f64
+                ),
+                0.16666666666666666,
+            );
+        });
+    }
+
+    #[pg_test]
+    fn irate_right_arrow_match() {
+        Spi::execute(|client| {
+            make_test_table(&client, "test");
+
+            assert_relative_eq!(
+                select_and_check_one!(
+                    client,
+                    "SELECT \
+                       irate_right(counter_agg(ts, val)), \
+                       counter_agg(ts, val) -> toolkit_experimental.irate_right() \
+                     FROM test",
+                    f64
+                ),
+                0.16666666666666666,
+            );
+        });
+    }
+
+    #[pg_test]
+    fn idelta_left_arrow_match() {
+        Spi::execute(|client| {
+            make_test_table(&client, "test");
+
+            assert_relative_eq!(
+                select_and_check_one!(
+                    client,
+                    "SELECT \
+                       idelta_left(counter_agg(ts, val)), \
+                       counter_agg(ts, val) -> toolkit_experimental.idelta_left() \
+                     FROM test",
+                    f64
+                ),
+                10.0,
+            );
+        });
+    }
+
+    #[pg_test]
+    fn idelta_right_arrow_match() {
+        Spi::execute(|client| {
+            make_test_table(&client, "test");
+
+            assert_relative_eq!(
+                select_and_check_one!(
+                    client,
+                    "SELECT \
+                       idelta_right(counter_agg(ts, val)), \
+                       counter_agg(ts, val) -> toolkit_experimental.idelta_right() \
+                     FROM test",
+                    f64
+                ),
+                10.0,
+            );
+        });
+    }
+
+    #[pg_test]
+    fn num_resets_arrow_match() {
+        Spi::execute(|client| {
+            make_test_table(&client, "test");
+
+            assert_relative_eq!(
+                select_and_check_one!(
+                    client,
+                    "SELECT \
+                       num_resets(counter_agg(ts, val)), \
+                       counter_agg(ts, val) -> toolkit_experimental.num_resets() \
+                     FROM test",
+                    f64
+                ),
+                0.0,
+            );
+        });
+    }
+
     // #[pg_test]
     // fn test_combine_aggregate(){
     //     Spi::execute(|client| {
@@ -1351,5 +1444,21 @@ pub(crate) mod testing {
             None,
             None,
         );
+    }
+
+    pub fn make_test_table(client: &pgx::SpiClient, name: &str) {
+        client.select(
+            &format!(
+                "CREATE TABLE {}(ts timestamptz, val DOUBLE PRECISION)",
+                name
+            ),
+            None,
+            None,
+        );
+        client.select(
+                &format!("INSERT INTO {} VALUES('2020-01-01 00:00:00+00', 10.0), ('2020-01-01 00:01:00+00', 20.0)", name),
+                None,
+                None,
+            );
     }
 }

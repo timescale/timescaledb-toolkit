@@ -457,7 +457,7 @@ fn time_delta(summary: GaugeSummary) -> f64 {
 #[opname(->)]
 fn arrow_irate_left(
     sketch: GaugeSummary,
-    _accessor: toolkit_experimental::AccessorIRateLeft,
+    _accessor: toolkit_experimental::AccessorIrateLeft,
 ) -> Option<f64> {
     irate_left(sketch)
 }
@@ -471,7 +471,7 @@ fn irate_left(summary: GaugeSummary) -> Option<f64> {
 #[opname(->)]
 fn arrow_irate_right(
     sketch: GaugeSummary,
-    _accessor: toolkit_experimental::AccessorIRateRight,
+    _accessor: toolkit_experimental::AccessorIrateRight,
 ) -> Option<f64> {
     irate_right(sketch)
 }
@@ -485,7 +485,7 @@ fn irate_right(summary: GaugeSummary) -> Option<f64> {
 #[opname(->)]
 fn arrow_idelta_left(
     sketch: GaugeSummary,
-    _accessor: toolkit_experimental::AccessorIDeltaLeft,
+    _accessor: toolkit_experimental::AccessorIdeltaLeft,
 ) -> f64 {
     idelta_left(sketch)
 }
@@ -499,7 +499,7 @@ fn idelta_left(summary: GaugeSummary) -> f64 {
 #[opname(->)]
 fn arrow_idelta_right(
     sketch: GaugeSummary,
-    _accessor: toolkit_experimental::AccessorIDeltaRight,
+    _accessor: toolkit_experimental::AccessorIdeltaRight,
 ) -> f64 {
     idelta_right(sketch)
 }
@@ -660,7 +660,7 @@ fn corr(summary: GaugeSummary) -> Option<f64> {
 #[opname(->)]
 fn arrow_zero_time(
     sketch: GaugeSummary,
-    __accessor: toolkit_experimental::AccessorZeroTime,
+    __accessor: toolkit_experimental::AccessorCounterZeroTime,
 ) -> Option<crate::raw::TimestampTz> {
     gauge_zero_time(sketch)
 }

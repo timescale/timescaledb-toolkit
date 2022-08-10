@@ -486,7 +486,7 @@ fn counter_agg_time_delta(
 #[opname(->)]
 pub fn arrow_counter_agg_irate_left(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorIRateLeft,
+    accessor: toolkit_experimental::AccessorIrateLeft,
 ) -> Option<f64> {
     let _ = accessor;
     counter_agg_irate_left(sketch)
@@ -504,7 +504,7 @@ fn counter_agg_irate_left(
 #[opname(->)]
 pub fn arrow_counter_agg_irate_right(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorIRateRight,
+    accessor: toolkit_experimental::AccessorIrateRight,
 ) -> Option<f64> {
     let _ = accessor;
     counter_agg_irate_right(sketch)
@@ -522,7 +522,7 @@ fn counter_agg_irate_right(
 #[opname(->)]
 pub fn arrow_counter_agg_idelta_left(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorIDeltaLeft,
+    accessor: toolkit_experimental::AccessorIdeltaLeft,
 ) -> f64 {
     let _ = accessor;
     counter_agg_idelta_left(sketch)
@@ -540,7 +540,7 @@ fn counter_agg_idelta_left(
 #[opname(->)]
 pub fn arrow_counter_agg_idelta_right(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorIDeltaRight,
+    accessor: toolkit_experimental::AccessorIdeltaRight,
 ) -> f64 {
     let _ = accessor;
     counter_agg_idelta_right(sketch)
@@ -778,7 +778,7 @@ fn counter_agg_corr(
 #[opname(->)]
 pub fn arrow_counter_agg_zero_time(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorZeroTime,
+    accessor: toolkit_experimental::AccessorCounterZeroTime,
 ) -> Option<crate::raw::TimestampTz> {
     let _ = accessor;
     counter_agg_counter_zero_time(sketch)

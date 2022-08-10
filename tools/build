@@ -163,7 +163,7 @@ while [ $# -gt 0 ]; do
             (
                 export CARGO_TARGET_DIR="$top_CARGO_TARGET_DIR"
                 $nop cargo pgx start $pg
-                $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- \
+                $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- full-update-test-source \
                  -h localhost \
                  -p $pg_port \
                  --cache old-versions \

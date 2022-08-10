@@ -1,6 +1,6 @@
 [package]
 name = "update-tester"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -10,7 +10,7 @@ control_file_reader = {path = "../../crates/scripting-utilities/control_file_rea
 postgres_connection_configuration = {path = "../../crates/scripting-utilities/postgres_connection_configuration"}
 
 colored = "2.0.0"
-clap = { version = "2.33", features = ["wrap_help"] }
+clap = { version = "3.2.15", features = ["wrap_help"] }
 postgres = "0.19.1"
 semver = "1.0.9"
 toml_edit = "0.14.3"

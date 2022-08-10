@@ -33,7 +33,7 @@ pub fn run_update_tests(
                 "installed unexpected version"
             );
 
-            let validation_values = test_client.create_test_objects_for(&old_version);
+            let validation_values = test_client.create_test_objects();
 
             test_client.update_to_current_version();
             let new_version = test_client.get_installed_extension_version();
@@ -58,6 +58,35 @@ pub fn run_update_tests(
     Ok(())
 }
 
+pub fn create_test_objects_for_package_testing(root_config: &ConnectionConfig) {
+    eprintln!(" {}", "Creating test objects".bold().cyan());
+
+    let test_db_name = "tsdb_toolkit_test";
+    let test_config = root_config.with_db(test_db_name);
+
+    let mut client = connect_to(root_config).0;
+
+    let drop = format!(r#"DROP DATABASE IF EXISTS "{}""#, test_db_name);
+    client
+        .simple_query(&drop)
+        .unwrap_or_else(|e| panic!("could not drop db {} due to {}", test_db_name, e));
+    let create = format!(r#"create database "{}""#, test_db_name);
+    client
+        .simple_query(&create)
+        .unwrap_or_else(|e| panic!("could not create db {} due to {}", test_db_name, e));
+
+    let mut test_client = connect_to(&test_config);
+
+    let create = "CREATE EXTENSION timescaledb_toolkit";
+    test_client
+        .simple_query(create)
+        .unwrap_or_else(|e| panic!("could not install extension due to {}", e,));
+
+    // create test objects
+    let _results = test_client.create_test_objects();
+    eprintln!("{}", "Finished creating objects".bold().green());
+}
+
 fn connect_to(config: &ConnectionConfig<'_>) -> TestClient {
     let client = Client::connect(&config.config_string(), NoTls).unwrap_or_else(|e| {
         panic!(
@@ -67,6 +96,42 @@ fn connect_to(config: &ConnectionConfig<'_>) -> TestClient {
         )
     });
     TestClient(client)
+}
+
+pub fn update_to_and_validate_new_toolkit_version(root_config: &ConnectionConfig) {
+    // update extension to new version
+    let test_db_name = "tsdb_toolkit_test";
+    let test_config = root_config.with_db(test_db_name);
+
+    let mut test_client = connect_to(&test_config);
+    test_client.update_to_current_version();
+
+    // run validation tests
+    let expected_results: QueryValues = vec![vec![
+        Some("100".to_string()),
+        Some("108".to_string()),
+        Some("149.5".to_string()),
+        Some("108.96220333142547".to_string()),
+        Some("109.50489521100047".to_string()),
+        Some("1.7995661075080858".to_string()),
+    ]];
+    test_client.validate_test_objects(expected_results);
+
+    eprintln!("{}", "Finished validating objects".bold().green());
+
+    // This close needs to happen before trying to drop the DB or else panics with `There is 1 other session using the database.`
+    test_client
+        .0
+        .close()
+        .unwrap_or_else(|e| panic!("Could not close connection to postgres DB due to {}", e));
+    // if the validation passes, drop the db
+    let mut client = connect_to(root_config).0;
+    eprintln!("{}", "Tests pass, dropping database.".bold().green());
+
+    let drop = format!(r#"DROP DATABASE IF EXISTS "{}""#, test_db_name);
+    client
+        .simple_query(&drop)
+        .unwrap_or_else(|e| panic!("could not drop db {} due to {}", test_db_name, e));
 }
 
 //---------------//
@@ -111,7 +176,6 @@ fn create_db<'a>(
 
 struct TestClient(Client);
 
-#[must_use]
 type QueryValues = Vec<Vec<Option<String>>>;
 
 impl TestClient {
@@ -129,7 +193,7 @@ impl TestClient {
     }
 
     #[must_use]
-    fn create_test_objects_for(&mut self, _old_version: &str) -> QueryValues {
+    fn create_test_objects(&mut self) -> QueryValues {
         let create_data_table = "\
             CREATE TABLE test_data(ts timestamptz, val DOUBLE PRECISION);\
             INSERT INTO test_data \
@@ -143,7 +207,7 @@ impl TestClient {
         // TODO JOSH - I want to have additional stuff for newer versions,
         //             but it's not ready yet
         let create_test_view = "\
-            CREATE VIEW regression_view AS \
+            CREATE MATERIALIZED VIEW regression_view AS \
                 SELECT \
                     counter_agg(ts, val) AS countagg, \
                     hyperloglog(32, val) AS hll, \
@@ -216,7 +280,8 @@ impl TestClient {
         // flatten the list of returned objects for better output on errors
         // it shouldn't change the result since each row only has a single
         // non-null element anyway.
-        let leaks: Vec<String> = leaks.into_iter()
+        let leaks: Vec<String> = leaks
+            .into_iter()
             .flat_map(Vec::into_iter)
             .flatten()
             .collect();

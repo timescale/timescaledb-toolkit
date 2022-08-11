@@ -1,7 +1,11 @@
+use std::{
+    borrow::Cow,
+    io::{self, Write},
+    process::exit,
+    time::Instant,
+};
 
-use std::{borrow::Cow, io::{self, Write}, process::exit, time::Instant};
-
-use clap::clap_app;
+use clap::{Arg, Command};
 
 use colored::Colorize;
 
@@ -9,17 +13,21 @@ use postgres::{Client, NoTls, SimpleQueryMessage::Row};
 use rayon::iter::{IntoParallelRefMutIterator, ParallelIterator};
 
 fn main() {
-    let matches = clap_app!(("testrunner") =>
-        (@arg HOST: -h --host [hostname] conflicts_with[URL] "postgres host")
-        (@arg PORT: -p --port [portnumber] conflicts_with[URL] "postgres port")
-        (@arg USER: -u --user [username] conflicts_with[URL] "postgres user")
-        (@arg PASSWORD: -a --password [password] conflicts_with[URL] "postgres password")
-        (@arg DB: -d --database [database] conflicts_with[URL] "postgres database the root \
-            connection should use. By default this DB will only be used \
-            to spawn the individual test databases; no tests will run against \
-            it.")
-    ).get_matches();
-
+    let matches = Command::new("testrunner")
+        .about("Testrunner")
+        .arg_required_else_help(true)
+        .arg(Arg::new("HOST").short('h').long("host").takes_value(true))
+        .arg(Arg::new("PORT").short('p').long("port").takes_value(true))
+        .arg(Arg::new("USER").short('u').long("user").takes_value(true))
+        .arg(
+            Arg::new("PASSWORD")
+                .short('a')
+                .long("password")
+                .takes_value(true),
+        )
+        .arg(Arg::new("DB").short('d').long("database").takes_value(true))
+        .mut_arg("help", |_h| Arg::new("help").long("help"))
+        .get_matches();
     let connection_config = ConnectionConfig {
         host: matches.value_of("HOST"),
         port: matches.value_of("PORT"),

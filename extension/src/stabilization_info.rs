@@ -229,6 +229,14 @@ crate::functions_stabilized_at! {
         variance_y(text),
         with_bounds(tstzrange),
         x_intercept(),
+        lttb(timestamp with time zone,double precision,integer),
+        lttb(timevector_tstz_f64,integer),
+        lttb_final(internal),
+        lttb_trans(internal,timestamp with time zone,double precision,integer),
+        asap_final(internal),
+        asap_smooth(timestamp with time zone,double precision,integer),
+        asap_smooth(timevector_tstz_f64,integer),
+        asap_trans(internal,timestamp with time zone,double precision,integer),
     }
     "1.8.0" => {
     }

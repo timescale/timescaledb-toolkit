@@ -12,16 +12,6 @@ use tspoint::TSPoint;
 
 use crate::time_vector::{Timevector_TSTZ_F64, Timevector_TSTZ_F64Data};
 
-// This is included for debug purposes and probably should not leave experimental
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn asap_smooth_raw(data: Vec<f64>, resolution: i32) -> Vec<f64> {
-    asap_smooth(&data, resolution as u32)
-}
-
-// hack to allow us to qualify names with "toolkit_experimental"
-// so that pgx generates the correct SQL
-mod toolkit_experimental {}
-
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ASAPTransState {
     ts: Vec<TSPoint>,
@@ -29,7 +19,7 @@ pub struct ASAPTransState {
     resolution: i32,
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn asap_trans(
     state: Internal,
     ts: Option<crate::raw::TimestampTz>,
@@ -83,26 +73,7 @@ impl ASAPTransState {
     }
 }
 
-fn find_downsample_interval(points: &[TSPoint], resolution: i64) -> i64 {
-    // debug_assert!(points.is_sorted_by_key(|p| p.ts));
-
-    // First candidate is simply the total range divided into even size buckets
-    let candidate = (points.last().unwrap().ts - points.first().unwrap().ts) / resolution;
-
-    // Problem with this approach is ASAP appears to deliver much rougher graphs if buckets
-    // don't contain an equal number of points.  We try to adjust for this by truncating the
-    // downsample_interval to a multiple of the average delta, unfortunately this is very
-    // susceptible to gaps in the data.  So instead of the average delta, we use the median.
-    let mut diffs = vec![0; (points.len() - 1) as usize];
-    for i in 1..points.len() as usize {
-        diffs[i - 1] = points[i].ts - points[i - 1].ts;
-    }
-    diffs.sort_unstable();
-    let median = diffs[diffs.len() / 2];
-    candidate / median * median // Truncate candidate to a multiple of median
-}
-
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 fn asap_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
@@ -124,22 +95,19 @@ fn asap_final_inner(
             if !state.sorted {
                 points.sort_by_key(|p| p.ts);
             }
-            // In following the ASAP reference implementation, we only downsample if the number
-            // of points is at least twice the resolution.  Otherwise we keep the number of
-            // points, but still normalize them to equal sized buckets.
-            let downsample_interval = if points.len() >= 2 * state.resolution as usize {
-                find_downsample_interval(&points, state.resolution as i64)
-            } else {
-                (points.last().unwrap().ts - points.first().unwrap().ts) / points.len() as i64
-            };
-            let mut normal = downsample_and_gapfill_to_normal_form(&points, downsample_interval);
+
             let start_ts = points.first().unwrap().ts;
+            let end_ts = points.last().unwrap().ts;
 
-            // Drop the last value to match the reference implementation
-            normal.pop();
-            let values = asap_smooth(&normal, state.resolution as u32);
+            let mut values: Vec<f64> = points.iter().map(|p| p.val).collect();
+            values = asap_smooth(&values, state.resolution as u32);
 
-            let interval = downsample_interval * normal.len() as i64 / values.len() as i64;
+            let interval = if values.len() > 1 {
+                (end_ts - start_ts) / (values.len() - 1) as i64
+            } else {
+                1
+            };
+
             let points: Vec<_> = values
                 .into_iter()
                 .enumerate()
@@ -164,12 +132,7 @@ fn asap_final_inner(
     }
 }
 
-#[pg_extern(
-    name = "asap_smooth",
-    schema = "toolkit_experimental",
-    immutable,
-    parallel_safe
-)]
+#[pg_extern(name = "asap_smooth", immutable, parallel_safe)]
 pub fn asap_on_timevector(
     mut series: Timevector_TSTZ_F64<'static>,
     resolution: i32,
@@ -180,23 +143,19 @@ pub fn asap_on_timevector(
     if needs_sort {
         series.points.as_owned().sort_by_key(|p| p.ts);
     }
-    // TODO points.make_slice()?
-    let downsample_interval = if series.points.len() >= 2 * resolution as usize {
-        find_downsample_interval(series.points.as_slice(), resolution as i64)
-    } else {
-        (series.points.as_slice().last().unwrap().ts - series.points.as_slice().first().unwrap().ts)
-            / series.points.len() as i64
-    };
-    let mut normal =
-        downsample_and_gapfill_to_normal_form(series.points.as_slice(), downsample_interval);
     let start_ts = series.points.as_slice().first().unwrap().ts;
+    let end_ts = series.points.as_slice().last().unwrap().ts;
 
-    // Drop the last value to match the reference implementation
-    normal.pop();
+    let values: Vec<f64> = series.points.as_slice().iter().map(|p| p.val).collect();
 
-    let result = asap_smooth(&normal, resolution as u32);
+    let result = asap_smooth(&values, resolution as u32);
 
-    let interval = downsample_interval * normal.len() as i64 / result.len() as i64;
+    let interval = if result.len() > 1 {
+        (end_ts - start_ts) / (result.len() - 1) as i64
+    } else {
+        1
+    };
+
     let points: Vec<_> = result
         .into_iter()
         .enumerate()
@@ -219,224 +178,152 @@ pub fn asap_on_timevector(
     })
 }
 
-// Adds the given number of points to the end of a non-empty NormalTimevector
-fn fill_normalized_series_gap(values: &mut Vec<f64>, points: i32, post_gap_val: f64) {
-    assert!(!values.is_empty());
-    let last_val = *values.last().unwrap();
-    for i in 1..=points {
-        values.push(last_val + (post_gap_val - last_val) * i as f64 / (points + 1) as f64);
-    }
-}
-
-fn downsample_and_gapfill_to_normal_form(points: &[TSPoint], downsample_interval: i64) -> Vec<f64> {
-    if points.len() < 2
-        || points.last().unwrap().ts - points.first().unwrap().ts < downsample_interval
-    {
-        panic!("Not enough data to generate a smoothed representation")
-    }
-    //TODO can we right-size?
-    let mut values = vec![];
-    let mut bound = points.first().unwrap().ts + downsample_interval;
-    let mut sum = 0.0;
-    let mut count = 0;
-    let mut gap_count = 0;
-    for pt in points.iter() {
-        if pt.ts < bound {
-            sum += pt.val;
-            count += 1;
-        } else {
-            assert!(count != 0);
-            let new_val = sum / count as f64;
-            // If we missed any intervals prior to the current one, fill in the gap here
-            if gap_count != 0 {
-                fill_normalized_series_gap(&mut values, gap_count, new_val);
-                gap_count = 0;
-            }
-            values.push(new_val);
-            sum = pt.val;
-            count = 1;
-            bound += downsample_interval;
-            // If the current point doesn't go in the bucket immediately following the one
-            // we just created, update the bound until we find the correct bucket and track
-            // the number of empty buckets we skip over
-            while bound < pt.ts {
-                bound += downsample_interval;
-                gap_count += 1;
-            }
-        }
-    }
-    // This will handle the last interval, since we always exit the above loop in the middle
-    // of accumulating an interval
-    assert!(count > 0);
-    let new_val = sum / count as f64;
-    if gap_count != 0 {
-        fill_normalized_series_gap(&mut values, gap_count, new_val);
-    }
-    values.push(sum / count as f64);
-    values
-}
-
 // Aggregate on only values (assumes aggregation over ordered normalized timestamp)
-extension_sql!("\n\
-    CREATE AGGREGATE toolkit_experimental.asap_smooth(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution INT)\n\
+extension_sql!(
+    "\n\
+    CREATE AGGREGATE asap_smooth(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution INT)\n\
     (\n\
-        sfunc = toolkit_experimental.asap_trans,\n\
+        sfunc = asap_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.asap_final\n\
+        finalfunc = asap_final\n\
     );\n",
-name = "asap_agg",
-requires = [asap_trans, asap_final],
+    name = "asap_agg",
+    requires = [asap_trans, asap_final],
 );
 
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
+    use approx::assert_relative_eq;
     use pgx::*;
     use pgx_macros::pg_test;
 
     #[pg_test]
-    fn test_asap() {
+    fn test_against_reference() {
+        // Test our ASAP implementation against the reference implementation at http://www.futuredata.io.s3-website-us-west-2.amazonaws.com/asap/
+        // The sample data is the first 100 points of the second sample data set.  Note that the dates are not important for this test.
         Spi::execute(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
-            client.select(
-                "CREATE TABLE asap_test (date timestamptz, value DOUBLE PRECISION)",
-                None,
-                None,
-            );
-
-            // Create a table with some cyclic data
-            client.select("insert into asap_test select '2020-1-1 UTC'::timestamptz + make_interval(days=>foo), 10 + 5 * cos(foo) from generate_series(0,1000) foo", None, None);
-            // Gap from [1001,1040] then continue cycle
-            client.select("insert into asap_test select '2020-1-1 UTC'::timestamptz + make_interval(days=>foo), 10 + 5 * cos(foo) from generate_series(1041,2000) foo", None, None);
-            // Values in [2001,2200] are 2 less than normal
-            client.select("insert into asap_test select '2020-1-1 UTC'::timestamptz + make_interval(days=>foo), 8 + 5 * cos(foo) from generate_series(2001,2200) foo", None, None);
-            // And fill out to 3000
-            client.select("insert into asap_test select '2020-1-1 UTC'::timestamptz + make_interval(days=>foo), 10 + 5 * cos(foo) from generate_series(2201,3000) foo", None, None);
-
-            // Smoothing to resolution 100 gives us 95 points so our hole should be around index 32-33
-            // and our decreased values should be around 64-72.  However, since the output is
-            // rolling averages, expect these values to impact the results around these ranges as well.
-
-            client.select("create table asap_vals as SELECT * FROM unnest((SELECT toolkit_experimental.asap_smooth(date, value, 100) FROM asap_test ))", None, None);
-
-            let sanity = client
-                .select("SELECT COUNT(*) FROM asap_vals", None, None)
-                .first()
-                .get_one::<i32>()
-                .unwrap();
-            assert_eq!(sanity, 95);
-
-            // First check that our smoothed values away from our impacted ranges are about 10
-            let test_val = client
-                .select(
-                    "SELECT value FROM asap_vals ORDER BY time LIMIT 1 OFFSET 5",
-                    None,
-                    None,
-                )
-                .first()
-                .get_one::<f64>()
-                .unwrap();
-            assert!((10.0 - test_val).abs() < 0.05);
-            let test_val = client
-                .select(
-                    "SELECT value FROM asap_vals ORDER BY time LIMIT 1 OFFSET 20",
-                    None,
-                    None,
-                )
-                .first()
-                .get_one::<f64>()
-                .unwrap();
-            assert!((10.0 - test_val).abs() < 0.05);
-            let test_val = client
-                .select(
-                    "SELECT value FROM asap_vals ORDER BY time LIMIT 1 OFFSET 55",
-                    None,
-                    None,
-                )
-                .first()
-                .get_one::<f64>()
-                .unwrap();
-            assert!((10.0 - test_val).abs() < 0.05);
-            let test_val = client
-                .select(
-                    "SELECT value FROM asap_vals ORDER BY time LIMIT 1 OFFSET 85",
-                    None,
-                    None,
-                )
-                .first()
-                .get_one::<f64>()
-                .unwrap();
-            assert!((10.0 - test_val).abs() < 0.05);
-
-            // There's not too much we can assume about our gap, since it's only one or two data point at our resolution, and they'll be filled with the linear interpolation of the left and right sides and then taken as part of a moving average with the surrounding points.  We will just check that the values are a bit away from 10 around this range.
-            let test_val = client
-                .select(
-                    "SELECT value FROM asap_vals ORDER BY time LIMIT 1 OFFSET 29",
-                    None,
-                    None,
-                )
-                .first()
-                .get_one::<f64>()
-                .unwrap();
-            assert!((10.0 - test_val).abs() > 0.1);
-            let test_val = client
-                .select(
-                    "SELECT value FROM asap_vals ORDER BY time LIMIT 1 OFFSET 33",
-                    None,
-                    None,
-                )
-                .first()
-                .get_one::<f64>()
-                .unwrap();
-            assert!((10.0 - test_val).abs() > 0.1);
-
-            // Finally check that our points near our decreased range are significantly lower.  We don't expect these to necessarily get down to 8 due to the rolling average, but they should be closer to 8 than 10 in the middle of the range.
-            let test_val = client
-                .select(
-                    "SELECT value FROM asap_vals ORDER BY time LIMIT 1 OFFSET 68",
-                    None,
-                    None,
-                )
-                .first()
-                .get_one::<f64>()
-                .unwrap();
-            assert!((10.0 - test_val).abs() > (8.0 - test_val).abs());
-            let test_val = client
-                .select(
-                    "SELECT value FROM asap_vals ORDER BY time LIMIT 1 OFFSET 70",
-                    None,
-                    None,
-                )
-                .first()
-                .get_one::<f64>()
-                .unwrap();
-            assert!((10.0 - test_val).abs() > (8.0 - test_val).abs());
-
-            // Now compare the asap aggregate to asap run on a timevector aggregate
-            client.select(
-                "create table asap_vals2 as
-                SELECT *
+            let mut result = client.select(
+                "
+                SELECT value
                 FROM unnest(
-                    (SELECT toolkit_experimental.asap_smooth(
-                        (SELECT timevector(date, value) FROM asap_test),
-                        100)
-                    )
-                )",
+                (SELECT asap_smooth('2020-1-1'::timestamptz + i * '1d'::interval, val, 10)
+                    FROM (VALUES 
+                        (1,1.1),(2,4.4),(3,7.5),(4,8.9),(5,11.7),(6,15),(7,15.3),(8,15.6),(9,13.3),(10,11.1),
+                        (11,7.5),(12,5.8),(13,5.6),(14,4.2),(15,4.7),(16,7.2),(17,11.4),(18,15.3),(19,15),(20,16.2),
+                        (21,14.4),(22,8.6),(23,5.3),(24,3.3),(25,4.4),(26,3.3),(27,5),(28,8.1),(29,10.8),(30,12.2),
+                        (31,13.8),(32,13.3),(33,12.8),(34,9.4),(35,6.9),(36,3.9),(37,1.1),(38,4.2),(39,4.2),(40,8.4),
+                        (41,13.4),(42,16.4),(43,16),(44,15.6),(45,14.7),(46,10.2),(47,6.1),(48,1.8),(49,4.2),(50,5),
+                        (51,5.1),(52,9.2),(53,13.6),(54,14.9),(55,16.9),(56,16.9),(57,14.4),(58,10.8),(59,4.7),(60,3.6),
+                        (61,3.9),(62,2.4),(63,7.1),(64,8.3),(65,12.5),(66,16.4),(67,16.9),(68,16),(69,12.8),(70,9.1),
+                        (71,7.2),(72,1.6),(73,1.2),(74,2.3),(75,2.8),(76,7.1),(77,10.3),(78,15.1),(79,16.8),(80,15.7),
+                        (81,16.6),(82,10.1),(83,8.1),(84,5),(85,4.1),(86,4.7),(87,6.2),(88,8.7),(89,12.4),(90,14),
+                        (91,15.3),(92,16.3),(93,15.3),(94,10.9),(95,9.2),(96,3.4),(97,1.9),(98,2.2),(99,6),(100,6.8)
+                    ) AS v(i, val)
+                )) s",
                 None,
-                None,
-            );
+                None);
 
-            let delta = client
-                .select(
-                    "SELECT count(*)
-                    FROM asap_vals r1 FULL OUTER JOIN asap_vals2 r2 ON r1 = r2
-                    WHERE r1 IS NULL OR r2 IS NULL;",
-                    None,
-                    None,
-                )
-                .first()
-                .get_one::<i32>();
-            assert_eq!(delta.unwrap(), 0);
-        });
+            assert_relative_eq!(
+                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                10.39
+            );
+            assert_relative_eq!(
+                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                9.29
+            );
+            assert_relative_eq!(
+                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                7.54
+            );
+            assert_relative_eq!(
+                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                7.8
+            );
+            assert_relative_eq!(
+                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                10.34
+            );
+            assert_relative_eq!(
+                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                11.01
+            );
+            assert_relative_eq!(
+                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                10.54
+            );
+            assert_relative_eq!(
+                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                8.01
+            );
+            assert_relative_eq!(
+                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                8.99
+            );
+            assert_relative_eq!(
+                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                8.73
+            );
+            assert!(result.next().is_none());
+        })
+    }
+
+    #[pg_test]
+    fn test_asap_equivalence() {
+        Spi::execute(|client| {
+            let mut value_result = client.select(
+                "
+                SELECT time::text, value
+                FROM unnest(
+                (SELECT asap_smooth('2020-1-1'::timestamptz + i * '1d'::interval, val, 10)
+                    FROM (VALUES 
+                        (1,1.1),(2,4.4),(3,7.5),(4,8.9),(5,11.7),(6,15),(7,15.3),(8,15.6),(9,13.3),(10,11.1),
+                        (11,7.5),(12,5.8),(13,5.6),(14,4.2),(15,4.7),(16,7.2),(17,11.4),(18,15.3),(19,15),(20,16.2),
+                        (21,14.4),(22,8.6),(23,5.3),(24,3.3),(25,4.4),(26,3.3),(27,5),(28,8.1),(29,10.8),(30,12.2),
+                        (31,13.8),(32,13.3),(33,12.8),(34,9.4),(35,6.9),(36,3.9),(37,1.1),(38,4.2),(39,4.2),(40,8.4),
+                        (41,13.4),(42,16.4),(43,16),(44,15.6),(45,14.7),(46,10.2),(47,6.1),(48,1.8),(49,4.2),(50,5),
+                        (51,5.1),(52,9.2),(53,13.6),(54,14.9),(55,16.9),(56,16.9),(57,14.4),(58,10.8),(59,4.7),(60,3.6),
+                        (61,3.9),(62,2.4),(63,7.1),(64,8.3),(65,12.5),(66,16.4),(67,16.9),(68,16),(69,12.8),(70,9.1),
+                        (71,7.2),(72,1.6),(73,1.2),(74,2.3),(75,2.8),(76,7.1),(77,10.3),(78,15.1),(79,16.8),(80,15.7),
+                        (81,16.6),(82,10.1),(83,8.1),(84,5),(85,4.1),(86,4.7),(87,6.2),(88,8.7),(89,12.4),(90,14),
+                        (91,15.3),(92,16.3),(93,15.3),(94,10.9),(95,9.2),(96,3.4),(97,1.9),(98,2.2),(99,6),(100,6.8)
+                    ) AS v(i, val)
+                )) s",
+                None,
+                None);
+
+            let mut tvec_result = client.select(
+                "
+                SELECT time::text, value
+                FROM unnest(
+                (SELECT asap_smooth(
+                    (SELECT timevector('2020-1-1'::timestamptz + i * '1d'::interval, val)
+                        FROM (VALUES 
+                            (1,1.1),(2,4.4),(3,7.5),(4,8.9),(5,11.7),(6,15),(7,15.3),(8,15.6),(9,13.3),(10,11.1),
+                            (11,7.5),(12,5.8),(13,5.6),(14,4.2),(15,4.7),(16,7.2),(17,11.4),(18,15.3),(19,15),(20,16.2),
+                            (21,14.4),(22,8.6),(23,5.3),(24,3.3),(25,4.4),(26,3.3),(27,5),(28,8.1),(29,10.8),(30,12.2),
+                            (31,13.8),(32,13.3),(33,12.8),(34,9.4),(35,6.9),(36,3.9),(37,1.1),(38,4.2),(39,4.2),(40,8.4),
+                            (41,13.4),(42,16.4),(43,16),(44,15.6),(45,14.7),(46,10.2),(47,6.1),(48,1.8),(49,4.2),(50,5),
+                            (51,5.1),(52,9.2),(53,13.6),(54,14.9),(55,16.9),(56,16.9),(57,14.4),(58,10.8),(59,4.7),(60,3.6),
+                            (61,3.9),(62,2.4),(63,7.1),(64,8.3),(65,12.5),(66,16.4),(67,16.9),(68,16),(69,12.8),(70,9.1),
+                            (71,7.2),(72,1.6),(73,1.2),(74,2.3),(75,2.8),(76,7.1),(77,10.3),(78,15.1),(79,16.8),(80,15.7),
+                            (81,16.6),(82,10.1),(83,8.1),(84,5),(85,4.1),(86,4.7),(87,6.2),(88,8.7),(89,12.4),(90,14),
+                            (91,15.3),(92,16.3),(93,15.3),(94,10.9),(95,9.2),(96,3.4),(97,1.9),(98,2.2),(99,6),(100,6.8)
+                        ) AS v(i, val)
+                    ), 10)
+                ))",
+                None,
+                None);
+
+            for _ in 0..10 {
+                let v = value_result.next().unwrap();
+                let t = tvec_result.next().unwrap();
+                assert_eq!(v[1].value::<&str>(), t[1].value::<&str>());
+                assert_eq!(v[2].value::<f64>(), t[2].value::<f64>());
+            }
+            assert!(value_result.next().is_none());
+            assert!(tvec_result.next().is_none());
+        })
     }
 }

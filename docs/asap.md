@@ -48,7 +48,7 @@ It is hard to look at this data and make much sense of how the temperature has c
 We can use ASAP smoothing here to get a much clearer picture of the behavior over this interval.
 
 ```SQL ,ignore
-SELECT * FROM unnest((SELECT toolkit_experimental.asap_smooth(month, value, 800) FROM temperatures));
+SELECT * FROM unnest((SELECT asap_smooth(month, value, 800) FROM temperatures));
 ```
 ```
                 time                 |       value
@@ -81,7 +81,7 @@ Note the use of the `unnest` here to unpack the results of the `asap_smooth` com
 ---
 ## **asap_smooth** <a id="asap_smooth"></a>
 ```SQL ,ignore
-toolkit_experimental.asap_smooth(
+asap_smooth(
     ts TIMESTAMPTZ,
     value DOUBLE PRECISION,
     resolution INT
@@ -124,19 +124,19 @@ SELECT
 </div>
 
 ```SQL
-SELECT * FROM unnest(
-    (SELECT toolkit_experimental.asap_smooth(date, reading, 8)
+SELECT time, round(value::numeric, 14) FROM unnest(
+    (SELECT asap_smooth(date, reading, 8)
      FROM metrics));
 ```
 ```output
-          time          |        value
-------------------------+---------------------
- 2020-01-01 01:00:00+00 | 5.3664814565722665
- 2020-01-01 21:00:00+00 |  5.949469264090644
- 2020-01-02 17:00:00+00 |  5.582987807518377
- 2020-01-03 13:00:00+00 |  4.633518543427733
- 2020-01-04 09:00:00+00 |  4.050530735909357
- 2020-01-05 05:00:00+00 |  4.417012192481623
- 2020-01-06 01:00:00+00 |  5.366481456572268
- 2020-01-06 21:00:00+00 |  5.949469264090643
+             time             |       value
+------------------------------+-------------------
+       2020-01-01 01:00:00+00 | 5.18067120121489
+2020-01-02 00:51:25.714285+00 | 5.60453762172858
+ 2020-01-03 00:42:51.42857+00 | 5.67427410239845
+2020-01-04 00:34:17.142855+00 | 5.34902995864025
+ 2020-01-05 00:25:42.85714+00 | 4.81932879878511
+2020-01-06 00:17:08.571425+00 | 4.39546237827141
+ 2020-01-07 00:08:34.28571+00 | 4.32572589760154
+2020-01-07 23:59:59.999995+00 | 4.65097004135974
 ```

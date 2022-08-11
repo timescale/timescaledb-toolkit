@@ -22,7 +22,8 @@ AS SELECT
     time_bucket('7 day'::interval, time) as week,
     hyperloglog(64, value1) as hll,
     counter_agg(time, value1) as counter,
-    stats_agg(value1, value2) as stats
+    stats_agg(value1, value2) as stats,
+    timevector(time, value2) as tvec
 FROM test
 GROUP BY time_bucket('7 day'::interval, time);
 ```
@@ -89,4 +90,27 @@ FROM weekly_aggs;
  average_y |   stddev_y    |   skewness_y    |   kurtosis_y
 -----------+---------------+-----------------+----------------
         67 | 23.6877840059 | -0.565748443434 | 2.39964349376
+```
+
+```SQL
+SELECT week, count(*)
+FROM (
+    SELECT week, unnest(tvec)
+    FROM weekly_aggs
+    WHERE week > '2020-06-01'::TIMESTAMPTZ
+) s
+GROUP BY week
+ORDER BY week;
+```
+```output
+          week          | count 
+------------------------+-------
+ 2020-06-08 00:00:00+00 |   168
+ 2020-06-15 00:00:00+00 |   168
+ 2020-06-22 00:00:00+00 |   168
+ 2020-06-29 00:00:00+00 |   168
+ 2020-07-06 00:00:00+00 |   168
+ 2020-07-13 00:00:00+00 |   168
+ 2020-07-20 00:00:00+00 |   168
+ 2020-07-27 00:00:00+00 |    59
 ```

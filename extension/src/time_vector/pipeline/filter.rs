@@ -24,9 +24,9 @@ pub fn filter_lambda_pipeline_element<'l, 'e>(
 }
 
 pub fn apply_lambda_to<'a>(
-    mut series: Timevector<'a>,
+    mut series: Timevector_TSTZ_F64<'a>,
     lambda: &lambda::LambdaData<'_>,
-) -> Timevector<'a> {
+) -> Timevector_TSTZ_F64<'a> {
     let expression = lambda.parse();
     if expression.ty() != &lambda::Type::Bool {
         panic!("invalid lambda type: the lambda must return a BOOLEAN")
@@ -49,7 +49,7 @@ pub fn apply_lambda_to<'a>(
 }
 
 pub fn filter_lambda_over_series(
-    series: &mut Timevector<'_>,
+    series: &mut Timevector_TSTZ_F64<'_>,
     mut func: impl FnMut(i64, f64) -> bool,
 ) {
     series.points.as_owned().retain(|p| func(p.ts, p.val));

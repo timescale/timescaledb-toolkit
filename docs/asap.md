@@ -48,7 +48,7 @@ It is hard to look at this data and make much sense of how the temperature has c
 We can use ASAP smoothing here to get a much clearer picture of the behavior over this interval.
 
 ```SQL ,ignore
-SELECT * FROM toolkit_experimental.unnest((SELECT toolkit_experimental.asap_smooth(month, value, 800) FROM temperatures));
+SELECT * FROM unnest((SELECT toolkit_experimental.asap_smooth(month, value, 800) FROM temperatures));
 ```
 ```
                 time                 |       value
@@ -124,7 +124,7 @@ SELECT
 </div>
 
 ```SQL
-SELECT * FROM toolkit_experimental.unnest(
+SELECT * FROM unnest(
     (SELECT toolkit_experimental.asap_smooth(date, reading, 8)
      FROM metrics));
 ```

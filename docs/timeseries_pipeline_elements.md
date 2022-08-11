@@ -49,7 +49,7 @@ Now suppose we want to know how much the temperature fluctuates on a daily basis
 ```SQL ,non-transactional,ignore-output
 CREATE VIEW daily_delta AS
     SELECT device,
-        toolkit_experimental.timevector(time, temperature)
+        timevector(time, temperature)
             -> (toolkit_experimental.sort()
             ->  toolkit_experimental.delta()) AS deltas
     FROM test_data
@@ -59,7 +59,7 @@ CREATE VIEW daily_delta AS
 This command creates a timevector from the time and temperature columns (grouped by device), sorts them in increasing time, and computes the deltas between values.  Now we can look at the deltas for a specific device.  Note that the output for this test is inaccurate as we've removed some of the pipeline elements for the moment.
 
 ```SQL,ignore-output
-SELECT time, value::numeric(4,2) AS delta FROM toolkit_experimental.unnest((SELECT deltas FROM daily_delta WHERE device = 3));
+SELECT time, value::numeric(4,2) AS delta FROM unnest((SELECT deltas FROM daily_delta WHERE device = 3));
 ```
 ```output
           time          | delta
@@ -140,8 +140,8 @@ This element will return a new timevector where each point is the difference bet
 ### Sample Usage <a id="timevector_pipeline_delta-examples"></a>
 ```SQL
 SELECT time, value
-FROM toolkit_experimental.unnest(
-    (SELECT toolkit_experimental.timevector('2020-01-01'::timestamptz + step * '1 day'::interval, step * step)
+FROM unnest(
+    (SELECT timevector('2020-01-01'::timestamptz + step * '1 day'::interval, step * step)
         -> toolkit_experimental.delta()
     FROM generate_series(1, 5) step)
 );
@@ -190,8 +190,8 @@ SELECT timevector(time, value) -> sort() -> lttb() FROM data;
 ### Sample Usage <a id="timevector_pipeline_lttb-examples"></a>
 ```SQL
 SELECT time, value
-FROM toolkit_experimental.unnest(
-    (SELECT toolkit_experimental.timevector('2020-01-01 UTC'::TIMESTAMPTZ + make_interval(days=>(foo*10)::int), 10 + 5 * cos(foo))
+FROM unnest(
+    (SELECT timevector('2020-01-01 UTC'::TIMESTAMPTZ + make_interval(days=>(foo*10)::int), 10 + 5 * cos(foo))
         -> toolkit_experimental.lttb(4)
     FROM generate_series(1,11,0.1) foo)
 );
@@ -230,8 +230,8 @@ This element takes in a timevector and returns a timevector consisting of the sa
 ### Sample Usage <a id="timevector_pipeline_sort-examples"></a>
 ```SQL
 SELECT time, value
-FROM toolkit_experimental.unnest(
-    (SELECT toolkit_experimental.timevector('2020-01-06'::timestamptz - step * '1 day'::interval, step * step)
+FROM unnest(
+    (SELECT timevector('2020-01-06'::timestamptz - step * '1 day'::interval, step * step)
         -> toolkit_experimental.sort()
     FROM generate_series(1, 5) step)
 );

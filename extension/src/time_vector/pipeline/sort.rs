@@ -14,8 +14,8 @@ pub fn sort_pipeline_element<'p, 'e>() -> toolkit_experimental::UnstableTimevect
 }
 
 pub fn sort_timevector(
-    mut series: toolkit_experimental::Timevector<'_>,
-) -> toolkit_experimental::Timevector<'_> {
+    mut series: Timevector_TSTZ_F64<'_>,
+) -> Timevector_TSTZ_F64<'_> {
     if series.is_sorted() {
         return series;
     }
@@ -46,7 +46,7 @@ pub fn sort_timevector(
         (points, null_val)
     };
 
-    TimevectorData {
+    Timevector_TSTZ_F64Data {
         header: 0,
         version: 1,
         padding: [0; 3],

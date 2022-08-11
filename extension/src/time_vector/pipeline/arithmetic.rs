@@ -33,7 +33,7 @@ pub enum Function {
     Trunc,
 }
 
-pub fn apply(mut series: Timevector<'_>, function: Function, rhs: f64) -> Timevector<'_> {
+pub fn apply(mut series: Timevector_TSTZ_F64<'_>, function: Function, rhs: f64) -> Timevector_TSTZ_F64<'_> {
     let function: fn(f64, f64) -> f64 = match function {
         Add => |a, b| a + b,
         Sub => |a, b| a - b,

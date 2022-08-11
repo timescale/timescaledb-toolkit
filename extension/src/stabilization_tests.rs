@@ -101,15 +101,6 @@ mod tests {
                             return None;
                         }
 
-                        // we special-case operator
-                        // `->>(regproc,regproc) returns pipeline` since it
-                        // doesn't take in any experimental type and relies on
-                        // returning one
-                        // TODO JOSH - is this operator even a good idea?
-                        if operator == "->>(regproc,regproc)" {
-                            return None;
-                        }
-
                         if stable_operators.contains(operator) {
                             return None;
                         }
@@ -151,10 +142,7 @@ mod tests {
     }
 
     fn stable_operators() -> HashSet<String> {
-        crate::stabilization_info::STABLE_OPERATORS
-            .iter()
-            .map(|s| s.to_string())
-            .collect()
+        crate::stabilization_info::STABLE_OPERATORS()
     }
 }
 
@@ -229,11 +217,23 @@ macro_rules! operators_stabilized_at {
         )*
     ) => {
         #[cfg(any(test, feature = "pg_test"))]
-         // TODO JOSH - this may not be right
-         pub static $export_symbol: &[&str] = &[
-            $(
-                $(concat!($operator_name, "(", stringify!( $($fn_type),+ ) ")"),)*
-            )*
-        ];
+        #[allow(non_snake_case)]
+        pub fn $export_symbol() -> std::collections::HashSet<String> {
+            static OPERATORS: &[(&str, &[&str])] = &[
+                $(
+                    $(
+                        (
+                            $operator_name,
+                            &[
+                                $( stringify!($($fn_type)+) ),*
+                            ]
+                        ),
+                    )*
+                )*
+            ];
+            OPERATORS.iter().map(|(name, types)| {
+                format!("{}({})", name, types.join(","))
+            }).collect()
+        }
     };
 }

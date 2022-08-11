@@ -40,7 +40,7 @@ to 34 points
 
 ```SQL
 SELECT time, value::numeric(10,2)
-FROM toolkit_experimental.unnest((
+FROM unnest((
     SELECT toolkit_experimental.lttb(time, val, 34)
     FROM sample_data))
 ```
@@ -101,7 +101,7 @@ resulting data looks less and less like the original
 
 ```SQL
 SELECT time, value::numeric(10,2)
-FROM toolkit_experimental.unnest((
+FROM unnest((
     SELECT toolkit_experimental.lttb(time, val, 17)
     FROM sample_data))
 ```
@@ -132,7 +132,7 @@ FROM toolkit_experimental.unnest((
 
 ```SQL
 SELECT time, value::numeric(10,2)
-FROM toolkit_experimental.unnest((
+FROM unnest((
     SELECT toolkit_experimental.lttb(time, val, 8)
     FROM sample_data))
 ```
@@ -165,7 +165,7 @@ toolkit_experimental.lttb(
 ```
 
 This will construct and return a sorted timevector with at most `resolution`
-points. `toolkit_experimental.unnest(...)` can be used to
+points. `unnest(...)` can be used to
 extract the `(time, value)` pairs from this series
 
 ### Required Arguments <a id="lttb-required-arguments"></a>
@@ -180,7 +180,7 @@ extract the `(time, value)` pairs from this series
 
 ```SQL
 SELECT time, value
-FROM toolkit_experimental.unnest((
+FROM unnest((
     SELECT toolkit_experimental.lttb(time, val, 4)
     FROM sample_data))
 ```

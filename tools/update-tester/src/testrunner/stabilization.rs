@@ -50,11 +50,23 @@ macro_rules! operators_stabilized_at {
             }
         )*
     ) => {
-         // TODO JOSH - this may not be right
-        pub static $export_symbol: &[&str] = &[
-            $(
-                $(concat!($operator_name, "(", stringify!( $($fn_type),+ ) ")"),)*
-            )*
-        ];
+        #[allow(non_snake_case)]
+        pub fn $export_symbol() -> std::collections::HashSet<String> {
+            static OPERATORS: &[(&str, &[&str])] = &[
+                $(
+                    $(
+                        (
+                            $operator_name,
+                            &[
+                                $( stringify!($($fn_type)+) ),*
+                            ]
+                        ),
+                    )*
+                )*
+            ];
+            OPERATORS.iter().map(|(name, types)| {
+                format!("{}({})", name, types.join(","))
+            }).collect()
+        }
     };
 }

@@ -10,7 +10,7 @@ use crate::{
 
 use tspoint::TSPoint;
 
-use crate::time_vector::{Timevector, TimevectorData};
+use crate::time_vector::{Timevector_TSTZ_F64, Timevector_TSTZ_F64Data};
 
 // This is included for debug purposes and probably should not leave experimental
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
@@ -106,13 +106,13 @@ fn find_downsample_interval(points: &[TSPoint], resolution: i64) -> i64 {
 fn asap_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
+) -> Option<Timevector_TSTZ_F64<'static>> {
     asap_final_inner(unsafe { state.to_inner() }, fcinfo)
 }
 fn asap_final_inner(
     state: Option<Inner<ASAPTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
+) -> Option<Timevector_TSTZ_F64<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let state = match state {
@@ -152,7 +152,7 @@ fn asap_final_inner(
             let nulls_len = (points.len() + 7) / 8;
 
             Some(crate::build! {
-                Timevector {
+                Timevector_TSTZ_F64 {
                     num_points: points.len() as u32,
                     flags: time_vector::FLAG_IS_SORTED,
                     internal_padding: [0; 3],
@@ -171,9 +171,9 @@ fn asap_final_inner(
     parallel_safe
 )]
 pub fn asap_on_timevector(
-    mut series: crate::time_vector::toolkit_experimental::Timevector<'static>,
+    mut series: Timevector_TSTZ_F64<'static>,
     resolution: i32,
-) -> Option<crate::time_vector::toolkit_experimental::Timevector<'static>> {
+) -> Option<Timevector_TSTZ_F64<'static>> {
     // TODO: implement this using zero copy (requires sort, find_downsample_interval, and downsample_and_gapfill on Timevector)
     let needs_sort = series.is_sorted();
 
@@ -209,7 +209,7 @@ pub fn asap_on_timevector(
     let nulls_len = (points.len() + 7) / 8;
 
     Some(crate::build! {
-        Timevector {
+        Timevector_TSTZ_F64 {
             num_points: points.len() as u32,
             flags: time_vector::FLAG_IS_SORTED,
             internal_padding: [0; 3],
@@ -317,7 +317,7 @@ mod tests {
             // and our decreased values should be around 64-72.  However, since the output is
             // rolling averages, expect these values to impact the results around these ranges as well.
 
-            client.select("create table asap_vals as SELECT * FROM toolkit_experimental.unnest((SELECT toolkit_experimental.asap_smooth(date, value, 100) FROM asap_test ))", None, None);
+            client.select("create table asap_vals as SELECT * FROM unnest((SELECT toolkit_experimental.asap_smooth(date, value, 100) FROM asap_test ))", None, None);
 
             let sanity = client
                 .select("SELECT COUNT(*) FROM asap_vals", None, None)
@@ -416,9 +416,9 @@ mod tests {
             client.select(
                 "create table asap_vals2 as
                 SELECT *
-                FROM toolkit_experimental.unnest(
+                FROM unnest(
                     (SELECT toolkit_experimental.asap_smooth(
-                        (SELECT toolkit_experimental.timevector(date, value) FROM asap_test),
+                        (SELECT timevector(date, value) FROM asap_test),
                         100)
                     )
                 )",

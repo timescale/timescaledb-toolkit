@@ -11,6 +11,27 @@
 
 crate::functions_stabilized_at! {
     STABLE_FUNCTIONS
+    "1.9.0" => {
+        accessorunnest_in(cstring),
+        accessorunnest_out(accessorunnest),
+        arrow_timevector_unnest(timevector_tstz_f64,accessorunnest),
+        rollup(timevector_tstz_f64),
+        timevector(timestamp with time zone,double precision),
+        timevector_combine(internal,internal),
+        timevector_tstz_f64_compound_trans(internal,timevector_tstz_f64),
+        timevector_deserialize(bytea,internal),
+        timevector_final(internal),
+        timevector_tstz_f64_in(cstring),
+        timevector_tstz_f64_out(timevector_tstz_f64),
+        timevector_serialize(internal),
+        timevector_tstz_f64_trans(internal,timestamp with time zone,double precision),
+        unnest(timevector_tstz_f64),
+        unnest(),
+    }
+    "1.8.0" => {
+    }
+    "1.7.0" => {
+    }
     "1.6.0" => {
     }
     "1.5" => {
@@ -164,6 +185,14 @@ crate::functions_stabilized_at! {
 
 crate::types_stabilized_at! {
     STABLE_TYPES
+    "1.9.0" => {
+        timevector_tstz_f64,
+        accessorunnest
+    }
+    "1.8.0" => {
+    }
+    "1.7.0" => {
+    }
     "1.6.0" => {
     }
     "1.5" => {
@@ -181,6 +210,13 @@ crate::types_stabilized_at! {
 
 crate::operators_stabilized_at! {
     STABLE_OPERATORS
+    "1.9.0" => {
+        "->"(timevector_tstz_f64,accessorunnest),
+    }
+    "1.8.0" => {
+    }
+    "1.7.0" => {
+    }
     "1.6.0" => {
     }
     "1.5" => {

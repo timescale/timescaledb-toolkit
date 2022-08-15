@@ -7,29 +7,45 @@ use std::{
     process::exit,
 };
 
-use clap::clap_app;
-
 use colored::Colorize;
 
+use clap::{Arg, Command};
 use runner::ConnectionConfig;
-
 mod parser;
 mod runner;
 
 fn main() {
-    let matches = clap_app!(("sql-doctester") =>
-        (@arg HOST: -h --host [hostname] conflicts_with[URL] "postgres host")
-        (@arg PORT: -p --port [portnumber] conflicts_with[URL] "postgres port")
-        (@arg USER: -u --user [username] conflicts_with[URL] "postgres user")
-        (@arg PASSWORD: -a --password [password] conflicts_with[URL] "postgres password")
-        (@arg DB: -d --database [database] conflicts_with[URL] "postgres database the root \
-            connection should use. By default this DB will only be used \
-            to spawn the individual test databases; no tests will run against \
-            it.")
-        (@arg START_SCRIPT: -s --("startup-script") [startup_script] conflicts_with[START_FILE] "SQL command that should be run when each test database is created.")
-        (@arg START_FILE: -f --("startup-file") [startup_file] "File containing SQL commands that should be run when each test database is created.")
-        (@arg INPUT: <tests>  "Path in which to search for tests")
-    ).get_matches();
+    let matches = Command::new("sql-doctester")
+        .about("Runs sql commands from docs/ dir to test out toolkit")
+        .arg_required_else_help(true)
+        .arg(Arg::new("HOST").short('h').long("host").takes_value(true))
+        .arg(Arg::new("PORT").short('p').long("port").takes_value(true))
+        .arg(Arg::new("USER").short('u').long("user").takes_value(true))
+        .arg(
+            Arg::new("PASSWORD")
+                .short('a')
+                .long("password")
+                .takes_value(true),
+        )
+        .arg(Arg::new("DB").short('d').long("database").takes_value(true))
+        .arg(
+            Arg::new("START_SCRIPT")
+                .short('s')
+                .long("startup-script")
+                .takes_value(true)
+                .conflicts_with("START_FILE"),
+        )
+        .arg(
+            Arg::new("START_FILE")
+                .short('f')
+                .long("startup-file")
+                .takes_value(true)
+                .conflicts_with("START_SCRIPT"),
+        )
+        .arg(Arg::new("INPUT").takes_value(true))
+        .mut_arg("help", |_h| Arg::new("help").long("help"))
+        .get_matches();
+
     let dirname = matches.value_of("INPUT").expect("need input");
 
     let connection_config = ConnectionConfig {

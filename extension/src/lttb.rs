@@ -17,7 +17,7 @@ pub struct LttbTrans {
     resolution: usize,
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn lttb_trans(
     state: Internal,
     time: crate::raw::TimestampTz,
@@ -63,7 +63,7 @@ pub fn lttb_trans_inner(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn lttb_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
@@ -96,10 +96,10 @@ pub fn lttb_final_inner(
 }
 
 extension_sql!("\n\
-CREATE AGGREGATE toolkit_experimental.lttb(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution integer) (\n\
-    sfunc = toolkit_experimental.lttb_trans,\n\
+CREATE AGGREGATE lttb(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution integer) (\n\
+    sfunc = lttb_trans,\n\
     stype = internal,\n\
-    finalfunc = toolkit_experimental.lttb_final\n\
+    finalfunc = lttb_final\n\
 );\n\
 ",
 name = "lttb_agg",
@@ -183,7 +183,6 @@ pub fn lttb(data: &[TSPoint], threshold: usize) -> Cow<'_, [TSPoint]> {
 
 #[pg_extern(
     name = "lttb",
-    schema = "toolkit_experimental",
     immutable,
     parallel_safe
 )]
@@ -315,7 +314,7 @@ mod tests {
                 "INSERT INTO results1
                 SELECT time, value
                 FROM unnest(
-                    (SELECT toolkit_experimental.lttb(time, value, 100) FROM test)
+                    (SELECT lttb(time, value, 100) FROM test)
                 );",
                 None,
                 None,
@@ -330,7 +329,7 @@ mod tests {
                 "INSERT INTO results2
                 SELECT time, value
                 FROM unnest(
-                    (SELECT toolkit_experimental.lttb(
+                    (SELECT lttb(
                         (SELECT timevector(time, value) FROM test), 100)
                     )
                 );",
@@ -343,6 +342,35 @@ mod tests {
                 .first()
                 .get_one::<i32>();
             assert_eq!(delta.unwrap(), 0);
+        })
+    }
+
+    #[pg_test]
+    fn test_lttb_result() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            let mut result = client.select(
+                r#"SELECT unnest(lttb(ts, val, 5))::TEXT
+                FROM (VALUES
+                    ('2020-1-1'::timestamptz, 10),
+                    ('2020-1-2'::timestamptz, 21),
+                    ('2020-1-3'::timestamptz, 19),
+                    ('2020-1-4'::timestamptz, 32),
+                    ('2020-1-5'::timestamptz, 12),
+                    ('2020-1-6'::timestamptz, 14),
+                    ('2020-1-7'::timestamptz, 18),
+                    ('2020-1-8'::timestamptz, 29),
+                    ('2020-1-9'::timestamptz, 23),
+                    ('2020-1-10'::timestamptz, 27),
+                    ('2020-1-11'::timestamptz, 14)
+                ) AS v(ts, val)"#, None, None);
+
+            assert_eq!(result.next().unwrap()[1].value(), Some("(\"2020-01-01 00:00:00+00\",10)"));
+            assert_eq!(result.next().unwrap()[1].value(), Some("(\"2020-01-04 00:00:00+00\",32)"));
+            assert_eq!(result.next().unwrap()[1].value(), Some("(\"2020-01-05 00:00:00+00\",12)"));
+            assert_eq!(result.next().unwrap()[1].value(), Some("(\"2020-01-08 00:00:00+00\",29)"));
+            assert_eq!(result.next().unwrap()[1].value(), Some("(\"2020-01-11 00:00:00+00\",14)"));
+            assert!(result.next().is_none());
         })
     }
 }

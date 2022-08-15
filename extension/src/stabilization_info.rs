@@ -27,6 +27,10 @@ crate::functions_stabilized_at! {
         timevector_tstz_f64_trans(internal,timestamp with time zone,double precision),
         unnest(timevector_tstz_f64),
         unnest(),
+        lttb(timestamp with time zone,double precision,integer),
+        lttb(timevector_tstz_f64,integer),
+        lttb_final(internal),
+        lttb_trans(internal,timestamp with time zone,double precision,integer),
     }
     "1.8.0" => {
     }

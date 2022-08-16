@@ -10,6 +10,7 @@ use pg_sys::{Datum, Oid};
 use pgx::*;
 
 use crate::{
+    accessors::{AccessorDistinctCount, AccessorStderror},
     aggregate_utils::{get_collation, in_aggregate_context},
     datum_utils::DatumHashBuilder,
     flatten, ron_inout_funcs,
@@ -197,12 +198,6 @@ flat_serialize_macro::flat_serialize! {
     }
 }
 
-// hack to allow us to qualify names with "toolkit_experimental"
-// so that pgx generates the correct SQL
-mod toolkit_experimental {
-    pub(crate) use crate::accessors::toolkit_experimental::*;
-}
-
 ron_inout_funcs!(HyperLogLog);
 
 #[pg_extern(immutable, parallel_safe)]
@@ -317,9 +312,8 @@ requires = [hyperloglog_union, hyperloglog_final, hyperloglog_combine, hyperlogl
 #[opname(->)]
 pub fn arrow_hyperloglog_count(
     sketch: HyperLogLog,
-    accessor: toolkit_experimental::AccessorDistinctCount,
+    _accessor: AccessorDistinctCount,
 ) -> i64 {
-    let _ = accessor;
     hyperloglog_count(sketch)
 }
 
@@ -342,9 +336,8 @@ pub fn hyperloglog_count(
 #[opname(->)]
 pub fn arrow_hyperloglog_error(
     sketch: HyperLogLog,
-    accessor: toolkit_experimental::AccessorStderror,
+    _accessor: AccessorStderror,
 ) -> f64 {
-    let _ = accessor;
     hyperloglog_error(sketch)
 }
 
@@ -478,7 +471,7 @@ mod tests {
                     distinct_count(\
                         hyperloglog(32, v::float)\
                     ), \
-                    hyperloglog(32, v::float)->toolkit_experimental.distinct_count() \
+                    hyperloglog(32, v::float) -> distinct_count() \
                     FROM generate_series(1, 100) v", None, None)
                 .first()
                 .get_two::<i32, i32>();
@@ -552,7 +545,7 @@ mod tests {
                     distinct_count(\
                         toolkit_experimental.approx_count_distinct(v::float)\
                     ), \
-                    toolkit_experimental.approx_count_distinct(v::float)->toolkit_experimental.distinct_count() \
+                    toolkit_experimental.approx_count_distinct(v::float) -> distinct_count() \
                     FROM generate_series(1, 100) v", None, None)
                 .first()
                 .get_two::<i32, i32>();
@@ -853,7 +846,7 @@ mod tests {
                     stderror(\
                         hyperloglog(32, v::float)\
                     ), \
-                    hyperloglog(32, v::float)->toolkit_experimental.stderror() \
+                    hyperloglog(32, v::float) -> stderror() \
                     FROM generate_series(1, 100) v", None, None)
                 .first()
                 .get_two::<i32, i32>();

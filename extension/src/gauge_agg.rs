@@ -7,6 +7,12 @@ use stats_agg::stats2d::StatsSummary2D;
 use tspoint::TSPoint;
 
 use crate::{
+    accessors::{
+        AccessorCorr, AccessorCounterZeroTime, AccessorDelta, AccessorExtrapolatedDelta,
+        AccessorExtrapolatedRate, AccessorIdeltaLeft, AccessorIdeltaRight, AccessorIntercept,
+        AccessorIrateLeft, AccessorIrateRight, AccessorNumChanges, AccessorNumElements,
+        AccessorRate, AccessorSlope, AccessorTimeDelta, AccessorWithBounds,
+    },
     aggregate_utils::in_aggregate_context,
     flatten,
     palloc::{Inner, Internal, InternalAsValue, ToInternal},
@@ -91,10 +97,6 @@ mod toolkit_experimental {
     }
 
     ron_inout_funcs!(GaugeSummary);
-
-    // hack to allow us to qualify names with "toolkit_experimental"
-    // so that pgx generates the correct SQL
-    pub(crate) use crate::accessors::toolkit_experimental::*;
 }
 
 use toolkit_experimental::*;
@@ -416,7 +418,7 @@ extension_sql!(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_delta(sketch: GaugeSummary, _accessor: toolkit_experimental::AccessorDelta) -> f64 {
+fn arrow_delta(sketch: GaugeSummary, _accessor: AccessorDelta) -> f64 {
     delta(sketch)
 }
 
@@ -429,7 +431,7 @@ fn delta(summary: GaugeSummary) -> f64 {
 #[opname(->)]
 fn arrow_gauge_agg_rate(
     sketch: GaugeSummary,
-    _accessor: toolkit_experimental::AccessorRate,
+    _accessor: AccessorRate,
 ) -> Option<f64> {
     rate(sketch)
 }
@@ -443,7 +445,7 @@ fn rate(summary: GaugeSummary) -> Option<f64> {
 #[opname(->)]
 fn arrow_time_delta(
     sketch: GaugeSummary,
-    _accessor: toolkit_experimental::AccessorTimeDelta,
+    _accessor: AccessorTimeDelta,
 ) -> f64 {
     time_delta(sketch)
 }
@@ -457,7 +459,7 @@ fn time_delta(summary: GaugeSummary) -> f64 {
 #[opname(->)]
 fn arrow_irate_left(
     sketch: GaugeSummary,
-    _accessor: toolkit_experimental::AccessorIrateLeft,
+    _accessor: AccessorIrateLeft,
 ) -> Option<f64> {
     irate_left(sketch)
 }
@@ -471,7 +473,7 @@ fn irate_left(summary: GaugeSummary) -> Option<f64> {
 #[opname(->)]
 fn arrow_irate_right(
     sketch: GaugeSummary,
-    _accessor: toolkit_experimental::AccessorIrateRight,
+    _accessor: AccessorIrateRight,
 ) -> Option<f64> {
     irate_right(sketch)
 }
@@ -485,7 +487,7 @@ fn irate_right(summary: GaugeSummary) -> Option<f64> {
 #[opname(->)]
 fn arrow_idelta_left(
     sketch: GaugeSummary,
-    _accessor: toolkit_experimental::AccessorIdeltaLeft,
+    _accessor: AccessorIdeltaLeft,
 ) -> f64 {
     idelta_left(sketch)
 }
@@ -499,7 +501,7 @@ fn idelta_left(summary: GaugeSummary) -> f64 {
 #[opname(->)]
 fn arrow_idelta_right(
     sketch: GaugeSummary,
-    _accessor: toolkit_experimental::AccessorIdeltaRight,
+    _accessor: AccessorIdeltaRight,
 ) -> f64 {
     idelta_right(sketch)
 }
@@ -513,7 +515,7 @@ fn idelta_right(summary: GaugeSummary) -> f64 {
 #[opname(->)]
 fn arrow_with_bounds(
     sketch: GaugeSummary,
-    accessor: toolkit_experimental::AccessorWithBounds,
+    accessor: AccessorWithBounds,
 ) -> GaugeSummary<'static> {
     let mut builder = GaugeSummaryBuilder::from(MetricSummary::from(sketch));
     builder.set_bounds(accessor.bounds());
@@ -535,7 +537,7 @@ fn with_bounds(summary: GaugeSummary, bounds: tstzrange) -> GaugeSummary {
 #[opname(->)]
 fn arrow_extrapolated_delta(
     sketch: GaugeSummary,
-    _accessor: toolkit_experimental::AccessorExtrapolatedDelta,
+    _accessor: AccessorExtrapolatedDelta,
 ) -> Option<f64> {
     extrapolated_delta(sketch)
 }
@@ -564,7 +566,7 @@ fn interpolated_delta(
 #[opname(->)]
 fn arrow_extrapolated_rate(
     sketch: GaugeSummary,
-    _accessor: toolkit_experimental::AccessorExtrapolatedRate,
+    _accessor: AccessorExtrapolatedRate,
 ) -> Option<f64> {
     extrapolated_rate(sketch)
 }
@@ -593,7 +595,7 @@ fn interpolated_rate(
 #[opname(->)]
 fn arrow_num_elements(
     sketch: GaugeSummary,
-    _accessor: toolkit_experimental::AccessorNumElements,
+    _accessor: AccessorNumElements,
 ) -> i64 {
     num_elements(sketch)
 }
@@ -607,7 +609,7 @@ fn num_elements(summary: GaugeSummary) -> i64 {
 #[opname(->)]
 fn arrow_num_changes(
     sketch: GaugeSummary,
-    _accessor: toolkit_experimental::AccessorNumChanges,
+    _accessor: AccessorNumChanges,
 ) -> i64 {
     num_changes(sketch)
 }
@@ -621,7 +623,7 @@ fn num_changes(summary: GaugeSummary) -> i64 {
 #[opname(->)]
 fn arrow_slope(
     sketch: GaugeSummary,
-    _accessor: toolkit_experimental::AccessorSlope,
+    _accessor: AccessorSlope,
 ) -> Option<f64> {
     slope(sketch)
 }
@@ -635,7 +637,7 @@ fn slope(summary: GaugeSummary) -> Option<f64> {
 #[opname(->)]
 fn arrow_intercept(
     sketch: GaugeSummary,
-    _accessor: toolkit_experimental::AccessorIntercept,
+    _accessor: AccessorIntercept,
 ) -> Option<f64> {
     intercept(sketch)
 }
@@ -647,7 +649,7 @@ fn intercept(summary: GaugeSummary) -> Option<f64> {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_corr(sketch: GaugeSummary, _accessor: toolkit_experimental::AccessorCorr) -> Option<f64> {
+fn arrow_corr(sketch: GaugeSummary, _accessor: AccessorCorr) -> Option<f64> {
     corr(sketch)
 }
 
@@ -660,7 +662,7 @@ fn corr(summary: GaugeSummary) -> Option<f64> {
 #[opname(->)]
 fn arrow_zero_time(
     sketch: GaugeSummary,
-    __accessor: toolkit_experimental::AccessorCounterZeroTime,
+    __accessor: AccessorCounterZeroTime,
 ) -> Option<crate::raw::TimestampTz> {
     gauge_zero_time(sketch)
 }

@@ -6,11 +6,14 @@ use serde::{Serialize, Deserialize};
 use pgx::*;
 
 use crate::{
+    accessors::{
+        AccessorApproxPercentile, AccessorApproxPercentileRank, AccessorMaxVal, AccessorMean,
+        AccessorMinVal, AccessorNumVals,
+    },
     aggregate_utils::in_aggregate_context,
-    ron_inout_funcs,
     flatten,
-    palloc::{Internal, InternalAsValue, Inner, ToInternal}, pg_type,
-    accessors::toolkit_experimental,
+    palloc::{Inner, Internal, InternalAsValue, ToInternal},
+    pg_type, ron_inout_funcs,
 };
 
 use tdigest::{
@@ -352,7 +355,7 @@ requires = [tdigest_compound_trans, tdigest_compound_final, tdigest_compound_com
 #[opname(->)]
 pub fn arrow_tdigest_approx_percentile(
     sketch: TDigest,
-    accessor: toolkit_experimental::AccessorApproxPercentile,
+    accessor: AccessorApproxPercentile,
 ) -> f64 {
     tdigest_quantile(accessor.percentile, sketch)
 }
@@ -370,7 +373,7 @@ pub fn tdigest_quantile(
 #[opname(->)]
 pub fn arrow_tdigest_approx_rank(
     sketch: TDigest,
-    accessor: toolkit_experimental::AccessorApproxPercentileRank,
+    accessor: AccessorApproxPercentileRank,
 ) -> f64 {
     tdigest_quantile_at_value(accessor.value, sketch)
 }
@@ -388,9 +391,8 @@ pub fn tdigest_quantile_at_value(
 #[opname(->)]
 pub fn arrow_tdigest_num_vals(
     sketch: TDigest,
-    accessor: toolkit_experimental::AccessorNumVals,
+    _accessor: AccessorNumVals,
 ) -> f64 {
-    let _ = accessor;
     tdigest_count(sketch)
 }
 
@@ -406,9 +408,8 @@ pub fn tdigest_count(
 #[opname(->)]
 pub fn arrow_tdigest_min(
     sketch: TDigest,
-    accessor: toolkit_experimental::AccessorMinVal,
+    _accessor: AccessorMinVal,
 ) -> f64 {
-    let _ = accessor;
     tdigest_min(sketch)
 }
 
@@ -425,9 +426,8 @@ pub fn tdigest_min(
 #[opname(->)]
 pub fn arrow_tdigest_max(
     sketch: TDigest,
-    accessor: toolkit_experimental::AccessorMaxVal,
+    _accessor: AccessorMaxVal,
 ) -> f64 {
-    let _ = accessor;
     tdigest_max(sketch)
 }
 
@@ -443,9 +443,8 @@ pub fn tdigest_max(
 #[opname(->)]
 pub fn arrow_tdigest_mean(
     sketch: TDigest,
-    accessor: toolkit_experimental::AccessorMean,
+    _accessor: AccessorMean,
 ) -> f64 {
-    let _ = accessor;
     tdigest_mean(sketch)
 }
 
@@ -515,9 +514,9 @@ mod tests {
 
             let (min2, max2, count2) = client
                 .select("SELECT \
-                    tdigest->toolkit_experimental.min_val(), \
-                    tdigest->toolkit_experimental.max_val(), \
-                    tdigest->toolkit_experimental.num_vals() \
+                    tdigest->min_val(), \
+                    tdigest->max_val(), \
+                    tdigest->num_vals() \
                     FROM digest",
                     None,
                     None
@@ -532,7 +531,7 @@ mod tests {
             let (mean, mean2) = client
                 .select("SELECT \
                     mean(tdigest), \
-                    tdigest -> toolkit_experimental.mean()
+                    tdigest -> mean()
                     FROM digest",
                     None,
                     None
@@ -571,8 +570,8 @@ mod tests {
                 let (est_val2, est_quant2) = client
                     .select(
                         &format!("SELECT
-                            tdigest->toolkit_experimental.approx_percentile({}), \
-                            tdigest->toolkit_experimental.approx_percentile_rank({}) \
+                            tdigest->approx_percentile({}), \
+                            tdigest->approx_percentile_rank({}) \
                             FROM digest",
                             quantile,
                             value),

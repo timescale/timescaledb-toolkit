@@ -18,7 +18,7 @@ pub fn delta_pipeline_element<'p, 'e>(
 
 extension_sql!(
     r#"
-    CREATE CAST (toolkit_experimental.AccessorDelta AS toolkit_experimental.UnstableTimevectorPipeline)
+    CREATE CAST (AccessorDelta AS toolkit_experimental.UnstableTimevectorPipeline)
         WITH FUNCTION toolkit_experimental.delta_cast
         AS IMPLICIT;
 "#,

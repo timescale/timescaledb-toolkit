@@ -51,7 +51,7 @@ CREATE VIEW daily_delta AS
     SELECT device,
         timevector(time, temperature)
             -> (toolkit_experimental.sort()
-            ->  toolkit_experimental.delta()) AS deltas
+            ->  delta()) AS deltas
     FROM test_data
     GROUP BY device;
 ```
@@ -142,7 +142,7 @@ This element will return a new timevector where each point is the difference bet
 SELECT time, value
 FROM unnest(
     (SELECT timevector('2020-01-01'::timestamptz + step * '1 day'::interval, step * step)
-        -> toolkit_experimental.delta()
+        -> delta()
     FROM generate_series(1, 5) step)
 );
 ```

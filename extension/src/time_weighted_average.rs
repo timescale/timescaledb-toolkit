@@ -1,12 +1,15 @@
 #![allow(non_camel_case_types)]
 
+use pgx::*;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    aggregate_utils::in_aggregate_context, flatten, ron_inout_funcs, palloc::{Internal, InternalAsValue, Inner, ToInternal}, pg_type,
-    accessors::toolkit_experimental,
+    accessors::AccessorAverage,
+    aggregate_utils::in_aggregate_context,
+    flatten,
+    palloc::{Inner, Internal, InternalAsValue, ToInternal},
+    pg_type, ron_inout_funcs,
 };
-use pgx::*;
 
 use tspoint::TSPoint;
 
@@ -343,9 +346,8 @@ requires = [time_weight_trans, time_weight_final, time_weight_combine, time_weig
 #[opname(->)]
 pub fn arrow_time_weighted_average_average(
     sketch: Option<TimeWeightSummary>,
-    accessor: toolkit_experimental::AccessorAverage,
+    _accessor: AccessorAverage,
 ) -> Option<f64> {
-    let _ = accessor;
     time_weighted_average_average(sketch)
 }
 
@@ -437,7 +439,7 @@ mod tests {
             // expected =(15 +15 +15 +15 + 20*4 + 20*2 +15*.5 + 25*9.5) / 20 = 21.25 just taking the midpoints between each point and multiplying by minutes and dividing by total
             assert!((select_one!(client, stmt, f64) - 21.25).abs() < f64::EPSILON);
             let stmt = "SELECT time_weight('Linear', ts, val) \
-                ->toolkit_experimental.average() \
+                ->average() \
             FROM test";
             // arrow syntax should be the same
             assert!((select_one!(client, stmt, f64) - 21.25).abs() < f64::EPSILON);

@@ -26,25 +26,13 @@ pub mod toolkit_experimental {
     }
 
     impl OpenHighLowClose<'_> {
-        pub fn new() -> Self {
+        pub fn new(first: TSPoint) -> Self {
             unsafe {
                 flatten!(OpenHighLowClose {
-                    open: TSPoint {
-                        ts: i64::MAX,
-                        val: 0.0
-                    },
-                    high: TSPoint {
-                        ts: 0,
-                        val: f64::MIN
-                    },
-                    low: TSPoint {
-                        ts: 0,
-                        val: f64::MAX
-                    },
-                    close: TSPoint {
-                        ts: i64::MIN,
-                        val: 0.0
-                    },
+                    open: first,
+                    high: first,
+                    low: first,
+                    close: first,
                 })
             }
         }
@@ -118,11 +106,6 @@ pub mod toolkit_experimental {
         }
     }
 
-    impl Default for OpenHighLowClose<'_> {
-        fn default() -> Self {
-            Self::new()
-        }
-    }
     ron_inout_funcs!(OpenHighLowClose);
 }
 
@@ -151,8 +134,7 @@ pub fn ohlc_transition_inner(
             };
             match state {
                 None => {
-                    let mut ohlc = OpenHighLowClose::new();
-                    ohlc.add_value(point);
+                    let ohlc = OpenHighLowClose::new(point);
                     Some(ohlc.into())
                 }
                 Some(mut ohlc) => {
@@ -180,11 +162,7 @@ pub fn ohlc_rollup_trans_inner<'input>(
     unsafe {
         in_aggregate_context(fcinfo, || match (state, value) {
             (state, None) => state,
-            (None, Some(value)) => {
-                let mut state = OpenHighLowClose::new();
-                state.combine(&value);
-                Some(state.into())
-            }
+            (None, Some(value)) => Some(value.into()),
             (Some(state), Some(value)) => {
                 let mut state = *state;
                 state.combine(&value);
@@ -438,6 +416,51 @@ mod tests {
                 );
                 assert_eq!(0.0, val.unwrap());
                 assert_eq!("2022-08-01 00:00:00+00", ts.unwrap());
+            }
+        });
+    }
+
+    #[pg_test]
+    fn ohlc_extreme_values() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            client.select("CREATE TABLE test(ts TIMESTAMPTZ, price FLOAT)", None, None);
+
+            // timestamptz low and high val according to https://www.postgresql.org/docs/14/datatype-datetime.html
+            for extreme_time in &["4713-01-01 00:00:00+00 BC", "294276-12-31 23:59:59+00"] {
+                let stmt = format!("SELECT toolkit_experimental.ohlc(ts, price)::text FROM (VALUES ('{}'::timestamptz, 1.0)) v(ts, price)", extreme_time);
+
+                let output = select_one!(client, &stmt, &str);
+
+                let expected = format!(
+                    "(\
+                            version:1,\
+                            open:(ts:\"{}\",val:1),\
+                            high:(ts:\"{}\",val:1),\
+                            low:(ts:\"{}\",val:1),\
+                            close:(ts:\"{}\",val:1)\
+                            )",
+                    extreme_time, extreme_time, extreme_time, extreme_time
+                );
+                assert_eq!(expected, output.unwrap());
+            }
+
+            for extreme_price in &[f64::MAX, f64::MIN] {
+                let stmt = format!("SELECT toolkit_experimental.ohlc(ts, price)::text FROM (VALUES ('2022-08-01 00:00:00+00'::timestamptz, {})) v(ts, price)", extreme_price);
+
+                let output = select_one!(client, &stmt, &str);
+
+                let expected = format!(
+                    "(\
+                            version:1,\
+                            open:(ts:\"2022-08-01 00:00:00+00\",val:{}),\
+                            high:(ts:\"2022-08-01 00:00:00+00\",val:{}),\
+                            low:(ts:\"2022-08-01 00:00:00+00\",val:{}),\
+                            close:(ts:\"2022-08-01 00:00:00+00\",val:{})\
+                            )",
+                    extreme_price, extreme_price, extreme_price, extreme_price
+                );
+                assert_eq!(expected, output.unwrap());
             }
         });
     }

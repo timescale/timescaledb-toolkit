@@ -1,12 +1,17 @@
-
 use pgx::*;
 
 use crate::{
+    accessors::{
+        AccessorAverage, AccessorAverageX, AccessorAverageY, AccessorCorr, AccessorCovar,
+        AccessorDeterminationCoeff, AccessorIntercept, AccessorKurtosis, AccessorKurtosisX,
+        AccessorKurtosisY, AccessorNumVals, AccessorSkewness, AccessorSkewnessX, AccessorSkewnessY,
+        AccessorSlope, AccessorStdDev, AccessorStdDevX, AccessorStdDevY, AccessorSum, AccessorSumX,
+        AccessorSumY, AccessorVariance, AccessorVarianceX, AccessorVarianceY, AccessorXIntercept,
+    },
     aggregate_utils::in_aggregate_context,
-    ron_inout_funcs,
     build,
-    palloc::{Internal, InternalAsValue, Inner, ToInternal},
-    pg_type,
+    palloc::{Inner, Internal, InternalAsValue, ToInternal},
+    pg_type, ron_inout_funcs,
 };
 
 use stats_agg::XYPair;
@@ -46,13 +51,6 @@ pg_type! {
 
 ron_inout_funcs!(StatsSummary1D);
 ron_inout_funcs!(StatsSummary2D);
-
-
-// hack to allow us to qualify names with "toolkit_experimental"
-// so that pgx generates the correct SQL
-mod toolkit_experimental {
-    pub(crate) use crate::accessors::toolkit_experimental::*;
-}
 
 impl<'input> StatsSummary1D<'input> {
     fn to_internal(&self) -> InternalStatsSummary1D {
@@ -691,9 +689,8 @@ requires = [stats2d_summary_trans, stats2d_final, stats2d_combine, stats2d_trans
 #[opname(->)]
 pub fn arrow_stats1d_average(
     sketch: StatsSummary1D,
-    accessor: toolkit_experimental::AccessorAverage,
+    _accessor: AccessorAverage,
 ) -> Option<f64> {
-    let _ = accessor;
     stats1d_average(sketch)
 }
 
@@ -709,9 +706,8 @@ pub(crate) fn stats1d_average(
 #[opname(->)]
 pub fn arrow_stats1d_sum(
     sketch: StatsSummary1D,
-    accessor: toolkit_experimental::AccessorSum,
+    _accessor: AccessorSum,
 ) -> Option<f64> {
-    let _ = accessor;
     stats1d_sum(sketch)
 }
 
@@ -727,9 +723,8 @@ pub (crate) fn stats1d_sum(
 #[opname(->)]
 pub fn arrow_stats1d_stddev(
     sketch: Option<StatsSummary1D>,
-    accessor: toolkit_experimental::AccessorStdDev,
+    accessor: AccessorStdDev,
 ) -> Option<f64> {
-    let _ = accessor;
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
     stats1d_stddev(sketch, &*method)
 }
@@ -750,9 +745,8 @@ fn stats1d_stddev(
 #[opname(->)]
 pub fn arrow_stats1d_variance(
     sketch: Option<StatsSummary1D>,
-    accessor: toolkit_experimental::AccessorVariance,
+    accessor: AccessorVariance,
 ) -> Option<f64> {
-    let _ = accessor;
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
     stats1d_variance(sketch, &*method)
 }
@@ -773,9 +767,8 @@ fn stats1d_variance(
 #[opname(->)]
 pub fn arrow_stats1d_skewness(
     sketch: StatsSummary1D,
-    accessor: toolkit_experimental::AccessorSkewness,
+    accessor: AccessorSkewness,
 ) -> Option<f64> {
-    let _ = accessor;
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
     stats1d_skewness(sketch, &*method)
 }
@@ -796,9 +789,8 @@ fn stats1d_skewness(
 #[opname(->)]
 pub fn arrow_stats1d_kurtosis(
     sketch: StatsSummary1D,
-    accessor: toolkit_experimental::AccessorKurtosis,
+    accessor: AccessorKurtosis,
 ) -> Option<f64> {
-    let _ = accessor;
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
     stats1d_kurtosis(sketch, &*method)
 }
@@ -820,9 +812,8 @@ fn stats1d_kurtosis(
 #[opname(->)]
 pub fn arrow_stats1d_num_vals(
     sketch: StatsSummary1D,
-    accessor: toolkit_experimental::AccessorNumVals,
+    _accessor: AccessorNumVals,
 ) -> i64 {
-    let _ = accessor;
     stats1d_num_vals(sketch)
 }
 
@@ -838,9 +829,8 @@ fn stats1d_num_vals(
 #[opname(->)]
 pub fn arrow_stats2d_average_x(
     sketch: StatsSummary2D,
-    accessor: toolkit_experimental::AccessorAverageX,
+    _accessor: AccessorAverageX,
 ) -> Option<f64> {
-    let _ = accessor;
     stats2d_average_x(sketch)
 }
 
@@ -856,9 +846,8 @@ fn stats2d_average_x(
 #[opname(->)]
 pub fn arrow_stats2d_average_y(
     sketch: StatsSummary2D,
-    accessor: toolkit_experimental::AccessorAverageY,
+    _accessor: AccessorAverageY,
 ) -> Option<f64> {
-    let _ = accessor;
     stats2d_average_y(sketch)
 }
 
@@ -874,9 +863,8 @@ fn stats2d_average_y(
 #[opname(->)]
 pub fn arrow_stats2d_sum_x(
     sketch: StatsSummary2D,
-    accessor: toolkit_experimental::AccessorSumX,
+    _accessor: AccessorSumX,
 ) -> Option<f64> {
-    let _ = accessor;
     stats2d_sum_x(sketch)
 }
 
@@ -892,9 +880,8 @@ fn stats2d_sum_x(
 #[opname(->)]
 pub fn arrow_stats2d_sum_y(
     sketch: StatsSummary2D,
-    accessor: toolkit_experimental::AccessorSumY,
+    _accessor: AccessorSumY,
 ) -> Option<f64> {
-    let _ = accessor;
     stats2d_sum_y(sketch)
 }
 
@@ -910,9 +897,8 @@ fn stats2d_sum_y(
 #[opname(->)]
 pub fn arrow_stats2d_stdddev_x(
     sketch: Option<StatsSummary2D>,
-    accessor: toolkit_experimental::AccessorStdDevX,
+    accessor: AccessorStdDevX,
 ) -> Option<f64> {
-    let _ = accessor;
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
     stats2d_stddev_x(sketch, &*method)
 }
@@ -933,9 +919,8 @@ fn stats2d_stddev_x(
 #[opname(->)]
 pub fn arrow_stats2d_stdddev_y(
     sketch: Option<StatsSummary2D>,
-    accessor: toolkit_experimental::AccessorStdDevY,
+    accessor: AccessorStdDevY,
 ) -> Option<f64> {
-    let _ = accessor;
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
     stats2d_stddev_y(sketch, &*method)
 }
@@ -956,9 +941,8 @@ fn stats2d_stddev_y(
 #[opname(->)]
 pub fn arrow_stats2d_variance_x(
     sketch: Option<StatsSummary2D>,
-    accessor: toolkit_experimental::AccessorVarianceX,
+    accessor: AccessorVarianceX,
 ) -> Option<f64> {
-    let _ = accessor;
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
     stats2d_variance_x(sketch, &*method)
 }
@@ -979,9 +963,8 @@ fn stats2d_variance_x(
 #[opname(->)]
 pub fn arrow_stats2d_variance_y(
     sketch: Option<StatsSummary2D>,
-    accessor: toolkit_experimental::AccessorVarianceY,
+    accessor: AccessorVarianceY,
 ) -> Option<f64> {
-    let _ = accessor;
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
     stats2d_variance_y(sketch, &*method)
 }
@@ -1002,9 +985,8 @@ fn stats2d_variance_y(
 #[opname(->)]
 pub fn arrow_stats2d_skewness_x(
     sketch: StatsSummary2D,
-    accessor: toolkit_experimental::AccessorSkewnessX,
+    accessor: AccessorSkewnessX,
 ) -> Option<f64> {
-    let _ = accessor;
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
     stats2d_skewness_x(sketch, &*method)
 }
@@ -1025,9 +1007,8 @@ fn stats2d_skewness_x(
 #[opname(->)]
 pub fn arrow_stats2d_skewness_y(
     sketch: StatsSummary2D,
-    accessor: toolkit_experimental::AccessorSkewnessY,
+    accessor: AccessorSkewnessY,
 ) -> Option<f64> {
-    let _ = accessor;
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
     stats2d_skewness_y(sketch, &*method)
 }
@@ -1048,9 +1029,8 @@ fn stats2d_skewness_y(
 #[opname(->)]
 pub fn arrow_stats2d_kurtosis_x(
     sketch: StatsSummary2D,
-    accessor: toolkit_experimental::AccessorKurtosisX,
+    accessor: AccessorKurtosisX,
 ) -> Option<f64> {
-    let _ = accessor;
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
     stats2d_kurtosis_x(sketch, &*method)
 }
@@ -1071,9 +1051,8 @@ fn stats2d_kurtosis_x(
 #[opname(->)]
 pub fn arrow_stats2d_kurtosis_y(
     sketch: StatsSummary2D,
-    accessor: toolkit_experimental::AccessorKurtosisY,
+    accessor: AccessorKurtosisY,
 ) -> Option<f64> {
-    let _ = accessor;
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
     stats2d_kurtosis_y(sketch, &*method)
 }
@@ -1094,9 +1073,8 @@ fn stats2d_kurtosis_y(
 #[opname(->)]
 pub fn arrow_stats2d_num_vals(
     sketch: StatsSummary2D,
-    accessor: toolkit_experimental::AccessorNumVals,
+    _accessor: AccessorNumVals,
 ) -> i64 {
-    let _ = accessor;
     stats2d_num_vals(sketch)
 }
 
@@ -1112,9 +1090,8 @@ fn stats2d_num_vals(
 #[opname(->)]
 pub fn arrow_stats2d_slope(
     sketch: StatsSummary2D,
-    accessor: toolkit_experimental::AccessorSlope,
+    _accessor: AccessorSlope,
 ) -> Option<f64> {
-    let _ = accessor;
     stats2d_slope(sketch)
 }
 
@@ -1130,9 +1107,8 @@ fn stats2d_slope(
 #[opname(->)]
 pub fn arrow_stats2d_corr(
     sketch: StatsSummary2D,
-    accessor: toolkit_experimental::AccessorCorr,
+    _accessor: AccessorCorr,
 ) -> Option<f64> {
-    let _ = accessor;
     stats2d_corr(sketch)
 }
 
@@ -1148,9 +1124,8 @@ fn stats2d_corr(
 #[opname(->)]
 pub fn arrow_stats2d_intercept(
     sketch: StatsSummary2D,
-    accessor: toolkit_experimental::AccessorIntercept,
+    _accessor: AccessorIntercept,
 ) -> Option<f64> {
-    let _ = accessor;
     stats2d_intercept(sketch)
 }
 
@@ -1166,9 +1141,8 @@ fn stats2d_intercept(
 #[opname(->)]
 pub fn arrow_stats2d_x_intercept(
     sketch: StatsSummary2D,
-    accessor: toolkit_experimental::AccessorXIntercept,
+    _accessor: AccessorXIntercept,
 ) -> Option<f64> {
-    let _ = accessor;
     stats2d_x_intercept(sketch)
 }
 
@@ -1184,9 +1158,8 @@ fn stats2d_x_intercept(
 #[opname(->)]
 pub fn arrow_stats2d_determination_coeff(
     sketch: StatsSummary2D,
-    accessor: toolkit_experimental::AccessorDeterminationCoeff,
+    _accessor: AccessorDeterminationCoeff,
 ) -> Option<f64> {
-    let _ = accessor;
     stats2d_determination_coeff(sketch)
 }
 
@@ -1202,9 +1175,8 @@ fn stats2d_determination_coeff(
 #[opname(->)]
 pub fn arrow_stats2d_covar(
     sketch: Option<StatsSummary2D>,
-    accessor: toolkit_experimental::AccessorCovar,
+    accessor: AccessorCovar,
 ) -> Option<f64> {
-    let _ = accessor;
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
     stats2d_covar(sketch, &*method)
 }
@@ -1539,28 +1511,28 @@ mod tests {
     fn tk1d_agg(agg: &str) -> String {
         format!("SELECT \
             {agg}(stats_agg(test_x)), \
-            stats_agg(test_x)->toolkit_experimental.{agg}() \
+            stats_agg(test_x)->{agg}() \
         FROM test_table", agg=agg)
     }
 
     fn tk1d_agg_arg(agg: &str, arg: &str) -> String {
         format!("SELECT \
             {agg}(stats_agg(test_x), '{arg}'), \
-            stats_agg(test_x)->toolkit_experimental.{agg}('{arg}') \
+            stats_agg(test_x)->{agg}('{arg}') \
         FROM test_table", agg=agg, arg=arg)
     }
 
     fn tk2d_agg(agg: &str) -> String {
         format!("SELECT \
             {agg}(stats_agg(test_y, test_x)), \
-            stats_agg(test_y, test_x)->toolkit_experimental.{agg}() \
+            stats_agg(test_y, test_x)->{agg}() \
         FROM test_table", agg=agg)
     }
 
     fn tk2d_agg_arg(agg: &str, arg: &str) -> String {
         format!("SELECT \
             {agg}(stats_agg(test_y, test_x), '{arg}'), \
-            stats_agg(test_y, test_x)->toolkit_experimental.{agg}('{arg}') \
+            stats_agg(test_y, test_x)->{agg}('{arg}') \
         FROM test_table", agg=agg, arg=arg)
     }
 

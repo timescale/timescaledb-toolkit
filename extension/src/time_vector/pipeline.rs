@@ -27,7 +27,7 @@ use crate::serialization::PgProcId;
 #[pg_schema]
 pub mod toolkit_experimental {
     use super::*;
-    pub(crate) use crate::accessors::toolkit_experimental::AccessorDelta;
+    pub(crate) use crate::accessors::AccessorDelta;
     pub use crate::time_vector::Timevector_TSTZ_F64;
     pub(crate) use lambda::toolkit_experimental::{Lambda, LambdaData};
     // TODO once we start stabilizing elements, create a type TimevectorPipeline

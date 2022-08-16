@@ -7,6 +7,7 @@ use counter_agg::CounterSummaryBuilder;
 use super::*;
 
 use crate::{
+    accessors::{AccessorAverage, AccessorNumVals, AccessorSum},
     build,
     counter_agg::CounterSummary,
     hyperloglog::HyperLogLog,
@@ -26,7 +27,6 @@ use self::toolkit_experimental::{
 #[pg_schema]
 pub mod toolkit_experimental {
     use super::*;
-    pub(crate) use crate::accessors::toolkit_experimental::*;
     pub(crate) use crate::time_vector::pipeline::UnstableTimevectorPipeline;
 
     pg_type! {
@@ -188,7 +188,7 @@ ALTER FUNCTION "arrow_run_pipeline_then_stats_agg" SUPPORT toolkit_experimental.
     schema = "toolkit_experimental"
 )]
 pub fn sum_pipeline_element(
-    accessor: toolkit_experimental::AccessorSum,
+    accessor: AccessorSum,
 ) -> toolkit_experimental::PipelineThenSum {
     let _ = accessor;
     build! {
@@ -201,7 +201,7 @@ pub fn sum_pipeline_element(
 
 extension_sql!(
     r#"
-    CREATE CAST (toolkit_experimental.AccessorSum AS toolkit_experimental.PipelineThenSum)
+    CREATE CAST (AccessorSum AS toolkit_experimental.PipelineThenSum)
         WITH FUNCTION toolkit_experimental.sum_cast
         AS IMPLICIT;
 "#,
@@ -274,7 +274,7 @@ ALTER FUNCTION "arrow_pipeline_then_sum" SUPPORT toolkit_experimental.pipeline_s
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn average_pipeline_element(
-    accessor: toolkit_experimental::AccessorAverage,
+    accessor: AccessorAverage,
 ) -> toolkit_experimental::PipelineThenAverage {
     let _ = accessor;
     build! {
@@ -287,7 +287,7 @@ pub fn average_pipeline_element(
 
 extension_sql!(
     r#"
-    CREATE CAST (toolkit_experimental.AccessorAverage AS toolkit_experimental.PipelineThenAverage)
+    CREATE CAST (AccessorAverage AS toolkit_experimental.PipelineThenAverage)
         WITH FUNCTION toolkit_experimental.average_pipeline_element
         AS IMPLICIT;
 "#,
@@ -369,7 +369,7 @@ ALTER FUNCTION "arrow_pipeline_then_average" SUPPORT toolkit_experimental.pipeli
     schema = "toolkit_experimental"
 )]
 pub fn num_vals_pipeline_element(
-    accessor: toolkit_experimental::AccessorNumVals,
+    accessor: AccessorNumVals,
 ) -> toolkit_experimental::PipelineThenNumVals {
     let _ = accessor;
     build! {
@@ -382,7 +382,7 @@ pub fn num_vals_pipeline_element(
 
 extension_sql!(
     r#"
-    CREATE CAST (toolkit_experimental.AccessorNumVals AS toolkit_experimental.PipelineThenNumVals)
+    CREATE CAST (AccessorNumVals AS toolkit_experimental.PipelineThenNumVals)
         WITH FUNCTION toolkit_experimental.num_vals_cast
         AS IMPLICIT;
 "#,

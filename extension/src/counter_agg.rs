@@ -3,12 +3,18 @@ use serde::{Serialize, Deserialize};
 use pgx::*;
 
 use crate::{
+    accessors::{
+        AccessorCorr, AccessorCounterZeroTime, AccessorDelta, AccessorExtrapolatedDelta,
+        AccessorExtrapolatedRate, AccessorIdeltaLeft, AccessorIdeltaRight, AccessorIntercept,
+        AccessorIrateLeft, AccessorIrateRight, AccessorNumChanges, AccessorNumElements,
+        AccessorNumResets, AccessorRate, AccessorSlope, AccessorTimeDelta, AccessorWithBounds,
+    },
     aggregate_utils::in_aggregate_context,
-    ron_inout_funcs,
     flatten,
-    palloc::{Internal, InternalAsValue, Inner, ToInternal},
+    palloc::{Inner, Internal, InternalAsValue, ToInternal},
     pg_type,
     range::*,
+    ron_inout_funcs,
 };
 
 use tspoint::TSPoint;
@@ -45,12 +51,6 @@ pg_type! {
 
 ron_inout_funcs!(CounterSummary);
 
-
-// hack to allow us to qualify names with "toolkit_experimental"
-// so that pgx generates the correct SQL
-mod toolkit_experimental {
-    pub(crate) use crate::accessors::toolkit_experimental::*;
-}
 
 impl<'input> CounterSummary<'input> {
     pub fn to_internal_counter_summary(&self) -> MetricSummary {
@@ -432,9 +432,8 @@ requires = [counter_agg_summary_trans, counter_agg_final, counter_agg_combine, c
 #[opname(->)]
 pub fn arrow_counter_agg_delta(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorDelta,
+    _accessor: AccessorDelta,
 ) -> f64 {
-    let _ = accessor;
     counter_agg_delta(sketch)
 }
 
@@ -450,9 +449,8 @@ fn counter_agg_delta(
 #[opname(->)]
 pub fn arrow_counter_agg_rate(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorRate,
+    _accessor: AccessorRate,
 ) -> Option<f64> {
-    let _ = accessor;
     counter_agg_rate(sketch)
 }
 
@@ -468,9 +466,8 @@ fn counter_agg_rate(
 #[opname(->)]
 pub fn arrow_counter_agg_time_delta(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorTimeDelta,
+    _accessor: AccessorTimeDelta,
 ) -> f64 {
-    let _ = accessor;
     counter_agg_time_delta(sketch)
 }
 
@@ -486,9 +483,8 @@ fn counter_agg_time_delta(
 #[opname(->)]
 pub fn arrow_counter_agg_irate_left(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorIrateLeft,
+    _accessor: AccessorIrateLeft,
 ) -> Option<f64> {
-    let _ = accessor;
     counter_agg_irate_left(sketch)
 }
 
@@ -504,9 +500,8 @@ fn counter_agg_irate_left(
 #[opname(->)]
 pub fn arrow_counter_agg_irate_right(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorIrateRight,
+    _accessor: AccessorIrateRight,
 ) -> Option<f64> {
-    let _ = accessor;
     counter_agg_irate_right(sketch)
 }
 
@@ -522,9 +517,8 @@ fn counter_agg_irate_right(
 #[opname(->)]
 pub fn arrow_counter_agg_idelta_left(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorIdeltaLeft,
+    _accessor: AccessorIdeltaLeft,
 ) -> f64 {
-    let _ = accessor;
     counter_agg_idelta_left(sketch)
 }
 
@@ -540,9 +534,8 @@ fn counter_agg_idelta_left(
 #[opname(->)]
 pub fn arrow_counter_agg_idelta_right(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorIdeltaRight,
+    _accessor: AccessorIdeltaRight,
 ) -> f64 {
-    let _ = accessor;
     counter_agg_idelta_right(sketch)
 }
 
@@ -558,9 +551,8 @@ fn counter_agg_idelta_right(
 #[opname(->)]
 pub fn arrow_counter_agg_with_bounds(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorWithBounds,
+    accessor: AccessorWithBounds,
 ) -> CounterSummary<'static> {
-    let _ = accessor;
     let mut builder = CounterSummaryBuilder::from(sketch.to_internal_counter_summary());
     builder.set_bounds(accessor.bounds());
     CounterSummary::from_internal_counter_summary(builder.build())
@@ -595,9 +587,8 @@ fn counter_agg_with_bounds(
 #[opname(->)]
 pub fn arrow_counter_agg_extrapolated_delta(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorExtrapolatedDelta,
+    accessor: AccessorExtrapolatedDelta,
 ) -> Option<f64> {
-    let _ = accessor;
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
     counter_agg_extrapolated_delta(sketch, &*method)
 }
@@ -633,9 +624,8 @@ fn counter_agg_interpolated_delta(
 #[opname(->)]
 pub fn arrow_counter_agg_extrapolated_rate(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorExtrapolatedRate,
+    accessor: AccessorExtrapolatedRate,
 ) -> Option<f64> {
-    let _ = accessor;
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
     counter_agg_extrapolated_rate(sketch, &*method)
 }
@@ -670,9 +660,8 @@ fn counter_agg_interpolated_rate(
 #[opname(->)]
 pub fn arrow_counter_agg_num_elements(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorNumElements,
+    _accessor: AccessorNumElements,
 ) -> i64 {
-    let _ = accessor;
     counter_agg_num_elements(sketch)
 }
 
@@ -688,9 +677,8 @@ fn counter_agg_num_elements(
 #[opname(->)]
 pub fn arrow_counter_agg_num_changes(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorNumChanges,
+    _accessor: AccessorNumChanges,
 ) -> i64 {
-    let _ = accessor;
     counter_agg_num_changes(sketch)
 }
 
@@ -706,9 +694,8 @@ fn counter_agg_num_changes(
 #[opname(->)]
 pub fn arrow_counter_agg_num_resets(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorNumResets,
+    _accessor: AccessorNumResets,
 ) -> i64 {
-    let _ = accessor;
     counter_agg_num_resets(sketch)
 }
 
@@ -724,9 +711,8 @@ fn counter_agg_num_resets(
 #[opname(->)]
 pub fn arrow_counter_agg_slope(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorSlope,
+    _accessor: AccessorSlope,
 ) -> Option<f64> {
-    let _ = accessor;
     counter_agg_slope(sketch)
 }
 
@@ -742,9 +728,8 @@ fn counter_agg_slope(
 #[opname(->)]
 pub fn arrow_counter_agg_intercept(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorIntercept,
+    _accessor: AccessorIntercept,
 ) -> Option<f64> {
-    let _ = accessor;
     counter_agg_intercept(sketch)
 }
 
@@ -760,9 +745,8 @@ fn counter_agg_intercept(
 #[opname(->)]
 pub fn arrow_counter_agg_corr(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorCorr,
+    _accessor: AccessorCorr,
 ) -> Option<f64> {
-    let _ = accessor;
     counter_agg_corr(sketch)
 }
 
@@ -778,9 +762,8 @@ fn counter_agg_corr(
 #[opname(->)]
 pub fn arrow_counter_agg_zero_time(
     sketch: CounterSummary,
-    accessor: toolkit_experimental::AccessorCounterZeroTime,
+    _accessor: AccessorCounterZeroTime,
 ) -> Option<crate::raw::TimestampTz> {
-    let _ = accessor;
     counter_agg_counter_zero_time(sketch)
 }
 
@@ -1285,7 +1268,7 @@ mod tests {
                     client,
                     "SELECT \
                        irate_left(counter_agg(ts, val)), \
-                       counter_agg(ts, val) -> toolkit_experimental.irate_left() \
+                       counter_agg(ts, val) -> irate_left() \
                      FROM test",
                     f64
                 ),
@@ -1304,7 +1287,7 @@ mod tests {
                     client,
                     "SELECT \
                        irate_right(counter_agg(ts, val)), \
-                       counter_agg(ts, val) -> toolkit_experimental.irate_right() \
+                       counter_agg(ts, val) -> irate_right() \
                      FROM test",
                     f64
                 ),
@@ -1323,7 +1306,7 @@ mod tests {
                     client,
                     "SELECT \
                        idelta_left(counter_agg(ts, val)), \
-                       counter_agg(ts, val) -> toolkit_experimental.idelta_left() \
+                       counter_agg(ts, val) -> idelta_left() \
                      FROM test",
                     f64
                 ),
@@ -1342,7 +1325,7 @@ mod tests {
                     client,
                     "SELECT \
                        idelta_right(counter_agg(ts, val)), \
-                       counter_agg(ts, val) -> toolkit_experimental.idelta_right() \
+                       counter_agg(ts, val) -> idelta_right() \
                      FROM test",
                     f64
                 ),
@@ -1361,7 +1344,7 @@ mod tests {
                     client,
                     "SELECT \
                        num_resets(counter_agg(ts, val)), \
-                       counter_agg(ts, val) -> toolkit_experimental.num_resets() \
+                       counter_agg(ts, val) -> num_resets() \
                      FROM test",
                     f64
                 ),

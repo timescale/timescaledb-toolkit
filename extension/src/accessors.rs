@@ -48,50 +48,46 @@ macro_rules! accessor_fn_impl {
     };
 }
 
-#[pg_schema]
-pub mod toolkit_experimental {
-    pub use super::*;
+accessor! { approx_percentile(
+    percentile: f64,
+) }
 
-    accessor! { approx_percentile(
-        percentile: f64,
-    ) }
+accessor! { approx_percentile_rank(
+    value: f64,
+) }
 
-    accessor! { approx_percentile_rank(
-        value: f64,
-    ) }
-
-    accessor! { num_vals() }
-    accessor! { mean() }
-    accessor! { error() }
-    accessor! { min_val() }
-    accessor! { max_val() }
-    accessor! { average() }
-    accessor! { average_x() }
-    accessor! { average_y() }
-    accessor! { sum() }
-    accessor! { sum_x() }
-    accessor! { sum_y() }
-    accessor! { slope() }
-    accessor! { corr() }
-    accessor! { intercept() }
-    accessor! { x_intercept() }
-    accessor! { determination_coeff() }
-    accessor! { distinct_count() }
-    accessor! { stderror() }
-    accessor! { delta() }
-    accessor! { time_delta() }
-    accessor! { rate() }
-    accessor! { irate_left() }
-    accessor! { irate_right() }
-    accessor! { idelta_left() }
-    accessor! { idelta_right() }
-    accessor! { num_elements() }
-    accessor! { num_changes() }
-    accessor! { num_resets() }
-    accessor! { counter_zero_time() }
+accessor! { num_vals() }
+accessor! { mean() }
+accessor! { error() }
+accessor! { min_val() }
+accessor! { max_val() }
+accessor! { average() }
+accessor! { average_x() }
+accessor! { average_y() }
+accessor! { sum() }
+accessor! { sum_x() }
+accessor! { sum_y() }
+accessor! { slope() }
+accessor! { corr() }
+accessor! { intercept() }
+accessor! { x_intercept() }
+accessor! { determination_coeff() }
+accessor! { distinct_count() }
+accessor! { stderror() }
+accessor! { delta() }
+accessor! { time_delta() }
+accessor! { rate() }
+accessor! { irate_left() }
+accessor! { irate_right() }
+accessor! { idelta_left() }
+accessor! { idelta_right() }
+accessor! { num_elements() }
+accessor! { num_changes() }
+accessor! { num_resets() }
+accessor! { counter_zero_time() }
 
 
-    // The rest are more complex, with String or other challenges.  Leaving alone for now.
+// The rest are more complex, with String or other challenges.  Leaving alone for now.
 
     pg_type! {
         #[derive(Debug)]
@@ -104,10 +100,10 @@ pub mod toolkit_experimental {
     //FIXME string IO
     ron_inout_funcs!(AccessorStdDev);
 
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="stddev")]
+    #[pg_extern(immutable, parallel_safe, name="stddev")]
     pub fn accessor_stddev(
         method: default!(&str, "'sample'"),
-    ) -> toolkit_experimental::AccessorStdDev<'static> {
+    ) -> AccessorStdDev<'static> {
         let _ = crate::stats_agg::method_kind(method);
         unsafe {
             flatten!{
@@ -131,10 +127,10 @@ pub mod toolkit_experimental {
     //FIXME string IO
     ron_inout_funcs!(AccessorStdDevX);
 
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="stddev_x")]
+    #[pg_extern(immutable, parallel_safe, name="stddev_x")]
     pub fn accessor_stddev_x(
         method: default!(&str, "'sample'"),
-    ) -> toolkit_experimental::AccessorStdDevX<'static> {
+    ) -> AccessorStdDevX<'static> {
         let _ = crate::stats_agg::method_kind(method);
         unsafe {
             flatten!{
@@ -158,10 +154,10 @@ pub mod toolkit_experimental {
     //FIXME string IO
     ron_inout_funcs!(AccessorStdDevY);
 
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="stddev_y")]
+    #[pg_extern(immutable, parallel_safe, name="stddev_y")]
     pub fn accessor_stddev_y(
         method: default!(&str, "'sample'"),
-    ) -> toolkit_experimental::AccessorStdDevY<'static> {
+    ) -> AccessorStdDevY<'static> {
         let _ = crate::stats_agg::method_kind(method);
         unsafe {
             flatten!{
@@ -185,10 +181,10 @@ pub mod toolkit_experimental {
     //FIXME string IO
     ron_inout_funcs!(AccessorVariance);
 
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="variance")]
+    #[pg_extern(immutable, parallel_safe, name="variance")]
     pub fn accessor_variance(
         method: default!(&str, "'sample'"),
-    ) -> toolkit_experimental::AccessorVariance<'static> {
+    ) -> AccessorVariance<'static> {
         let _ = crate::stats_agg::method_kind(method);
         unsafe {
             flatten!{
@@ -212,10 +208,10 @@ pub mod toolkit_experimental {
     //FIXME string IO
     ron_inout_funcs!(AccessorVarianceX);
 
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="variance_x")]
+    #[pg_extern(immutable, parallel_safe, name="variance_x")]
     pub fn accessor_variance_x(
         method: default!(&str, "'sample'"),
-    ) -> toolkit_experimental::AccessorVarianceX<'static> {
+    ) -> AccessorVarianceX<'static> {
         let _ = crate::stats_agg::method_kind(method);
         unsafe {
             flatten!{
@@ -238,10 +234,10 @@ pub mod toolkit_experimental {
     //FIXME string IO
     ron_inout_funcs!(AccessorVarianceY);
 
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="variance_y")]
+    #[pg_extern(immutable, parallel_safe, name="variance_y")]
     pub fn accessor_variance_y(
         method: default!(&str, "'sample'"),
-    ) -> toolkit_experimental::AccessorVarianceY<'static> {
+    ) -> AccessorVarianceY<'static> {
         let _ = crate::stats_agg::method_kind(method);
         unsafe {
             flatten!{
@@ -264,10 +260,10 @@ pub mod toolkit_experimental {
 
     ron_inout_funcs!(AccessorSkewness);
 
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="skewness")]
+    #[pg_extern(immutable, parallel_safe, name="skewness")]
     pub fn accessor_skewness(
         method: default!(&str, "'sample'"),
-    ) -> toolkit_experimental::AccessorSkewness<'static> {
+    ) -> AccessorSkewness<'static> {
         let _ = crate::stats_agg::method_kind(method);
         unsafe {
             flatten!{
@@ -290,10 +286,10 @@ pub mod toolkit_experimental {
 
     ron_inout_funcs!(AccessorSkewnessX);
 
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="skewness_x")]
+    #[pg_extern(immutable, parallel_safe, name="skewness_x")]
     pub fn accessor_skewness_x(
         method: default!(&str, "'sample'"),
-    ) -> toolkit_experimental::AccessorSkewnessX<'static> {
+    ) -> AccessorSkewnessX<'static> {
         let _ = crate::stats_agg::method_kind(method);
         unsafe {
             flatten!{
@@ -316,10 +312,10 @@ pub mod toolkit_experimental {
 
     ron_inout_funcs!(AccessorSkewnessY);
 
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="skewness_y")]
+    #[pg_extern(immutable, parallel_safe, name="skewness_y")]
     pub fn accessor_skewness_y(
         method: default!(&str, "'sample'"),
-    ) -> toolkit_experimental::AccessorSkewnessY<'static> {
+    ) -> AccessorSkewnessY<'static> {
         let _ = crate::stats_agg::method_kind(method);
         unsafe {
             flatten!{
@@ -342,10 +338,10 @@ pub mod toolkit_experimental {
 
     ron_inout_funcs!(AccessorKurtosis);
 
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="kurtosis")]
+    #[pg_extern(immutable, parallel_safe, name="kurtosis")]
     pub fn accessor_kurtosis(
         method: default!(&str, "'sample'"),
-    ) -> toolkit_experimental::AccessorKurtosis<'static> {
+    ) -> AccessorKurtosis<'static> {
         let _ = crate::stats_agg::method_kind(method);
         unsafe {
             flatten!{
@@ -368,10 +364,10 @@ pub mod toolkit_experimental {
 
     ron_inout_funcs!(AccessorKurtosisX);
 
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="kurtosis_x")]
+    #[pg_extern(immutable, parallel_safe, name="kurtosis_x")]
     pub fn accessor_kurtosis_x(
         method: default!(&str, "'sample'"),
-    ) -> toolkit_experimental::AccessorKurtosisX<'static> {
+    ) -> AccessorKurtosisX<'static> {
         let _ = crate::stats_agg::method_kind(method);
         unsafe {
             flatten!{
@@ -394,10 +390,10 @@ pub mod toolkit_experimental {
 
     ron_inout_funcs!(AccessorKurtosisY);
 
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="kurtosis_y")]
+    #[pg_extern(immutable, parallel_safe, name="kurtosis_y")]
     pub fn accessor_kurtosis_y(
         method: default!(&str, "'sample'"),
-    ) -> toolkit_experimental::AccessorKurtosisY<'static> {
+    ) -> AccessorKurtosisY<'static> {
         let _ = crate::stats_agg::method_kind(method);
         unsafe {
             flatten!{
@@ -421,10 +417,10 @@ pub mod toolkit_experimental {
     // FIXME string IO
     ron_inout_funcs!(AccessorCovar);
 
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="covariance")]
+    #[pg_extern(immutable, parallel_safe, name="covariance")]
     pub fn accessor_covar(
         method: default!(&str, "'sample'"),
-    ) -> toolkit_experimental::AccessorCovar<'static> {
+    ) -> AccessorCovar<'static> {
         let _ = crate::stats_agg::method_kind(method);
         unsafe {
             flatten!{
@@ -448,10 +444,10 @@ pub mod toolkit_experimental {
     //FIXME string IO
     ron_inout_funcs!(AccessorExtrapolatedDelta);
 
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="extrapolated_delta")]
+    #[pg_extern(immutable, parallel_safe, name="extrapolated_delta")]
     pub fn accessor_extrapolated_delta(
         method: &str,
-    ) -> toolkit_experimental::AccessorExtrapolatedDelta<'static> {
+    ) -> AccessorExtrapolatedDelta<'static> {
         let _ = crate::counter_agg::method_kind(method);
         unsafe {
             flatten!{
@@ -475,10 +471,10 @@ pub mod toolkit_experimental {
     //FIXME string IO
     ron_inout_funcs!(AccessorExtrapolatedRate);
 
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="extrapolated_rate")]
+    #[pg_extern(immutable, parallel_safe, name="extrapolated_rate")]
     pub fn accessor_extrapolated_rate(
         method: &str,
-    ) -> toolkit_experimental::AccessorExtrapolatedRate<'static> {
+    ) -> AccessorExtrapolatedRate<'static> {
         let _ = crate::counter_agg::method_kind(method);
         unsafe {
             flatten!{
@@ -504,10 +500,10 @@ pub mod toolkit_experimental {
 
     ron_inout_funcs!(AccessorWithBounds);
 
-    #[pg_extern(immutable, parallel_safe, schema="toolkit_experimental", name="with_bounds")]
+    #[pg_extern(immutable, parallel_safe, name="with_bounds")]
     pub fn accessor_with_bounds(
         bounds: crate::raw::tstzrange,
-    ) -> toolkit_experimental::AccessorWithBounds<'static> {
+    ) -> AccessorWithBounds<'static> {
         let range = unsafe { crate::range::get_range(bounds.0 as *mut pg_sys::varlena) };
         let mut accessor = build!{
             AccessorWithBounds {
@@ -546,7 +542,6 @@ pub mod toolkit_experimental {
             }.into()
         }
     }
-}
 
 pg_type! {
     #[derive(Debug)]

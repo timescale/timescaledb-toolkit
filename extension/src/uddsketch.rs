@@ -6,10 +6,14 @@ use encodings::{delta, prefix_varint};
 use uddsketch::{SketchHashKey, UDDSketch as UddSketchInternal};
 
 use crate::{
+    accessors::{
+        AccessorApproxPercentile, AccessorApproxPercentileRank, AccessorError, AccessorMean,
+        AccessorNumVals,
+    },
     aggregate_utils::in_aggregate_context,
     flatten,
-    palloc::{Internal, InternalAsValue, Inner, ToInternal}, pg_type,
-    accessors::toolkit_experimental,
+    palloc::{Inner, Internal, InternalAsValue, ToInternal},
+    pg_type,
 };
 
 // PG function for adding values to a sketch.
@@ -528,7 +532,7 @@ requires = [uddsketch_compound_trans, uddsketch_final, uddsketch_combine, uddske
 #[opname(->)]
 pub fn arrow_uddsketch_approx_percentile(
     sketch: UddSketch,
-    accessor: toolkit_experimental::AccessorApproxPercentile,
+    accessor: AccessorApproxPercentile,
 ) -> f64 {
     uddsketch_approx_percentile(accessor.percentile, sketch)
 }
@@ -552,7 +556,7 @@ pub fn uddsketch_approx_percentile(
 #[opname(->)]
 pub fn arrow_uddsketch_approx_rank(
     sketch: UddSketch,
-    accessor: toolkit_experimental::AccessorApproxPercentileRank,
+    accessor: AccessorApproxPercentileRank,
 ) -> f64 {
     uddsketch_approx_percentile_rank(accessor.value, sketch)
 }
@@ -575,9 +579,8 @@ pub fn uddsketch_approx_percentile_rank(
 #[opname(->)]
 pub fn arrow_uddsketch_num_vals(
     sketch: UddSketch,
-    accessor: toolkit_experimental::AccessorNumVals,
+    _accessor: AccessorNumVals,
 ) -> f64 {
-    let _ = accessor;
     uddsketch_num_vals(sketch)
 }
 
@@ -594,9 +597,8 @@ pub fn uddsketch_num_vals(
 #[opname(->)]
 pub fn arrow_uddsketch_mean(
     sketch: UddSketch,
-    accessor: toolkit_experimental::AccessorMean,
+    _accessor: AccessorMean,
 ) -> f64 {
-    let _ = accessor;
     uddsketch_mean(sketch)
 }
 
@@ -618,9 +620,8 @@ pub fn uddsketch_mean(
 #[opname(->)]
 pub fn arrow_uddsketch_error(
     sketch: UddSketch,
-    accessor: toolkit_experimental::AccessorError,
+    _accessor: AccessorError,
 ) -> f64 {
-    let _ = accessor;
     uddsketch_error(sketch)
 }
 
@@ -684,8 +685,8 @@ mod tests {
 
             let (mean2, count2) = client
                 .select("SELECT \
-                    uddsketch -> toolkit_experimental.mean(), \
-                    uddsketch -> toolkit_experimental.num_vals() \
+                    uddsketch -> mean(), \
+                    uddsketch -> num_vals() \
                     FROM sketch", None, None)
                 .first()
                 .get_two::<f64, f64>();
@@ -695,7 +696,7 @@ mod tests {
             let (error, error2) = client
                 .select("SELECT \
                     error(uddsketch), \
-                    uddsketch -> toolkit_experimental.error() \
+                    uddsketch -> error() \
                     FROM sketch", None, None)
                 .first()
                 .get_two::<f64, f64>();
@@ -727,8 +728,8 @@ mod tests {
                 let (est_val2, est_quant2) = client
                     .select(
                         &format!("SELECT \
-                                uddsketch->toolkit_experimental.approx_percentile({}), \
-                                uddsketch->toolkit_experimental.approx_percentile_rank({}) \
+                                uddsketch->approx_percentile({}), \
+                                uddsketch->approx_percentile_rank({}) \
                             FROM sketch", approx_percentile, value), None, None)
                     .first()
                     .get_two::<f64, f64>();

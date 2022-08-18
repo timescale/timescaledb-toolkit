@@ -484,6 +484,7 @@ fn version(s: &str) -> Version {
         patch: nums
             .next()
             .unwrap_or("0")
+            .trim_end_matches("-dev")
             .parse()
             .unwrap_or_else(|e| panic!("error {} for major version in `{}`", e, s)),
     };

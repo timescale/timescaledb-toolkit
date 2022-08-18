@@ -31,6 +31,7 @@ pub(crate) fn generate_from_install(
     mut upgrade_file: impl Write,
 ) {
     let new_stabilizations = new_stabilizations(from_version, current_version);
+
     writeln!(
         &mut upgrade_file,
         "DROP SCHEMA IF EXISTS toolkit_experimental CASCADE;\n\
@@ -68,19 +69,7 @@ pub(crate) fn generate_from_install(
                 // TODO is there something more principled to do here?
                 writeln!(script_creator.upgrade_file, "CREATE SCHEMA {}", create).unwrap();
             }
-            Some(Create::Operator(create)) => {
-                // TODO we have no stable operators
-                // JOSH - operators are slightly different than other objects since
-                //        they're not necessarily in the toolkit_experimental when unstable.
-                //        Instead, to check if it's stable we need to check if
-                //        one of the inputs types, or the function is experimental.
-                //        in other words, we need to check if one of
-                //          FUNCTION=toolkit_experimental.*
-                //          LEFTARG=toolkit_experimental.*
-                //          RIGHTARG=toolkit_experimental.*
-                //        see `parse_operator_info()` for an attempt at this
-                writeln!(script_creator.upgrade_file, "CREATE OPERATOR {}", create).unwrap();
-            }
+            Some(Create::Operator(create)) => script_creator.handle_create_operator(create),
             Some(Create::Cast(create)) => {
                 // TODO we don't have a stable one of these yet
                 // JOSH - we should probably check if the FUNCTION is experimental also
@@ -113,6 +102,9 @@ enum Create {
     Schema(String),
     Cast(String),
 }
+
+const MUST_FIND_MATCH: bool = false;
+const ALLOW_NO_MATCH: bool = true;
 
 impl<Lines, Dst> UpdateScriptCreator<Lines, Dst>
 where
@@ -252,31 +244,7 @@ where
     }
 
     fn get_alterable_properties(&mut self) -> Vec<Option<String>> {
-        let mut alters = vec![None; ALTERABLE_PROPERTIES.len()];
-        for line in &mut self.lines {
-            let mut split = line.split_ascii_whitespace();
-            let first = match split.next() {
-                None => continue,
-                Some(first) => first,
-            };
-
-            // found `)` means we're done with
-            // ```
-            // CREATE TYPE <name> (
-            //     ...
-            // );
-            // ```
-            if first.starts_with(')') {
-                break;
-            }
-
-            for (i, property) in ALTERABLE_PROPERTIES.iter().enumerate() {
-                if first.eq_ignore_ascii_case(property) {
-                    assert_eq!(split.next(), Some("="));
-                    alters[i] = Some(split.next().expect("no value").to_string());
-                }
-            }
-        }
+        self.get_properties(&ALTERABLE_PROPERTIES[..], ALLOW_NO_MATCH);
         // Should return alters here, except PG12 doesn't allow alterations to type properties.
         // Once we no longer support PG12 change this back to returning alters
         vec![]
@@ -312,6 +280,104 @@ where
         }
 
         writeln!(self.upgrade_file, "{}", alter_statement).expect("cannot write ALTER TYPE");
+    }
+
+    fn handle_create_operator(&mut self, create: String) {
+        assert!(create.trim_end().ends_with('('));
+        // found
+        // ```
+        // CREATE OPERATOR <op> (
+        //     PROCEDURE=...,
+        //     LEFTARG=...,
+        //     RIGHTARG=...
+        // );
+        // ```
+        // if any of `PROCEDURE`, `LEFTARG`, or `RIGHTARG` refer to and
+        // experimental object the operator is experimental, otherwise it isn't
+        let op = extract_name(&create);
+
+        let fields = self.get_properties(&["PROCEDURE", "LEFTARG", "RIGHTARG"], MUST_FIND_MATCH);
+
+        let is_experimental = fields
+            .iter()
+            .filter_map(|f| f.as_ref())
+            .any(|f| f.contains("toolkit_experimental"));
+
+        let parse_operator_arg_type = |field: &Option<String>| {
+            field
+                .as_ref()
+                .unwrap()
+                // remove everything after the comma, if one exists
+                .split_terminator(',')
+                .next()
+                .unwrap()
+                // remove any trailing comments
+                .split_terminator("/*")
+                .next()
+                .unwrap()
+                .to_ascii_lowercase()
+                // handle `DOUBLE PRECISION`
+                .split_ascii_whitespace()
+                .map(|s| s.to_string())
+                .collect()
+        };
+        let operator = Function {
+            name: op.clone(),
+            types: vec![
+                parse_operator_arg_type(&fields[1]),
+                parse_operator_arg_type(&fields[2]),
+            ],
+        };
+        if is_experimental || self.new_stabilizations.new_operators.contains(&operator) {
+            writeln!(
+                self.upgrade_file,
+                "CREATE OPERATOR {} (\n    \
+                    PROCEDURE={}\n    \
+                    LEFTARG={}\n    \
+                    RIGHTARG={}\n    \
+                );",
+                op,
+                fields[0].as_ref().unwrap(),
+                fields[1].as_ref().unwrap(),
+                fields[2].as_ref().unwrap(),
+            )
+            .expect("cannot write CREATE OPERATOR")
+        }
+    }
+
+    fn get_properties(&mut self, fields: &[&str], allow_no_match: bool) -> Vec<Option<String>> {
+        let mut properties = vec![None; fields.len()];
+        for line in &mut self.lines {
+            // found `)` means we're done with
+            // ```
+            // CREATE <object> <name> (
+            //     ...
+            // );
+            // ```
+            if line.trim_start().starts_with(')') {
+                break;
+            }
+            let mut split = line.split('=');
+            let field = split.next().unwrap().trim();
+            let value = split.next().unwrap_or_else(|| panic!("no value for field {}", field)).trim();
+            assert_eq!(split.next(), None);
+
+            let mut found_match = false;
+            for (i, property) in fields.iter().enumerate() {
+                if field.eq_ignore_ascii_case(property) {
+                    properties[i] = Some(value.to_string());
+                    found_match = true;
+                }
+            }
+            if !found_match && !allow_no_match {
+                panic!(
+                    "{} is not considered an acceptable property for this object",
+                    field
+                )
+            }
+        }
+
+        properties
     }
 }
 
@@ -394,37 +460,6 @@ fn parse_ident(mut stmt: &str) -> (String, &str) {
     }
 }
 
-// TODO JOSH - this may not be done yet, but I'm leaving it in to help future devs
-// fn parse_operator_info(operator: &str) -> Function {
-//     let name = extract_name(operator);
-//     let args_start = operator.find('(').unwrap();
-//     let args = operator[args_start..].lines();
-//     let (mut left, mut right) = (None, None);
-//     for arg in args {
-//         let arg = arg.trim_start();
-//         let (sink, skip) = if arg.starts_with("LEFTARG") {
-//             (&mut left, "LEFTARG".len())
-//         } else if arg.starts_with("RIGHTARG") {
-//             (&mut right, "RIGHTARG".len())
-//         } else {
-//             continue;
-//         };
-//         // skip LEFT/RIGHTARG=
-//         let arg = &arg[skip + 1..];
-//         *sink = match arg.rfind(',') {
-//             Some(end) => arg[..end].to_ascii_lowercase().into(),
-//             None => arg
-//                 .split_ascii_whitespace()
-//                 .map(|s| s.to_ascii_lowercase())
-//                 .next(),
-//         }
-//     }
-//     Function {
-//         name,
-//         types: vec![vec![left.unwrap()], vec![right.unwrap()]],
-//     }
-// }
-
 fn extract_name(line: &str) -> String {
     let mut name: &str = line.split_ascii_whitespace().next().expect("no type name");
     if name.ends_with(';') {
@@ -461,7 +496,7 @@ pub(crate) struct StaticFunction {
     types: &'static [&'static [&'static str]],
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug)]
 struct Version {
     major: u64,
     minor: u64,
@@ -484,6 +519,7 @@ fn version(s: &str) -> Version {
         patch: nums
             .next()
             .unwrap_or("0")
+            .trim_end_matches("-dev")
             .parse()
             .unwrap_or_else(|e| panic!("error {} for major version in `{}`", e, s)),
     };
@@ -493,17 +529,20 @@ fn version(s: &str) -> Version {
     version
 }
 
-fn new_objects<'a, T>(
+fn new_objects<'a, T: std::fmt::Debug>(
     stabilizations: &'a [(&'a str, T)],
     from_version: &'a str,
     to_version: &'a str,
 ) -> impl Iterator<Item = &'a (&'a str, T)> + 'a {
     let to_version = to_version.trim_end_matches("-dev");
-    println!("{}", from_version);
     let from_version = version(from_version);
+    let to_version = version(to_version);
     stabilizations
         .iter()
-        .skip_while(move |(version, _)| version != &to_version)
+        .skip_while(move |(version_str, _)| {
+            let version = version(version_str);
+            version > to_version
+        })
         .take_while(move |(at, _)| at != &"prehistory" && version(at) > from_version)
 }
 
@@ -602,7 +641,7 @@ macro_rules! operators_stabilized_at {
                         $version,
                         &[
                             $(StaticFunction {
-                                name: stringify!($fn_name),
+                                name: $operator_name,
                                 types: &[$(
                                     &[$(
                                         stringify!($fn_type),

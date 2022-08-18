@@ -461,7 +461,7 @@ pub(crate) struct StaticFunction {
     types: &'static [&'static [&'static str]],
 }
 
-#[derive(Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Eq, PartialEq, Ord, PartialOrd, Debug)]
 struct Version {
     major: u64,
     minor: u64,
@@ -493,7 +493,7 @@ fn version(s: &str) -> Version {
     version
 }
 
-fn new_objects<'a, T>(
+fn new_objects<'a, T: std::fmt::Debug>(
     stabilizations: &'a [(&'a str, T)],
     from_version: &'a str,
     to_version: &'a str,
@@ -501,9 +501,13 @@ fn new_objects<'a, T>(
     let to_version = to_version.trim_end_matches("-dev");
     println!("{}", from_version);
     let from_version = version(from_version);
+    let to_version = version(to_version);
     stabilizations
         .iter()
-        .skip_while(move |(version, _)| version != &to_version)
+        .skip_while(move |(version_str, _)| {
+            let version = version(version_str);
+            version > to_version
+        })
         .take_while(move |(at, _)| at != &"prehistory" && version(at) > from_version)
 }
 

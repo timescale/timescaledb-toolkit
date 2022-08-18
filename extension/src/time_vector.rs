@@ -262,7 +262,7 @@ pub fn combine(first: Timevector_TSTZ_F64<'_>, second: Timevector_TSTZ_F64<'_>) 
             <= second.points.as_slice().first().unwrap().ts;
     let points: Vec<_> = first.iter().chain(second.iter()).collect();
 
-    let mut flags = (first.flags | FLAG_HAS_NULLS) | (second.flags | FLAG_HAS_NULLS);
+    let mut flags = (first.flags & FLAG_HAS_NULLS) | (second.flags & FLAG_HAS_NULLS);
     if is_sorted {
         flags |= FLAG_IS_SORTED;
     }
@@ -491,6 +491,26 @@ mod tests {
             assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-07 00:00:00+00\",71)"));
             assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-08 00:00:00+00\",0)"));
             assert!(unnest.next().is_none());
+        })
+    }
+
+    #[pg_test]
+    fn test_rollup_preserves_nulls_flag() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            client.select("CREATE TABLE tvecs (vector Timevector_TSTZ_F64)", None, None);
+            client.select("INSERT INTO tvecs SELECT timevector('2020-1-1', 20)", None, None);
+            client.select("INSERT INTO tvecs SELECT timevector('2020-1-2', 30)", None, None);
+            client.select("INSERT INTO tvecs SELECT timevector('2020-1-3', 15)", None, None);
+
+            let tvec = client.select("SELECT rollup(vector)::TEXT FROM tvecs", None, None).first().get_one::<String>().unwrap();
+            let expected = r#"(version:1,num_points:3,flags:1,internal_padding:(0,0,0),points:[(ts:"2020-01-01 00:00:00+00",val:20),(ts:"2020-01-02 00:00:00+00",val:30),(ts:"2020-01-03 00:00:00+00",val:15)],null_val:[0])"#;
+            assert_eq!(tvec, expected);
+
+            client.select("INSERT INTO tvecs SELECT timevector('2019-1-4', NULL)", None, None);
+            let tvec = client.select("SELECT rollup(vector)::TEXT FROM tvecs", None, None).first().get_one::<String>().unwrap();
+            let expected = r#"(version:1,num_points:4,flags:2,internal_padding:(0,0,0),points:[(ts:"2020-01-01 00:00:00+00",val:20),(ts:"2020-01-02 00:00:00+00",val:30),(ts:"2020-01-03 00:00:00+00",val:15),(ts:"2019-01-04 00:00:00+00",val:NaN)],null_val:[8])"#;
+            assert_eq!(tvec, expected);
         })
     }
 }

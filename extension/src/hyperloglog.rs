@@ -47,9 +47,9 @@ pub fn hyperloglog_trans(
     .internal()
 }
 
-const APPROX_COUNT_DISTINCT_DEFAULT_SIZE: i32 = 32678;
+const APPROX_COUNT_DISTINCT_DEFAULT_SIZE: i32 = 32768;
 
-/// Similar to hyperloglog_trans(), except size is set to a default of 32,678
+/// Similar to hyperloglog_trans(), except size is set to a default of 32,768
 #[pg_extern(immutable, parallel_safe,schema = "toolkit_experimental")]
 pub fn approx_count_distinct_trans(
     state: Internal,

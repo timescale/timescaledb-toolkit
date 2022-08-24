@@ -507,7 +507,7 @@ mod tests {
                 )
                 .first()
                 .get_one::<String>();
-                
+
             let expected = "(\
                 version:1,\
                 log:Sparse(\

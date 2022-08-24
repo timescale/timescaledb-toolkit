@@ -194,8 +194,8 @@ impl<'s> Storage<'s> {
                             (idx, right_delta)
                         } else {
                             let idx = *l;
-                            if *r > 0 {
-                                *r -= 1;
+                            if *l > 0 {
+                                *l -= 1;
                                 return (idx, left_delta);
                             }
                             *self = Right(*r);

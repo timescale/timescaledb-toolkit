@@ -2,6 +2,8 @@ use pgx::*;
 
 use super::*;
 
+use crate::accessors::AccessorDelta;
+
 // TODO is (immutable, parallel_safe) correct?
 #[pg_extern(
     immutable,
@@ -10,7 +12,7 @@ use super::*;
     schema = "toolkit_experimental"
 )]
 pub fn delta_pipeline_element<'p, 'e>(
-    accessor: toolkit_experimental::AccessorDelta<'p>,
+    accessor: AccessorDelta<'p>,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
     let _ = accessor;
     Element::Delta {}.flatten()

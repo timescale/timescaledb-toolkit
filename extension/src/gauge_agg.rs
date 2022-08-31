@@ -61,11 +61,15 @@ mod toolkit_experimental {
             let prev = prev.map(MetricSummary::from);
             let next = next.map(MetricSummary::from);
     
-            let prev = prev.map(|summary| 
-                time_weighted_average::TimeWeightMethod::Linear
-                .interpolate(summary.last, Some(this.first), interval_start)
-                .expect("unable to interpolate lower bound")
-            );
+            let prev = if this.first.ts > interval_start {
+                prev.map(|summary| 
+                    time_weighted_average::TimeWeightMethod::Linear
+                    .interpolate(summary.last, Some(this.first), interval_start)
+                    .expect("unable to interpolate lower bound")
+                ) 
+            } else {
+                None
+            };
 
             let next = next.map(|summary| 
                 time_weighted_average::TimeWeightMethod::Linear
@@ -1049,6 +1053,57 @@ mod tests {
                 rates.next().unwrap()[1].value(), 
                 Some((35. - 27.5)/(16. * 60. * 60.))
             );
+        });
+    }
+
+    #[pg_test]
+    fn guage_agg_interpolated_delta_with_aligned_point() {
+        Spi::execute(|client| {
+            client.select(
+                "CREATE TABLE test(time timestamptz, value double precision, bucket timestamptz)",
+                None,
+                None,
+            );
+            client.select(
+                r#"INSERT INTO test VALUES
+                ('2020-1-1 10:00'::timestamptz, 10.0, '2020-1-1'::timestamptz),
+                ('2020-1-1 12:00'::timestamptz, 40.0, '2020-1-1'::timestamptz),
+                ('2020-1-1 16:00'::timestamptz, 20.0, '2020-1-1'::timestamptz),
+                ('2020-1-2 0:00'::timestamptz, 15.0, '2020-1-2'::timestamptz),
+                ('2020-1-2 12:00'::timestamptz, 50.0, '2020-1-2'::timestamptz),
+                ('2020-1-2 20:00'::timestamptz, 25.0, '2020-1-2'::timestamptz)"#,
+                None,
+                None,
+            );
+
+            let mut deltas = client.select(
+                r#"SELECT
+                toolkit_experimental.interpolated_delta(
+                    agg,
+                    bucket,
+                    '1 day'::interval, 
+                    LAG(agg) OVER (ORDER BY bucket), 
+                    LEAD(agg) OVER (ORDER BY bucket)
+                ) FROM (
+                    SELECT bucket, toolkit_experimental.gauge_agg(time, value) as agg 
+                    FROM test 
+                    GROUP BY bucket
+                ) s
+                ORDER BY bucket"#,
+                None,
+                None,
+            );
+            // Day 1, start at 10, interpolated end of day is 15 (after reset)
+            assert_eq!(
+                deltas.next().unwrap()[1].value(), 
+                Some(15. - 10.)
+            );
+            // Day 2, start is 15, end is 25
+            assert_eq!(
+                deltas.next().unwrap()[1].value(), 
+                Some(25. - 15.)
+            );
+            assert!(deltas.next().is_none());
         });
     }
 

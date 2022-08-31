@@ -48,7 +48,7 @@ impl<'input> TimeWeightSummary<'input> {
         prev: Option<TimeWeightSummary>,
         next: Option<TimeWeightSummary>,
     ) -> TimeWeightSummary<'static> {
-        assert!(interval_start <= self.first.ts && interval_start + interval_len >= self.last.ts);
+        assert!(interval_start <= self.first.ts && interval_start + interval_len > self.last.ts);
         let mut new_sum = self.weighted_sum;
         let new_start = match prev {
             Some(prev) if interval_start < self.first.ts => {
@@ -62,7 +62,7 @@ impl<'input> TimeWeightSummary<'input> {
             _ => self.first
         };
         let new_end = match next {
-            Some(next) if self.last.ts < interval_start + interval_len => {
+            Some(next) => {
                 let new_end = 
                     self.method
                     .interpolate(self.last, Some(next.first), interval_start + interval_len)

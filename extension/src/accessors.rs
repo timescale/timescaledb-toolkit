@@ -85,6 +85,10 @@ accessor! { num_elements() }
 accessor! { num_changes() }
 accessor! { num_resets() }
 accessor! { counter_zero_time() }
+accessor! { first_val() }
+accessor! { last_val() }
+accessor! { first_time() }
+accessor! { last_time() }
 
 
 // The rest are more complex, with String or other challenges.  Leaving alone for now.

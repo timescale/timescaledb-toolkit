@@ -746,33 +746,23 @@ fn counter_agg_counter_zero_time(summary: CounterSummary) -> Option<crate::raw::
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_first_val(
-    sketch: CounterSummary,
-    _accessor: AccessorFirstVal,
-) -> f64 {
+pub fn arrow_counter_agg_first_val(sketch: CounterSummary, _accessor: AccessorFirstVal) -> f64 {
     counter_agg_first_val(sketch)
 }
 
-#[pg_extern(name="first_val", strict, immutable, parallel_safe)]
-fn counter_agg_first_val(
-    summary: CounterSummary,
-)-> f64 {
+#[pg_extern(name = "first_val", strict, immutable, parallel_safe)]
+fn counter_agg_first_val(summary: CounterSummary) -> f64 {
     summary.to_internal_counter_summary().first.val
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_last_val(
-    sketch: CounterSummary,
-    _accessor: AccessorLastVal,
-) -> f64 {
+pub fn arrow_counter_agg_last_val(sketch: CounterSummary, _accessor: AccessorLastVal) -> f64 {
     counter_agg_last_val(sketch)
 }
 
-#[pg_extern(name="last_val", strict, immutable, parallel_safe)]
-fn counter_agg_last_val(
-    summary: CounterSummary,
-)-> f64 {
+#[pg_extern(name = "last_val", strict, immutable, parallel_safe)]
+fn counter_agg_last_val(summary: CounterSummary) -> f64 {
     summary.to_internal_counter_summary().last.val
 }
 
@@ -785,10 +775,8 @@ pub fn arrow_counter_agg_first_time(
     counter_agg_first_time(sketch)
 }
 
-#[pg_extern(name="first_time", strict, immutable, parallel_safe)]
-fn counter_agg_first_time(
-    summary: CounterSummary,
-)-> crate::raw::TimestampTz {
+#[pg_extern(name = "first_time", strict, immutable, parallel_safe)]
+fn counter_agg_first_time(summary: CounterSummary) -> crate::raw::TimestampTz {
     summary.to_internal_counter_summary().first.ts.into()
 }
 
@@ -801,10 +789,8 @@ pub fn arrow_counter_agg_last_time(
     counter_agg_last_time(sketch)
 }
 
-#[pg_extern(name="last_time", strict, immutable, parallel_safe)]
-fn counter_agg_last_time(
-    summary: CounterSummary,
-)-> crate::raw::TimestampTz {
+#[pg_extern(name = "last_time", strict, immutable, parallel_safe)]
+fn counter_agg_last_time(summary: CounterSummary) -> crate::raw::TimestampTz {
     summary.to_internal_counter_summary().last.ts.into()
 }
 

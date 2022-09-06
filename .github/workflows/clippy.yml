@@ -19,8 +19,6 @@ jobs:
       image: timescaledev/rust-pgx:latest
       env:
         # TODO: See TODOs on duplicate block in ci.yml
-        # Must keep in sync with `path: target` in "Cache cargo target dir" job
-        CARGO_TARGET_DIR_NAME: target
         CARGO_INCREMENTAL: 0
         CARGO_NET_RETRY: 10
         CI: 1

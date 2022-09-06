@@ -18,8 +18,7 @@ use std::{borrow::Cow, convert::TryInto, debug_assert};
 //
 // and treat the block like a regular integer, using shifts to get the
 // values in and out
-#[derive(Clone)]
-#[derive(serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Clone, serde::Serialize, serde::Deserialize, PartialEq)]
 pub struct Registers<'s>(Cow<'s, [u8]>);
 
 impl<'s> Registers<'s> {
@@ -132,7 +131,11 @@ impl<'s> Registers<'s> {
 
     pub fn merge<'a, 'b>(a: &Registers<'a>, b: &Registers<'b>) -> Self {
         if a.0.len() != b.0.len() {
-            panic!("different register size in merge: {} != {}", a.0.len(), b.0.len())
+            panic!(
+                "different register size in merge: {} != {}",
+                a.0.len(),
+                b.0.len()
+            )
         }
 
         let registers: Vec<u8> = (&*a.0).into();
@@ -303,8 +306,11 @@ mod test {
     }
 
     #[quickcheck]
-    fn quick_merge(exp: u8, ops_a: Vec<(usize, u8)>, ops_b: Vec<(usize, u8)>)
-    -> quickcheck::TestResult {
+    fn quick_merge(
+        exp: u8,
+        ops_a: Vec<(usize, u8)>,
+        ops_b: Vec<(usize, u8)>,
+    ) -> quickcheck::TestResult {
         use quickcheck::TestResult;
 
         if exp < 4 || exp > 16 {
@@ -328,7 +334,6 @@ mod test {
             b.set_max(fixed_idx, val);
             reference.set_max(fixed_idx, val);
         }
-
 
         let merged = Registers::merge(&a, &b);
         assert_eq!(&*merged.0, &*reference.0);

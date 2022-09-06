@@ -1,8 +1,8 @@
+use counter_agg::range::I64Range;
+use pgx::{extension_sql, pg_sys};
+use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::slice;
-use serde::{Serialize, Deserialize};
-use pgx::{extension_sql, pg_sys};
-use counter_agg::range::I64Range;
 
 use flat_serialize_macro::flat_serialize;
 
@@ -16,12 +16,12 @@ pub unsafe fn get_range(range: tstzrange) -> Option<I64Range> {
     let range_bytes = get_toasted_bytes(&*range);
     let mut range_bytes = &range_bytes[8..]; // don't care about the Header and Oid
     let flags = *range_bytes.last().unwrap();
-    let mut range = I64Range{
+    let mut range = I64Range {
         left: None,
         right: None,
     };
-    if flags & RANGE_EMPTY != 0{
-        return None
+    if flags & RANGE_EMPTY != 0 {
+        return None;
     }
     if range_has_lbound(flags) {
         let bytes = range_bytes[..8].try_into().unwrap();
@@ -32,7 +32,7 @@ pub unsafe fn get_range(range: tstzrange) -> Option<I64Range> {
         }
         range.left = Some(left);
     }
-    if range_has_rbound(flags){
+    if range_has_rbound(flags) {
         let bytes = range_bytes[..8].try_into().unwrap();
         let mut right = i64::from_ne_bytes(bytes);
         if rbound_inclusive(flags) {
@@ -41,7 +41,6 @@ pub unsafe fn get_range(range: tstzrange) -> Option<I64Range> {
         range.right = Some(right);
     }
     Some(range)
-
 }
 
 unsafe fn get_toasted_bytes(ptr: &pg_sys::varlena) -> &[u8] {
@@ -106,9 +105,9 @@ flat_serialize! {
 impl I64RangeWrapper {
     pub fn to_i64range(&self) -> Option<I64Range> {
         if self.is_present == 0 {
-            return None
+            return None;
         }
-        Some(I64Range{
+        Some(I64Range {
             left: self.left,
             right: self.right,
         })
@@ -119,7 +118,7 @@ impl I64RangeWrapper {
             Some(range) => Self {
                 is_present: 1,
                 has_left: range.left.is_some().into(),
-                has_right:  range.right.is_some().into(),
+                has_right: range.right.is_some().into(),
                 padding: [0; 5],
                 left: range.left,
                 right: range.right,

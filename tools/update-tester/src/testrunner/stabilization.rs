@@ -1,4 +1,3 @@
-
 pub use stabilization_info::*;
 
 #[path = "../../../../extension/src/stabilization_info.rs"]

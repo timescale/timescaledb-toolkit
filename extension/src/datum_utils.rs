@@ -545,14 +545,16 @@ impl<'a> Iterator for DatumStoreIntoIterator<'a> {
                     None
                 } else {
                     // SAFETY `data` is guaranteed to be 8-byte aligned, so it is safe to use as a usize slice
-                    let dat = unsafe {std::slice::from_raw_parts(
-                        store.data.as_slice().as_ptr() as *const Datum,
-                        bound,
-                    )[idx]};
+                    let dat = unsafe {
+                        std::slice::from_raw_parts(
+                            store.data.as_slice().as_ptr() as *const Datum,
+                            bound,
+                        )[idx]
+                    };
                     *next_idx += 1;
                     Some(dat)
                 }
-            },
+            }
             DatumStoreIntoIterator::Varlena { store, next_offset } => {
                 if *next_offset >= store.data_len {
                     None

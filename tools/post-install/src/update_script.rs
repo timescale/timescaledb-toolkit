@@ -359,7 +359,10 @@ where
             }
             let mut split = line.split('=');
             let field = split.next().unwrap().trim();
-            let value = split.next().unwrap_or_else(|| panic!("no value for field {}", field)).trim();
+            let value = split
+                .next()
+                .unwrap_or_else(|| panic!("no value for field {}", field))
+                .trim();
             assert_eq!(split.next(), None);
 
             let mut found_match = false;

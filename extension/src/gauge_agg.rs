@@ -60,18 +60,22 @@ mod toolkit_experimental {
             let this = MetricSummary::from(self.clone());
             let prev = prev.map(MetricSummary::from);
             let next = next.map(MetricSummary::from);
-    
-            let prev = prev.map(|summary| 
-                time_weighted_average::TimeWeightMethod::Linear
-                .interpolate(summary.last, Some(this.first), interval_start)
-                .expect("unable to interpolate lower bound")
-            );
 
-            let next = next.map(|summary| 
+            let prev = prev.map(|summary| {
                 time_weighted_average::TimeWeightMethod::Linear
-                .interpolate(this.last, Some(summary.first), interval_start + interval_len)
-                .expect("unable to interpolate upper bound")
-            );
+                    .interpolate(summary.last, Some(this.first), interval_start)
+                    .expect("unable to interpolate lower bound")
+            });
+
+            let next = next.map(|summary| {
+                time_weighted_average::TimeWeightMethod::Linear
+                    .interpolate(
+                        this.last,
+                        Some(summary.first),
+                        interval_start + interval_len,
+                    )
+                    .expect("unable to interpolate upper bound")
+            });
 
             let builder = prev.map(|pt| GaugeSummaryBuilder::new(&pt, None));
             let mut builder = builder.map_or_else(
@@ -85,13 +89,15 @@ mod toolkit_experimental {
                         .combine(&this)
                         .expect("unable to add data to interpolation");
                     builder
-                }
+                },
             );
-            
+
             if let Some(next) = next {
-                builder.add_point(&next).expect("unable to add final interpolated point");
+                builder
+                    .add_point(&next)
+                    .expect("unable to add final interpolated point");
             }
-    
+
             builder.build().into()
         }
     }
@@ -429,10 +435,7 @@ fn delta(summary: GaugeSummary) -> f64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_gauge_agg_rate(
-    sketch: GaugeSummary,
-    _accessor: AccessorRate,
-) -> Option<f64> {
+fn arrow_gauge_agg_rate(sketch: GaugeSummary, _accessor: AccessorRate) -> Option<f64> {
     rate(sketch)
 }
 
@@ -443,10 +446,7 @@ fn rate(summary: GaugeSummary) -> Option<f64> {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_time_delta(
-    sketch: GaugeSummary,
-    _accessor: AccessorTimeDelta,
-) -> f64 {
+fn arrow_time_delta(sketch: GaugeSummary, _accessor: AccessorTimeDelta) -> f64 {
     time_delta(sketch)
 }
 
@@ -457,10 +457,7 @@ fn time_delta(summary: GaugeSummary) -> f64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_irate_left(
-    sketch: GaugeSummary,
-    _accessor: AccessorIrateLeft,
-) -> Option<f64> {
+fn arrow_irate_left(sketch: GaugeSummary, _accessor: AccessorIrateLeft) -> Option<f64> {
     irate_left(sketch)
 }
 
@@ -471,10 +468,7 @@ fn irate_left(summary: GaugeSummary) -> Option<f64> {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_irate_right(
-    sketch: GaugeSummary,
-    _accessor: AccessorIrateRight,
-) -> Option<f64> {
+fn arrow_irate_right(sketch: GaugeSummary, _accessor: AccessorIrateRight) -> Option<f64> {
     irate_right(sketch)
 }
 
@@ -485,10 +479,7 @@ fn irate_right(summary: GaugeSummary) -> Option<f64> {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_idelta_left(
-    sketch: GaugeSummary,
-    _accessor: AccessorIdeltaLeft,
-) -> f64 {
+fn arrow_idelta_left(sketch: GaugeSummary, _accessor: AccessorIdeltaLeft) -> f64 {
     idelta_left(sketch)
 }
 
@@ -499,10 +490,7 @@ fn idelta_left(summary: GaugeSummary) -> f64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_idelta_right(
-    sketch: GaugeSummary,
-    _accessor: AccessorIdeltaRight,
-) -> f64 {
+fn arrow_idelta_right(sketch: GaugeSummary, _accessor: AccessorIdeltaRight) -> f64 {
     idelta_right(sketch)
 }
 
@@ -513,10 +501,7 @@ fn idelta_right(summary: GaugeSummary) -> f64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_with_bounds(
-    sketch: GaugeSummary,
-    accessor: AccessorWithBounds,
-) -> GaugeSummary<'static> {
+fn arrow_with_bounds(sketch: GaugeSummary, accessor: AccessorWithBounds) -> GaugeSummary<'static> {
     let mut builder = GaugeSummaryBuilder::from(MetricSummary::from(sketch));
     builder.set_bounds(accessor.bounds());
     builder.build().into()
@@ -554,12 +539,9 @@ fn interpolated_delta(
     interval: crate::raw::Interval,
     prev: Option<GaugeSummary>,
     next: Option<GaugeSummary>,
-)-> f64 {
+) -> f64 {
     let interval = crate::datum_utils::interval_to_ms(&start, &interval);
-    MetricSummary::from(
-        summary.interpolate(start.into(), interval, prev, next)
-    )
-        .delta()
+    MetricSummary::from(summary.interpolate(start.into(), interval, prev, next)).delta()
 }
 
 #[pg_operator(immutable, parallel_safe)]
@@ -583,20 +565,14 @@ fn interpolated_rate(
     interval: crate::raw::Interval,
     prev: Option<GaugeSummary>,
     next: Option<GaugeSummary>,
-)-> Option<f64> {
+) -> Option<f64> {
     let interval = crate::datum_utils::interval_to_ms(&start, &interval);
-    MetricSummary::from(
-        summary.interpolate(start.into(), interval, prev, next)
-    )
-        .rate()
+    MetricSummary::from(summary.interpolate(start.into(), interval, prev, next)).rate()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_num_elements(
-    sketch: GaugeSummary,
-    _accessor: AccessorNumElements,
-) -> i64 {
+fn arrow_num_elements(sketch: GaugeSummary, _accessor: AccessorNumElements) -> i64 {
     num_elements(sketch)
 }
 
@@ -607,10 +583,7 @@ fn num_elements(summary: GaugeSummary) -> i64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_num_changes(
-    sketch: GaugeSummary,
-    _accessor: AccessorNumChanges,
-) -> i64 {
+fn arrow_num_changes(sketch: GaugeSummary, _accessor: AccessorNumChanges) -> i64 {
     num_changes(sketch)
 }
 
@@ -621,10 +594,7 @@ fn num_changes(summary: GaugeSummary) -> i64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_slope(
-    sketch: GaugeSummary,
-    _accessor: AccessorSlope,
-) -> Option<f64> {
+fn arrow_slope(sketch: GaugeSummary, _accessor: AccessorSlope) -> Option<f64> {
     slope(sketch)
 }
 
@@ -635,10 +605,7 @@ fn slope(summary: GaugeSummary) -> Option<f64> {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_intercept(
-    sketch: GaugeSummary,
-    _accessor: AccessorIntercept,
-) -> Option<f64> {
+fn arrow_intercept(sketch: GaugeSummary, _accessor: AccessorIntercept) -> Option<f64> {
     intercept(sketch)
 }
 
@@ -1001,20 +968,11 @@ mod tests {
             );
 
             // Day 1, start at 10, interpolated end of day is 16
-            assert_eq!(
-                deltas.next().unwrap()[1].value(), 
-                Some(16. - 10.)
-            );
+            assert_eq!(deltas.next().unwrap()[1].value(), Some(16. - 10.));
             // Day 2, interpolated start is 16, interpolated end is 27.5
-            assert_eq!(
-                deltas.next().unwrap()[1].value(), 
-                Some(27.5 - 16.)
-            );
+            assert_eq!(deltas.next().unwrap()[1].value(), Some(27.5 - 16.));
             // Day 3, interpolated start is 27.5, end is 35
-            assert_eq!(
-                deltas.next().unwrap()[1].value(), 
-                Some(35. - 27.5)
-            );
+            assert_eq!(deltas.next().unwrap()[1].value(), Some(35. - 27.5));
 
             let mut rates = client.select(
                 r#"SELECT
@@ -1036,18 +994,18 @@ mod tests {
 
             // Day 1, 14 hours (rate is per second)
             assert_eq!(
-                rates.next().unwrap()[1].value(), 
-                Some((16. - 10.)/(14. * 60. * 60.))
+                rates.next().unwrap()[1].value(),
+                Some((16. - 10.) / (14. * 60. * 60.))
             );
             // Day 2, 24 hours
             assert_eq!(
-                rates.next().unwrap()[1].value(), 
-                Some((27.5 - 16.)/(24. * 60. * 60.))
+                rates.next().unwrap()[1].value(),
+                Some((27.5 - 16.) / (24. * 60. * 60.))
             );
             // Day 3, 16 hours
             assert_eq!(
-                rates.next().unwrap()[1].value(), 
-                Some((35. - 27.5)/(16. * 60. * 60.))
+                rates.next().unwrap()[1].value(),
+                Some((35. - 27.5) / (16. * 60. * 60.))
             );
         });
     }

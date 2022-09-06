@@ -216,10 +216,10 @@ impl UDDSketch {
         compactions: u64,
         values: u64,
         sum: f64,
-        keys: impl Iterator<Item=SketchHashKey>,
-        counts: impl Iterator<Item=u64>
+        keys: impl Iterator<Item = SketchHashKey>,
+        counts: impl Iterator<Item = u64>,
     ) -> Self {
-        let mut sketch =UDDSketch {
+        let mut sketch = UDDSketch {
             buckets: SketchHashMap::new(),
             alpha: current_error,
             gamma: gamma(current_error),
@@ -288,9 +288,14 @@ impl UDDSketch {
     pub fn merge_sketch(&mut self, other: &UDDSketch) {
         // Require matching initial parameters
         assert!(
-            (self.gamma.powf(1.0 / f64::powi(2.0, self.compactions as i32)) - 
-             other.gamma.powf(1.0 / f64::powi(2.0, other.compactions as i32))
-            ).abs() < 1e-9 // f64::EPSILON too small, see issue #396
+            (self
+                .gamma
+                .powf(1.0 / f64::powi(2.0, self.compactions as i32))
+                - other
+                    .gamma
+                    .powf(1.0 / f64::powi(2.0, other.compactions as i32)))
+            .abs()
+                < 1e-9 // f64::EPSILON too small, see issue #396
         );
         assert!(self.max_buckets == other.max_buckets);
 
@@ -363,7 +368,13 @@ impl UDDSketch {
     }
 
     pub fn estimate_quantile(&self, quantile: f64) -> f64 {
-        estimate_quantile(quantile, self.alpha, self.gamma, self.num_values, self.buckets.iter())
+        estimate_quantile(
+            quantile,
+            self.alpha,
+            self.gamma,
+            self.num_values,
+            self.buckets.iter(),
+        )
     }
 
     pub fn estimate_quantile_at_value(&self, value: f64) -> f64 {
@@ -376,8 +387,8 @@ pub fn estimate_quantile(
     alpha: f64,
     gamma: f64,
     num_values: u64,
-    buckets: impl Iterator<Item=(SketchHashKey, u64)>,
-) -> f64  {
+    buckets: impl Iterator<Item = (SketchHashKey, u64)>,
+) -> f64 {
     assert!((0.0..=1.0).contains(&quantile));
 
     let mut remaining = (num_values as f64 * quantile) as u64 + 1;
@@ -401,7 +412,7 @@ pub fn estimate_quantile(
 fn last_bucket_value(
     alpha: f64,
     gamma: f64,
-    buckets: impl Iterator<Item=(SketchHashKey, u64)>
+    buckets: impl Iterator<Item = (SketchHashKey, u64)>,
 ) -> f64 {
     let (key, _) = buckets.last().unwrap();
     bucket_to_value(alpha, gamma, key)
@@ -422,7 +433,7 @@ pub fn estimate_quantile_at_value(
     value: f64,
     gamma: f64,
     num_values: u64,
-    buckets: impl Iterator<Item=(SketchHashKey, u64)>,
+    buckets: impl Iterator<Item = (SketchHashKey, u64)>,
 ) -> f64 {
     let mut count = 0.0;
     let target = key(value, gamma);

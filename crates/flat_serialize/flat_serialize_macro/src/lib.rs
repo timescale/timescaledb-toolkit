@@ -1,11 +1,13 @@
-
-use proc_macro::{TokenStream};
+use proc_macro::TokenStream;
 
 use proc_macro2::TokenStream as TokenStream2;
 
 use quote::{quote, quote_spanned};
 
-use syn::{Attribute, Expr, Field, Ident, Lifetime, Token, parse_macro_input, punctuated::Punctuated, spanned::Spanned, visit_mut::VisitMut};
+use syn::{
+    parse_macro_input, punctuated::Punctuated, spanned::Spanned, visit_mut::VisitMut, Attribute,
+    Expr, Field, Ident, Lifetime, Token,
+};
 
 mod parser;
 
@@ -157,7 +159,7 @@ fn flat_serialize_struct(input: FlatSerializeStruct) -> TokenStream2 {
         });
 
         let lifetime = input.lifetime.as_ref().map(|lifetime| {
-            quote!{ #lifetime }
+            quote! { #lifetime }
         });
         let try_ref = input.fn_try_ref(lifetime.as_ref());
         let fill_slice = input.fn_fill_slice();
@@ -171,15 +173,15 @@ fn flat_serialize_struct(input: FlatSerializeStruct) -> TokenStream2 {
             .iter()
             .map(|f| f.declaration(true, lifetime.as_ref(), input.per_field_attrs.iter()));
         let lifetime_args = input.lifetime.as_ref().map(|lifetime| {
-            quote!{ <#lifetime> }
+            quote! { <#lifetime> }
         });
-        let ref_liftime = lifetime_args.clone().unwrap_or_else(|| quote!{ <'a> });
-        let rl = lifetime.clone().unwrap_or_else(|| quote!{ 'a });
+        let ref_liftime = lifetime_args.clone().unwrap_or_else(|| quote! { <'a> });
+        let rl = lifetime.clone().unwrap_or_else(|| quote! { 'a });
         let owned_lifetime = if lifetime_args.is_some() {
-                Some(quote!( <'static> ))
-            } else {
-                None
-            };
+            Some(quote!( <'static> ))
+        } else {
+            None
+        };
 
         let attrs = &*input.attrs;
 
@@ -267,10 +269,13 @@ fn flat_serialize_enum(input: FlatSerializeEnum) -> TokenStream2 {
         }
     });
 
-    let lifetime = input.lifetime.as_ref().map(|lifetime| quote!{ #lifetime });
-    let lifetime_args = input.lifetime.as_ref().map(|lifetime| quote!{ <#lifetime> });
-    let ref_liftime = lifetime_args.clone().unwrap_or_else(|| quote!{ <'a> });
-    let rl = lifetime.clone().unwrap_or_else(|| quote!{ 'a });
+    let lifetime = input.lifetime.as_ref().map(|lifetime| quote! { #lifetime });
+    let lifetime_args = input
+        .lifetime
+        .as_ref()
+        .map(|lifetime| quote! { <#lifetime> });
+    let ref_liftime = lifetime_args.clone().unwrap_or_else(|| quote! { <'a> });
+    let rl = lifetime.clone().unwrap_or_else(|| quote! { 'a });
     let owned_lifetime = if lifetime_args.is_some() {
         Some(quote!( <'static> ))
     } else {
@@ -283,8 +288,6 @@ fn flat_serialize_enum(input: FlatSerializeEnum) -> TokenStream2 {
     let body = input.variants(lifetime.as_ref());
     let ident = &input.ident;
     let attrs = &*input.attrs;
-
-
 
     quote! {
         #[derive(Clone)]
@@ -332,29 +335,25 @@ fn flat_serialize_enum(input: FlatSerializeEnum) -> TokenStream2 {
 
 impl VariableLenFieldInfo {
     fn len_from_bytes(&self) -> TokenStream2 {
-        let mut lfb = SelfReplacer(|name|
-            syn::parse_quote! { #name.clone().unwrap() }
-        );
+        let mut lfb = SelfReplacer(|name| syn::parse_quote! { #name.clone().unwrap() });
         let mut len = self.len_expr.clone();
         lfb.visit_expr_mut(&mut len);
         quote! { #len }
     }
 
     fn counter_expr(&self) -> TokenStream2 {
-        let mut ce = SelfReplacer(|name|
-            syn::parse_quote! { (*#name) }
-        );
+        let mut ce = SelfReplacer(|name| syn::parse_quote! { (*#name) });
         let mut len = self.len_expr.clone();
         ce.visit_expr_mut(&mut len);
         quote! { #len }
     }
 
     fn err_size_expr(&self) -> TokenStream2 {
-        let mut ese = SelfReplacer(|name|
+        let mut ese = SelfReplacer(|name| {
             syn::parse_quote! {
                 match #name { Some(#name) => #name, None => return 0usize, }
             }
-        );
+        });
         let mut len = self.len_expr.clone();
         ese.visit_expr_mut(&mut len);
         quote! { #len }
@@ -392,9 +391,11 @@ impl FlatSerializeEnum {
     fn variants(&self, lifetime: Option<&TokenStream2>) -> TokenStream2 {
         let id = &self.ident;
         let variants = self.variants.iter().map(|variant| {
-            let fields = variant.body.fields.iter().map(|f|
-                f.declaration(false, lifetime, self.per_field_attrs.iter())
-            );
+            let fields = variant
+                .body
+                .fields
+                .iter()
+                .map(|f| f.declaration(false, lifetime, self.per_field_attrs.iter()));
             let ident = &variant.body.ident;
             quote! {
                 #ident {
@@ -402,7 +403,7 @@ impl FlatSerializeEnum {
                 },
             }
         });
-        let args = lifetime.map(|lifetime| quote!{ <#lifetime> });
+        let args = lifetime.map(|lifetime| quote! { <#lifetime> });
         quote! {
             pub enum #id #args {
                 #(#variants)*
@@ -431,8 +432,10 @@ impl FlatSerializeEnum {
 
     fn alignment_check(&self) -> TokenStream2 {
         let tag_check = self.tag.alignment_check();
-        let variant_checks = self.variants.iter()
-            .map(|v| v.body.alignment_check(quote!(current_size), quote!(min_align)));
+        let variant_checks = self.variants.iter().map(|v| {
+            v.body
+                .alignment_check(quote!(current_size), quote!(min_align))
+        });
         quote! {
             // alignment assertions
             #[allow(unused_assignments)]
@@ -465,7 +468,7 @@ impl FlatSerializeEnum {
         let tag_alignment = self.tag.required_alignment();
         let alignments = self.variants.iter().map(|v| {
             let alignments = v.body.fields.iter().map(|f| f.required_alignment());
-            quote!{
+            quote! {
                 let mut required_alignment = #tag_alignment;
                 #(
                     let alignment = #alignments;
@@ -496,7 +499,7 @@ impl FlatSerializeEnum {
 
     fn fn_max_provided_alignment(&self) -> TokenStream2 {
         let min_align = self.tag.max_provided_alignment();
-        let min_align = quote!{
+        let min_align = quote! {
             match #min_align {
                 Some(a) => Some(a),
                 None => Some(8),
@@ -508,7 +511,7 @@ impl FlatSerializeEnum {
         let alignments = self.variants.iter().map(|v| {
             let alignments = v.body.fields.iter().map(|f| f.max_provided_alignment());
             let sizes = v.body.fields.iter().map(|f| f.min_len());
-            quote!{
+            quote! {
                 let mut min_align: Option<usize> = #min_align;
                 #(
                     let alignment = #alignments;
@@ -694,11 +697,7 @@ impl FlatSerializeEnum {
         let bodies = self.variants.iter().map(|v| {
             let variant = &v.body.ident;
 
-            let size = v
-                .body
-                .fields
-                .iter()
-                .map(|f| f.size_fn());
+            let size = v.body.fields.iter().map(|f| f.size_fn());
             let fields = v.body.fields.iter().map(|f| f.ident.as_ref().unwrap());
             quote! {
                 #id::#variant { #(#fields),* } => {
@@ -718,11 +717,7 @@ impl FlatSerializeEnum {
 }
 
 impl FlatSerializeStruct {
-    fn alignment_check(
-        &self,
-        start: TokenStream2,
-        min_align: TokenStream2,
-    ) -> TokenStream2 {
+    fn alignment_check(&self, start: TokenStream2, min_align: TokenStream2) -> TokenStream2 {
         let checks = self.fields.iter().map(|f| f.alignment_check());
 
         quote! {
@@ -808,10 +803,7 @@ impl FlatSerializeStruct {
         }
     }
 
-    fn fn_try_ref(
-        &self,
-        lifetime: Option<&TokenStream2>,
-    ) -> TokenStream2 {
+    fn fn_try_ref(&self, lifetime: Option<&TokenStream2>) -> TokenStream2 {
         let break_label = syn::Lifetime::new("'tryref", proc_macro2::Span::call_site());
         let id = &self.ident;
         let TryRefBody {
@@ -840,26 +832,17 @@ impl FlatSerializeStruct {
         }
     }
 
-    fn fn_try_ref_body(
-        &self,
-        break_label: &syn::Lifetime,
-    ) -> TryRefBody {
-        let field_names = self
-            .fields
-            .iter()
-            .map(|f| &f.ident);
-        let ty1 =  self
-            .fields
-            .iter()
-            .map(|f| f.local_ty());
+    fn fn_try_ref_body(&self, break_label: &syn::Lifetime) -> TryRefBody {
+        let field_names = self.fields.iter().map(|f| &f.ident);
+        let ty1 = self.fields.iter().map(|f| f.local_ty());
         let field1 = field_names.clone();
         let field2 = field_names.clone();
         let field_setters = self.fields.iter().map(|field| {
             let name = &field.ident;
             if field.is_optional() {
-                quote!{ #name }
+                quote! { #name }
             } else {
-                quote!{ #name.unwrap() }
+                quote! { #name.unwrap() }
             }
         });
 
@@ -869,10 +852,7 @@ impl FlatSerializeStruct {
 
         let set_fields = quote!( #(#field2: #field_setters),* );
 
-        let err_size = self
-        .fields
-            .iter()
-            .map(|f| f.err_size());
+        let err_size = self.fields.iter().map(|f| f.err_size());
         let err_size = quote!( #( + #err_size)* );
         TryRefBody {
             vars,
@@ -882,9 +862,7 @@ impl FlatSerializeStruct {
         }
     }
 
-    fn fn_fill_slice(
-        &self,
-    ) -> TokenStream2 {
+    fn fn_fill_slice(&self) -> TokenStream2 {
         let id = &self.ident;
         let (fields, fill_slice_with) = self.fill_slice_body();
         quote! {
@@ -900,9 +878,7 @@ impl FlatSerializeStruct {
             }
         }
     }
-    fn fill_slice_body(
-        &self,
-    ) -> (TokenStream2, TokenStream2) {
+    fn fill_slice_body(&self) -> (TokenStream2, TokenStream2) {
         //FIXME assert multiple values of counters are equal...
         let fill_slice_with = self.fields.iter().map(|f| f.fill_slice());
         let fill_slice_with = quote!( #(#fill_slice_with);* );
@@ -912,13 +888,8 @@ impl FlatSerializeStruct {
         (fields, fill_slice_with)
     }
 
-    fn fn_len(
-        &self,
-    ) -> TokenStream2 {
-        let size = self
-            .fields
-            .iter()
-            .map(|f| f.size_fn());
+    fn fn_len(&self) -> TokenStream2 {
+        let size = self.fields.iter().map(|f| f.size_fn());
         let field = self.fields.iter().map(|f| f.ident.as_ref().unwrap());
         let id = &self.ident;
 
@@ -934,14 +905,13 @@ impl FlatSerializeStruct {
 }
 
 impl FlatSerializeField {
-
     fn alignment_check(&self) -> TokenStream2 {
-        let current_size  = quote!(current_size);
-        let min_align  = quote!(min_align);
+        let current_size = quote!(current_size);
+        let min_align = quote!(min_align);
         match &self.length_info {
             None => {
                 let ty = self.ty_without_lifetime();
-                quote_spanned!{self.ty.span()=>
+                quote_spanned! {self.ty.span()=>
                     if (#current_size) % <#ty as flat_serialize::FlatSerializable>::REQUIRED_ALIGNMENT != 0 {
                         panic!("unaligned field: the current size of the data is not a multiple of this type's alignment")
                     }
@@ -957,7 +927,7 @@ impl FlatSerializeField {
             }
             Some(info) => {
                 let ty = info.ty_without_lifetime();
-                quote_spanned!{self.ty.span()=>
+                quote_spanned! {self.ty.span()=>
                     if (#current_size) % <#ty as flat_serialize::FlatSerializable>::REQUIRED_ALIGNMENT != 0 {
                         panic!("unaligned field: the current size of the data is not a multiple of this type's alignment")
                     }
@@ -977,25 +947,29 @@ impl FlatSerializeField {
     }
 
     fn trait_check(&self) -> TokenStream2 {
-        let (ty, needs_lifetime) =
-            match (&self.ty_without_lifetime, &self.length_info) {
-                (_, Some(VariableLenFieldInfo{ ty_without_lifetime: Some(ty), .. })) =>
-                    (ty.clone(), true),
-                (_, Some(VariableLenFieldInfo{ ty, .. })) => (quote!{ #ty }, false),
-                (Some(ty), _) => (ty.clone(), true),
-                _ => {
-                    let ty = &self.ty;
-                    (quote!{ #ty }, false)
-                }
-            };
-        let lifetime = needs_lifetime.then(|| quote!{ <'static> });
+        let (ty, needs_lifetime) = match (&self.ty_without_lifetime, &self.length_info) {
+            (
+                _,
+                Some(VariableLenFieldInfo {
+                    ty_without_lifetime: Some(ty),
+                    ..
+                }),
+            ) => (ty.clone(), true),
+            (_, Some(VariableLenFieldInfo { ty, .. })) => (quote! { #ty }, false),
+            (Some(ty), _) => (ty.clone(), true),
+            _ => {
+                let ty = &self.ty;
+                (quote! { #ty }, false)
+            }
+        };
+        let lifetime = needs_lifetime.then(|| quote! { <'static> });
         let name = self.ident.as_ref().unwrap();
         // based on static_assertions
         // TODO add ConstLen assertion if type is in var-len position?
-        return quote_spanned!{self.ty.span()=>
+        return quote_spanned! {self.ty.span()=>
             fn #name<'test, T: flat_serialize::FlatSerializable<'test>>() {}
             let _ = #name::<#ty #lifetime>;
-        }
+        };
     }
 
     fn required_alignment(&self) -> TokenStream2 {
@@ -1003,7 +977,7 @@ impl FlatSerializeField {
             None => self.ty_without_lifetime(),
             Some(info) => info.ty_without_lifetime(),
         };
-        quote_spanned!{self.ty.span()=>
+        quote_spanned! {self.ty.span()=>
             <#ty as flat_serialize::FlatSerializable>::REQUIRED_ALIGNMENT
         }
     }
@@ -1012,17 +986,21 @@ impl FlatSerializeField {
         match &self.length_info {
             None => {
                 let ty = self.ty_without_lifetime();
-                quote_spanned!{self.ty.span()=>
+                quote_spanned! {self.ty.span()=>
                     <#ty as flat_serialize::FlatSerializable>::MAX_PROVIDED_ALIGNMENT
                 }
-            },
-            Some(info @ VariableLenFieldInfo { is_optional: true, ..}) => {
+            }
+            Some(
+                info @ VariableLenFieldInfo {
+                    is_optional: true, ..
+                },
+            ) => {
                 let ty = info.ty_without_lifetime();
                 // fields after an optional field cannot be aligned to more than
                 // the field is in the event the field is present, so if the
                 // field does not provide a max alignment (i.e. it's fixed-len)
                 // use that to determine what the max alignment is.
-                quote_spanned!{self.ty.span()=>
+                quote_spanned! {self.ty.span()=>
                     {
                         let ty_provied = <#ty as flat_serialize::FlatSerializable>::MAX_PROVIDED_ALIGNMENT;
                         match ty_provied {
@@ -1031,14 +1009,18 @@ impl FlatSerializeField {
                         }
                     }
                 }
-            },
-            Some(info @ VariableLenFieldInfo { is_optional: false, ..}) => {
+            }
+            Some(
+                info @ VariableLenFieldInfo {
+                    is_optional: false, ..
+                },
+            ) => {
                 let ty = info.ty_without_lifetime();
                 // for variable length slices we only need to check the required
                 // alignment, not the max-provided: TRIVIAL_COPY types won't
                 // have a max-provided alignment, while other ones will be
                 // padded out to their natural alignment.
-                quote_spanned!{self.ty.span()=>
+                quote_spanned! {self.ty.span()=>
                     {
                         Some(<#ty as  flat_serialize::FlatSerializable>::REQUIRED_ALIGNMENT)
                     }
@@ -1051,21 +1033,24 @@ impl FlatSerializeField {
         match &self.length_info {
             None => {
                 let ty = self.ty_without_lifetime();
-                quote_spanned!{self.ty.span()=>
+                quote_spanned! {self.ty.span()=>
                     <#ty as flat_serialize::FlatSerializable>::MIN_LEN
                 }
+            }
+            Some(..) => quote_spanned! {self.ty.span()=>
+                0
             },
-            Some(..) =>
-                quote_spanned!{self.ty.span()=>
-                    0
-                },
         }
     }
 
-    fn try_wrap(&self, break_label: &syn::Lifetime,) -> TokenStream2 {
+    fn try_wrap(&self, break_label: &syn::Lifetime) -> TokenStream2 {
         let ident = self.ident.as_ref().unwrap();
         match &self.length_info {
-            Some(info @ VariableLenFieldInfo { is_optional: false, .. }) => {
+            Some(
+                info @ VariableLenFieldInfo {
+                    is_optional: false, ..
+                },
+            ) => {
                 let count = info.len_from_bytes();
                 quote! {
                     {
@@ -1082,7 +1067,11 @@ impl FlatSerializeField {
                     }
                 }
             }
-            Some(info @ VariableLenFieldInfo { is_optional: true, .. }) => {
+            Some(
+                info @ VariableLenFieldInfo {
+                    is_optional: true, ..
+                },
+            ) => {
                 let is_present = info.len_from_bytes();
                 let ty = info.ty_without_lifetime();
                 quote! {
@@ -1101,7 +1090,7 @@ impl FlatSerializeField {
             }
             None => {
                 let ty = self.ty_without_lifetime();
-                quote!{
+                quote! {
                     {
                         let (field, rem) = match <#ty>::try_ref(input) {
                             Ok((f, b)) => (f, b),
@@ -1121,7 +1110,11 @@ impl FlatSerializeField {
     fn fill_slice(&self) -> TokenStream2 {
         let ident = self.ident.as_ref().unwrap();
         match &self.length_info {
-            Some(info @ VariableLenFieldInfo { is_optional: false, .. }) => {
+            Some(
+                info @ VariableLenFieldInfo {
+                    is_optional: false, ..
+                },
+            ) => {
                 let count = info.counter_expr();
                 // TODO this may not elide all bounds checks
                 quote! {
@@ -1131,7 +1124,11 @@ impl FlatSerializeField {
                     }
                 }
             }
-            Some(info @ VariableLenFieldInfo { is_optional: true, .. }) => {
+            Some(
+                info @ VariableLenFieldInfo {
+                    is_optional: true, ..
+                },
+            ) => {
                 let is_present = info.counter_expr();
                 let ty = &info.ty;
                 quote! {
@@ -1155,14 +1152,22 @@ impl FlatSerializeField {
 
     fn err_size(&self) -> TokenStream2 {
         match &self.length_info {
-            Some(info @ VariableLenFieldInfo { is_optional: false, .. }) => {
+            Some(
+                info @ VariableLenFieldInfo {
+                    is_optional: false, ..
+                },
+            ) => {
                 let count = info.err_size_expr();
                 let ty = info.ty_without_lifetime();
                 quote! {
                     (|| <#ty>::MIN_LEN * (#count) as usize)()
                 }
             }
-            Some(info @ VariableLenFieldInfo { is_optional: true, .. }) => {
+            Some(
+                info @ VariableLenFieldInfo {
+                    is_optional: true, ..
+                },
+            ) => {
                 let is_present = info.err_size_expr();
                 let ty = info.ty_without_lifetime();
                 quote! {
@@ -1172,7 +1177,7 @@ impl FlatSerializeField {
             None => {
                 let ty = &self.ty_without_lifetime();
                 quote! { <#ty>::MIN_LEN }
-            },
+            }
         }
     }
 
@@ -1183,16 +1188,23 @@ impl FlatSerializeField {
                 quote_spanned! {self.field.span()=>
                     #nominal_ty
                 }
+            }
+            Some(VariableLenFieldInfo {
+                is_optional: false,
+                ty,
+                ..
+            }) => quote_spanned! {self.field.span()=>
+                <#ty as flat_serialize::FlatSerializable<#lifetime>>::SLICE
             },
-            Some(VariableLenFieldInfo { is_optional: false, ty, .. }) =>
-                quote_spanned! {self.field.span()=>
-                    <#ty as flat_serialize::FlatSerializable<#lifetime>>::SLICE
-                },
-            Some(VariableLenFieldInfo { is_optional: true, ty, .. }) => {
+            Some(VariableLenFieldInfo {
+                is_optional: true,
+                ty,
+                ..
+            }) => {
                 quote_spanned! {self.field.span()=>
                     Option<#ty>
                 }
-            },
+            }
         }
     }
 
@@ -1201,26 +1213,42 @@ impl FlatSerializeField {
             None => {
                 let ty = &self.ty;
                 quote! { Option<#ty> }
-            },
-            Some(VariableLenFieldInfo { is_optional: false, ty, .. }) => {
+            }
+            Some(VariableLenFieldInfo {
+                is_optional: false,
+                ty,
+                ..
+            }) => {
                 quote! { Option<<#ty as flat_serialize::FlatSerializable<'_>>::SLICE> }
-            },
-            Some(VariableLenFieldInfo { is_optional: true, ty, .. }) => {
+            }
+            Some(VariableLenFieldInfo {
+                is_optional: true,
+                ty,
+                ..
+            }) => {
                 quote! { Option<#ty> }
-            },
+            }
         }
     }
 
     fn size_fn(&self) -> TokenStream2 {
         let ident = self.ident.as_ref().unwrap();
         match &self.length_info {
-            Some(info @ VariableLenFieldInfo { is_optional: false, .. }) => {
+            Some(
+                info @ VariableLenFieldInfo {
+                    is_optional: false, ..
+                },
+            ) => {
                 let count = info.counter_expr();
                 quote! {
                     (<_ as flat_serialize::VariableLen<'_>>::num_bytes(#ident, (#count) as usize))
                 }
             }
-            Some(info @ VariableLenFieldInfo { is_optional: true, .. }) => {
+            Some(
+                info @ VariableLenFieldInfo {
+                    is_optional: true, ..
+                },
+            ) => {
                 let ty = self.ty_without_lifetime();
                 let is_present = info.counter_expr();
                 quote! {
@@ -1241,10 +1269,14 @@ impl FlatSerializeField {
     fn make_owned(&self) -> TokenStream2 {
         let ident = self.ident.as_ref().unwrap();
         match &self.length_info {
-            Some(VariableLenFieldInfo { is_optional: false, .. }) => {
+            Some(VariableLenFieldInfo {
+                is_optional: false, ..
+            }) => {
                 quote! { flat_serialize::Slice::make_owned(#ident); }
             }
-            Some(VariableLenFieldInfo { is_optional: true, .. }) => {
+            Some(VariableLenFieldInfo {
+                is_optional: true, ..
+            }) => {
                 let ty = self.ty_without_lifetime();
                 quote! {
                     #ident.as_mut().map(|v| <#ty as flat_serialize::FlatSerializable>::make_owned(v));
@@ -1261,10 +1293,14 @@ impl FlatSerializeField {
     fn into_owned(&self) -> TokenStream2 {
         let ident = self.ident.as_ref().unwrap();
         match &self.length_info {
-            Some(VariableLenFieldInfo { is_optional: false, .. }) => {
+            Some(VariableLenFieldInfo {
+                is_optional: false, ..
+            }) => {
                 quote! { #ident: flat_serialize::Slice::into_owned(#ident), }
             }
-            Some(VariableLenFieldInfo { is_optional: true, .. }) => {
+            Some(VariableLenFieldInfo {
+                is_optional: true, ..
+            }) => {
                 let ty = self.ty_without_lifetime();
                 quote! {
                     #ident: #ident.map(|v| <#ty as flat_serialize::FlatSerializable>::into_owned(v)),
@@ -1281,11 +1317,11 @@ impl FlatSerializeField {
         &'b self,
         is_pub: bool,
         lifetime: Option<&TokenStream2>,
-        pf_attrs: impl Iterator<Item = &'a PerFieldsAttr> + 'a
+        pf_attrs: impl Iterator<Item = &'a PerFieldsAttr> + 'a,
     ) -> TokenStream2 {
         let name = self.ident.as_ref().unwrap();
         let attrs = self.attrs.iter();
-        let pub_marker = is_pub.then(|| quote!{ pub });
+        let pub_marker = is_pub.then(|| quote! { pub });
         let ty = self.exposed_ty(lifetime);
         let per_field_attrs = self.per_field_attrs(pf_attrs);
         quote! { #(#per_field_attrs)* #(#attrs)* #pub_marker #name: #ty, }
@@ -1311,14 +1347,20 @@ impl FlatSerializeField {
         match &self.ty_without_lifetime {
             None => {
                 let ty = &self.ty;
-                quote!{ #ty }
-            },
+                quote! { #ty }
+            }
             Some(ty) => ty.clone(),
         }
     }
 
     fn is_optional(&self) -> bool {
-        matches!(self.length_info, Some(VariableLenFieldInfo { is_optional: true, ..}))
+        matches!(
+            self.length_info,
+            Some(VariableLenFieldInfo {
+                is_optional: true,
+                ..
+            })
+        )
     }
 }
 
@@ -1327,8 +1369,8 @@ impl VariableLenFieldInfo {
         match &self.ty_without_lifetime {
             None => {
                 let ty = &self.ty;
-                quote!{ #ty }
-            },
+                quote! { #ty }
+            }
             Some(ty) => ty.clone(),
         }
     }
@@ -1341,32 +1383,40 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
 
     let s = match input.data {
         syn::Data::Enum(e) => {
-            let repr: Vec<_> = input.attrs.iter().flat_map(|attr| {
-                let meta = match attr.parse_meta() {
-                    Ok(meta) => meta,
-                    _ => return None,
-                };
-                let has_repr = meta.path().get_ident().map_or(false, |id| id == "repr");
-                if !has_repr {
-                    return None
-                }
-                attr.parse_args().ok().and_then(|ident: Ident| {
-                    if ident == "u8" || ident == "u16" || ident == "u32" || ident == "u64" {
-                        return Some(ident)
+            let repr: Vec<_> = input
+                .attrs
+                .iter()
+                .flat_map(|attr| {
+                    let meta = match attr.parse_meta() {
+                        Ok(meta) => meta,
+                        _ => return None,
+                    };
+                    let has_repr = meta.path().get_ident().map_or(false, |id| id == "repr");
+                    if !has_repr {
+                        return None;
                     }
-                    None
+                    attr.parse_args().ok().and_then(|ident: Ident| {
+                        if ident == "u8" || ident == "u16" || ident == "u32" || ident == "u64" {
+                            return Some(ident);
+                        }
+                        None
+                    })
                 })
-            }).collect();
+                .collect();
             if repr.len() != 1 {
                 return quote_spanned! {e.enum_token.span()=>
                     compile_error!{"FlatSerializable only allowed on #[repr(u..)] enums without variants"}
-                }.into()
+                }.into();
             }
-            let all_unit = e.variants.iter().all(|variant| matches!(variant.fields, syn::Fields::Unit));
+            let all_unit = e
+                .variants
+                .iter()
+                .all(|variant| matches!(variant.fields, syn::Fields::Unit));
             if !all_unit {
                 return quote_spanned! {e.enum_token.span()=>
                     compile_error!{"FlatSerializable only allowed on until enums"}
-                }.into()
+                }
+                .into();
             }
 
             let variant = e.variants.iter().map(|v| &v.ident);
@@ -1374,7 +1424,7 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
             let const_name = variant.clone();
             let repr = &repr[0];
 
-            let out = quote!{
+            let out = quote! {
                 unsafe impl<'i> flat_serialize::FlatSerializable<'i> for #name {
                     const MIN_LEN: usize = std::mem::size_of::<Self>();
                     const REQUIRED_ALIGNMENT: usize = std::mem::align_of::<Self>();
@@ -1432,33 +1482,41 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
                 }
             };
             return out.into();
-        },
-        syn::Data::Union(u) => return quote_spanned! {u.union_token.span()=>
-            compile_error!("FlatSerializable not allowed on unions")
-        }.into(),
+        }
+        syn::Data::Union(u) => {
+            return quote_spanned! {u.union_token.span()=>
+                compile_error!("FlatSerializable not allowed on unions")
+            }
+            .into()
+        }
         syn::Data::Struct(s) => s,
     };
 
-    let num_reprs = input.attrs.iter().flat_map(|attr| {
-        let meta = match attr.parse_meta() {
-            Ok(meta) => meta,
-            _ => return None,
-        };
-        let has_repr = meta.path().get_ident().map_or(false, |id| id == "repr");
-        if !has_repr {
-            return None
-        }
-        attr.parse_args().ok().and_then(|ident: Ident| {
-            if ident == "C" {
-                return Some(ident)
+    let num_reprs = input
+        .attrs
+        .iter()
+        .flat_map(|attr| {
+            let meta = match attr.parse_meta() {
+                Ok(meta) => meta,
+                _ => return None,
+            };
+            let has_repr = meta.path().get_ident().map_or(false, |id| id == "repr");
+            if !has_repr {
+                return None;
             }
-            None
+            attr.parse_args().ok().and_then(|ident: Ident| {
+                if ident == "C" {
+                    return Some(ident);
+                }
+                None
+            })
         })
-    }).count();
+        .count();
     if num_reprs != 1 {
         return quote_spanned! {s.struct_token.span()=>
             compile_error!{"FlatSerializable only allowed on #[repr(C)] structs"}
-        }.into()
+        }
+        .into();
     }
 
     let s = FlatSerializeStruct {
@@ -1466,11 +1524,15 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
         attrs: Default::default(),
         ident: name,
         lifetime: None,
-        fields: s.fields.into_iter().map(|f| FlatSerializeField {
-            field: f,
-            ty_without_lifetime: None,
-            length_info: None,
-        }).collect(),
+        fields: s
+            .fields
+            .into_iter()
+            .map(|f| FlatSerializeField {
+                field: f,
+                ty_without_lifetime: None,
+                length_info: None,
+            })
+            .collect(),
     };
 
     let ident = &s.ident;

@@ -5,10 +5,7 @@ use aggregate_builder::aggregate;
 
 use pgx::*;
 
-use crate::{
-    palloc::Inner,
-    raw::bytea,
-};
+use crate::{palloc::Inner, raw::bytea};
 
 // just about the simplest aggregate `arbitrary()` returns an arbitrary element
 // from the input set. We have three versions
@@ -17,13 +14,11 @@ use crate::{
 //     but not parallel-safe) outputs the expected config.
 //  3. `parallel_anything()` tests that the parallel version outputs the expected
 //      config.
-#[aggregate] impl toolkit_experimental::anything {
+#[aggregate]
+impl toolkit_experimental::anything {
     type State = String;
 
-    fn transition(
-        state: Option<State>,
-        #[sql_type("text")] value: String,
-    ) -> Option<State> {
+    fn transition(state: Option<State>, #[sql_type("text")] value: String) -> Option<State> {
         state.or(Some(value))
     }
 
@@ -32,13 +27,11 @@ use crate::{
     }
 }
 
-#[aggregate] impl toolkit_experimental::cagg_anything {
+#[aggregate]
+impl toolkit_experimental::cagg_anything {
     type State = String;
 
-    fn transition(
-        state: Option<State>,
-        #[sql_type("text")] value: String,
-    ) -> Option<State> {
+    fn transition(state: Option<State>, #[sql_type("text")] value: String) -> Option<State> {
         state.or(Some(value))
     }
 
@@ -59,13 +52,11 @@ use crate::{
     }
 }
 
-#[aggregate] impl toolkit_experimental::parallel_anything {
+#[aggregate]
+impl toolkit_experimental::parallel_anything {
     type State = String;
 
-    fn transition(
-        state: Option<State>,
-        #[sql_type("text")] value: String,
-    ) -> Option<State> {
+    fn transition(state: Option<State>, #[sql_type("text")] value: String) -> Option<State> {
         state.or(Some(value))
     }
 
@@ -97,12 +88,14 @@ mod tests {
     #[pg_test]
     fn test_anything_in_experimental_and_returns_first() {
         Spi::execute(|client| {
-            let output = client.select(
-                "SELECT toolkit_experimental.anything(val) \
+            let output = client
+                .select(
+                    "SELECT toolkit_experimental.anything(val) \
                 FROM (VALUES ('foo'), ('bar'), ('baz')) as v(val)",
-                None,
-                None,
-            ).first()
+                    None,
+                    None,
+                )
+                .first()
                 .get_one::<String>();
             assert_eq!(output.as_deref(), Some("foo"));
         })
@@ -196,8 +189,10 @@ mod tests {
     // For simplicity, we just return a single string representing the tuple
     // and use string-comparison.
     fn get_aggregate_spec(client: &spi::SpiClient, aggregate_name: &str) -> String {
-        client.select(
-            &format!(r#"SELECT (
+        client
+            .select(
+                &format!(
+                    r#"SELECT (
                 prokind,
                 provolatile,
                 proparallel,
@@ -212,10 +207,13 @@ mod tests {
                 aggcombinefn)::TEXT
             FROM pg_proc, pg_aggregate
             WHERE proname = '{}'
-              AND pg_proc.oid = aggfnoid;"#, aggregate_name),
-            None,
-            None,
-        ).first()
+              AND pg_proc.oid = aggfnoid;"#,
+                    aggregate_name
+                ),
+                None,
+                None,
+            )
+            .first()
             .get_one::<String>()
             .expect("no aggregate found")
     }

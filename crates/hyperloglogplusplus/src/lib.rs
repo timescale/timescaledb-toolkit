@@ -37,34 +37,29 @@ impl<'s, T, B> HyperLogLog<'s, T, B> {
     }
 
     pub fn from_sparse_parts(
-        bytes: &'s[u8],
+        bytes: &'s [u8],
         num_compressed: u64,
         precision: u8,
         buildhasher: B,
     ) -> Self {
         Self {
             storage: HyperLogLogStorage::Sparse(sparse::Storage::from_parts(
-                bytes, num_compressed, precision
+                bytes,
+                num_compressed,
+                precision,
             )),
             buildhasher,
             _pd: PhantomData,
         }
     }
 
-    pub fn from_dense_parts(
-        bytes: &'s[u8],
-        precision: u8,
-        buildhasher: B,
-    ) -> Self {
+    pub fn from_dense_parts(bytes: &'s [u8], precision: u8, buildhasher: B) -> Self {
         Self {
-            storage: HyperLogLogStorage::Dense(dense::Storage::from_parts(
-                bytes, precision
-            )),
+            storage: HyperLogLogStorage::Dense(dense::Storage::from_parts(bytes, precision)),
             buildhasher,
             _pd: PhantomData,
         }
     }
-
 
     pub fn estimate_count(&mut self) -> u64 {
         use HyperLogLogStorage::*;
@@ -107,12 +102,14 @@ impl<'s, T, B> HyperLogLog<'s, T, B> {
     pub fn merge_all(&mut self) {
         match &mut self.storage {
             HyperLogLogStorage::Sparse(s) => s.merge_buffers(),
-            HyperLogLogStorage::Dense(_) => {},
+            HyperLogLogStorage::Dense(_) => {}
         }
     }
 
     pub fn into_owned(&self) -> HyperLogLog<'static, T, B>
-    where B: Clone {
+    where
+        B: Clone,
+    {
         use HyperLogLogStorage::*;
         let storage = match &self.storage {
             Sparse(s) => Sparse(s.into_owned()),
@@ -121,7 +118,7 @@ impl<'s, T, B> HyperLogLog<'s, T, B> {
         HyperLogLog {
             storage,
             buildhasher: self.buildhasher.clone(),
-            _pd: PhantomData
+            _pd: PhantomData,
         }
     }
 }
@@ -158,18 +155,14 @@ where
                     let dense = s.to_dense();
                     self.storage = Dense(dense);
                 }
-            },
+            }
             (Sparse(s), Dense(o)) => {
                 let mut dense = s.to_dense();
                 dense.merge_in(o);
                 self.storage = Dense(dense);
-            },
-            (Dense(s), Sparse(o)) => {
-                s.merge_in(&o.immutable_to_dense())
-            },
-            (Dense(s), Dense(o)) => {
-                s.merge_in(o)
-            },
+            }
+            (Dense(s), Sparse(o)) => s.merge_in(&o.immutable_to_dense()),
+            (Dense(s), Dense(o)) => s.merge_in(o),
         }
     }
 }
@@ -202,7 +195,7 @@ impl Extractable for u32 {
 }
 
 pub fn error_for_precision(precision: u8) -> f64 {
-    1.04/2.0f64.powi(precision.into()).sqrt()
+    1.04 / 2.0f64.powi(precision.into()).sqrt()
 }
 
 pub fn precision_for_error(max_error: f64) -> u8 {
@@ -210,7 +203,7 @@ pub fn precision_for_error(max_error: f64) -> u8 {
     // error*sqrt(number_of_registers) = 1.04
     // sqrt(number_of_registers) = 1.04/error
     // number_of_registers = (1.04/error)^2
-    let num_registers = (1.04f64/max_error).powi(2);
+    let num_registers = (1.04f64 / max_error).powi(2);
     let precision = num_registers.log2().ceil();
     if !(4.0..=18.0).contains(&precision) {
         panic!("derived precision is not valid, error should be in the range [0.26, 0.00203125]")
@@ -378,7 +371,7 @@ mod tests {
     }
 
     // FIXME needs hash collision check
-    #[cfg(feature="flaky_tests")]
+    #[cfg(feature = "flaky_tests")]
     #[quickcheck]
     fn quick_merge_hll_8(values_a: Vec<u64>, values_b: Vec<u64>) {
         let mut hll_a = HyperLogLog::new(8, FnvBuildHasher::default());
@@ -402,8 +395,7 @@ mod tests {
         // if there's a hash collision between the elements unique to a and b
         // the counts could be off slightly, check if there is in fact such a
         // collision
-        if estimate > baseline + 5
-            || estimate < baseline.saturating_sub(6) {
+        if estimate > baseline + 5 || estimate < baseline.saturating_sub(6) {
             panic!("{} != {}", estimate, baseline)
         }
     }
@@ -431,7 +423,10 @@ mod tests {
     #[test]
     fn precision_for_error() {
         for precision in 4..=18 {
-            assert_eq!(super::precision_for_error(super::error_for_precision(precision)), precision)
+            assert_eq!(
+                super::precision_for_error(super::error_for_precision(precision)),
+                precision
+            )
         }
     }
 }

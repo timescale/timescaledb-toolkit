@@ -1,13 +1,19 @@
-
 use std::{collections::HashSet, ops::Deref};
 
 use proc_macro2::TokenStream as TokenStream2;
 
-use syn::{Attribute, Expr, Field, Ident, Result, Token, Type, braced, parse::{Parse, ParseStream}, spanned::Spanned, token, visit::Visit};
+use syn::{
+    braced,
+    parse::{Parse, ParseStream},
+    spanned::Spanned,
+    token,
+    visit::Visit,
+    Attribute, Expr, Field, Ident, Result, Token, Type,
+};
 
 use crate::{
-    VariableLenFieldInfo, FlatSerialize, FlatSerializeEnum, FlatSerializeField,
-    FlatSerializeStruct, FlatSerializeVariant, PerFieldsAttr,
+    FlatSerialize, FlatSerializeEnum, FlatSerializeField, FlatSerializeStruct,
+    FlatSerializeVariant, PerFieldsAttr, VariableLenFieldInfo,
 };
 
 use quote::{quote, quote_spanned};
@@ -353,22 +359,23 @@ impl<'a, 'b, 'ast> Visit<'ast> for ValidateLenFields<'a, 'b> {
     }
 }
 
-
 pub fn as_turbofish(ty: &Type) -> TokenStream2 {
     let path = match &ty {
         Type::Path(path) => path,
-        _ => return quote_spanned! {ty.span()=>
-            compile_error!("can only flatten path-based types")
-        },
+        _ => {
+            return quote_spanned! {ty.span()=>
+                compile_error!("can only flatten path-based types")
+            }
+        }
     };
     if path.qself.is_some() {
         return quote_spanned! {ty.span()=>
             compile_error!("cannot use `<Foo as Bar>` in flatten")
-        }
+        };
     }
     let path = &path.path;
     let leading_colon = &path.leading_colon;
-    let mut output = quote!{};
+    let mut output = quote! {};
     let mut error = None;
     for segment in &path.segments {
         match &segment.arguments {
@@ -376,30 +383,30 @@ pub fn as_turbofish(ty: &Type) -> TokenStream2 {
                 error = Some(quote_spanned! {args.span()=>
                     compile_error!("cannot use `()` in flatten")
                 });
-            },
+            }
             syn::PathArguments::None => {
                 if output.is_empty() {
-                    output = quote!{ #leading_colon #segment };
+                    output = quote! { #leading_colon #segment };
                 } else {
-                    output = quote!{ #output::#segment};
+                    output = quote! { #output::#segment};
                 }
-            },
+            }
             syn::PathArguments::AngleBracketed(_) => {
                 let ident = &segment.ident;
                 if output.is_empty() {
                     // TODO leave in args?
                     // output = quote!{ #leading_colon #ident::#args };
-                    output = quote!{ #leading_colon #ident };
+                    output = quote! { #leading_colon #ident };
                 } else {
                     // TODO leave in args?
                     // output = quote!{ #output::#ident::#args };
-                    output = quote!{ #output::#ident };
+                    output = quote! { #output::#ident };
                 }
-            },
+            }
         }
     }
     if let Some(error) = error {
-        return error
+        return error;
     }
 
     output

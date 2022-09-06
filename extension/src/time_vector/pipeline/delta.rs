@@ -27,9 +27,7 @@ extension_sql!(
     name = "accessor_delta_cast",
 );
 
-pub fn timevector_delta<'s>(
-    series: &Timevector_TSTZ_F64<'s>,
-) -> Timevector_TSTZ_F64<'s> {
+pub fn timevector_delta<'s>(series: &Timevector_TSTZ_F64<'s>) -> Timevector_TSTZ_F64<'s> {
     if !series.is_sorted() {
         panic!("can only compute deltas for sorted timevector");
     }

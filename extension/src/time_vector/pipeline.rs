@@ -326,7 +326,11 @@ mod tests {
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
-            client.select("CREATE TABLE lttb_pipe (series timevector_tstz_f64)", None, None);
+            client.select(
+                "CREATE TABLE lttb_pipe (series timevector_tstz_f64)",
+                None,
+                None,
+            );
             client.select(
                 "INSERT INTO lttb_pipe \
                 SELECT timevector(time, val) FROM ( \

@@ -13,9 +13,7 @@ pub fn sort_pipeline_element<'p, 'e>() -> toolkit_experimental::UnstableTimevect
     Element::Sort {}.flatten()
 }
 
-pub fn sort_timevector(
-    mut series: Timevector_TSTZ_F64<'_>,
-) -> Timevector_TSTZ_F64<'_> {
+pub fn sort_timevector(mut series: Timevector_TSTZ_F64<'_>) -> Timevector_TSTZ_F64<'_> {
     if series.is_sorted() {
         return series;
     }

@@ -1,12 +1,12 @@
-
-use std::{alloc::{GlobalAlloc, Layout, System}, ops::{Deref, DerefMut}, ptr::NonNull};
+use std::{
+    alloc::{GlobalAlloc, Layout, System},
+    ops::{Deref, DerefMut},
+    ptr::NonNull,
+};
 
 use pgx::*;
 
-pub unsafe fn in_memory_context<T, F: FnOnce() -> T>(
-    mctx: pg_sys::MemoryContext,
-    f: F
-) -> T {
+pub unsafe fn in_memory_context<T, F: FnOnce() -> T>(mctx: pg_sys::MemoryContext, f: F) -> T {
     let prev_ctx = pg_sys::CurrentMemoryContext;
     pg_sys::CurrentMemoryContext = mctx;
     let t = f();
@@ -83,9 +83,7 @@ unsafe impl<T> ToInternal for Inner<T> {
 
 impl<T> From<T> for Inner<T> {
     fn from(t: T) -> Self {
-        unsafe {
-            Internal::new(t).to_inner().unwrap()
-        }
+        unsafe { Internal::new(t).to_inner().unwrap() }
     }
 }
 
@@ -151,12 +149,7 @@ unsafe impl GlobalAlloc for PanickingAllocator {
         p
     }
 
-    unsafe fn realloc(
-        &self,
-        ptr: *mut u8,
-        layout: Layout,
-        new_size: usize
-    ) -> *mut u8 {
+    unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
         let p = System.realloc(ptr, layout, new_size);
         if p.is_null() {
             panic!("Out of memory")

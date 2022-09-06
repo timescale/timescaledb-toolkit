@@ -1,4 +1,3 @@
-
 #[derive(Copy, Clone, Debug)]
 pub enum CachedDatum<'r> {
     None,
@@ -252,7 +251,7 @@ macro_rules! ron_inout_funcs {
     ($name:ident) => {
         impl<'input> InOutFuncs for $name<'input> {
             fn output(&self, buffer: &mut StringInfo) {
-                use $crate::serialization::{EncodedStr::*, str_to_db_encoding};
+                use $crate::serialization::{str_to_db_encoding, EncodedStr::*};
 
                 let stringified = ron::to_string(&**self).unwrap();
                 match str_to_db_encoding(&stringified) {
@@ -369,30 +368,34 @@ macro_rules! do_serialize {
 }
 #[macro_export]
 macro_rules! do_deserialize {
-    ($bytes: expr, $t: ty) => {
-        {
-            use $crate::type_builder::SerializationType;
+    ($bytes: expr, $t: ty) => {{
+        use $crate::type_builder::SerializationType;
 
-            let state: $t = unsafe {
-                let input: $crate::raw::bytea = $bytes;
-                let input: pgx::pg_sys::Datum = input.into();
-                let detoasted = pg_sys::pg_detoast_datum_packed(input as *mut _);
-                let len = pgx::varsize_any_exhdr(detoasted);
-                let data = pgx::vardata_any(detoasted);
-                let bytes = std::slice::from_raw_parts(data as *mut u8, len);
-                if bytes.len() < 1 {
-                    pgx::error!("deserialization error, no bytes")
-                }
-                if bytes[0] != 1 {
-                    pgx::error!("deserialization error, invalid serialization version {}", bytes[0])
-                }
-                if bytes[1] != SerializationType::Default as u8 {
-                    pgx::error!("deserialization error, invalid serialization type {}", bytes[1])
-                }
-                bincode::deserialize(&bytes[2..]).unwrap_or_else(|e|
-                    pgx::error!("deserialization error {}", e))
-            };
-            state.into()
-        }
-    };
+        let state: $t = unsafe {
+            let input: $crate::raw::bytea = $bytes;
+            let input: pgx::pg_sys::Datum = input.into();
+            let detoasted = pg_sys::pg_detoast_datum_packed(input as *mut _);
+            let len = pgx::varsize_any_exhdr(detoasted);
+            let data = pgx::vardata_any(detoasted);
+            let bytes = std::slice::from_raw_parts(data as *mut u8, len);
+            if bytes.len() < 1 {
+                pgx::error!("deserialization error, no bytes")
+            }
+            if bytes[0] != 1 {
+                pgx::error!(
+                    "deserialization error, invalid serialization version {}",
+                    bytes[0]
+                )
+            }
+            if bytes[1] != SerializationType::Default as u8 {
+                pgx::error!(
+                    "deserialization error, invalid serialization type {}",
+                    bytes[1]
+                )
+            }
+            bincode::deserialize(&bytes[2..])
+                .unwrap_or_else(|e| pgx::error!("deserialization error {}", e))
+        };
+        state.into()
+    }};
 }

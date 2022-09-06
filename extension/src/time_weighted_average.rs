@@ -493,7 +493,7 @@ mod tests {
             let stmt = "SELECT last_val(time_weight('LOCF', ts, val)) FROM test";
             assert!((select_one!(client, stmt, f64) - 20.0).abs() < f64::EPSILON);
 
-	    // arrow syntax should be the same
+            // arrow syntax should be the same
             let stmt = "SELECT time_weight('LOCF', ts, val) -> first_val() FROM test";
             assert!((select_one!(client, stmt, f64) - 10.0).abs() < f64::EPSILON);
             let stmt = "SELECT time_weight('LOCF', ts, val) -> last_val() FROM test";
@@ -504,12 +504,11 @@ mod tests {
             let stmt = "SELECT last_time(time_weight('LOCF', ts, val))::text FROM test";
             assert_eq!(select_one!(client, stmt, &str), "2020-01-01 00:01:00+00");
 
-	    // arrow syntax should be the same
+            // arrow syntax should be the same
             let stmt = "SELECT (time_weight('LOCF', ts, val) -> first_time())::text FROM test";
             assert_eq!(select_one!(client, stmt, &str), "2020-01-01 00:00:00+00");
             let stmt = "SELECT (time_weight('LOCF', ts, val) -> last_time())::text FROM test";
             assert_eq!(select_one!(client, stmt, &str), "2020-01-01 00:01:00+00");
-	    
 
             // more values evenly spaced
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)";

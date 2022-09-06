@@ -5,10 +5,10 @@ use pgx::*;
 use crate::{
     accessors::{
         AccessorCorr, AccessorCounterZeroTime, AccessorDelta, AccessorExtrapolatedDelta,
-        AccessorExtrapolatedRate, AccessorIdeltaLeft, AccessorIdeltaRight, AccessorIntercept,
-        AccessorIrateLeft, AccessorIrateRight, AccessorNumChanges, AccessorNumElements,
+        AccessorExtrapolatedRate, AccessorFirstTime, AccessorFirstVal, AccessorIdeltaLeft,
+        AccessorIdeltaRight, AccessorIntercept, AccessorIrateLeft, AccessorIrateRight,
+        AccessorLastTime, AccessorLastVal, AccessorNumChanges, AccessorNumElements,
         AccessorNumResets, AccessorRate, AccessorSlope, AccessorTimeDelta, AccessorWithBounds,
-        AccessorFirstTime, AccessorFirstVal, AccessorLastTime, AccessorLastVal,
     },
     aggregate_utils::in_aggregate_context,
     flatten,

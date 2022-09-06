@@ -4,7 +4,9 @@ use pgx::*;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    accessors::AccessorAverage,
+    accessors::{
+        AccessorAverage, AccessorFirstTime, AccessorFirstVal, AccessorLastTime, AccessorLastVal,
+    },
     aggregate_utils::in_aggregate_context,
     flatten,
     palloc::{Inner, Internal, InternalAsValue, ToInternal},
@@ -315,6 +317,70 @@ fn time_weight_final_inner(
     }
 }
 
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_time_weight_first_val(
+    sketch: TimeWeightSummary,
+    _accessor: AccessorFirstVal,
+) -> f64 {
+    time_weight_first_val(sketch)
+}
+
+#[pg_extern(name="first_val", strict, immutable, parallel_safe)]
+fn time_weight_first_val(
+    summary: TimeWeightSummary,
+)-> f64 {
+    summary.first.val
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_time_weight_last_val(
+    sketch: TimeWeightSummary,
+    _accessor: AccessorLastVal,
+) -> f64 {
+    time_weight_last_val(sketch)
+}
+
+#[pg_extern(name="last_val", strict, immutable, parallel_safe)]
+fn time_weight_last_val(
+    summary: TimeWeightSummary,
+)-> f64 {
+    summary.last.val
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_time_weight_first_time(
+    sketch: TimeWeightSummary,
+    _accessor: AccessorFirstTime,
+) -> crate::raw::TimestampTz {
+    time_weight_first_time(sketch)
+}
+
+#[pg_extern(name="first_time", strict, immutable, parallel_safe)]
+fn time_weight_first_time(
+    summary: TimeWeightSummary,
+)-> crate::raw::TimestampTz {
+    summary.first.ts.into()
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_time_weight_last_time(
+    sketch: TimeWeightSummary,
+    _accessor: AccessorLastTime,
+) -> crate::raw::TimestampTz {
+    time_weight_last_time(sketch)
+}
+
+#[pg_extern(name="last_time", strict, immutable, parallel_safe)]
+fn time_weight_last_time(
+    summary: TimeWeightSummary,
+)-> crate::raw::TimestampTz {
+    summary.last.ts.into()
+}
+
 extension_sql!("\n\
     CREATE AGGREGATE time_weight(method text, ts timestamptz, value DOUBLE PRECISION)\n\
     (\n\
@@ -409,7 +475,7 @@ mod tests {
     #[pg_test]
     fn test_time_weight_aggregate() {
         Spi::execute(|client| {
-            let stmt = "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)";
+            let stmt = "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION); SET TIME ZONE 'UTC'";
             client.select(stmt, None, None);
 
             // add a couple points
@@ -421,6 +487,28 @@ mod tests {
             assert!((select_one!(client, stmt, f64) - 15.0).abs() < f64::EPSILON);
             let stmt = "SELECT average(time_weight('LOCF', ts, val)) FROM test";
             assert!((select_one!(client, stmt, f64) - 10.0).abs() < f64::EPSILON);
+
+            let stmt = "SELECT first_val(time_weight('LOCF', ts, val)) FROM test";
+            assert!((select_one!(client, stmt, f64) - 10.0).abs() < f64::EPSILON);
+            let stmt = "SELECT last_val(time_weight('LOCF', ts, val)) FROM test";
+            assert!((select_one!(client, stmt, f64) - 20.0).abs() < f64::EPSILON);
+
+            // arrow syntax should be the same
+            let stmt = "SELECT time_weight('LOCF', ts, val) -> first_val() FROM test";
+            assert!((select_one!(client, stmt, f64) - 10.0).abs() < f64::EPSILON);
+            let stmt = "SELECT time_weight('LOCF', ts, val) -> last_val() FROM test";
+            assert!((select_one!(client, stmt, f64) - 20.0).abs() < f64::EPSILON);
+
+            let stmt = "SELECT first_time(time_weight('LOCF', ts, val))::text FROM test";
+            assert_eq!(select_one!(client, stmt, &str), "2020-01-01 00:00:00+00");
+            let stmt = "SELECT last_time(time_weight('LOCF', ts, val))::text FROM test";
+            assert_eq!(select_one!(client, stmt, &str), "2020-01-01 00:01:00+00");
+
+            // arrow syntax should be the same
+            let stmt = "SELECT (time_weight('LOCF', ts, val) -> first_time())::text FROM test";
+            assert_eq!(select_one!(client, stmt, &str), "2020-01-01 00:00:00+00");
+            let stmt = "SELECT (time_weight('LOCF', ts, val) -> last_time())::text FROM test";
+            assert_eq!(select_one!(client, stmt, &str), "2020-01-01 00:01:00+00");
 
             // more values evenly spaced
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)";

@@ -41,7 +41,7 @@ fn main() {
 
     let db_name = "_ta_temp_testrunner_db";
     let dropper = Deferred(move || {
-        let mut dropper = Client::connect(&*root_connection_config, NoTls)
+        let mut dropper = Client::connect(root_connection_config, NoTls)
             .expect("cannot connect to drop test DBs");
         dropper
             .simple_query(&format!(r#"DROP DATABASE IF EXISTS "{}""#, db_name))
@@ -49,7 +49,7 @@ fn main() {
     });
 
     let mut root_client =
-        Client::connect(&*root_connection_config, NoTls).expect("could not connect to postgres");
+        Client::connect(root_connection_config, NoTls).expect("could not connect to postgres");
     root_client
         .simple_query(&format!(r#"CREATE DATABASE "{}""#, db_name))
         .expect("could not create test DB");

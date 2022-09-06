@@ -5,7 +5,7 @@ use std::cmp::{max, min};
 // we are a discrete type so translating is simple [), this enforces equality
 // between ranges like [0, 10) and [0, 9]
 // None values denote infinite bounds on that side
-#[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Serialize, Deserialize)]
 #[repr(C)]
 pub struct I64Range {
     pub left: Option<i64>,

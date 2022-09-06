@@ -146,6 +146,7 @@ where
         // find which of a number of matchers a str starts with, and return the
         // rest. In other words, if find the first matcher matcher such that the
         // str is `<matcher> <remaining>` and return the `<remaining>`
+        #[allow(clippy::type_complexity)]
         fn match_start<T, const N: usize>(
             line: &str,
             matchers: [(&str, &mut dyn FnMut(&str) -> T); N],

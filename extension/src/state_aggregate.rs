@@ -268,7 +268,7 @@ impl toolkit_experimental::state_agg {
 }
 
 // Intermediate state kept in postgres.
-#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct StateAggTransState {
     records: Vec<Record>,
 }

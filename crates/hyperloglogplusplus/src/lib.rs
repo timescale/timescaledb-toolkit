@@ -14,14 +14,14 @@ mod hyperloglog_data;
 pub mod registers;
 pub mod sparse;
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq)]
 pub struct HyperLogLog<'s, T: ?Sized, B> {
     storage: HyperLogLogStorage<'s>,
     pub buildhasher: B,
     _pd: PhantomData<T>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq)]
 pub enum HyperLogLogStorage<'s> {
     Sparse(sparse::Storage<'s>),
     Dense(dense::Storage<'s>),

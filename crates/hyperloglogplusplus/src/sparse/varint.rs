@@ -12,7 +12,7 @@ pub fn decompression_iter<'a, 'b>(
         .map(|v| Encoded(v as u32))
 }
 
-#[derive(Default, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
+#[derive(Default, serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq)]
 pub struct Compressed<'c>(Cow<'c, [u8]>);
 
 impl<'c> Compressed<'c> {

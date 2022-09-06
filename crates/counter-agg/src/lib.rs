@@ -8,7 +8,7 @@ pub mod range;
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum CounterError {
     OrderError,
     BoundsInvalid,

@@ -1159,7 +1159,7 @@ pub fn as_method(method: &str) -> Option<Method> {
 mod tests {
     use super::*;
     use approx::relative_eq;
-    use pgx::*;
+    
     use pgx_macros::pg_test;
     use rand::rngs::SmallRng;
     use rand::seq::SliceRandom;

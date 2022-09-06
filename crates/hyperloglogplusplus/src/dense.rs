@@ -5,7 +5,7 @@ use crate::hyperloglog_data::{
 
 use crate::{registers::Registers, Extractable};
 
-#[derive(Clone, serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct Storage<'s> {
     pub registers: Registers<'s>,
     // TODO can be derived from block.len()
@@ -527,6 +527,6 @@ mod tests {
             return false;
         }
 
-        return true;
+        true
     }
 }

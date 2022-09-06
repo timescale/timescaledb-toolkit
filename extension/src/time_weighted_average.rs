@@ -395,7 +395,7 @@ pub fn time_weighted_average_interpolated_average(
 #[pg_schema]
 mod tests {
     use super::*;
-    use pgx::*;
+    
     use pgx_macros::pg_test;
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {

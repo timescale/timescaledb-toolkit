@@ -74,7 +74,7 @@ impl<'input> Timevector_TSTZ_F64<'input> {
     }
 
     fn clone_owned(&self) -> Timevector_TSTZ_F64<'static> {
-        Timevector_TSTZ_F64Data::clone(&*self).into_owned().into()
+        Timevector_TSTZ_F64Data::clone(self).into_owned().into()
     }
 }
 

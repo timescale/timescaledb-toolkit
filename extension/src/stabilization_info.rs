@@ -11,6 +11,36 @@
 
 crate::functions_stabilized_at! {
     STABLE_FUNCTIONS
+    "1.11.0" => {
+        accessorfirsttime_in(cstring),
+        accessorfirsttime_out(accessorfirsttime),
+        accessorfirstval_in(cstring),
+        accessorfirstval_out(accessorfirstval),
+        accessorlasttime_in(cstring),
+        accessorlasttime_out(accessorlasttime),
+        accessorlastval_in(cstring),
+        accessorlastval_out(accessorlastval),
+        arrow_counter_agg_first_time(countersummary,accessorfirsttime),
+        arrow_counter_agg_first_val(countersummary,accessorfirstval),
+        arrow_counter_agg_last_time(countersummary,accessorlasttime),
+        arrow_counter_agg_last_val(countersummary,accessorlastval),
+        arrow_time_weight_first_time(timeweightsummary,accessorfirsttime),
+        arrow_time_weight_first_val(timeweightsummary,accessorfirstval),
+        arrow_time_weight_last_time(timeweightsummary,accessorlasttime),
+        arrow_time_weight_last_val(timeweightsummary,accessorlastval),
+        first_time(),
+        first_time(countersummary),
+        first_time(timeweightsummary),
+        first_val(),
+        first_val(countersummary),
+        first_val(timeweightsummary),
+        last_time(),
+        last_time(countersummary),
+        last_time(timeweightsummary),
+        last_val(),
+        last_val(countersummary),
+        last_val(timeweightsummary),
+        }
     "1.9.0" => {
         accessorapproxpercentile_in(cstring),
         accessorapproxpercentile_out(accessorapproxpercentile),
@@ -387,6 +417,12 @@ crate::functions_stabilized_at! {
 
 crate::types_stabilized_at! {
     STABLE_TYPES
+    "1.11.0" => {
+        accessorfirsttime,
+        accessorfirstval,
+        accessorlasttime,
+        accessorlastval,
+    }
     "1.9.0" => {
         accessorapproxpercentile,
         accessorapproxpercentilerank,
@@ -459,6 +495,16 @@ crate::types_stabilized_at! {
 
 crate::operators_stabilized_at! {
     STABLE_OPERATORS
+    "1.11.0" => {
+        "->"(countersummary,accessorfirsttime),
+        "->"(countersummary,accessorfirstval),
+        "->"(countersummary,accessorlasttime),
+        "->"(countersummary,accessorlastval),
+        "->"(timeweightsummary,accessorfirsttime),
+        "->"(timeweightsummary,accessorfirstval),
+        "->"(timeweightsummary,accessorlasttime),
+        "->"(timeweightsummary,accessorlastval),
+    }
     "1.9.0" => {
         "->"(countersummary,accessorcorr),
         "->"(countersummary,accessorcounterzerotime),

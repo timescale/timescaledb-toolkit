@@ -5,8 +5,9 @@ use pgx::*;
 use crate::{
     accessors::{
         AccessorCorr, AccessorCounterZeroTime, AccessorDelta, AccessorExtrapolatedDelta,
-        AccessorExtrapolatedRate, AccessorIdeltaLeft, AccessorIdeltaRight, AccessorIntercept,
-        AccessorIrateLeft, AccessorIrateRight, AccessorNumChanges, AccessorNumElements,
+        AccessorExtrapolatedRate, AccessorFirstTime, AccessorFirstVal, AccessorIdeltaLeft,
+        AccessorIdeltaRight, AccessorIntercept, AccessorIrateLeft, AccessorIrateRight,
+        AccessorLastTime, AccessorLastVal, AccessorNumChanges, AccessorNumElements,
         AccessorNumResets, AccessorRate, AccessorSlope, AccessorTimeDelta, AccessorWithBounds,
     },
     aggregate_utils::in_aggregate_context,
@@ -743,6 +744,70 @@ fn counter_agg_counter_zero_time(summary: CounterSummary) -> Option<crate::raw::
     Some(((summary.to_internal_counter_summary().stats.x_intercept()? * 1_000_000.0) as i64).into())
 }
 
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_agg_first_val(
+    sketch: CounterSummary,
+    _accessor: AccessorFirstVal,
+) -> f64 {
+    counter_agg_first_val(sketch)
+}
+
+#[pg_extern(name="first_val", strict, immutable, parallel_safe)]
+fn counter_agg_first_val(
+    summary: CounterSummary,
+)-> f64 {
+    summary.to_internal_counter_summary().first.val
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_agg_last_val(
+    sketch: CounterSummary,
+    _accessor: AccessorLastVal,
+) -> f64 {
+    counter_agg_last_val(sketch)
+}
+
+#[pg_extern(name="last_val", strict, immutable, parallel_safe)]
+fn counter_agg_last_val(
+    summary: CounterSummary,
+)-> f64 {
+    summary.to_internal_counter_summary().last.val
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_agg_first_time(
+    sketch: CounterSummary,
+    _accessor: AccessorFirstTime,
+) -> crate::raw::TimestampTz {
+    counter_agg_first_time(sketch)
+}
+
+#[pg_extern(name="first_time", strict, immutable, parallel_safe)]
+fn counter_agg_first_time(
+    summary: CounterSummary,
+)-> crate::raw::TimestampTz {
+    summary.to_internal_counter_summary().first.ts.into()
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_agg_last_time(
+    sketch: CounterSummary,
+    _accessor: AccessorLastTime,
+) -> crate::raw::TimestampTz {
+    counter_agg_last_time(sketch)
+}
+
+#[pg_extern(name="last_time", strict, immutable, parallel_safe)]
+fn counter_agg_last_time(
+    summary: CounterSummary,
+)-> crate::raw::TimestampTz {
+    summary.to_internal_counter_summary().last.ts.into()
+}
+
 #[derive(Clone, Copy)]
 pub enum Method {
     Prometheus,
@@ -1366,6 +1431,128 @@ mod tests {
                     f64
                 ),
                 0.0,
+            );
+        });
+    }
+
+    #[pg_test]
+    fn first_and_last_val() {
+        Spi::execute(|client| {
+            make_test_table(&client, "test");
+
+            assert_relative_eq!(
+                select_one!(
+                    client,
+                    "SELECT \
+                       first_val(counter_agg(ts, val)) \
+                     FROM test",
+                    f64
+                ),
+                10.0,
+            );
+
+            assert_relative_eq!(
+                select_one!(
+                    client,
+                    "SELECT \
+                       last_val(counter_agg(ts, val)) \
+                     FROM test",
+                    f64
+                ),
+                20.0,
+            );
+        });
+    }
+
+    #[pg_test]
+    fn first_and_last_val_arrow_match() {
+        Spi::execute(|client| {
+            make_test_table(&client, "test");
+
+            assert_relative_eq!(
+                select_and_check_one!(
+                    client,
+                    "SELECT \
+                       first_val(counter_agg(ts, val)), \
+                       counter_agg(ts, val) -> first_val() \
+                     FROM test",
+                    f64
+                ),
+                10.0,
+            );
+
+            assert_relative_eq!(
+                select_and_check_one!(
+                    client,
+                    "SELECT \
+                       last_val(counter_agg(ts, val)), \
+                       counter_agg(ts, val) -> last_val() \
+                     FROM test",
+                    f64
+                ),
+                20.0,
+            );
+        });
+    }
+
+    #[pg_test]
+    fn first_and_last_time() {
+        Spi::execute(|client| {
+            make_test_table(&client, "test");
+            client.select("SET TIME ZONE 'UTC'", None, None);
+
+            assert_eq!(
+                select_one!(
+                    client,
+                    "SELECT \
+                       first_time(counter_agg(ts, val))::text \
+                     FROM test",
+                    &str
+                ),
+                "2020-01-01 00:00:00+00",
+            );
+
+            assert_eq!(
+                select_one!(
+                    client,
+                    "SELECT \
+                       last_time(counter_agg(ts, val))::text \
+                     FROM test",
+                    &str
+                ),
+                "2020-01-01 00:01:00+00",
+            );
+        });
+    }
+
+    #[pg_test]
+    fn first_and_last_time_arrow_match() {
+        Spi::execute(|client| {
+            make_test_table(&client, "test");
+            client.select("SET TIME ZONE 'UTC'", None, None);
+
+            assert_eq!(
+                select_and_check_one!(
+                    client,
+                    "SELECT \
+                       first_time(counter_agg(ts, val))::text, \
+                       (counter_agg(ts, val) -> first_time())::text \
+                     FROM test",
+                    &str
+                ),
+                "2020-01-01 00:00:00+00",
+            );
+
+            assert_eq!(
+                select_and_check_one!(
+                    client,
+                    "SELECT \
+                       last_time(counter_agg(ts, val))::text, \
+                       (counter_agg(ts, val) -> last_time())::text \
+                     FROM test",
+                    &str
+                ),
+                "2020-01-01 00:01:00+00",
             );
         });
     }

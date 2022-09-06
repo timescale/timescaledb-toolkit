@@ -59,15 +59,15 @@ jobs:
         path: |
           /usr/local/cargo/registry
           /usr/local/cargo/git
-        key: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-cargo-1.10.1
-        restore-keys: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-cargo-1.8
+        key: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-cargo-1.11.0
+        restore-keys: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-cargo-1.10.1
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-1.10.1
-        restore-keys: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-1.8
+        key: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-1.11.0
+        #restore-keys: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-1.10.1
 
     - name: Run pgx tests
       run: su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-extension 2>&1'
@@ -108,15 +108,15 @@ jobs:
         path: |
           /usr/local/cargo/registry
           /usr/local/cargo/git
-        key: ${{ runner.os }}-test-crates-cargo-1.9
-        restore-keys: ${{ runner.os }}-test-crates-cargo-1.8
+        key: ${{ runner.os }}-test-crates-cargo-1.11.0
+        restore-keys: ${{ runner.os }}-test-crates-cargo-1.9
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-test-crates-target-1.9
-        restore-keys: ${{ runner.os }}-test-crates-target-1.8
+        key: ${{ runner.os }}-test-crates-target-1.11.0
+        #restore-keys: ${{ runner.os }}-test-crates-target-1.10.1
 
     - name: Run Crates Tests
       run: su postgres -c 'sh tools/build test-crates 2>&1'
@@ -150,22 +150,22 @@ jobs:
         path: |
           /usr/local/cargo/registry
           /usr/local/cargo/git
-        key: ${{ runner.os }}-test-updates-cargo-1.10.1
-        restore-keys: ${{ runner.os }}-test-crates-cargo-1.8
+        key: ${{ runner.os }}-test-updates-cargo-1.11.0
+        restore-keys: ${{ runner.os }}-test-crates-cargo-1.10.1
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-test-updates-target-1.10.1
-        restore-keys: ${{ runner.os }}-test-crates-target-1.8
+        key: ${{ runner.os }}-test-updates-target-1.11.0
+        #restore-keys: ${{ runner.os }}-test-crates-target-1.10.1
 
     - name: Cache old versions dir
       uses: actions/cache@v2
       with:
         path: old-versions
-        key: ${{ runner.os }}-test-old-versions-1.10.1
-        restore-keys: ${{ runner.os }}-test-old-versions-1.8
+        key: ${{ runner.os }}-test-old-versions-1.11.0
+        restore-keys: ${{ runner.os }}-test-old-versions-1.10.1
 
     - name: Run Update Tests
       run: su postgres -c 'sh tools/build -pg$PGVERSION -cargo-pgx /home/postgres/pgx/0.4/bin/cargo-pgx -cargo-pgx-old /home/postgres/pgx/0.2/bin/cargo-pgx test-updates 2>&1'

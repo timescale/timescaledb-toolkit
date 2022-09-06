@@ -770,7 +770,6 @@ mod tests {
     use super::testing::*;
     use super::*;
     use approx::assert_relative_eq;
-    
 
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {

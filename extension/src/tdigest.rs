@@ -436,7 +436,7 @@ pub fn tdigest_mean(digest: TDigest) -> f64 {
 #[pg_schema]
 mod tests {
     use super::*;
-    
+
     use pgx_macros::pg_test;
 
     // Assert equality between two floats, within some fixed error range.

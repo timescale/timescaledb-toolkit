@@ -89,7 +89,7 @@ where
     /// Creates a new, empty HyperLogLog.
     ///
     /// - `b` number of bits used for register selection, number of registers within the
-    ///   HyperLogLog will be `2^b`. `b` must be in `[4, 16]`
+    ///   HyperLogLog will be `2^b`. `b` must be in `[4, 18]`
     ///
     /// Panics when `b` is out of bounds.
     pub fn new(b: usize) -> Self {

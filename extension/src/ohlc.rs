@@ -89,19 +89,19 @@ pub mod toolkit_experimental {
             self.close.val
         }
 
-        pub fn open_at(&self) -> i64 {
+        pub fn open_time(&self) -> i64 {
             self.open.ts
         }
 
-        pub fn high_at(&self) -> i64 {
+        pub fn high_time(&self) -> i64 {
             self.high.ts
         }
 
-        pub fn low_at(&self) -> i64 {
+        pub fn low_time(&self) -> i64 {
             self.low.ts
         }
 
-        pub fn close_at(&self) -> i64 {
+        pub fn close_time(&self) -> i64 {
             self.close.ts
         }
     }
@@ -307,27 +307,27 @@ pub fn close(aggregate: Option<OpenHighLowClose>) -> f64 {
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn open_at(aggregate: Option<OpenHighLowClose>) -> crate::raw::TimestampTz {
+pub fn open_time(aggregate: Option<OpenHighLowClose>) -> crate::raw::TimestampTz {
     let ohlc = aggregate.unwrap();
-    ohlc.open_at().into()
+    ohlc.open_time().into()
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn high_at(aggregate: Option<OpenHighLowClose>) -> crate::raw::TimestampTz {
+pub fn high_time(aggregate: Option<OpenHighLowClose>) -> crate::raw::TimestampTz {
     let ohlc = aggregate.unwrap();
-    ohlc.high_at().into()
+    ohlc.high_time().into()
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn low_at(aggregate: Option<OpenHighLowClose>) -> crate::raw::TimestampTz {
+pub fn low_time(aggregate: Option<OpenHighLowClose>) -> crate::raw::TimestampTz {
     let ohlc = aggregate.unwrap();
-    ohlc.low_at().into()
+    ohlc.low_time().into()
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn close_at(aggregate: Option<OpenHighLowClose>) -> crate::raw::TimestampTz {
+pub fn close_time(aggregate: Option<OpenHighLowClose>) -> crate::raw::TimestampTz {
     let ohlc = aggregate.unwrap();
-    ohlc.close_at().into()
+    ohlc.close_time().into()
 }
 
 #[cfg(any(test, feature = "pg_test"))]
@@ -410,7 +410,7 @@ mod tests {
             for ohlc in &["open", "high", "low", "close"] {
                 let (val, ts) = select_two!(
                     client,
-                    format!("SELECT toolkit_experimental.{ohlc}(ohlc), toolkit_experimental.{ohlc}_at(ohlc)::text FROM ohlc_view").as_str(),
+                    format!("SELECT toolkit_experimental.{ohlc}(ohlc), toolkit_experimental.{ohlc}_time(ohlc)::text FROM ohlc_view").as_str(),
                     f64,
                     &str
                 );

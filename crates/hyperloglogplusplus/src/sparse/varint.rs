@@ -12,7 +12,7 @@ pub fn decompression_iter<'a, 'b>(Compressed(bytes): &'a Compressed<'b>) -> impl
 }
 
 #[derive(Default)]
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq)]
 pub struct Compressed<'c>(Cow<'c, [u8]>);
 
 impl<'c> Compressed<'c> {

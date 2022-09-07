@@ -317,13 +317,13 @@ mod tests {
         assert!(mean(&series_c).abs() < 0.000000000001);  // float precision breaks == 0 here
         assert_eq!(std(&series_c), 1.0);
 
-        let test = Metrics::new(&&series_a);
-        assert_eq!(test.roughness(), (((3.0 * (1.6 as f64).powi(2) + 2.0 * (2.4 as f64).powi(2)) / 5.0)).sqrt());
+        let test = Metrics::new(&series_a);
+        assert_eq!(test.roughness(), (((3.0 * 1.6_f64.powi(2) + 2.0 * 2.4_f64.powi(2)) / 5.0)).sqrt());
         assert_eq!(test.kurtosis(), 1.0);
-        let test = Metrics::new(&&series_b);
+        let test = Metrics::new(&series_b);
         assert_eq!(test.roughness(), 0.4686099077599554);  // manually verified
         assert!((test.kurtosis() - 2.7304).abs() < 0.000000000001); // = 2.7304
-        let test = Metrics::new(&&series_c);
+        let test = Metrics::new(&series_c);
         assert_eq!(test.roughness(), 0.0);
         assert!((test.kurtosis() - 1.7).abs() < 0.000000000001);  // == 1.7
     }

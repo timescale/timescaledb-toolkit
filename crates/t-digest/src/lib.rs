@@ -897,7 +897,7 @@ mod tests {
         for i in 1..=100 {
             buffer.push(i as f64);
             if buffer.len() >= digested.max_size() {
-                let new = std::mem::replace(&mut buffer, vec![]);
+                let new = std::mem::take(&mut buffer);
                 digested = digested.merge_unsorted(new)
             }
         }
@@ -961,8 +961,7 @@ mod tests {
             .iter()
             .chain(batch2.iter())
             .chain(batch3.iter())
-            .chain(batch4.iter())
-            .map(|x| *x)
+            .chain(batch4.iter()).copied()
             .collect();
         master.sort_by(|a, b| a.partial_cmp(b).unwrap());
 

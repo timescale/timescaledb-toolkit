@@ -206,7 +206,7 @@ impl <'input, T: 'input> Slice<'input, T> {
         match self {
             Slice::Iter(iter) => Iter::Unflatten(*iter),
             Slice::Slice(slice) => Iter::Slice(slice),
-            Slice::Owned(vec) => Iter::Slice(&*vec),
+            Slice::Owned(vec) => Iter::Slice(vec),
         }
     }
 }
@@ -394,7 +394,7 @@ impl<'input, T: 'input> Slice<'input, T> {
             Slice::Iter(_) =>
                 panic!("cannot convert iterator to slice without mutating"),
             Slice::Slice(s) => *s,
-            Slice::Owned(o) => &*o,
+            Slice::Owned(o) => o,
         }
     }
 

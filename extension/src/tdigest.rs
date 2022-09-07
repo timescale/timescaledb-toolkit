@@ -200,7 +200,7 @@ impl<'input> TDigest<'input> {
                     sum: digest.sum(),
                     min: digest.min(),
                     max: digest.max(),
-                    centroids: (&*centroids).into(),
+                    centroids: centroids.into(),
                 }
             )
         }

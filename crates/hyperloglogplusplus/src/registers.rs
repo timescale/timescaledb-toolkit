@@ -19,7 +19,7 @@ use std::{borrow::Cow, convert::TryInto, debug_assert};
 // and treat the block like a regular integer, using shifts to get the
 // values in and out
 #[derive(Clone)]
-#[derive(serde::Serialize, serde::Deserialize, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct Registers<'s>(Cow<'s, [u8]>);
 
 impl<'s> Registers<'s> {
@@ -51,7 +51,7 @@ impl<'s> Registers<'s> {
         // TODO switch chunks_exact_mut() to as_chunks_mut() once stable?
         let block_num = idx / 4;
         let idx_in_block = idx % 4;
-        let block = self.0.chunks_exact(3).skip(block_num).next().unwrap();
+        let block = self.0.chunks_exact(3).nth(block_num).unwrap();
         let block = u32::from_be_bytes([block[0], block[1], block[2], 0x0]);
         let value = block >> (8 + 6 * (3 - idx_in_block));
         (value & 0x3f) as u8
@@ -107,7 +107,7 @@ impl<'s> Registers<'s> {
 
         self.0.chunks_exact(3).flat_map(|bytes| {
             const LOW_REG_MASK: u32 = (1 << 6) - 1;
-            let [a, b, c]: [u8; 3] = (&*bytes).try_into().unwrap();
+            let [a, b, c]: [u8; 3] = bytes.try_into().unwrap();
             let block = u32::from_be_bytes([a, b, c, 0x0]);
             // TODO replace with
             // ```
@@ -303,10 +303,12 @@ mod test {
     }
 
     #[quickcheck]
-    fn quick_merge(exp: u8, ops_a: Vec<(usize, u8)>, ops_b: Vec<(usize, u8)>)
-    -> quickcheck::TestResult {
+    fn quick_merge(
+        exp: u8,
+        ops_a: Vec<(usize, u8)>,
+        ops_b: Vec<(usize, u8)>,
+    ) -> quickcheck::TestResult {
         use quickcheck::TestResult;
-
         if exp < 4 || exp > 16 {
             return TestResult::discard();
         }

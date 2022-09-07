@@ -488,14 +488,14 @@ mod tests {
         assert_eq!(sketch.count(), 2);
         assert_eq!(sketch.max_error(), 0.1);
         for i in 2..20 {
-            sketch.add_value(1000.0 * (1.23 as f64).powi(i));
+            sketch.add_value(1000.0 * 1.23_f64.powi(i));
         }
 
         assert_eq!(sketch.count(), 20);
         assert_eq!(sketch.max_error(), 0.1);
 
         for i in 20..30 {
-            sketch.add_value(1000.0 * (1.23 as f64).powi(i));
+            sketch.add_value(1000.0 * 1.23_f64.powi(i));
         }
 
         assert_eq!(sketch.count(), 30);
@@ -565,7 +565,7 @@ mod tests {
 
         let mut sketch5 = UDDSketch::new(20, 0.1);
         for i in 100..220 {
-            sketch5.add_value((1.23 as f64).powi(i));
+            sketch5.add_value(1.23_f64.powi(i));
         }
 
         assert_eq!(sketch5.max_error(), a4);

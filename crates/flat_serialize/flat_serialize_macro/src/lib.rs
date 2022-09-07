@@ -992,7 +992,7 @@ impl FlatSerializeField {
         let name = self.ident.as_ref().unwrap();
         // based on static_assertions
         // TODO add ConstLen assertion if type is in var-len position?
-        return quote_spanned!{self.ty.span()=>
+        quote_spanned!{self.ty.span()=>
             fn #name<'test, T: flat_serialize::FlatSerializable<'test>>() {}
             let _ = #name::<#ty #lifetime>;
         }

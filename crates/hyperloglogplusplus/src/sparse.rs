@@ -20,8 +20,7 @@ pub struct Storage<'s> {
     pub precision: u8,
 }
 
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[repr(transparent)]
 pub struct Encoded(u32);
 
@@ -45,7 +44,7 @@ impl<'s> Storage<'s> {
         }
     }
 
-    pub fn from_parts(bytes: &'s[u8], num_compressed: u64, precision: u8) -> Self {
+    pub fn from_parts(bytes: &'s [u8], num_compressed: u64, precision: u8) -> Self {
         // TODO what is max precision
         assert!(
             (4..=18).contains(&precision),

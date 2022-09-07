@@ -8,7 +8,7 @@ use std::fmt;
 use std::hash::{BuildHasher, BuildHasherDefault, Hash, Hasher};
 use std::marker::PhantomData;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::hyperloglog_data::{
     BIAS_DATA_OFFSET, BIAS_DATA_VEC, RAW_ESTIMATE_DATA_OFFSET, RAW_ESTIMATE_DATA_VEC,
@@ -181,7 +181,9 @@ where
     ///
     /// Panics when `b` or `buildhasher` parameter of `self` and `other` do not match.
     pub fn merge_in(&mut self, other: &Self)
-    where B: Eq {
+    where
+        B: Eq,
+    {
         assert_eq!(
             self.b, other.b,
             "b must be equal (left={}, right={})",
@@ -241,7 +243,9 @@ where
     }
 }
 pub struct HyperLogLog<'buffer, T: ?Sized, B = BuildHasherDefault<DefaultHasher>>
-where B: Clone {
+where
+    B: Clone,
+{
     pub registers: &'buffer [u8],
     pub b: usize,
     pub buildhasher: Cow<'buffer, B>,
@@ -251,8 +255,8 @@ where B: Clone {
 impl<'buffer, T, B> Clone for HyperLogLog<'buffer, T, B>
 where
     T: ?Sized,
-    B: Clone, {
-
+    B: Clone,
+{
     fn clone(&self) -> Self {
         Self {
             registers: self.registers,
@@ -266,7 +270,8 @@ where
 impl<'buffer, T, B> HyperLogLog<'buffer, T, B>
 where
     T: ?Sized,
-    B: Clone {
+    B: Clone,
+{
     /// Get number of registers.
     pub fn m(&self) -> usize {
         self.registers.len()
@@ -276,7 +281,6 @@ where
     pub fn relative_error(&self) -> f64 {
         (3f64 * 2f64.ln() - 1f64).sqrt() / (self.m() as f64).sqrt()
     }
-
 
     fn am(&self) -> f64 {
         let m = self.registers.len();
@@ -406,33 +410,28 @@ where
     }
 }
 
-
 impl<'buffer, T, B> HyperLogLog<'buffer, T, B>
 where
     T: Hash + ?Sized,
-    B: BuildHasher + Clone, {
-
+    B: BuildHasher + Clone,
+{
     /// Get `BuildHasher`.
     pub fn buildhasher(&self) -> &B {
         &self.buildhasher
     }
 
     pub fn merge(a: &Self, b: &Self) -> HyperLogLogger<T, B>
-    where B: Clone + Eq {
-        assert_eq!(
-            a.b, b.b,
-            "b must be equal (left={}, right={})",
-            a.b, b.b
-        );
-        assert!(
-            a.buildhasher == b.buildhasher,
-            "buildhasher must be equal"
-        );
+    where
+        B: Clone + Eq,
+    {
+        assert_eq!(a.b, b.b, "b must be equal (left={}, right={})", a.b, b.b);
+        assert!(a.buildhasher == b.buildhasher, "buildhasher must be equal");
 
         let b_registers = &b.registers[..a.registers.len()];
 
         HyperLogLogger {
-            registers: a.registers
+            registers: a
+                .registers
                 .iter()
                 .zip(b_registers.iter())
                 .map(|x| cmp::max(x.0, x.1))
@@ -448,16 +447,15 @@ where
     }
 }
 
-
 #[cfg(test)]
 mod tests {
-    use super::{HyperLogLogger, HyperLogLog};
+    use super::{HyperLogLog, HyperLogLogger};
     use crate::hyperloglog_data::{RAW_ESTIMATE_DATA_OFFSET, RAW_ESTIMATE_DATA_VEC};
 
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{BuildHasher, Hasher};
 
-        /// BuildHasher that takes a seed.
+    /// BuildHasher that takes a seed.
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct BuildHasherSeeded {
         seed: usize,
@@ -535,7 +533,8 @@ mod tests {
 
     #[test]
     fn add_b4_n1k_fnv() {
-        let mut hll: HyperLogLogger::<_, fnv::FnvBuildHasher> = HyperLogLogger::with_hash(4, Default::default());
+        let mut hll: HyperLogLogger<_, fnv::FnvBuildHasher> =
+            HyperLogLogger::with_hash(4, Default::default());
         for i in 0..1000 {
             hll.add(&i);
         }
@@ -555,7 +554,8 @@ mod tests {
 
     #[test]
     fn add_b8_n1k_fnv() {
-        let mut hll: HyperLogLogger::<_, fnv::FnvBuildHasher> = HyperLogLogger::with_hash(8, Default::default());
+        let mut hll: HyperLogLogger<_, fnv::FnvBuildHasher> =
+            HyperLogLogger::with_hash(8, Default::default());
         for i in 0..1000 {
             hll.add(&i);
         }
@@ -699,7 +699,8 @@ mod tests {
     fn merge_panics_buildhasher() {
         let mut hll1 =
             HyperLogLogger::<u64, BuildHasherSeeded>::with_hash(12, BuildHasherSeeded::new(0));
-        let hll2 = HyperLogLogger::<u64, BuildHasherSeeded>::with_hash(12, BuildHasherSeeded::new(1));
+        let hll2 =
+            HyperLogLogger::<u64, BuildHasherSeeded>::with_hash(12, BuildHasherSeeded::new(1));
         hll1.merge_in(&hll2);
     }
 

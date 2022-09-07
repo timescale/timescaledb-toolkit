@@ -5,8 +5,7 @@ use crate::hyperloglog_data::{
 
 use crate::{registers::Registers, Extractable};
 
-#[derive(Clone)]
-#[derive(serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[derive(Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
 pub struct Storage<'s> {
     pub registers: Registers<'s>,
     // TODO can be derived from block.len()
@@ -496,7 +495,7 @@ mod tests {
         quickcheck::TestResult::failed()
     }
 
-    #[cfg(feature="flaky_tests")]
+    #[cfg(feature = "flaky_tests")]
     #[quickcheck]
     fn quick_8(values: Vec<u64>) -> quickcheck::TestResult {
         let mut hll = Storage::new(8);

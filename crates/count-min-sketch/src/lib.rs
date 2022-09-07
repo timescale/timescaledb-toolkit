@@ -24,7 +24,6 @@ pub struct CountMinHashFn {
 const SEED: u64 = 0x517cc1b727220a95; // from FxHash
 
 impl CountMinHashFn {
-
     /// Creates a new CountMinHashFn whose hash function key is equal to `key`.
     pub fn with_key(key: u64) -> Self {
         Self { key }

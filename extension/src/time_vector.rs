@@ -120,7 +120,8 @@ pub fn unnest(
 pub fn arrow_timevector_unnest<'a>(
     series: Timevector_TSTZ_F64<'a>,
     _accessor: AccessorUnnest,
-) -> impl std::iter::Iterator<Item = (name!(time, crate::raw::TimestampTz), name!(value, f64))> + 'a {
+) -> impl std::iter::Iterator<Item = (name!(time, crate::raw::TimestampTz), name!(value, f64))> + 'a
+{
     unnest(series)
 }
 
@@ -248,7 +249,10 @@ pub fn inner_combine<'a, 'b>(
     }
 }
 
-pub fn combine(first: Timevector_TSTZ_F64<'_>, second: Timevector_TSTZ_F64<'_>) -> Timevector_TSTZ_F64<'static> {
+pub fn combine(
+    first: Timevector_TSTZ_F64<'_>,
+    second: Timevector_TSTZ_F64<'_>,
+) -> Timevector_TSTZ_F64<'static> {
     if first.num_vals() == 0 {
         return second.clone_owned();
     }
@@ -375,22 +379,48 @@ mod tests {
     pub fn test_unnest() {
         Spi::execute(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
-            client.select("CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION)", None, None);
-            client.select(r#"INSERT INTO data VALUES
+            client.select(
+                "CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION)",
+                None,
+                None,
+            );
+            client.select(
+                r#"INSERT INTO data VALUES
                     ('1-1-2020', 30.0),
                     ('1-2-2020', 45.0),
                     ('1-3-2020', NULL),
                     ('1-4-2020', 55.5),
                     ('1-5-2020', 10.0)"#,
-                None, None);
+                None,
+                None,
+            );
 
-            let mut unnest = client.select("SELECT unnest(timevector(time, value))::TEXT FROM data", None, None);
+            let mut unnest = client.select(
+                "SELECT unnest(timevector(time, value))::TEXT FROM data",
+                None,
+                None,
+            );
 
-            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-01 00:00:00+00\",30)"));
-            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-02 00:00:00+00\",45)"));
-            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-03 00:00:00+00\",NaN)"));
-            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-04 00:00:00+00\",55.5)"));
-            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-05 00:00:00+00\",10)"));
+            assert_eq!(
+                unnest.next().unwrap()[1].value(),
+                Some("(\"2020-01-01 00:00:00+00\",30)")
+            );
+            assert_eq!(
+                unnest.next().unwrap()[1].value(),
+                Some("(\"2020-01-02 00:00:00+00\",45)")
+            );
+            assert_eq!(
+                unnest.next().unwrap()[1].value(),
+                Some("(\"2020-01-03 00:00:00+00\",NaN)")
+            );
+            assert_eq!(
+                unnest.next().unwrap()[1].value(),
+                Some("(\"2020-01-04 00:00:00+00\",55.5)")
+            );
+            assert_eq!(
+                unnest.next().unwrap()[1].value(),
+                Some("(\"2020-01-05 00:00:00+00\",10)")
+            );
             assert!(unnest.next().is_none());
         })
     }
@@ -399,31 +429,57 @@ mod tests {
     pub fn timevector_io() {
         Spi::execute(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
-            client.select("CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION)", None, None);
-            client.select(r#"INSERT INTO data VALUES
+            client.select(
+                "CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION)",
+                None,
+                None,
+            );
+            client.select(
+                r#"INSERT INTO data VALUES
                     ('1-1-2020', 30.0),
                     ('1-2-2020', 45.0),
                     ('1-3-2020', NULL),
                     ('1-4-2020', 55.5),
                     ('1-5-2020', 10.0)"#,
-                None, None);
+                None,
+                None,
+            );
 
-            let tvec = client.select("SELECT timevector(time,value)::TEXT FROM data", None, None).first().get_one::<String>().unwrap();
+            let tvec = client
+                .select("SELECT timevector(time,value)::TEXT FROM data", None, None)
+                .first()
+                .get_one::<String>()
+                .unwrap();
             let expected = r#"(version:1,num_points:5,flags:3,internal_padding:(0,0,0),points:[(ts:"2020-01-01 00:00:00+00",val:30),(ts:"2020-01-02 00:00:00+00",val:45),(ts:"2020-01-03 00:00:00+00",val:NaN),(ts:"2020-01-04 00:00:00+00",val:55.5),(ts:"2020-01-05 00:00:00+00",val:10)],null_val:[4])"#;
 
             assert_eq!(tvec, expected);
 
             let mut unnest = client.select(
-                &format!(
-                    "SELECT unnest('{}'::timevector_tstz_f64)::TEXT",
-                    expected
-                ), None, None);
+                &format!("SELECT unnest('{}'::timevector_tstz_f64)::TEXT", expected),
+                None,
+                None,
+            );
 
-            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-01 00:00:00+00\",30)"));
-            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-02 00:00:00+00\",45)"));
-            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-03 00:00:00+00\",NaN)"));
-            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-04 00:00:00+00\",55.5)"));
-            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-05 00:00:00+00\",10)"));
+            assert_eq!(
+                unnest.next().unwrap()[1].value(),
+                Some("(\"2020-01-01 00:00:00+00\",30)")
+            );
+            assert_eq!(
+                unnest.next().unwrap()[1].value(),
+                Some("(\"2020-01-02 00:00:00+00\",45)")
+            );
+            assert_eq!(
+                unnest.next().unwrap()[1].value(),
+                Some("(\"2020-01-03 00:00:00+00\",NaN)")
+            );
+            assert_eq!(
+                unnest.next().unwrap()[1].value(),
+                Some("(\"2020-01-04 00:00:00+00\",55.5)")
+            );
+            assert_eq!(
+                unnest.next().unwrap()[1].value(),
+                Some("(\"2020-01-05 00:00:00+00\",10)")
+            );
             assert!(unnest.next().is_none());
         })
     }
@@ -432,17 +488,32 @@ mod tests {
     pub fn test_arrow_equivalence() {
         Spi::execute(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
-            client.select("CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION)", None, None);
-            client.select(r#"INSERT INTO data VALUES
+            client.select(
+                "CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION)",
+                None,
+                None,
+            );
+            client.select(
+                r#"INSERT INTO data VALUES
                     ('1-1-2020', 30.0),
                     ('1-2-2020', 45.0),
                     ('1-3-2020', NULL),
                     ('1-4-2020', 55.5),
                     ('1-5-2020', 10.0)"#,
-                None, None);
+                None,
+                None,
+            );
 
-            let mut func = client.select("SELECT unnest(timevector(time, value))::TEXT FROM data", None, None);
-            let mut op = client.select("SELECT (timevector(time, value) -> unnest())::TEXT FROM data", None, None);
+            let mut func = client.select(
+                "SELECT unnest(timevector(time, value))::TEXT FROM data",
+                None,
+                None,
+            );
+            let mut op = client.select(
+                "SELECT (timevector(time, value) -> unnest())::TEXT FROM data",
+                None,
+                None,
+            );
 
             let mut test = true;
             while test {
@@ -452,7 +523,7 @@ mod tests {
                         assert_eq!(a[1].value::<&str>(), b[1].value::<&str>()),
                     _ => panic!("Arrow operator didn't contain the same number of elements as nested function"),
                 };
-            };
+            }
         })
     }
 
@@ -460,8 +531,13 @@ mod tests {
     pub fn test_rollup() {
         Spi::execute(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
-            client.select("CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION, bucket INTEGER)", None, None);
-            client.select(r#"INSERT INTO data VALUES
+            client.select(
+                "CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION, bucket INTEGER)",
+                None,
+                None,
+            );
+            client.select(
+                r#"INSERT INTO data VALUES
                     ('1-1-2020', 30.0, 1),
                     ('1-2-2020', 45.0, 1),
                     ('1-3-2020', NULL, 2),
@@ -470,26 +546,54 @@ mod tests {
                     ('1-6-2020', 13.0, 3),
                     ('1-7-2020', 71.0, 4),
                     ('1-8-2020', 0.0, 4)"#,
-                None, None);
-                
+                None,
+                None,
+            );
+
             let mut unnest = client.select(
-                    "SELECT unnest(rollup(tvec))::TEXT
+                "SELECT unnest(rollup(tvec))::TEXT
                         FROM (
                             SELECT timevector(time, value) AS tvec
                             FROM data 
                             GROUP BY bucket 
                             ORDER BY bucket
                         ) s",
-                    None, None);
+                None,
+                None,
+            );
 
-            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-01 00:00:00+00\",30)"));
-            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-02 00:00:00+00\",45)"));
-            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-03 00:00:00+00\",NaN)"));
-            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-04 00:00:00+00\",55.5)"));
-            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-05 00:00:00+00\",10)"));
-            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-06 00:00:00+00\",13)"));
-            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-07 00:00:00+00\",71)"));
-            assert_eq!(unnest.next().unwrap()[1].value(), Some("(\"2020-01-08 00:00:00+00\",0)"));
+            assert_eq!(
+                unnest.next().unwrap()[1].value(),
+                Some("(\"2020-01-01 00:00:00+00\",30)")
+            );
+            assert_eq!(
+                unnest.next().unwrap()[1].value(),
+                Some("(\"2020-01-02 00:00:00+00\",45)")
+            );
+            assert_eq!(
+                unnest.next().unwrap()[1].value(),
+                Some("(\"2020-01-03 00:00:00+00\",NaN)")
+            );
+            assert_eq!(
+                unnest.next().unwrap()[1].value(),
+                Some("(\"2020-01-04 00:00:00+00\",55.5)")
+            );
+            assert_eq!(
+                unnest.next().unwrap()[1].value(),
+                Some("(\"2020-01-05 00:00:00+00\",10)")
+            );
+            assert_eq!(
+                unnest.next().unwrap()[1].value(),
+                Some("(\"2020-01-06 00:00:00+00\",13)")
+            );
+            assert_eq!(
+                unnest.next().unwrap()[1].value(),
+                Some("(\"2020-01-07 00:00:00+00\",71)")
+            );
+            assert_eq!(
+                unnest.next().unwrap()[1].value(),
+                Some("(\"2020-01-08 00:00:00+00\",0)")
+            );
             assert!(unnest.next().is_none());
         })
     }
@@ -498,17 +602,45 @@ mod tests {
     fn test_rollup_preserves_nulls_flag() {
         Spi::execute(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
-            client.select("CREATE TABLE tvecs (vector Timevector_TSTZ_F64)", None, None);
-            client.select("INSERT INTO tvecs SELECT timevector('2020-1-1', 20)", None, None);
-            client.select("INSERT INTO tvecs SELECT timevector('2020-1-2', 30)", None, None);
-            client.select("INSERT INTO tvecs SELECT timevector('2020-1-3', 15)", None, None);
+            client.select(
+                "CREATE TABLE tvecs (vector Timevector_TSTZ_F64)",
+                None,
+                None,
+            );
+            client.select(
+                "INSERT INTO tvecs SELECT timevector('2020-1-1', 20)",
+                None,
+                None,
+            );
+            client.select(
+                "INSERT INTO tvecs SELECT timevector('2020-1-2', 30)",
+                None,
+                None,
+            );
+            client.select(
+                "INSERT INTO tvecs SELECT timevector('2020-1-3', 15)",
+                None,
+                None,
+            );
 
-            let tvec = client.select("SELECT rollup(vector)::TEXT FROM tvecs", None, None).first().get_one::<String>().unwrap();
+            let tvec = client
+                .select("SELECT rollup(vector)::TEXT FROM tvecs", None, None)
+                .first()
+                .get_one::<String>()
+                .unwrap();
             let expected = r#"(version:1,num_points:3,flags:1,internal_padding:(0,0,0),points:[(ts:"2020-01-01 00:00:00+00",val:20),(ts:"2020-01-02 00:00:00+00",val:30),(ts:"2020-01-03 00:00:00+00",val:15)],null_val:[0])"#;
             assert_eq!(tvec, expected);
 
-            client.select("INSERT INTO tvecs SELECT timevector('2019-1-4', NULL)", None, None);
-            let tvec = client.select("SELECT rollup(vector)::TEXT FROM tvecs", None, None).first().get_one::<String>().unwrap();
+            client.select(
+                "INSERT INTO tvecs SELECT timevector('2019-1-4', NULL)",
+                None,
+                None,
+            );
+            let tvec = client
+                .select("SELECT rollup(vector)::TEXT FROM tvecs", None, None)
+                .first()
+                .get_one::<String>()
+                .unwrap();
             let expected = r#"(version:1,num_points:4,flags:2,internal_padding:(0,0,0),points:[(ts:"2020-01-01 00:00:00+00",val:20),(ts:"2020-01-02 00:00:00+00",val:30),(ts:"2020-01-03 00:00:00+00",val:15),(ts:"2019-01-04 00:00:00+00",val:NaN)],null_val:[8])"#;
             assert_eq!(tvec, expected);
         })

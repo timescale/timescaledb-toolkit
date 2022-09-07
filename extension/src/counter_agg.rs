@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use pgx::*;
 
@@ -20,11 +20,7 @@ use crate::{
 
 use tspoint::TSPoint;
 
-use counter_agg::{
-    MetricSummary,
-    CounterSummaryBuilder,
-    range::I64Range,
-};
+use counter_agg::{range::I64Range, CounterSummaryBuilder, MetricSummary};
 use stats_agg::stats2d::StatsSummary2D;
 
 use self::Method::*;
@@ -52,10 +48,9 @@ pg_type! {
 
 ron_inout_funcs!(CounterSummary);
 
-
 impl<'input> CounterSummary<'input> {
     pub fn to_internal_counter_summary(&self) -> MetricSummary {
-        MetricSummary{
+        MetricSummary {
             first: self.first,
             second: self.second,
             penultimate: self.penultimate,
@@ -68,9 +63,8 @@ impl<'input> CounterSummary<'input> {
         }
     }
     pub fn from_internal_counter_summary(st: MetricSummary) -> Self {
-        unsafe{
-            flatten!(
-            CounterSummary {
+        unsafe {
+            flatten!(CounterSummary {
                 stats: st.stats,
                 first: st.first,
                 second: st.second,
@@ -95,14 +89,17 @@ impl<'input> CounterSummary<'input> {
     ) -> CounterSummary<'static> {
         let prev = if self.first.ts > interval_start {
             prev.map(|summary| {
-            let first = if summary.last.val > self.first.val {
-                TSPoint{ ts: summary.last.ts, val: 0.} 
-            } else {
-                summary.last
-            };
-            time_weighted_average::TimeWeightMethod::Linear
-                .interpolate(first, Some(self.first), interval_start)
-                .expect("unable to interpolate lower bound")
+                let first = if summary.last.val > self.first.val {
+                    TSPoint {
+                        ts: summary.last.ts,
+                        val: 0.,
+                    }
+                } else {
+                    summary.last
+                };
+                time_weighted_average::TimeWeightMethod::Linear
+                    .interpolate(first, Some(self.first), interval_start)
+                    .expect("unable to interpolate lower bound")
             })
         } else {
             None
@@ -110,7 +107,10 @@ impl<'input> CounterSummary<'input> {
 
         let next = next.map(|summary| {
             let last = if self.last.val > summary.first.val {
-                TSPoint{ ts: self.last.ts, val: 0. }
+                TSPoint {
+                    ts: self.last.ts,
+                    val: 0.,
+                }
             } else {
                 self.last
             };
@@ -120,21 +120,24 @@ impl<'input> CounterSummary<'input> {
         });
 
         let builder = prev.map(|pt| CounterSummaryBuilder::new(&pt, None));
-        let mut builder =
-            builder.map_or_else(
-                || {
-                    let mut summary = self.clone();
-                    summary.bounds = I64RangeWrapper::from_i64range(None);
-                    summary.to_internal_counter_summary().into()
-                }, 
-                |mut builder| {
-                    builder.combine(&self.to_internal_counter_summary())
-                        .expect("unable to add data to interpolation"); builder
-                }
-            );
-        
+        let mut builder = builder.map_or_else(
+            || {
+                let mut summary = self.clone();
+                summary.bounds = I64RangeWrapper::from_i64range(None);
+                summary.to_internal_counter_summary().into()
+            },
+            |mut builder| {
+                builder
+                    .combine(&self.to_internal_counter_summary())
+                    .expect("unable to add data to interpolation");
+                builder
+            },
+        );
+
         if let Some(next) = next {
-            builder.add_point(&next).expect("unable to add final interpolated point");
+            builder
+                .add_point(&next)
+                .expect("unable to add final interpolated point");
         }
 
         CounterSummary::from_internal_counter_summary(builder.build())
@@ -172,13 +175,15 @@ impl CounterSummaryTransState {
 
     fn combine_points(&mut self) {
         if self.point_buffer.is_empty() {
-            return
+            return;
         }
         self.point_buffer.sort_unstable_by_key(|p| p.ts);
         let mut iter = self.point_buffer.iter();
-        let mut summary = CounterSummaryBuilder::new( iter.next().unwrap(), self.bounds);
+        let mut summary = CounterSummaryBuilder::new(iter.next().unwrap(), self.bounds);
         for p in iter {
-            summary.add_point(p).unwrap_or_else(|e| pgx::error!("{}", e));
+            summary
+                .add_point(p)
+                .unwrap_or_else(|e| pgx::error!("{}", e));
         }
         self.point_buffer.clear();
         // TODO build method should check validity
@@ -200,38 +205,33 @@ impl CounterSummaryTransState {
         self.combine_points();
 
         if self.summary_buffer.len() <= 1 {
-            return
+            return;
         }
         // TODO move much of this method to crate?
         self.summary_buffer.sort_unstable_by_key(|s| s.first.ts);
         let mut sum_iter = self.summary_buffer.iter();
         let mut new_summary = CounterSummaryBuilder::from(sum_iter.next().unwrap().clone());
         for sum in sum_iter {
-            new_summary.combine(sum).unwrap_or_else(|e| pgx::error!("{}", e));
+            new_summary
+                .combine(sum)
+                .unwrap_or_else(|e| pgx::error!("{}", e));
         }
         self.summary_buffer = vec![new_summary.build()];
     }
 }
 
 #[pg_extern(immutable, parallel_safe, strict)]
-pub fn counter_summary_trans_serialize(
-    state: Internal,
-) -> bytea {
+pub fn counter_summary_trans_serialize(state: Internal) -> bytea {
     let state: &mut CounterSummaryTransState = unsafe { state.get_mut().unwrap() };
     state.combine_summaries();
     crate::do_serialize!(state)
 }
 
 #[pg_extern(strict, immutable, parallel_safe)]
-pub fn counter_summary_trans_deserialize(
-    bytes: bytea,
-    _internal: Internal,
-) -> Option<Internal> {
+pub fn counter_summary_trans_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
     counter_summary_trans_deserialize_inner(bytes).internal()
 }
-pub fn counter_summary_trans_deserialize_inner(
-    bytes: bytea,
-) -> Inner<CounterSummaryTransState> {
+pub fn counter_summary_trans_deserialize_inner(bytes: bytea) -> Inner<CounterSummaryTransState> {
     let c: CounterSummaryTransState = crate::do_deserialize!(bytes, CounterSummaryTransState);
     c.into()
 }
@@ -258,7 +258,7 @@ pub fn counter_agg_trans_inner(
             let p = match (ts, val) {
                 (_, None) => return state,
                 (None, _) => return state,
-                (Some(ts), Some(val)) => TSPoint{ts: ts.into(), val},
+                (Some(ts), Some(val)) => TSPoint { ts: ts.into(), val },
             };
             match state {
                 None => {
@@ -268,8 +268,11 @@ pub fn counter_agg_trans_inner(
                     }
                     s.push_point(p);
                     Some(s.into())
-                },
-                Some(mut s) => {s.push_point(p); Some(s)},
+                }
+                Some(mut s) => {
+                    s.push_point(p);
+                    Some(s)
+                }
             }
         })
     }
@@ -282,9 +285,8 @@ pub fn counter_agg_trans_no_bounds(
     val: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    counter_agg_trans_inner(unsafe{ state.to_inner() }, ts, val, None, fcinfo).internal()
+    counter_agg_trans_inner(unsafe { state.to_inner() }, ts, val, None, fcinfo).internal()
 }
-
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn counter_agg_summary_trans(
@@ -292,7 +294,7 @@ pub fn counter_agg_summary_trans(
     value: Option<CounterSummary>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    counter_agg_summary_trans_inner(unsafe{ state.to_inner() }, value, fcinfo).internal()
+    counter_agg_summary_trans_inner(unsafe { state.to_inner() }, value, fcinfo).internal()
 }
 pub fn counter_agg_summary_trans_inner(
     state: Option<Inner<CounterSummaryTransState>>,
@@ -300,18 +302,20 @@ pub fn counter_agg_summary_trans_inner(
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<CounterSummaryTransState>> {
     unsafe {
-        in_aggregate_context(fcinfo, || {
-            match (state, value) {
-                (state, None) => state,
-                (None, Some(value)) => {
-                    let mut state = CounterSummaryTransState::new();
-                    state.summary_buffer.push(value.to_internal_counter_summary());
-                    Some(state.into())
-                }
-                (Some(mut state), Some(value)) => {
-                    state.summary_buffer.push(value.to_internal_counter_summary());
-                    Some(state)
-                }
+        in_aggregate_context(fcinfo, || match (state, value) {
+            (state, None) => state,
+            (None, Some(value)) => {
+                let mut state = CounterSummaryTransState::new();
+                state
+                    .summary_buffer
+                    .push(value.to_internal_counter_summary());
+                Some(state.into())
+            }
+            (Some(mut state), Some(value)) => {
+                state
+                    .summary_buffer
+                    .push(value.to_internal_counter_summary());
+                Some(state)
             }
         })
     }
@@ -323,9 +327,7 @@ pub fn counter_agg_combine(
     state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    unsafe {
-        counter_agg_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
-    }
+    unsafe { counter_agg_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal() }
 }
 pub fn counter_agg_combine_inner(
     state1: Option<Inner<CounterSummaryTransState>>,
@@ -336,8 +338,16 @@ pub fn counter_agg_combine_inner(
         in_aggregate_context(fcinfo, || {
             match (state1, state2) {
                 (None, None) => None,
-                (None, Some(state2)) => {let mut s = state2.clone(); s.combine_points(); Some(s.into())},
-                (Some(state1), None) => {let mut s = state1.clone(); s.combine_points(); Some(s.into())}, //should I make these return themselves?
+                (None, Some(state2)) => {
+                    let mut s = state2.clone();
+                    s.combine_points();
+                    Some(s.into())
+                }
+                (Some(state1), None) => {
+                    let mut s = state1.clone();
+                    s.combine_points();
+                    Some(s.into())
+                } //should I make these return themselves?
                 (Some(state1), Some(state2)) => {
                     let mut s1 = state1.clone(); // is there a way to avoid if it doesn't need it?
                     s1.combine_points();
@@ -356,7 +366,7 @@ fn counter_agg_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<CounterSummary<'static>> {
-    counter_agg_final_inner(unsafe{ state.to_inner() }, fcinfo)
+    counter_agg_final_inner(unsafe { state.to_inner() }, fcinfo)
 }
 fn counter_agg_final_inner(
     state: Option<Inner<CounterSummaryTransState>>,
@@ -384,8 +394,8 @@ fn counter_agg_final_inner(
     }
 }
 
-
-extension_sql!("\n\
+extension_sql!(
+    "\n\
     CREATE AGGREGATE counter_agg( ts timestamptz, value DOUBLE PRECISION, bounds tstzrange )\n\
     (\n\
         sfunc = counter_agg_trans,\n\
@@ -396,12 +406,19 @@ extension_sql!("\n\
         deserialfunc = counter_summary_trans_deserialize,\n\
         parallel = restricted\n\
     );\n",
-name = "counter_agg",
-requires = [counter_agg_trans, counter_agg_final, counter_agg_combine, counter_summary_trans_serialize, counter_summary_trans_deserialize],
+    name = "counter_agg",
+    requires = [
+        counter_agg_trans,
+        counter_agg_final,
+        counter_agg_combine,
+        counter_summary_trans_serialize,
+        counter_summary_trans_deserialize
+    ],
 );
 
 // allow calling counter agg without bounds provided.
-extension_sql!("\n\
+extension_sql!(
+    "\n\
     CREATE AGGREGATE counter_agg( ts timestamptz, value DOUBLE PRECISION )\n\
     (\n\
         sfunc = counter_agg_trans_no_bounds,\n\
@@ -413,11 +430,18 @@ extension_sql!("\n\
         parallel = restricted\n\
     );\n\
 ",
-name = "counter_agg2",
-requires = [counter_agg_trans_no_bounds, counter_agg_final, counter_agg_combine, counter_summary_trans_serialize, counter_summary_trans_deserialize],
+    name = "counter_agg2",
+    requires = [
+        counter_agg_trans_no_bounds,
+        counter_agg_final,
+        counter_agg_combine,
+        counter_summary_trans_serialize,
+        counter_summary_trans_deserialize
+    ],
 );
 
-extension_sql!("\n\
+extension_sql!(
+    "\n\
     CREATE AGGREGATE rollup(cs CounterSummary)\n\
     (\n\
         sfunc = counter_agg_summary_trans,\n\
@@ -429,60 +453,48 @@ extension_sql!("\n\
         parallel = restricted\n\
     );\n\
 ",
-name = "counter_rollup",
-requires = [counter_agg_summary_trans, counter_agg_final, counter_agg_combine, counter_summary_trans_serialize, counter_summary_trans_deserialize],
+    name = "counter_rollup",
+    requires = [
+        counter_agg_summary_trans,
+        counter_agg_final,
+        counter_agg_combine,
+        counter_summary_trans_serialize,
+        counter_summary_trans_deserialize
+    ],
 );
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_delta(
-    sketch: CounterSummary,
-    _accessor: AccessorDelta,
-) -> f64 {
+pub fn arrow_counter_agg_delta(sketch: CounterSummary, _accessor: AccessorDelta) -> f64 {
     counter_agg_delta(sketch)
 }
 
-#[pg_extern(name="delta", strict, immutable, parallel_safe)]
-fn counter_agg_delta(
-    summary: CounterSummary,
-)-> f64 {
+#[pg_extern(name = "delta", strict, immutable, parallel_safe)]
+fn counter_agg_delta(summary: CounterSummary) -> f64 {
     summary.to_internal_counter_summary().delta()
 }
 
-
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_rate(
-    sketch: CounterSummary,
-    _accessor: AccessorRate,
-) -> Option<f64> {
+pub fn arrow_counter_agg_rate(sketch: CounterSummary, _accessor: AccessorRate) -> Option<f64> {
     counter_agg_rate(sketch)
 }
 
-#[pg_extern(name="rate", strict, immutable, parallel_safe )]
-fn counter_agg_rate(
-    summary: CounterSummary,
-)-> Option<f64> {
+#[pg_extern(name = "rate", strict, immutable, parallel_safe)]
+fn counter_agg_rate(summary: CounterSummary) -> Option<f64> {
     summary.to_internal_counter_summary().rate()
 }
 
-
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_time_delta(
-    sketch: CounterSummary,
-    _accessor: AccessorTimeDelta,
-) -> f64 {
+pub fn arrow_counter_agg_time_delta(sketch: CounterSummary, _accessor: AccessorTimeDelta) -> f64 {
     counter_agg_time_delta(sketch)
 }
 
-#[pg_extern(name="time_delta", strict, immutable, parallel_safe)]
-fn counter_agg_time_delta(
-    summary: CounterSummary,
-)-> f64 {
+#[pg_extern(name = "time_delta", strict, immutable, parallel_safe)]
+fn counter_agg_time_delta(summary: CounterSummary) -> f64 {
     summary.to_internal_counter_summary().time_delta()
 }
-
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
@@ -493,13 +505,10 @@ pub fn arrow_counter_agg_irate_left(
     counter_agg_irate_left(sketch)
 }
 
-#[pg_extern(name="irate_left", strict, immutable, parallel_safe)]
-fn counter_agg_irate_left(
-    summary: CounterSummary,
-)-> Option<f64> {
+#[pg_extern(name = "irate_left", strict, immutable, parallel_safe)]
+fn counter_agg_irate_left(summary: CounterSummary) -> Option<f64> {
     summary.to_internal_counter_summary().irate_left()
 }
-
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
@@ -510,30 +519,21 @@ pub fn arrow_counter_agg_irate_right(
     counter_agg_irate_right(sketch)
 }
 
-#[pg_extern(name="irate_right", strict, immutable, parallel_safe)]
-fn counter_agg_irate_right(
-    summary: CounterSummary,
-)-> Option<f64> {
+#[pg_extern(name = "irate_right", strict, immutable, parallel_safe)]
+fn counter_agg_irate_right(summary: CounterSummary) -> Option<f64> {
     summary.to_internal_counter_summary().irate_right()
 }
 
-
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_idelta_left(
-    sketch: CounterSummary,
-    _accessor: AccessorIdeltaLeft,
-) -> f64 {
+pub fn arrow_counter_agg_idelta_left(sketch: CounterSummary, _accessor: AccessorIdeltaLeft) -> f64 {
     counter_agg_idelta_left(sketch)
 }
 
-#[pg_extern(name="idelta_left", strict, immutable, parallel_safe)]
-fn counter_agg_idelta_left(
-    summary: CounterSummary,
-)-> f64 {
+#[pg_extern(name = "idelta_left", strict, immutable, parallel_safe)]
+fn counter_agg_idelta_left(summary: CounterSummary) -> f64 {
     summary.to_internal_counter_summary().idelta_left()
 }
-
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
@@ -544,13 +544,10 @@ pub fn arrow_counter_agg_idelta_right(
     counter_agg_idelta_right(sketch)
 }
 
-#[pg_extern(name="idelta_right", strict, immutable, parallel_safe)]
-fn counter_agg_idelta_right(
-    summary: CounterSummary,
-)-> f64 {
+#[pg_extern(name = "idelta_right", strict, immutable, parallel_safe)]
+fn counter_agg_idelta_right(summary: CounterSummary) -> f64 {
     summary.to_internal_counter_summary().idelta_right()
 }
-
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
@@ -563,13 +560,10 @@ pub fn arrow_counter_agg_with_bounds(
     CounterSummary::from_internal_counter_summary(builder.build())
 }
 
-#[pg_extern(name="with_bounds", strict, immutable, parallel_safe)]
-fn counter_agg_with_bounds(
-    summary: CounterSummary,
-    bounds: tstzrange,
-) -> CounterSummary {
+#[pg_extern(name = "with_bounds", strict, immutable, parallel_safe)]
+fn counter_agg_with_bounds(summary: CounterSummary, bounds: tstzrange) -> CounterSummary {
     // TODO dedup with previous by using apply_bounds
-    unsafe{
+    unsafe {
         let ptr = bounds.0 as *mut pg_sys::varlena;
         let mut builder = CounterSummaryBuilder::from(summary.to_internal_counter_summary());
         builder.set_bounds(get_range(ptr));
@@ -598,32 +592,35 @@ pub fn arrow_counter_agg_extrapolated_delta(
     counter_agg_extrapolated_delta(sketch, &*method)
 }
 
-#[pg_extern(name="extrapolated_delta", strict, immutable, parallel_safe)]
-fn counter_agg_extrapolated_delta(
-    summary: CounterSummary,
-    method: &str,
-)-> Option<f64> {
+#[pg_extern(name = "extrapolated_delta", strict, immutable, parallel_safe)]
+fn counter_agg_extrapolated_delta(summary: CounterSummary, method: &str) -> Option<f64> {
     match method_kind(method) {
-        Prometheus => {
-            summary.to_internal_counter_summary().prometheus_delta().unwrap()
-        },
+        Prometheus => summary
+            .to_internal_counter_summary()
+            .prometheus_delta()
+            .unwrap(),
     }
 }
 
-#[pg_extern(name="interpolated_delta", immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(
+    name = "interpolated_delta",
+    immutable,
+    parallel_safe,
+    schema = "toolkit_experimental"
+)]
 fn counter_agg_interpolated_delta(
     summary: CounterSummary,
     start: crate::raw::TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<CounterSummary>,
     next: Option<CounterSummary>,
-)-> f64 {
+) -> f64 {
     let interval = crate::datum_utils::interval_to_ms(&start, &interval);
-    summary.interpolate(start.into(), interval, prev, next)
+    summary
+        .interpolate(start.into(), interval, prev, next)
         .to_internal_counter_summary()
         .delta()
 }
-
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
@@ -635,28 +632,32 @@ pub fn arrow_counter_agg_extrapolated_rate(
     counter_agg_extrapolated_rate(sketch, &*method)
 }
 
-#[pg_extern(name="extrapolated_rate", strict, immutable, parallel_safe)]
-fn counter_agg_extrapolated_rate(
-    summary: CounterSummary,
-    method: &str,
-)-> Option<f64> {
+#[pg_extern(name = "extrapolated_rate", strict, immutable, parallel_safe)]
+fn counter_agg_extrapolated_rate(summary: CounterSummary, method: &str) -> Option<f64> {
     match method_kind(method) {
-        Prometheus => {
-            summary.to_internal_counter_summary().prometheus_rate().unwrap()
-        },
+        Prometheus => summary
+            .to_internal_counter_summary()
+            .prometheus_rate()
+            .unwrap(),
     }
 }
 
-#[pg_extern(name="interpolated_rate", immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(
+    name = "interpolated_rate",
+    immutable,
+    parallel_safe,
+    schema = "toolkit_experimental"
+)]
 fn counter_agg_interpolated_rate(
     summary: CounterSummary,
     start: crate::raw::TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<CounterSummary>,
     next: Option<CounterSummary>,
-)-> Option<f64> {
+) -> Option<f64> {
     let interval = crate::datum_utils::interval_to_ms(&start, &interval);
-    summary.interpolate(start.into(), interval, prev, next)
+    summary
+        .interpolate(start.into(), interval, prev, next)
         .to_internal_counter_summary()
         .rate()
 }
@@ -670,64 +671,43 @@ pub fn arrow_counter_agg_num_elements(
     counter_agg_num_elements(sketch)
 }
 
-#[pg_extern(name="num_elements", strict, immutable, parallel_safe)]
-fn counter_agg_num_elements(
-    summary: CounterSummary,
-)-> i64 {
+#[pg_extern(name = "num_elements", strict, immutable, parallel_safe)]
+fn counter_agg_num_elements(summary: CounterSummary) -> i64 {
     summary.to_internal_counter_summary().stats.n as i64
 }
 
-
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_num_changes(
-    sketch: CounterSummary,
-    _accessor: AccessorNumChanges,
-) -> i64 {
+pub fn arrow_counter_agg_num_changes(sketch: CounterSummary, _accessor: AccessorNumChanges) -> i64 {
     counter_agg_num_changes(sketch)
 }
 
-#[pg_extern(name="num_changes", strict, immutable, parallel_safe)]
-fn counter_agg_num_changes(
-    summary: CounterSummary,
-)-> i64 {
+#[pg_extern(name = "num_changes", strict, immutable, parallel_safe)]
+fn counter_agg_num_changes(summary: CounterSummary) -> i64 {
     summary.to_internal_counter_summary().num_changes as i64
 }
 
-
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_num_resets(
-    sketch: CounterSummary,
-    _accessor: AccessorNumResets,
-) -> i64 {
+pub fn arrow_counter_agg_num_resets(sketch: CounterSummary, _accessor: AccessorNumResets) -> i64 {
     counter_agg_num_resets(sketch)
 }
 
-#[pg_extern(name="num_resets", strict, immutable, parallel_safe)]
-fn counter_agg_num_resets(
-    summary: CounterSummary,
-)-> i64 {
+#[pg_extern(name = "num_resets", strict, immutable, parallel_safe)]
+fn counter_agg_num_resets(summary: CounterSummary) -> i64 {
     summary.to_internal_counter_summary().num_resets as i64
 }
 
-
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_slope(
-    sketch: CounterSummary,
-    _accessor: AccessorSlope,
-) -> Option<f64> {
+pub fn arrow_counter_agg_slope(sketch: CounterSummary, _accessor: AccessorSlope) -> Option<f64> {
     counter_agg_slope(sketch)
 }
 
-#[pg_extern(name="slope", strict, immutable, parallel_safe)]
-fn counter_agg_slope(
-    summary: CounterSummary,
-)-> Option<f64> {
+#[pg_extern(name = "slope", strict, immutable, parallel_safe)]
+fn counter_agg_slope(summary: CounterSummary) -> Option<f64> {
     summary.to_internal_counter_summary().stats.slope()
 }
-
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
@@ -738,30 +718,21 @@ pub fn arrow_counter_agg_intercept(
     counter_agg_intercept(sketch)
 }
 
-#[pg_extern(name="intercept", strict, immutable, parallel_safe)]
-fn counter_agg_intercept(
-    summary: CounterSummary,
-)-> Option<f64> {
+#[pg_extern(name = "intercept", strict, immutable, parallel_safe)]
+fn counter_agg_intercept(summary: CounterSummary) -> Option<f64> {
     summary.to_internal_counter_summary().stats.intercept()
 }
 
-
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_corr(
-    sketch: CounterSummary,
-    _accessor: AccessorCorr,
-) -> Option<f64> {
+pub fn arrow_counter_agg_corr(sketch: CounterSummary, _accessor: AccessorCorr) -> Option<f64> {
     counter_agg_corr(sketch)
 }
 
-#[pg_extern(name="corr", strict, immutable, parallel_safe)]
-fn counter_agg_corr(
-    summary: CounterSummary,
-)-> Option<f64> {
+#[pg_extern(name = "corr", strict, immutable, parallel_safe)]
+fn counter_agg_corr(summary: CounterSummary) -> Option<f64> {
     summary.to_internal_counter_summary().stats.corr()
 }
-
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
@@ -772,42 +743,30 @@ pub fn arrow_counter_agg_zero_time(
     counter_agg_counter_zero_time(sketch)
 }
 
-#[pg_extern(name="counter_zero_time", strict, immutable, parallel_safe)]
-fn counter_agg_counter_zero_time(
-    summary: CounterSummary,
-)-> Option<crate::raw::TimestampTz> {
+#[pg_extern(name = "counter_zero_time", strict, immutable, parallel_safe)]
+fn counter_agg_counter_zero_time(summary: CounterSummary) -> Option<crate::raw::TimestampTz> {
     Some(((summary.to_internal_counter_summary().stats.x_intercept()? * 1_000_000.0) as i64).into())
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_first_val(
-    sketch: CounterSummary,
-    _accessor: AccessorFirstVal,
-) -> f64 {
+pub fn arrow_counter_agg_first_val(sketch: CounterSummary, _accessor: AccessorFirstVal) -> f64 {
     counter_agg_first_val(sketch)
 }
 
-#[pg_extern(name="first_val", strict, immutable, parallel_safe)]
-fn counter_agg_first_val(
-    summary: CounterSummary,
-)-> f64 {
+#[pg_extern(name = "first_val", strict, immutable, parallel_safe)]
+fn counter_agg_first_val(summary: CounterSummary) -> f64 {
     summary.to_internal_counter_summary().first.val
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_last_val(
-    sketch: CounterSummary,
-    _accessor: AccessorLastVal,
-) -> f64 {
+pub fn arrow_counter_agg_last_val(sketch: CounterSummary, _accessor: AccessorLastVal) -> f64 {
     counter_agg_last_val(sketch)
 }
 
-#[pg_extern(name="last_val", strict, immutable, parallel_safe)]
-fn counter_agg_last_val(
-    summary: CounterSummary,
-)-> f64 {
+#[pg_extern(name = "last_val", strict, immutable, parallel_safe)]
+fn counter_agg_last_val(summary: CounterSummary) -> f64 {
     summary.to_internal_counter_summary().last.val
 }
 
@@ -820,10 +779,8 @@ pub fn arrow_counter_agg_first_time(
     counter_agg_first_time(sketch)
 }
 
-#[pg_extern(name="first_time", strict, immutable, parallel_safe)]
-fn counter_agg_first_time(
-    summary: CounterSummary,
-)-> crate::raw::TimestampTz {
+#[pg_extern(name = "first_time", strict, immutable, parallel_safe)]
+fn counter_agg_first_time(summary: CounterSummary) -> crate::raw::TimestampTz {
     summary.to_internal_counter_summary().first.ts.into()
 }
 
@@ -836,10 +793,8 @@ pub fn arrow_counter_agg_last_time(
     counter_agg_last_time(sketch)
 }
 
-#[pg_extern(name="last_time", strict, immutable, parallel_safe)]
-fn counter_agg_last_time(
-    summary: CounterSummary,
-)-> crate::raw::TimestampTz {
+#[pg_extern(name = "last_time", strict, immutable, parallel_safe)]
+fn counter_agg_last_time(summary: CounterSummary) -> crate::raw::TimestampTz {
     summary.to_internal_counter_summary().last.ts.into()
 }
 
@@ -849,7 +804,7 @@ pub enum Method {
 }
 
 #[track_caller]
-pub fn method_kind(method: &str)  -> Method {
+pub fn method_kind(method: &str) -> Method {
     match as_method(method) {
         Some(method) => method,
         None => pgx::error!("unknown analysis method. Valid methods are 'prometheus'"),
@@ -867,10 +822,9 @@ pub fn as_method(method: &str) -> Option<Method> {
 #[pg_schema]
 mod tests {
 
-    use approx::assert_relative_eq;
-    use pgx::*;
-    use super::*;
     use super::testing::*;
+    use super::*;
+    use approx::assert_relative_eq;
 
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {
@@ -883,22 +837,20 @@ mod tests {
     }
 
     macro_rules! select_and_check_one {
-        ($client:expr, $stmt:expr, $type:ty) => {
-            {
-                let (a, b) = $client
-                    .select($stmt, None, None)
-                    .first()
-                    .get_two::<$type, $type>();
-                assert_eq!(a, b);
-                a.unwrap()
-            }
-        };
+        ($client:expr, $stmt:expr, $type:ty) => {{
+            let (a, b) = $client
+                .select($stmt, None, None)
+                .first()
+                .get_two::<$type, $type>();
+            assert_eq!(a, b);
+            a.unwrap()
+        }};
     }
 
     //do proper numerical comparisons on the values where that matters, use exact where it should be exact.
     // copied from counter_agg crate
     #[track_caller]
-    fn assert_close_enough(p1:&MetricSummary, p2:&MetricSummary) {
+    fn assert_close_enough(p1: &MetricSummary, p2: &MetricSummary) {
         assert_eq!(p1.first, p2.first, "first");
         assert_eq!(p1.second, p2.second, "second");
         assert_eq!(p1.penultimate, p2.penultimate, "penultimate");
@@ -919,15 +871,22 @@ mod tests {
             // set search_path after defining our table so we don't pollute the wrong schema
             let stmt = "SELECT format('toolkit_experimental, %s',current_setting('search_path'))";
             let search_path = select_one!(client, stmt, String);
-            client.select(&format!("SET LOCAL search_path TO {}", search_path), None, None);
+            client.select(
+                &format!("SET LOCAL search_path TO {}", search_path),
+                None,
+                None,
+            );
             make_test_table(&client, "test");
 
             // NULL bounds are equivalent to none provided
             let stmt = "SELECT counter_agg(ts, val) FROM test";
-            let a = select_one!(client,stmt, CounterSummary);
+            let a = select_one!(client, stmt, CounterSummary);
             let stmt = "SELECT counter_agg(ts, val, NULL::tstzrange) FROM test";
-            let b = select_one!(client,stmt, CounterSummary);
-            assert_close_enough(&a.to_internal_counter_summary(), &b.to_internal_counter_summary());
+            let b = select_one!(client, stmt, CounterSummary);
+            assert_close_enough(
+                &a.to_internal_counter_summary(),
+                &b.to_internal_counter_summary(),
+            );
 
             let stmt = "SELECT \
                 delta(counter_agg(ts, val)), \
@@ -1012,17 +971,24 @@ mod tests {
 
             //combine function works as expected
             let stmt = "SELECT counter_agg(ts, val) FROM test";
-            let a = select_one!(client,stmt, CounterSummary);
+            let a = select_one!(client, stmt, CounterSummary);
             let stmt = "WITH t as (SELECT date_trunc('minute', ts), counter_agg(ts, val) as agg FROM test group by 1 ) SELECT rollup(agg) FROM t";
-            let b = select_one!(client,stmt, CounterSummary);
-            assert_close_enough(&a.to_internal_counter_summary(), &b.to_internal_counter_summary());
+            let b = select_one!(client, stmt, CounterSummary);
+            assert_close_enough(
+                &a.to_internal_counter_summary(),
+                &b.to_internal_counter_summary(),
+            );
         });
     }
 
     #[pg_test]
     fn test_counter_io() {
         Spi::execute(|client| {
-            client.select("CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)", None, None);
+            client.select(
+                "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+                None,
+                None,
+            );
             client.select("SET TIME ZONE 'UTC'", None, None);
             let stmt = "INSERT INTO test VALUES\
                 ('2020-01-01 00:00:00+00', 10.0),\
@@ -1097,24 +1063,67 @@ mod tests {
             use std::ptr;
             const BASE: i64 = 631152000000000;
             const MIN: i64 = 60000000;
-            let state = counter_agg_trans_inner(None, Some(BASE.into()), Some(10.0), None, ptr::null_mut());
-            let state = counter_agg_trans_inner(state, Some((BASE + MIN).into()), Some(20.0), None, ptr::null_mut());
-            let state = counter_agg_trans_inner(state, Some((BASE + 2 * MIN).into()), Some(30.0), None, ptr::null_mut());
-            let state = counter_agg_trans_inner(state, Some((BASE + 3 * MIN).into()), Some(10.0), None, ptr::null_mut());
-            let state = counter_agg_trans_inner(state, Some((BASE + 4 * MIN).into()), Some(20.0), None, ptr::null_mut());
-            let state = counter_agg_trans_inner(state, Some((BASE + 5 * MIN).into()), Some(30.0), None, ptr::null_mut());
+            let state =
+                counter_agg_trans_inner(None, Some(BASE.into()), Some(10.0), None, ptr::null_mut());
+            let state = counter_agg_trans_inner(
+                state,
+                Some((BASE + MIN).into()),
+                Some(20.0),
+                None,
+                ptr::null_mut(),
+            );
+            let state = counter_agg_trans_inner(
+                state,
+                Some((BASE + 2 * MIN).into()),
+                Some(30.0),
+                None,
+                ptr::null_mut(),
+            );
+            let state = counter_agg_trans_inner(
+                state,
+                Some((BASE + 3 * MIN).into()),
+                Some(10.0),
+                None,
+                ptr::null_mut(),
+            );
+            let state = counter_agg_trans_inner(
+                state,
+                Some((BASE + 4 * MIN).into()),
+                Some(20.0),
+                None,
+                ptr::null_mut(),
+            );
+            let state = counter_agg_trans_inner(
+                state,
+                Some((BASE + 5 * MIN).into()),
+                Some(30.0),
+                None,
+                ptr::null_mut(),
+            );
 
             let mut control = state.unwrap();
-            let buffer = counter_summary_trans_serialize(Inner::from(control.clone()).internal().unwrap());
+            let buffer =
+                counter_summary_trans_serialize(Inner::from(control.clone()).internal().unwrap());
             let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
 
-            let expected = [1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 96, 194, 134, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 36, 64, 0, 231, 85, 138, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 52, 64, 0, 124, 16, 149, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 52, 64, 0, 3, 164, 152, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 62, 64, 0, 0, 0, 0, 0, 0, 62, 64, 1, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 144, 246, 54, 236, 65, 0, 0, 0, 0, 0, 195, 238, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 32, 17, 209, 65, 0, 0, 0, 0, 0, 64, 106, 64, 0, 0, 0, 0, 0, 88, 155, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 76, 248, 42, 65, 0, 0, 0, 0, 0, 130, 196, 64, 0];
+            let expected = [
+                1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 96, 194, 134, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 36,
+                64, 0, 231, 85, 138, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 52, 64, 0, 124, 16, 149, 7, 62,
+                2, 0, 0, 0, 0, 0, 0, 0, 52, 64, 0, 3, 164, 152, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 62,
+                64, 0, 0, 0, 0, 0, 0, 62, 64, 1, 0, 0, 0, 0, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 6, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 128, 144, 246, 54, 236, 65, 0, 0, 0, 0, 0, 195, 238, 64, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 32, 17, 209, 65, 0, 0, 0, 0, 0, 64, 106, 64, 0,
+                0, 0, 0, 0, 88, 155, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 76, 248, 42, 65, 0, 0,
+                0, 0, 0, 130, 196, 64, 0,
+            ];
             assert_eq!(buffer, expected);
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
-            let new_state = counter_summary_trans_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
+            let new_state = counter_summary_trans_deserialize_inner(bytea(
+                &*expected as *const pg_sys::varlena as _,
+            ));
 
-            control.combine_summaries();  // Serialized form is always combined
+            control.combine_summaries(); // Serialized form is always combined
             assert_eq!(&*new_state, &*control);
         }
     }
@@ -1277,19 +1286,13 @@ mod tests {
 
             // Day 1, start at 10, interpolated end of day is 10 (after reset), reset at 40 and 20
             assert_eq!(
-                deltas.next().unwrap()[1].value(), 
+                deltas.next().unwrap()[1].value(),
                 Some(10. + 40. + 20. - 10.)
             );
             // Day 2, interpolated start is 10, interpolated end is 27.5, reset at 50
-            assert_eq!(
-                deltas.next().unwrap()[1].value(), 
-                Some(27.5 + 50. - 10.)
-            );
+            assert_eq!(deltas.next().unwrap()[1].value(), Some(27.5 + 50. - 10.));
             // Day 3, interpolated start is 27.5, end is 35, reset at 30
-            assert_eq!(
-                deltas.next().unwrap()[1].value(), 
-                Some(35. + 30. - 27.5)
-            );
+            assert_eq!(deltas.next().unwrap()[1].value(), Some(35. + 30. - 27.5));
             assert!(deltas.next().is_none());
 
             let mut rates = client.select(
@@ -1312,18 +1315,18 @@ mod tests {
 
             // Day 1, 14 hours (rate is per second)
             assert_eq!(
-                rates.next().unwrap()[1].value(), 
-                Some((10. + 40. + 20. - 10.)/(14. * 60. * 60.))
+                rates.next().unwrap()[1].value(),
+                Some((10. + 40. + 20. - 10.) / (14. * 60. * 60.))
             );
             // Day 2, 24 hours
             assert_eq!(
-                rates.next().unwrap()[1].value(), 
-                Some((27.5 + 50. - 10.)/(24. * 60. * 60.))
+                rates.next().unwrap()[1].value(),
+                Some((27.5 + 50. - 10.) / (24. * 60. * 60.))
             );
             // Day 3, 16 hours
             assert_eq!(
-                rates.next().unwrap()[1].value(), 
-                Some((35. + 30. - 27.5)/(16. * 60. * 60.))
+                rates.next().unwrap()[1].value(),
+                Some((35. + 30. - 27.5) / (16. * 60. * 60.))
             );
             assert!(rates.next().is_none());
         });
@@ -1368,14 +1371,11 @@ mod tests {
             );
             // Day 1, start at 10, interpolated end of day is 15 (after reset), reset at 40 and 20
             assert_eq!(
-                deltas.next().unwrap()[1].value(), 
+                deltas.next().unwrap()[1].value(),
                 Some(15. + 40. + 20. - 10.)
             );
             // Day 2, start is 15, end is 25, reset at 50
-            assert_eq!(
-                deltas.next().unwrap()[1].value(), 
-                Some(25. + 50. - 15.)
-            );
+            assert_eq!(deltas.next().unwrap()[1].value(), Some(25. + 50. - 15.));
             assert!(deltas.next().is_none());
         });
     }

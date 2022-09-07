@@ -1,22 +1,21 @@
-
 use std::borrow::Cow;
 
 use encodings::{delta, prefix_varint};
 
 use super::Encoded;
 
-pub fn decompression_iter<'a, 'b>(Compressed(bytes): &'a Compressed<'b>) -> impl Iterator<Item=Encoded> + 'a {
+pub fn decompression_iter<'a, 'b>(
+    Compressed(bytes): &'a Compressed<'b>,
+) -> impl Iterator<Item = Encoded> + 'a {
     prefix_varint::u64_decompressor(bytes)
         .map(delta::u64_decoder())
         .map(|v| Encoded(v as u32))
 }
 
-#[derive(Default)]
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq)]
+#[derive(Default, serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq)]
 pub struct Compressed<'c>(Cow<'c, [u8]>);
 
 impl<'c> Compressed<'c> {
-
     pub fn from_raw(bytes: &'c [u8]) -> Self {
         Self(bytes.into())
     }
@@ -38,7 +37,6 @@ impl<'c> Compressed<'c> {
         Compressed(Cow::from(self.0.clone().into_owned()))
     }
 }
-
 
 pub struct Compressor<F: FnMut(u64) -> u64> {
     compressor: prefix_varint::U64Compressor<F>,
@@ -77,7 +75,10 @@ impl<F: FnMut(u64) -> u64> Compressor<F> {
             self.compress_value(val)
         }
 
-        (Compressed(self.compressor.finish().into()), self.num_compressed)
+        (
+            Compressed(self.compressor.finish().into()),
+            self.num_compressed,
+        )
     }
 
     fn compress_value(&mut self, Encoded(value): Encoded) {

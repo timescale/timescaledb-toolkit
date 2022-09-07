@@ -187,9 +187,7 @@ ALTER FUNCTION "arrow_run_pipeline_then_stats_agg" SUPPORT toolkit_experimental.
     name = "sum_cast",
     schema = "toolkit_experimental"
 )]
-pub fn sum_pipeline_element(
-    accessor: AccessorSum,
-) -> toolkit_experimental::PipelineThenSum {
+pub fn sum_pipeline_element(accessor: AccessorSum) -> toolkit_experimental::PipelineThenSum {
     let _ = accessor;
     build! {
         PipelineThenSum {

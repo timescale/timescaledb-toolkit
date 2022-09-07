@@ -1,9 +1,7 @@
-
-use tspoint::TSPoint;
-use stats_agg::{XYPair, stats2d::StatsSummary2D};
 use serde::{Deserialize, Serialize};
+use stats_agg::{stats2d::StatsSummary2D, XYPair};
 use std::fmt;
-
+use tspoint::TSPoint;
 
 pub mod range;
 
@@ -11,7 +9,7 @@ pub mod range;
 mod tests;
 
 #[derive(Debug, PartialEq, Eq)]
-pub enum CounterError{
+pub enum CounterError {
     OrderError,
     BoundsInvalid,
 }
@@ -51,14 +49,14 @@ pub struct MetricSummary {
 // you can always subtract a common near value from all your times, then add it back in, the regression analysis will be unchanged.
 // Note that convert the timestamp into seconds rather than microseconds here so that the slope and any other regression analysis, is done on a per-second basis.
 // For instance, the slope will be the per-second slope, not the per-microsecond slope. The x intercept value will need to be converted back to microseconds so you get a timestamp out.
-fn ts_to_xy(pt: TSPoint) -> XYPair{
-    XYPair{
+fn ts_to_xy(pt: TSPoint) -> XYPair {
+    XYPair {
         x: to_seconds(pt.ts as f64),
         y: pt.val,
     }
 }
 
-fn to_seconds(t: f64)-> f64{
+fn to_seconds(t: f64) -> f64 {
     t / 1_000_000_f64 // by default postgres timestamps have microsecond precision
 }
 
@@ -66,8 +64,8 @@ fn to_seconds(t: f64)-> f64{
 /// it is treated as a reset of the counter and the previous value is added to the "true value" of the
 /// counter at that timestamp.
 impl MetricSummary {
-    pub fn new(pt: &TSPoint, bounds:Option<range::I64Range>) -> MetricSummary {
-        let mut n = MetricSummary{
+    pub fn new(pt: &TSPoint, bounds: Option<range::I64Range>) -> MetricSummary {
+        let mut n = MetricSummary {
             first: *pt,
             second: *pt,
             penultimate: *pt,
@@ -83,15 +81,14 @@ impl MetricSummary {
     }
 
     fn reset(&mut self, incoming: &TSPoint) {
-        if  incoming.val < self.last.val {
+        if incoming.val < self.last.val {
             self.reset_sum += self.last.val;
             self.num_resets += 1;
         }
     }
 
     // expects time-ordered input
-    fn add_point(&mut self, incoming: &TSPoint) -> Result<(), CounterError>{
-
+    fn add_point(&mut self, incoming: &TSPoint) -> Result<(), CounterError> {
         if incoming.ts < self.last.ts {
             return Err(CounterError::OrderError);
         }
@@ -143,7 +140,12 @@ impl MetricSummary {
         }
         let mut stats = incoming.stats;
         // have to offset based on our reset_sum, including the amount we added based on any resets that happened at the boundary (but before we add in the incoming reset_sum)
-        stats.offset(XYPair{x:0.0, y: self.reset_sum}).unwrap();
+        stats
+            .offset(XYPair {
+                x: 0.0,
+                y: self.reset_sum,
+            })
+            .unwrap();
         self.last = incoming.last;
         self.reset_sum += incoming.reset_sum;
         self.num_resets += incoming.num_resets;
@@ -154,7 +156,7 @@ impl MetricSummary {
         Ok(())
     }
 
-    pub fn time_delta(&self) -> f64{
+    pub fn time_delta(&self) -> f64 {
         to_seconds((self.last.ts - self.first.ts) as f64)
     }
 
@@ -187,15 +189,15 @@ impl MetricSummary {
         }
     }
 
-    pub fn irate_left(&self) -> Option<f64>{
-        if self.single_value(){
+    pub fn irate_left(&self) -> Option<f64> {
+        if self.single_value() {
             None
         } else {
             Some(self.idelta_left() / to_seconds((self.second.ts - self.first.ts) as f64))
         }
     }
 
-    pub fn irate_right(&self) -> Option<f64>{
+    pub fn irate_right(&self) -> Option<f64> {
         if self.single_value() {
             None
         } else {
@@ -204,16 +206,16 @@ impl MetricSummary {
     }
 
     pub fn bounds_valid(&self) -> bool {
-        match self.bounds{
-            None => true,  // unbounded contains everything
-            Some(b) => b.contains(self.last.ts) && b.contains(self.first.ts)
+        match self.bounds {
+            None => true, // unbounded contains everything
+            Some(b) => b.contains(self.last.ts) && b.contains(self.first.ts),
         }
     }
 
-    fn bounds_extend(&mut self, in_bounds:Option<range::I64Range>){
+    fn bounds_extend(&mut self, in_bounds: Option<range::I64Range>) {
         match (self.bounds, in_bounds) {
-            (None, _) => {self.bounds = in_bounds},
-            (_, None) => {},
+            (None, _) => self.bounds = in_bounds,
+            (_, None) => {}
             (Some(mut a), Some(b)) => {
                 a.extend(&b);
                 self.bounds = Some(a);
@@ -223,12 +225,13 @@ impl MetricSummary {
 
     // based on:  https://github.com/timescale/promscale_extension/blob/d51a0958442f66cb78d38b584a10100f0d278298/src/lib.rs#L208,
     // which is based on:     // https://github.com/prometheus/prometheus/blob/e5ffa8c9a08a5ee4185271c8c26051ddc1388b7a/promql/functions.go#L59
-    pub fn prometheus_delta(&self) -> Result<Option<f64>, CounterError>{
-        if self.bounds.is_none() || !self.bounds_valid() ||  self.bounds.unwrap().has_infinite() {
+    pub fn prometheus_delta(&self) -> Result<Option<f64>, CounterError> {
+        if self.bounds.is_none() || !self.bounds_valid() || self.bounds.unwrap().has_infinite() {
             return Err(CounterError::BoundsInvalid);
         }
         //must have at least 2 values
-        if self.single_value() || self.bounds.unwrap().is_singleton() { //technically, the is_singleton check is redundant, it's included for clarity (any singleton bound that is valid can only be one point)
+        if self.single_value() || self.bounds.unwrap().is_singleton() {
+            //technically, the is_singleton check is redundant, it's included for clarity (any singleton bound that is valid can only be one point)
             return Ok(None);
         }
 
@@ -236,10 +239,12 @@ impl MetricSummary {
 
         // all calculated durations in seconds in Prom implementation, so we'll do that here.
         // we can unwrap all of the bounds accesses as they are guaranteed to be there from the checks above
-        let mut duration_to_start = to_seconds((self.first.ts - self.bounds.unwrap().left.unwrap()) as f64);
+        let mut duration_to_start =
+            to_seconds((self.first.ts - self.bounds.unwrap().left.unwrap()) as f64);
 
         /* bounds stores [L,H), but Prom takes the duration using the inclusive range [L, H-1ms]. Subtract an extra ms, ours is in microseconds. */
-        let duration_to_end = to_seconds((self.bounds.unwrap().right.unwrap() - self.last.ts - 1_000) as f64);
+        let duration_to_end =
+            to_seconds((self.bounds.unwrap().right.unwrap() - self.last.ts - 1_000) as f64);
         let sampled_interval = self.time_delta();
         let avg_duration_between_samples = sampled_interval / (self.stats.n - 1) as f64; // don't have to worry about divide by zero because we know we have at least 2 values from the above.
 
@@ -276,14 +281,14 @@ impl MetricSummary {
         Ok(Some(result_val))
     }
 
-    pub fn prometheus_rate(&self) -> Result<Option<f64>, CounterError>{
-        let delta  = self.prometheus_delta()?;
+    pub fn prometheus_rate(&self) -> Result<Option<f64>, CounterError> {
+        let delta = self.prometheus_delta()?;
         if delta.is_none() {
             return Ok(None);
         }
         let delta = delta.unwrap();
-        let bounds = self.bounds.unwrap() ; // if we got through delta without error then we have bounds
-        /* bounds stores [L,H), but Prom takes the duration using the inclusive range [L, H-1ms]. So subtract an extra ms from the duration*/
+        let bounds = self.bounds.unwrap(); // if we got through delta without error then we have bounds
+                                           /* bounds stores [L,H), but Prom takes the duration using the inclusive range [L, H-1ms]. So subtract an extra ms from the duration*/
         let duration = bounds.duration().unwrap() - 1_000;
         if duration <= 0 {
             return Ok(None); // if we have a total duration under a ms, it's less than prom could deal with so we return none.
@@ -293,13 +298,13 @@ impl MetricSummary {
 }
 
 impl fmt::Display for CounterError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>)
-    -> Result<(), fmt::Error> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
         match self {
-            CounterError::OrderError =>
-                write!(f, "out of order points: points must be submitted in time-order"),
-            CounterError::BoundsInvalid =>
-                write!(f, "cannot calculate delta without valid bounds"),
+            CounterError::OrderError => write!(
+                f,
+                "out of order points: points must be submitted in time-order"
+            ),
+            CounterError::BoundsInvalid => write!(f, "cannot calculate delta without valid bounds"),
         }
     }
 }

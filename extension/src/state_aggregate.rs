@@ -90,7 +90,7 @@ pub mod toolkit_experimental {
                 }
             }
             assert!(first_state < durations.len() && last_state < durations.len());
-                
+
             unsafe {
                 flatten!(StateAgg {
                     states_len,
@@ -140,11 +140,9 @@ pub mod toolkit_experimental {
             let mut states = std::str::from_utf8(self.states.as_slice())
                 .unwrap()
                 .to_string();
-            let mut durations: Vec<DurationInState> =
-                self.durations.iter().collect();
+            let mut durations: Vec<DurationInState> = self.durations.iter().collect();
 
-            let first = match prev 
-            {   
+            let first = match prev {
                 Some(prev) if interval_start < self.first_time => {
                     if prev.last_state < prev.durations.len() as u32 {
                         let start_interval = self.first_time - interval_start;
@@ -171,13 +169,13 @@ pub mod toolkit_experimental {
                     } else {
                         pgx::error!("unable to interpolate interval on state aggregate where previous agg has no data")
                     }
-                },
+                }
                 _ => Record {
                     state: self
                         .state_str(&self.durations.as_slice()[self.first_state as usize])
                         .to_string(),
                     time: self.first_time,
-                }
+                },
             };
 
             let last = if interval_start + interval_len > self.last_time && has_next {
@@ -362,14 +360,14 @@ pub fn interpolated_duration_in(
     next: Option<StateAgg>,
 ) -> crate::raw::Interval {
     match aggregate {
-        None => pgx::error!("when interpolating data between grouped data, all groups must contain some data"),
+        None => pgx::error!(
+            "when interpolating data between grouped data, all groups must contain some data"
+        ),
         Some(aggregate) => {
             let interval = crate::datum_utils::interval_to_ms(&start, &interval);
             duration_in(
                 state,
-                Some(
-                    aggregate.interpolate(start.into(), interval, prev, next.is_some()),
-                )
+                Some(aggregate.interpolate(start.into(), interval, prev, next.is_some())),
             )
         }
     }
@@ -431,7 +429,7 @@ impl DurationState {
     // add a 0 duration entry so that we can handle rollup and interpolation calls
     fn finalize(&mut self) {
         if let Some((last_state, _)) = self.last_state.take() {
-            self.durations.entry(last_state).or_insert(0); 
+            self.durations.entry(last_state).or_insert(0);
         }
     }
 }
@@ -869,7 +867,11 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
     #[pg_test]
     fn interpolate_introduces_state() {
         Spi::execute(|client| {
-            client.select("CREATE TABLE states(time TIMESTAMPTZ, state TEXT, bucket INT)", None, None);
+            client.select(
+                "CREATE TABLE states(time TIMESTAMPTZ, state TEXT, bucket INT)",
+                None,
+                None,
+            );
             client.select(
                 r#"INSERT INTO states VALUES
                 ('1-1-2020 10:00', 'starting', 1),
@@ -877,8 +879,10 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
                 ('1-2-2020 16:00', 'error', 2),
                 ('1-3-2020 18:30', 'starting', 3),
                 ('1-3-2020 19:30', 'running', 3),
-                ('1-4-2020 12:00', 'stopping', 4)"#, 
-            None, None);
+                ('1-4-2020 12:00', 'stopping', 4)"#,
+                None,
+                None,
+            );
 
             let mut durations = client.select(
                 r#"SELECT 

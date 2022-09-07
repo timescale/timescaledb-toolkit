@@ -48,8 +48,8 @@ fn main() {
             .expect("could not drop test DB");
     });
 
-    let mut root_client = Client::connect(root_connection_config, NoTls)
-        .expect("could not connect to postgres");
+    let mut root_client =
+        Client::connect(root_connection_config, NoTls).expect("could not connect to postgres");
     root_client
         .simple_query(&format!(r#"CREATE DATABASE "{}""#, db_name))
         .expect("could not create test DB");
@@ -66,20 +66,25 @@ fn main() {
         .expect("could not connect to test DB");
 
     println!("{}", "Creating Extension".bold().green());
-    client.simple_query("CREATE EXTENSION timescaledb_toolkit;"
-        ).expect("cannot retrieve test names");
+    client
+        .simple_query("CREATE EXTENSION timescaledb_toolkit;")
+        .expect("cannot retrieve test names");
 
     println!("{}", "Retrieving Tests".bold().green());
-    let tests_names = client.simple_query("\
+    let tests_names = client
+        .simple_query(
+            "\
         SELECT proname \
         FROM pg_proc, pg_namespace \
         WHERE pronamespace=pg_namespace.oid \
             AND nspname='tests' \
-        ORDER BY proname;"
-    ).expect("cannot retrieve test names");
+        ORDER BY proname;",
+        )
+        .expect("cannot retrieve test names");
 
     type Passed = bool;
-    let mut tests: Vec<(&str, Passed)> = tests_names.iter()
+    let mut tests: Vec<(&str, Passed)> = tests_names
+        .iter()
         .flat_map(|test| match test {
             Row(row) => Some((row.get(0).unwrap(), true)),
             _ => None,
@@ -87,39 +92,37 @@ fn main() {
         .collect();
 
     println!("{} {} tests\n", "Running".bold().green(), tests.len());
-    let connector = || Client::connect(&test_connection_config.config_string(), NoTls)
-        .expect("could not connect to test DB");
-    tests.par_iter_mut().for_each_init(connector, |client, (test, passed)| {
+    let connector = || {
+        Client::connect(&test_connection_config.config_string(), NoTls)
+            .expect("could not connect to test DB")
+    };
+    tests
+        .par_iter_mut()
+        .for_each_init(connector, |client, (test, passed)| {
+            let mut txn = client.transaction().expect("cannot start transaction");
+            let res = txn.simple_query(&format!("SELECT tests.{}()", test));
+            txn.rollback().expect("cannot rollback transaction");
 
-        let mut txn = client.transaction().expect("cannot start transaction");
-        let res = txn.simple_query(&format!("SELECT tests.{}()", test));
-        txn.rollback().expect("cannot rollback transaction");
-
-        match (test.starts_with("should_fail"), res) {
-            (false, Err(error)) => {
-                println!(
-                    "test `{}` failed with\n{}\n",
-                    test.blue(),
-                    error,
-                );
-                *passed = false;
-            },
-            (true, Ok(..)) => {
-                println!(
-                    "test `{}` completed successfully when it was expected to error\n",
-                    test.blue(),
-                );
-                *passed = false;
-            },
-            _ => {},
-        }
-    });
+            match (test.starts_with("should_fail"), res) {
+                (false, Err(error)) => {
+                    println!("test `{}` failed with\n{}\n", test.blue(), error,);
+                    *passed = false;
+                }
+                (true, Ok(..)) => {
+                    println!(
+                        "test `{}` completed successfully when it was expected to error\n",
+                        test.blue(),
+                    );
+                    *passed = false;
+                }
+                _ => {}
+            }
+        });
 
     let elapsed = start.elapsed();
 
     let stdout = io::stdout();
     let mut out = stdout.lock();
-
 
     let mut num_errors = 0;
 
@@ -136,7 +139,8 @@ fn main() {
             } else {
                 "FAILED".red()
             },
-        ).expect("cannot output");
+        )
+        .expect("cannot output");
     }
 
     let failed = num_errors > 0;
@@ -144,15 +148,12 @@ fn main() {
     writeln!(
         &mut out,
         "\ntest result {}. {} passed; {} failed; finished in {:.2}s",
-        if failed {
-            "FAILED".red()
-        } else {
-            "ok".green()
-        },
+        if failed { "FAILED".red() } else { "ok".green() },
         tests.len() - num_errors,
         num_errors,
         elapsed.as_secs_f32(),
-    ).expect("cannot output");
+    )
+    .expect("cannot output");
 
     drop(client);
     drop(dropper);

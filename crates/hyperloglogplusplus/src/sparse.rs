@@ -12,7 +12,7 @@ use self::varint::*;
 
 mod varint;
 
-#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, PartialEq, Eq)]
 pub struct Storage<'s> {
     to_merge: HashSet<Encoded>,
     pub compressed: Compressed<'s>,
@@ -367,7 +367,7 @@ mod tests {
             );
             return TestResult::failed();
         }
-        return TestResult::passed();
+        TestResult::passed()
     }
 
     #[quickcheck]
@@ -400,7 +400,7 @@ mod tests {
             );
             return TestResult::failed();
         }
-        return TestResult::passed();
+        TestResult::passed()
     }
 
     // fn encoded_order() {

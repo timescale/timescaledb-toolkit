@@ -90,7 +90,7 @@
     #[test]
     fn test_counter_delta(){
         let startpt = &TSPoint{ts: 0, val:10.0};
-        let mut summary = CounterSummaryBuilder::new(&startpt, None);
+        let mut summary = CounterSummaryBuilder::new(startpt, None);
 
         // with one point
         assert_relative_eq!(summary.clone().build().delta(), 0.0);
@@ -148,7 +148,7 @@
         assert_close_enough(&summary.build(), &combined.build());
 
         // test error in wrong direction
-        combined = part2.clone();
+        combined = part2;
         assert_eq!(combined.combine(&part1.build()).unwrap_err(), CounterError::OrderError);
     }
     #[test]

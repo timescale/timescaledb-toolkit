@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use super::*;
 
 // TODO: there are one or two other gapfill objects in this extension, these should be unified
-#[derive(Clone, Serialize, Deserialize, PartialEq, Debug, FlatSerializable)]
+#[derive(Clone, Serialize, Deserialize, PartialEq, Eq, Debug, FlatSerializable)]
 #[repr(u64)]
 pub enum FillToMethod {
     Locf,

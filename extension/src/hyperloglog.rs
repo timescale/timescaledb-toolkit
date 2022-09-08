@@ -21,7 +21,7 @@ use crate::{
 
 use hyperloglogplusplus::{HyperLogLog as HLL, HyperLogLogStorage};
 
-#[derive(Serialize, Deserialize, Clone, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct HyperLogLogTrans {
     logger: HLL<'static, Datum, DatumHashBuilder>,
 }

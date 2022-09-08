@@ -3,7 +3,7 @@ use tspoint::TSPoint;
 
 use flat_serialize_macro::FlatSerializable;
 
-#[derive(Clone, Copy, PartialEq, Debug, Serialize, Deserialize, FlatSerializable)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize, FlatSerializable)]
 #[repr(u8)]
 pub enum TimeWeightMethod {
     LOCF = 0,
@@ -18,7 +18,7 @@ pub struct TimeWeightSummary {
     pub w_sum: f64,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Eq, Debug)]
 pub enum TimeWeightError {
     OrderError,
     DoubleOverflow, // do we need to do this?

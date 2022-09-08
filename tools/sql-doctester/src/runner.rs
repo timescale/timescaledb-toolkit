@@ -92,7 +92,7 @@ pub fn run_tests<OnErr: FnMut(Test, TestError)>(
 
     if let (Some(db), Some(startup_script)) = (stateless_db.as_ref(), startup_script) {
         let stateless_connection_config = ConnectionConfig {
-            database: Some(&*db),
+            database: Some(db),
             ..connection_config
         };
         let mut client = Client::connect(&stateless_connection_config.config_string(), NoTls)

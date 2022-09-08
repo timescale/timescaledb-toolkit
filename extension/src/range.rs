@@ -93,7 +93,7 @@ fn rbound_inclusive(flags: u8) -> bool {
 // }
 // ```
 flat_serialize! {
-    #[derive(Debug, PartialEq, Serialize, Deserialize)]
+    #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
     struct I64RangeWrapper {
         is_present: u8,
         has_left: u8,

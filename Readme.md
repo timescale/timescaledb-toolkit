@@ -12,6 +12,7 @@ and our [Discussions forum](https://github.com/timescale/timescaledb-toolkit/dis
 
 Documentation for this version of the TimescaleDB Toolkit extension can be found
 in this repository at [`docs`](https://github.com/timescale/timescaledb-toolkit/tree/main/docs).
+The release history can be found on this repo's [GitHub releases](https://github.com/timescale/timescaledb-toolkit/releases).
 
 
 ## 🖥 Try It Out ##

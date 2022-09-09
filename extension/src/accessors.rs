@@ -518,3 +518,31 @@ pub fn accessor_unnest() -> AccessorUnnest<'static> {
         }
     }
 }
+
+#[pg_schema]
+pub mod toolkit_experimental {
+    use super::*;
+
+    pg_type! {
+        #[derive(Debug)]
+        struct AccessorIntegral<'input> {
+            len: u32,
+            bytes: [u8; self.len],
+        }
+    }
+
+    // FIXME string IO
+    ron_inout_funcs!(AccessorIntegral);
+
+    #[pg_extern(immutable, parallel_safe, name = "integral")]
+    pub fn accessor_integral(unit: default!(&str, "'second'")) -> AccessorIntegral<'static> {
+        unsafe {
+            flatten! {
+                AccessorIntegral {
+                    len: unit.len().try_into().unwrap(),
+                    bytes: unit.as_bytes().into(),
+                }
+            }
+        }
+    }
+}

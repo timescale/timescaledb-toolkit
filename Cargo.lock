@@ -881,15 +881,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "494b4d60369511e7dea41cf646832512a94e542f68bb9c49e54518e0f468eb47"
 
 [[package]]
-name = "hyperloglog"
-version = "0.1.0"
-dependencies = [
- "bytecount",
- "fnv",
- "serde",
-]
-
-[[package]]
 name = "hyperloglogplusplus"
 version = "0.1.0"
 dependencies = [

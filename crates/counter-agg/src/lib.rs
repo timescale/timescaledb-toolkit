@@ -288,8 +288,7 @@ impl MetricSummary {
         }
         let delta = delta.unwrap();
         let bounds = self.bounds.unwrap(); // if we got through delta without error then we have bounds
-                                           /* bounds stores [L,H), but Prom takes the duration using the inclusive range [L, H-1ms]. So subtract an extra ms from the duration*/
-        let duration = bounds.duration().unwrap() - 1_000;
+        let duration = bounds.duration().unwrap() - 1_000; // bounds stores [L,H), but Prom takes the duration using the inclusive range [L, H-1ms]. So subtract an extra ms from the duration
         if duration <= 0 {
             return Ok(None); // if we have a total duration under a ms, it's less than prom could deal with so we return none.
         }

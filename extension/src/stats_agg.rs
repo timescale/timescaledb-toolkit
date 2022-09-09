@@ -195,8 +195,9 @@ pub fn stats2d_trans_inner(
             };
             match (state, val) {
                 (None, None) => {
+                    // return an empty one from the trans function because otherwise it breaks in the window context
                     Some(StatsSummary2D::from_internal(InternalStatsSummary2D::new()).into())
-                } // return an empty one from the trans function because otherwise it breaks in the window context
+                }
                 (Some(state), None) => Some(state),
                 (None, Some(val)) => {
                     let mut s = InternalStatsSummary2D::new();

@@ -100,7 +100,7 @@ impl<'s> Storage<'s> {
         if h <= self.threshold() {
             h as u64
         } else {
-            e as u64
+            e_p as u64
         }
     }
 
@@ -155,7 +155,7 @@ impl<'s> Storage<'s> {
 
         let mut value = 0.0;
         for i in 0..6 {
-            value += distances[i] * bias_data[i];
+            value += distances[i] * bias_data[neighbors[i]];
         }
 
         return value;
@@ -295,7 +295,7 @@ mod tests {
             hll.add_hash(hash(i));
         }
         // FIXME examine in more detail
-        assert_eq!(hll.estimate_count(), 469);
+        assert_eq!(hll.estimate_count(), 430);
     }
 
     #[test]
@@ -331,7 +331,7 @@ mod tests {
         for i in 0..10000 {
             hll.add_hash(hash(i));
         }
-        assert_eq!(hll.estimate_count(), 11513);
+        assert_eq!(hll.estimate_count(), 11347);
     }
 
     #[test]
@@ -349,7 +349,7 @@ mod tests {
         for i in 0..100000 {
             hll.add_hash(hash(i));
         }
-        assert_eq!(hll.estimate_count(), 126_448);
+        assert_eq!(hll.estimate_count(), 117304);
     }
 
     #[test]

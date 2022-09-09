@@ -455,6 +455,7 @@ mod tests {
     use super::*;
 
     use pgx_macros::pg_test;
+    use rand::distributions::{Distribution, Uniform};
 
     #[pg_test]
     fn test_hll_aggregate() {
@@ -815,7 +816,7 @@ mod tests {
                     ) q";
                 let count = client.select(query, None, None).first().get_one::<i64>();
 
-                assert_eq!(count, Some(152));
+                assert_eq!(count, Some(153));
             }
         });
     }
@@ -887,6 +888,38 @@ mod tests {
                 .get_two::<i32, i32>();
             assert_eq!(Some(-788581389), count);
             assert_eq!(count, arrow_count);
+        });
+    }
+
+    #[pg_test]
+    fn bias_correct_values_accurate() {
+        const NUM_BIAS_TRIALS: usize = 5;
+        const MAX_TRIAL_ERROR: f64 = 0.05;
+        Spi::execute(|client| {
+            // This should match THRESHOLD_DATA_VEC from b=12-18
+            let thresholds = vec![3100, 6500, 11500, 20000, 50000, 120000, 350000];
+            let rand_precision: Uniform<usize> = Uniform::new_inclusive(12, 18);
+            let mut rng = rand::thread_rng();
+            for _ in 0..NUM_BIAS_TRIALS {
+                let precision = rand_precision.sample(&mut rng);
+                let rand_cardinality: Uniform<usize> =
+                    Uniform::new_inclusive(thresholds[precision - 12], 5 * (1 << precision));
+                let cardinality = rand_cardinality.sample(&mut rng);
+                let query = format!(
+                    "SELECT hyperloglog({}, v) -> distinct_count() FROM generate_series(1, {}) v",
+                    1 << precision,
+                    cardinality
+                );
+
+                let estimate = client
+                    .select(&query, None, None)
+                    .first()
+                    .get_one::<i64>()
+                    .unwrap();
+
+                let error = (estimate as f64 / cardinality as f64).abs() - 1.;
+                assert!(error < MAX_TRIAL_ERROR, "hyperloglog with {} buckets on cardinality {} gave a result of {}.  Resulting error {} exceeds max allowed ({})", 2^precision, cardinality, estimate, error, MAX_TRIAL_ERROR);
+            }
         });
     }
 

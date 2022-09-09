@@ -94,7 +94,7 @@ FROM (
 ```output
  count
 -------
-   152
+   153
 ```
 
 ---
@@ -128,7 +128,7 @@ FROM generate_series(1, 100) data
 ```output
  distinct_count
 ----------------
-            114
+            104
 ```
 
 ## **stderror** <a id="hyperloglog_stderror"></a>

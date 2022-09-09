@@ -179,7 +179,7 @@ pub fn time_weight_trans_inner(
                         point_buffer: vec![],
                         // TODO technically not portable to ASCII-compatible charsets
                         method: match method.trim().to_lowercase().as_str() {
-                            "linear" => TimeWeightMethod::Linear,
+                            "linear" | "trapezoidal" => TimeWeightMethod::Linear,
                             "locf" => TimeWeightMethod::LOCF,
                             _ => panic!("unknown method"),
                         },
@@ -531,7 +531,7 @@ mod tests {
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:00:00+00', 10.0)";
             client.select(stmt, None, None);
 
-            let stmt = "SELECT toolkit_experimental.integral(time_weight('Linear', ts, val), 'hrs') FROM test";
+            let stmt = "SELECT toolkit_experimental.integral(time_weight('Trapezoidal', ts, val), 'hrs') FROM test";
             assert_eq!(select_one!(client, stmt, f64), 0.0);
             let stmt = "SELECT toolkit_experimental.integral(time_weight('LOCF', ts, val), 'msecond') FROM test";
             assert_eq!(select_one!(client, stmt, f64), 0.0);

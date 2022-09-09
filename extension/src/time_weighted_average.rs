@@ -602,6 +602,10 @@ mod tests {
             FROM test";
             // arrow syntax should be the same
             assert!((select_one!(client, stmt, f64) - 25500000000.00).abs() < f64::EPSILON);
+            let stmt = "SELECT time_weight('Linear', ts, val) \
+                ->toolkit_experimental.integral() \
+            FROM test";
+            assert!((select_one!(client, stmt, f64) - 25500.00).abs() < f64::EPSILON);
 
             let stmt = "SELECT average(time_weight('LOCF', ts, val)) FROM test";
             // expected = (10 + 20 + 10 + 20 + 10*4 + 30*2 +10*.5 + 20*9.5) / 20 = 17.75 using last value and carrying for each point

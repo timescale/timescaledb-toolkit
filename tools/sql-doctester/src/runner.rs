@@ -67,9 +67,11 @@ pub fn run_tests<OnErr: FnMut(Test, TestError)>(
         let drop_name = db_name.to_string();
         let deferred = Deferred(move || {
             eprintln!("{} {}", "Finished".bold().green(), finish_name);
-            let _ = Client::connect(root_connection_config, NoTls).and_then(|mut client| {
-                client.simple_query(&format!(r#"DROP DATABASE IF EXISTS "{}""#, drop_name))
-            }).map_err(|e| eprintln!("error dropping DB {}", e));
+            let _ = Client::connect(root_connection_config, NoTls)
+                .and_then(|mut client| {
+                    client.simple_query(&format!(r#"DROP DATABASE IF EXISTS "{}""#, drop_name))
+                })
+                .map_err(|e| eprintln!("error dropping DB {}", e));
         });
         {
             eprintln!("{} {}", "Starting".bold().green(), tests_name);
@@ -221,9 +223,11 @@ fn validate_output(output: Vec<SimpleQueryMessage>, test: &Test) -> Result<(), T
 
     let all_eq = test.output.iter().zip(rows.iter()).all(|(out, row)| {
         out.len() == row.len()
-        && out.iter().zip(row.iter()).enumerate().all(|(i, (o, r))| {
-            clamp_len(o, i, test) == clamp_len(r, i, test)
-        })
+            && out
+                .iter()
+                .zip(row.iter())
+                .enumerate()
+                .all(|(i, (o, r))| clamp_len(o, i, test) == clamp_len(r, i, test))
     });
     if !all_eq {
         return Err(TestError::OutputError(output_error(
@@ -243,7 +247,7 @@ fn stringify_table(table: &[Vec<String>]) -> String {
         // Ensure that we have width for every column
         // TODO this shouldn't be needed, but somtimes is?
         if width.len() < row.len() {
-            width.extend((0..row.len()-width.len()).map(|_| 0));
+            width.extend((0..row.len() - width.len()).map(|_| 0));
         }
         for (i, value) in row.iter().enumerate() {
             width[i] = max(width[i], value.len())

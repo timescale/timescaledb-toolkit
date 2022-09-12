@@ -1,7 +1,7 @@
 use std::{
     ffi::{CStr, CString},
+    mem::{align_of, size_of, MaybeUninit},
     slice,
-    mem::{size_of, align_of, MaybeUninit},
 };
 
 use flat_serialize::{impl_flat_serializable, FlatSerializable, WrapErr};
@@ -227,13 +227,21 @@ impl Serialize for PgTypId {
             }
 
             let namespace_len = CStr::from_ptr(namespace).to_bytes().len();
-            let namespace = pg_sys::pg_server_to_any(namespace, namespace_len as _, pg_sys::pg_enc_PG_UTF8 as _);
+            let namespace = pg_sys::pg_server_to_any(
+                namespace,
+                namespace_len as _,
+                pg_sys::pg_enc_PG_UTF8 as _,
+            );
             let namespace = CStr::from_ptr(namespace);
             let namespace = namespace.to_str().unwrap();
 
             let type_name = (*type_tuple).typname.data.as_ptr();
             let type_name_len = CStr::from_ptr(type_name).to_bytes().len();
-            let type_name = pg_sys::pg_server_to_any(type_name, type_name_len as _, pg_sys::pg_enc_PG_UTF8 as _);
+            let type_name = pg_sys::pg_server_to_any(
+                type_name,
+                type_name_len as _,
+                pg_sys::pg_enc_PG_UTF8 as _,
+            );
             let type_name = CStr::from_ptr(type_name);
             let type_name = type_name.to_str().unwrap();
 
@@ -259,10 +267,15 @@ impl<'de> Deserialize<'de> for PgTypId {
         );
         let (namespace_len, name_len) = (namespace.to_bytes().len(), name.to_bytes().len());
         unsafe {
-            let namespace = pg_sys::pg_any_to_server(namespace.as_ptr(), namespace_len as _, pg_sys::pg_enc_PG_UTF8 as _);
+            let namespace = pg_sys::pg_any_to_server(
+                namespace.as_ptr(),
+                namespace_len as _,
+                pg_sys::pg_enc_PG_UTF8 as _,
+            );
             let namespace = CStr::from_ptr(namespace);
 
-            let name = pg_sys::pg_any_to_server(name.as_ptr(), name_len as _, pg_sys::pg_enc_PG_UTF8 as _);
+            let name =
+                pg_sys::pg_any_to_server(name.as_ptr(), name_len as _, pg_sys::pg_enc_PG_UTF8 as _);
             let name = CStr::from_ptr(name);
 
             let namespace_id = pg_sys::LookupExplicitNamespace(namespace.as_ptr(), true);
@@ -389,7 +402,13 @@ mod tests {
     #[pg_test]
     fn test_short_type_id_serialize_circle_type() {
         let serialized = bincode::serialize(&ShortTypeId(CIRCLEOID)).unwrap();
-        assert_eq!(serialized, vec![42, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111, 103, 6, 0, 0, 0, 0, 0, 0, 0, 99, 105, 114, 99, 108, 101],);
+        assert_eq!(
+            serialized,
+            vec![
+                42, 0, 0, 0, 10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111, 103,
+                6, 0, 0, 0, 0, 0, 0, 0, 99, 105, 114, 99, 108, 101
+            ],
+        );
         let deserialized: ShortTypeId = bincode::deserialize(&serialized).unwrap();
         assert_eq!(deserialized.0, CIRCLEOID);
     }

@@ -16,8 +16,7 @@ use crate::{
 use tspoint::TSPoint;
 
 use time_weighted_average::{
-    TimeWeightError, TimeWeightMethod,
-    TimeWeightSummary as TimeWeightSummaryInternal,
+    TimeWeightError, TimeWeightMethod, TimeWeightSummary as TimeWeightSummaryInternal,
 };
 
 use crate::raw::bytea;
@@ -54,36 +53,34 @@ impl<'input> TimeWeightSummary<'input> {
         let mut new_sum = self.weighted_sum;
         let new_start = match prev {
             Some(prev) if interval_start < self.first.ts => {
-                let new_start = 
-                    self.method
+                let new_start = self
+                    .method
                     .interpolate(prev.last, Some(self.first), interval_start)
                     .expect("unable to interpolate start of interval");
                 new_sum += self.method.weighted_sum(new_start, self.first);
                 new_start
-            },
-            _ => self.first
+            }
+            _ => self.first,
         };
         let new_end = match next {
             Some(next) => {
-                let new_end = 
-                    self.method
+                let new_end = self
+                    .method
                     .interpolate(self.last, Some(next.first), interval_start + interval_len)
                     .expect("unable to interpolate end of interval");
                 new_sum += self.method.weighted_sum(self.last, new_end);
                 new_end
-            },
-            _ => self.last
+            }
+            _ => self.last,
         };
 
-        unsafe { 
-            crate::flatten!( 
-                TimeWeightSummary {
-                    first: new_start,
-                    last: new_end,
-                    weighted_sum: new_sum,
-                    method: self.method,
-                }
-            ) 
+        unsafe {
+            crate::flatten!(TimeWeightSummary {
+                first: new_start,
+                last: new_end,
+                weighted_sum: new_sum,
+                method: self.method,
+            })
         }
     }
 }
@@ -139,15 +136,10 @@ pub fn time_weight_trans_serialize(state: Internal) -> bytea {
 }
 
 #[pg_extern(strict, immutable, parallel_safe)]
-pub fn time_weight_trans_deserialize(
-    bytes: bytea,
-    _internal: Internal,
-) -> Option<Internal> {
+pub fn time_weight_trans_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
     time_weight_trans_deserialize_inner(bytes).internal()
 }
-pub fn time_weight_trans_deserialize_inner(
-    bytes: bytea,
-) -> Inner<TimeWeightTransState> {
+pub fn time_weight_trans_deserialize_inner(bytes: bytea) -> Inner<TimeWeightTransState> {
     let t: TimeWeightTransState = crate::do_deserialize!(bytes, TimeWeightTransState);
     t.into()
 }
@@ -161,9 +153,7 @@ pub fn time_weight_trans(
     val: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    unsafe {
-        time_weight_trans_inner(state.to_inner(), method, ts, val, fcinfo).internal()
-    }
+    unsafe { time_weight_trans_inner(state.to_inner(), method, ts, val, fcinfo).internal() }
 }
 
 pub fn time_weight_trans_inner(
@@ -211,7 +201,7 @@ pub fn time_weight_summary_trans(
     next: Option<TimeWeightSummary>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    time_weight_summary_trans_inner(unsafe{ state.to_inner() }, next, fcinfo).internal()
+    time_weight_summary_trans_inner(unsafe { state.to_inner() }, next, fcinfo).internal()
 }
 
 pub fn time_weight_summary_trans_inner(
@@ -250,9 +240,7 @@ pub fn time_weight_combine(
     state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    unsafe {
-        time_weight_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
-    }
+    unsafe { time_weight_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal() }
 }
 
 pub fn time_weight_combine_inner(
@@ -292,7 +280,7 @@ fn time_weight_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<TimeWeightSummary<'static>> {
-    time_weight_final_inner(unsafe {state.to_inner()}, fcinfo)
+    time_weight_final_inner(unsafe { state.to_inner() }, fcinfo)
 }
 
 fn time_weight_final_inner(
@@ -307,45 +295,37 @@ fn time_weight_final_inner(
             };
             state.combine_summaries();
             debug_assert!(state.summary_buffer.len() <= 1);
-            state.summary_buffer.pop().map(|st| flatten!(TimeWeightSummary {
-                method: st.method,
-                first: st.first,
-                last: st.last,
-                weighted_sum: st.w_sum,
-            }))
+            state.summary_buffer.pop().map(|st| {
+                flatten!(TimeWeightSummary {
+                    method: st.method,
+                    first: st.first,
+                    last: st.last,
+                    weighted_sum: st.w_sum,
+                })
+            })
         })
     }
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_time_weight_first_val(
-    sketch: TimeWeightSummary,
-    _accessor: AccessorFirstVal,
-) -> f64 {
+pub fn arrow_time_weight_first_val(sketch: TimeWeightSummary, _accessor: AccessorFirstVal) -> f64 {
     time_weight_first_val(sketch)
 }
 
-#[pg_extern(name="first_val", strict, immutable, parallel_safe)]
-fn time_weight_first_val(
-    summary: TimeWeightSummary,
-)-> f64 {
+#[pg_extern(name = "first_val", strict, immutable, parallel_safe)]
+fn time_weight_first_val(summary: TimeWeightSummary) -> f64 {
     summary.first.val
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_time_weight_last_val(
-    sketch: TimeWeightSummary,
-    _accessor: AccessorLastVal,
-) -> f64 {
+pub fn arrow_time_weight_last_val(sketch: TimeWeightSummary, _accessor: AccessorLastVal) -> f64 {
     time_weight_last_val(sketch)
 }
 
-#[pg_extern(name="last_val", strict, immutable, parallel_safe)]
-fn time_weight_last_val(
-    summary: TimeWeightSummary,
-)-> f64 {
+#[pg_extern(name = "last_val", strict, immutable, parallel_safe)]
+fn time_weight_last_val(summary: TimeWeightSummary) -> f64 {
     summary.last.val
 }
 
@@ -358,10 +338,8 @@ pub fn arrow_time_weight_first_time(
     time_weight_first_time(sketch)
 }
 
-#[pg_extern(name="first_time", strict, immutable, parallel_safe)]
-fn time_weight_first_time(
-    summary: TimeWeightSummary,
-)-> crate::raw::TimestampTz {
+#[pg_extern(name = "first_time", strict, immutable, parallel_safe)]
+fn time_weight_first_time(summary: TimeWeightSummary) -> crate::raw::TimestampTz {
     summary.first.ts.into()
 }
 
@@ -374,14 +352,13 @@ pub fn arrow_time_weight_last_time(
     time_weight_last_time(sketch)
 }
 
-#[pg_extern(name="last_time", strict, immutable, parallel_safe)]
-fn time_weight_last_time(
-    summary: TimeWeightSummary,
-)-> crate::raw::TimestampTz {
+#[pg_extern(name = "last_time", strict, immutable, parallel_safe)]
+fn time_weight_last_time(summary: TimeWeightSummary) -> crate::raw::TimestampTz {
     summary.last.ts.into()
 }
 
-extension_sql!("\n\
+extension_sql!(
+    "\n\
     CREATE AGGREGATE time_weight(method text, ts timestamptz, value DOUBLE PRECISION)\n\
     (\n\
         sfunc = time_weight_trans,\n\
@@ -404,8 +381,15 @@ extension_sql!("\n\
         parallel = restricted\n\
     );\n\
 ",
-name = "time_weight_agg",
-requires = [time_weight_trans, time_weight_final, time_weight_combine, time_weight_trans_serialize, time_weight_trans_deserialize, time_weight_summary_trans],
+    name = "time_weight_agg",
+    requires = [
+        time_weight_trans,
+        time_weight_final,
+        time_weight_combine,
+        time_weight_trans_serialize,
+        time_weight_trans_deserialize,
+        time_weight_summary_trans
+    ],
 );
 
 #[pg_operator(immutable, parallel_safe)]
@@ -417,11 +401,8 @@ pub fn arrow_time_weighted_average_average(
     time_weighted_average_average(sketch)
 }
 
-
 #[pg_extern(immutable, parallel_safe, name = "average")]
-pub fn time_weighted_average_average(
-    tws: Option<TimeWeightSummary>,
-) -> Option<f64> {
+pub fn time_weighted_average_average(tws: Option<TimeWeightSummary>) -> Option<f64> {
     match tws {
         None => None,
         Some(tws) => match tws.internal().time_weighted_average() {
@@ -438,7 +419,12 @@ pub fn time_weighted_average_average(
     }
 }
 
-#[pg_extern(immutable, parallel_safe, name = "interpolated_average", schema = "toolkit_experimental")]
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "interpolated_average",
+    schema = "toolkit_experimental"
+)]
 pub fn time_weighted_average_interpolated_average(
     tws: Option<TimeWeightSummary>,
     start: crate::raw::TimestampTz,
@@ -460,8 +446,8 @@ pub fn time_weighted_average_interpolated_average(
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgx::*;
     use super::*;
+
     use pgx_macros::pg_test;
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {
@@ -475,7 +461,8 @@ mod tests {
     #[pg_test]
     fn test_time_weight_aggregate() {
         Spi::execute(|client| {
-            let stmt = "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION); SET TIME ZONE 'UTC'";
+            let stmt =
+                "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION); SET TIME ZONE 'UTC'";
             client.select(stmt, None, None);
 
             // add a couple points
@@ -558,7 +545,7 @@ mod tests {
             client.select(stmt, None, None);
 
             let linear_time_weight = "SELECT time_weight('Linear', ts, val)::TEXT FROM test";
-            let locf_time_weight =  "SELECT time_weight('LOCF', ts, val)::TEXT FROM test";
+            let locf_time_weight = "SELECT time_weight('LOCF', ts, val)::TEXT FROM test";
             let avg = |text: &str| format!("SELECT average('{}'::TimeWeightSummary)", text);
 
             // add a couple points
@@ -640,24 +627,67 @@ mod tests {
             use std::ptr;
             const BASE: i64 = 631152000000000;
             const MIN: i64 = 60000000;
-            let state = time_weight_trans_inner(None, "linear".to_string(), Some(BASE.into()), Some(10.0), ptr::null_mut());
-            let state = time_weight_trans_inner(state, "linear".to_string(), Some((BASE + MIN).into()), Some(20.0), ptr::null_mut());
-            let state = time_weight_trans_inner(state, "linear".to_string(), Some((BASE + 2 * MIN).into()), Some(30.0), ptr::null_mut());
-            let state = time_weight_trans_inner(state, "linear".to_string(), Some((BASE + 3 * MIN).into()), Some(10.0), ptr::null_mut());
-            let state = time_weight_trans_inner(state, "linear".to_string(), Some((BASE + 4 * MIN).into()), Some(20.0), ptr::null_mut());
-            let state = time_weight_trans_inner(state, "linear".to_string(), Some((BASE + 5 * MIN).into()), Some(30.0), ptr::null_mut());
+            let state = time_weight_trans_inner(
+                None,
+                "linear".to_string(),
+                Some(BASE.into()),
+                Some(10.0),
+                ptr::null_mut(),
+            );
+            let state = time_weight_trans_inner(
+                state,
+                "linear".to_string(),
+                Some((BASE + MIN).into()),
+                Some(20.0),
+                ptr::null_mut(),
+            );
+            let state = time_weight_trans_inner(
+                state,
+                "linear".to_string(),
+                Some((BASE + 2 * MIN).into()),
+                Some(30.0),
+                ptr::null_mut(),
+            );
+            let state = time_weight_trans_inner(
+                state,
+                "linear".to_string(),
+                Some((BASE + 3 * MIN).into()),
+                Some(10.0),
+                ptr::null_mut(),
+            );
+            let state = time_weight_trans_inner(
+                state,
+                "linear".to_string(),
+                Some((BASE + 4 * MIN).into()),
+                Some(20.0),
+                ptr::null_mut(),
+            );
+            let state = time_weight_trans_inner(
+                state,
+                "linear".to_string(),
+                Some((BASE + 5 * MIN).into()),
+                Some(30.0),
+                ptr::null_mut(),
+            );
 
             let mut control = state.unwrap();
-            let buffer = time_weight_trans_serialize(Inner::from(control.clone()).internal().unwrap());
+            let buffer =
+                time_weight_trans_serialize(Inner::from(control.clone()).internal().unwrap());
             let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
 
-            let expected = [1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 96, 194, 134, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 36, 64, 0, 3, 164, 152, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 62, 64, 0, 0, 0, 192, 11, 90, 246, 65];
+            let expected = [
+                1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 96, 194, 134, 7, 62, 2, 0,
+                0, 0, 0, 0, 0, 0, 36, 64, 0, 3, 164, 152, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 62, 64, 0,
+                0, 0, 192, 11, 90, 246, 65,
+            ];
             assert_eq!(buffer, expected);
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
-            let new_state = time_weight_trans_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
+            let new_state = time_weight_trans_deserialize_inner(bytea(
+                &*expected as *const pg_sys::varlena as _,
+            ));
 
-            control.combine_summaries();  // Serialized form is always combined
+            control.combine_summaries(); // Serialized form is always combined
             assert_eq!(&*new_state, &*control);
         }
     }
@@ -705,17 +735,17 @@ mod tests {
 
             // Day 1, 4 hours @ 10, 4 @ 40, 8 @ 20
             assert_eq!(
-                averages.next().unwrap()[1].value(), 
+                averages.next().unwrap()[1].value(),
                 Some((4. * 10. + 4. * 40. + 8. * 20.) / 16.)
             );
             // Day 2, 2 hours @ 20, 10 @ 15, 8 @ 50, 4 @ 25
             assert_eq!(
-                averages.next().unwrap()[1].value(), 
+                averages.next().unwrap()[1].value(),
                 Some((2. * 20. + 10. * 15. + 8. * 50. + 4. * 25.) / 24.)
             );
             // Day 3, 10 hours @ 25, 2 @ 30, 4 @ 0
             assert_eq!(
-                averages.next().unwrap()[1].value(), 
+                averages.next().unwrap()[1].value(),
                 Some((10. * 25. + 2. * 30.) / 16.)
             );
             assert!(averages.next().is_none());

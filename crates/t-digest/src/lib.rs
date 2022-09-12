@@ -961,7 +961,8 @@ mod tests {
             .iter()
             .chain(batch2.iter())
             .chain(batch3.iter())
-            .chain(batch4.iter()).copied()
+            .chain(batch4.iter())
+            .copied()
             .collect();
         master.sort_by(|a, b| a.partial_cmp(b).unwrap());
 

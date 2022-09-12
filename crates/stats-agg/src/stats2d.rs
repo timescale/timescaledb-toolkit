@@ -1,8 +1,8 @@
 // 2D stats are based on the Youngs-Cramer implementation in PG here:
 // https://github.com/postgres/postgres/blob/472e518a44eacd9caac7d618f1b6451672ca4481/src/backend/utils/adt/float.c#L3260
-use serde::{Deserialize, Serialize};
 use crate::{StatsError, XYPair, INV_FLOATING_ERROR_THRESHOLD, M3, M4};
 use flat_serialize_macro::FlatSerializable;
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize, FlatSerializable)]
 #[repr(C)]
@@ -21,7 +21,7 @@ pub struct StatsSummary2D {
 
 impl Default for StatsSummary2D {
     fn default() -> Self {
-       Self::new()
+        Self::new()
     }
 }
 
@@ -136,8 +136,16 @@ impl StatsSummary2D {
     }
     fn check_overflow(&self, old: &StatsSummary2D, p: XYPair) -> bool {
         //Only report overflow if we have finite inputs that lead to infinite results.
-        ((self.sx.is_infinite() || self.sx2.is_infinite() || self.sx3.is_infinite() || self.sx4.is_infinite()) && old.sx.is_finite() && p.x.is_finite())
-            || ((self.sy.is_infinite() || self.sy2.is_infinite() || self.sy3.is_infinite() || self.sy4.is_infinite())
+        ((self.sx.is_infinite()
+            || self.sx2.is_infinite()
+            || self.sx3.is_infinite()
+            || self.sx4.is_infinite())
+            && old.sx.is_finite()
+            && p.x.is_finite())
+            || ((self.sy.is_infinite()
+                || self.sy2.is_infinite()
+                || self.sy3.is_infinite()
+                || self.sy4.is_infinite())
                 && old.sy.is_finite()
                 && p.y.is_finite())
             || (self.sxy.is_infinite()
@@ -166,13 +174,15 @@ impl StatsSummary2D {
     // sum((x - Sx/n)(y - Sy/n)) = Sxy = Sxy_old + 1/(n * n_old) * (nx - Sx) * (ny - Sy)  -> Sxy_old = Sxy - 1/(n * n_old) * (nx - Sx) * (ny - Sy)
     pub fn remove(&self, p: XYPair) -> Option<Self> {
         // if we are trying to remove a nan/infinite input, it's time to recalculate.
-        if !p.x.is_finite() || !p.y.is_finite(){
+        if !p.x.is_finite() || !p.y.is_finite() {
             return None;
         }
         // if we are removing a value that is very large compared to the sum of the values that we're removing it from,
         // we should probably recalculate to avoid accumulating error. We might want a different test for this, if there
         // is a  way to calculate the error directly, that might be best...
-        if p.x / self.sx > INV_FLOATING_ERROR_THRESHOLD || p.y / self.sy > INV_FLOATING_ERROR_THRESHOLD{
+        if p.x / self.sx > INV_FLOATING_ERROR_THRESHOLD
+            || p.y / self.sy > INV_FLOATING_ERROR_THRESHOLD
+        {
             return None;
         }
 
@@ -265,12 +275,52 @@ impl StatsSummary2D {
             n,
             sx: self.sx + other.sx,
             sx2: self.sx2 + other.sx2 + self.n64() * other.n64() * tmpx * tmpx / n as f64,
-            sx3: M3::combine(self.n64(), other.n64(), self.sx, other.sx, self.sx2, other.sx2, self.sx3, other.sx3),
-            sx4: M4::combine(self.n64(), other.n64(), self.sx, other.sx, self.sx2, other.sx2, self.sx3, other.sx3, self.sx4, other.sx4),
+            sx3: M3::combine(
+                self.n64(),
+                other.n64(),
+                self.sx,
+                other.sx,
+                self.sx2,
+                other.sx2,
+                self.sx3,
+                other.sx3,
+            ),
+            sx4: M4::combine(
+                self.n64(),
+                other.n64(),
+                self.sx,
+                other.sx,
+                self.sx2,
+                other.sx2,
+                self.sx3,
+                other.sx3,
+                self.sx4,
+                other.sx4,
+            ),
             sy: self.sy + other.sy,
             sy2: self.sy2 + other.sy2 + self.n64() * other.n64() * tmpy * tmpy / n as f64,
-            sy3: M3::combine(self.n64(), other.n64(), self.sy, other.sy, self.sy2, other.sy2, self.sy3, other.sy3),
-            sy4: M4::combine(self.n64(), other.n64(), self.sy, other.sy, self.sy2, other.sy2, self.sy3, other.sy3, self.sy4, other.sy4),
+            sy3: M3::combine(
+                self.n64(),
+                other.n64(),
+                self.sy,
+                other.sy,
+                self.sy2,
+                other.sy2,
+                self.sy3,
+                other.sy3,
+            ),
+            sy4: M4::combine(
+                self.n64(),
+                other.n64(),
+                self.sy,
+                other.sy,
+                self.sy2,
+                other.sy2,
+                self.sy3,
+                other.sy3,
+                self.sy4,
+                other.sy4,
+            ),
             sxy: self.sxy + other.sxy + self.n64() * other.n64() * tmpx * tmpy / n as f64,
         };
         if r.has_infinite() && !self.has_infinite() && !other.has_infinite() {
@@ -283,21 +333,23 @@ impl StatsSummary2D {
     // for re-aggregation over a window, this is what will get called in tumbling window averages for instance.
     // As with any window function, returning None will cause a re-calculation, so we do that in several cases where either we're dealing with infinites or we have some potential problems with outlying sums
     // so here, self is the previously combined StatsSummary, and we're removing the input and returning the part that would have been there before.
-    pub fn remove_combined(&self, remove: StatsSummary2D) -> Option<Self>{
+    pub fn remove_combined(&self, remove: StatsSummary2D) -> Option<Self> {
         let combined = &self; // just to lessen confusion with naming
-        // handle the trivial n = 0 and equal n cases here, and don't worry about divide by zero errors later.
+                              // handle the trivial n = 0 and equal n cases here, and don't worry about divide by zero errors later.
         if combined.n == remove.n {
             return Some(StatsSummary2D::new());
-        }  else if remove.n == 0 {
+        } else if remove.n == 0 {
             return Some(*self);
         } else if combined.n < remove.n {
             panic!(); //  given that we're always removing things that we've previously added, we shouldn't be able to get a case where we're removing an n that's larger.
         }
         // if the sum we're removing is very large compared to the overall value we need to recalculate, see note on the remove function
-        if remove.sx / combined.sx > INV_FLOATING_ERROR_THRESHOLD || remove.sy / combined.sy > INV_FLOATING_ERROR_THRESHOLD {
+        if remove.sx / combined.sx > INV_FLOATING_ERROR_THRESHOLD
+            || remove.sy / combined.sy > INV_FLOATING_ERROR_THRESHOLD
+        {
             return None;
         }
-        let mut part = StatsSummary2D{
+        let mut part = StatsSummary2D {
             n: combined.n - remove.n,
             sx: combined.sx - remove.sx,
             sy: combined.sy - remove.sy,
@@ -311,16 +363,58 @@ impl StatsSummary2D {
         };
         let tmpx = part.sx / part.n64() - remove.sx / remove.n64(); //gets squared so order doesn't matter
         let tmpy = part.sy / part.n64() - remove.sy / remove.n64();
-        part.sx2 = combined.sx2 - remove.sx2 - part.n64() * remove.n64() * tmpx * tmpx / combined.n64();
-        part.sx3 = M3::remove_combined(part.n64(), remove.n64(), part.sx, remove.sx, part.sx2, remove.sx2, self.sx3, remove.sx3);
-        part.sx4 = M4::remove_combined(part.n64(), remove.n64(), part.sx, remove.sx, part.sx2, remove.sx2, part.sx3, remove.sx3, self.sx4, remove.sx4);
-        part.sy2 = combined.sy2 - remove.sy2 - part.n64() * remove.n64() * tmpy * tmpy / combined.n64();
-        part.sy3 = M3::remove_combined(part.n64(), remove.n64(), part.sy, remove.sy, part.sy2, remove.sy2, self.sy3, remove.sy3);
-        part.sy4 = M4::remove_combined(part.n64(), remove.n64(), part.sy, remove.sy, part.sy2, remove.sy2, part.sy3, remove.sy3, self.sy4, remove.sy4);
-        part.sxy = combined.sxy - remove.sxy - part.n64() * remove.n64() * tmpx * tmpy / combined.n64();
+        part.sx2 =
+            combined.sx2 - remove.sx2 - part.n64() * remove.n64() * tmpx * tmpx / combined.n64();
+        part.sx3 = M3::remove_combined(
+            part.n64(),
+            remove.n64(),
+            part.sx,
+            remove.sx,
+            part.sx2,
+            remove.sx2,
+            self.sx3,
+            remove.sx3,
+        );
+        part.sx4 = M4::remove_combined(
+            part.n64(),
+            remove.n64(),
+            part.sx,
+            remove.sx,
+            part.sx2,
+            remove.sx2,
+            part.sx3,
+            remove.sx3,
+            self.sx4,
+            remove.sx4,
+        );
+        part.sy2 =
+            combined.sy2 - remove.sy2 - part.n64() * remove.n64() * tmpy * tmpy / combined.n64();
+        part.sy3 = M3::remove_combined(
+            part.n64(),
+            remove.n64(),
+            part.sy,
+            remove.sy,
+            part.sy2,
+            remove.sy2,
+            self.sy3,
+            remove.sy3,
+        );
+        part.sy4 = M4::remove_combined(
+            part.n64(),
+            remove.n64(),
+            part.sy,
+            remove.sy,
+            part.sy2,
+            remove.sy2,
+            part.sy3,
+            remove.sy3,
+            self.sy4,
+            remove.sy4,
+        );
+        part.sxy =
+            combined.sxy - remove.sxy - part.n64() * remove.n64() * tmpx * tmpy / combined.n64();
         Some(part)
     }
-
 
     /// offsets all values accumulated in a StatsSummary2D by a given amount in X & Y. This
     /// only works if all values are offset by that amount. This is used for allowing
@@ -332,21 +426,20 @@ impl StatsSummary2D {
     // unaffected because they rely on the expression (Y-Sy/N), (and analogous for the X values) which is basically each value subtracted from the
     // average of all values and if all values are shifted by a constant, then the average shifts by the same constant so it cancels out:
     // i.e. If a constant C is added to each Y, then (Y-Sy/N) reduces back to itself as follows:
-        //(Y + C) - (Sy + NC)/N
-        // Y + C - Sy/N - NC/N
-        // Y + C - Sy/N - C
-        // Y - Sy/N
+    //(Y + C) - (Sy + NC)/N
+    // Y + C - Sy/N - NC/N
+    // Y + C - Sy/N - C
+    // Y - Sy/N
     pub fn offset(&mut self, offset: XYPair) -> Result<(), StatsError> {
         self.sx += self.n64() * offset.x;
         self.sy += self.n64() * offset.y;
-        if self.has_infinite() && offset.x.is_finite() && offset.y.is_finite(){
+        if self.has_infinite() && offset.x.is_finite() && offset.y.is_finite() {
             return Err(StatsError::DoubleOverflow);
         }
         Ok(())
     }
 
     //TODO: Add tests for offsets
-
 
     ///returns the sum of squares of both the independent (x) and dependent (y) variables
     ///as an XYPair, where the sum of squares is defined as: sum(x^2) - sum(x)^2 / n)
@@ -553,7 +646,7 @@ impl StatsSummary2D {
     pub fn x_intercept(&self) -> Option<f64> {
         // vertical line does have an x intercept
         if self.n > 1 && self.sx2 == 0.0 {
-            return Some(self.sx / self.n64())
+            return Some(self.sx / self.n64());
         }
         // horizontal lines have no x intercepts
         if self.sy2 == 0.0 {
@@ -611,18 +704,27 @@ impl StatsSummary2D {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
-    fn test_linear(){
-        let p = StatsSummary2D::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
+    fn test_linear() {
+        let p = StatsSummary2D::new_from_vec(vec![
+            XYPair { y: 2.0, x: 1.0 },
+            XYPair { y: 4.0, x: 2.0 },
+            XYPair { y: 6.0, x: 3.0 },
+        ])
+        .unwrap();
         assert_eq!(p.slope().unwrap(), 2.0);
         assert_eq!(p.intercept().unwrap(), 0.0);
         assert_eq!(p.x_intercept().unwrap(), 0.0);
 
-        let p = StatsSummary2D::new_from_vec(vec![XYPair{y:2.0, x:2.0,}, XYPair{y:4.0, x:3.0,}, XYPair{y:6.0, x:4.0,}]).unwrap();
+        let p = StatsSummary2D::new_from_vec(vec![
+            XYPair { y: 2.0, x: 2.0 },
+            XYPair { y: 4.0, x: 3.0 },
+            XYPair { y: 6.0, x: 4.0 },
+        ])
+        .unwrap();
         assert_eq!(p.slope().unwrap(), 2.0);
         assert_eq!(p.intercept().unwrap(), -2.0);
         assert_eq!(p.x_intercept().unwrap(), 1.0);
@@ -633,17 +735,25 @@ mod tests {
         assert_eq!(p.intercept(), None);
         assert_eq!(p.x_intercept(), None);
         // singleton
-        let p = StatsSummary2D::new_from_vec(vec![XYPair{y:2.0, x:2.0,}, ]).unwrap();
+        let p = StatsSummary2D::new_from_vec(vec![XYPair { y: 2.0, x: 2.0 }]).unwrap();
         assert_eq!(p.slope(), None);
         assert_eq!(p.intercept(), None);
         assert_eq!(p.x_intercept(), None);
         //vertical
-        let p = StatsSummary2D::new_from_vec(vec![XYPair{y:2.0, x:2.0,}, XYPair{y:4.0, x:2.0,},]).unwrap();
+        let p = StatsSummary2D::new_from_vec(vec![
+            XYPair { y: 2.0, x: 2.0 },
+            XYPair { y: 4.0, x: 2.0 },
+        ])
+        .unwrap();
         assert_eq!(p.slope(), None);
         assert_eq!(p.intercept(), None);
         assert_eq!(p.x_intercept().unwrap(), 2.0);
         //horizontal
-        let p = StatsSummary2D::new_from_vec(vec![XYPair{y:2.0, x:2.0,}, XYPair{y:2.0, x:4.0,},]).unwrap();
+        let p = StatsSummary2D::new_from_vec(vec![
+            XYPair { y: 2.0, x: 2.0 },
+            XYPair { y: 2.0, x: 4.0 },
+        ])
+        .unwrap();
         assert_eq!(p.slope().unwrap(), 0.0);
         assert_eq!(p.intercept().unwrap(), 2.0);
         assert_eq!(p.x_intercept(), None);

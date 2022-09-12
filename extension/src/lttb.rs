@@ -95,15 +95,16 @@ pub fn lttb_final_inner(
     }
 }
 
-extension_sql!("\n\
+extension_sql!(
+    "\n\
 CREATE AGGREGATE lttb(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution integer) (\n\
     sfunc = lttb_trans,\n\
     stype = internal,\n\
     finalfunc = lttb_final\n\
 );\n\
 ",
-name = "lttb_agg",
-requires = [lttb_trans, lttb_final],
+    name = "lttb_agg",
+    requires = [lttb_trans, lttb_final],
 );
 
 // based on https://github.com/jeromefroe/lttb-rs version 0.2.0
@@ -181,11 +182,7 @@ pub fn lttb(data: &[TSPoint], threshold: usize) -> Cow<'_, [TSPoint]> {
     Cow::Owned(sampled)
 }
 
-#[pg_extern(
-    name = "lttb",
-    immutable,
-    parallel_safe
-)]
+#[pg_extern(name = "lttb", immutable, parallel_safe)]
 pub fn lttb_on_timevector(
     series: Timevector_TSTZ_F64<'static>,
     threshold: i32,
@@ -194,10 +191,7 @@ pub fn lttb_on_timevector(
 }
 
 // based on https://github.com/jeromefroe/lttb-rs version 0.2.0
-pub fn lttb_ts(
-    data: Timevector_TSTZ_F64,
-    threshold: usize,
-) -> Timevector_TSTZ_F64 {
+pub fn lttb_ts(data: Timevector_TSTZ_F64, threshold: usize) -> Timevector_TSTZ_F64 {
     if !data.is_sorted() {
         panic!("lttb requires sorted timevector");
     }
@@ -363,13 +357,31 @@ mod tests {
                     ('2020-1-9'::timestamptz, 23),
                     ('2020-1-10'::timestamptz, 27),
                     ('2020-1-11'::timestamptz, 14)
-                ) AS v(ts, val)"#, None, None);
+                ) AS v(ts, val)"#,
+                None,
+                None,
+            );
 
-            assert_eq!(result.next().unwrap()[1].value(), Some("(\"2020-01-01 00:00:00+00\",10)"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(\"2020-01-04 00:00:00+00\",32)"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(\"2020-01-05 00:00:00+00\",12)"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(\"2020-01-08 00:00:00+00\",29)"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(\"2020-01-11 00:00:00+00\",14)"));
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(\"2020-01-01 00:00:00+00\",10)")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(\"2020-01-04 00:00:00+00\",32)")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(\"2020-01-05 00:00:00+00\",12)")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(\"2020-01-08 00:00:00+00\",29)")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(\"2020-01-11 00:00:00+00\",14)")
+            );
             assert!(result.next().is_none());
         })
     }

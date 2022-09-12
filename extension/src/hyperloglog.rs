@@ -1,8 +1,6 @@
 #![allow(clippy::identity_op)] // clippy gets confused by flat_serialize! enums
 
-use std::{
-    convert::TryInto,
-};
+use std::convert::TryInto;
 
 use serde::{Deserialize, Serialize};
 
@@ -13,9 +11,9 @@ use crate::{
     accessors::{AccessorDistinctCount, AccessorStderror},
     aggregate_utils::{get_collation, in_aggregate_context},
     datum_utils::DatumHashBuilder,
-    flatten, ron_inout_funcs,
-    palloc::{Internal, InternalAsValue, Inner, ToInternal},
-    pg_type,
+    flatten,
+    palloc::{Inner, Internal, InternalAsValue, ToInternal},
+    pg_type, ron_inout_funcs,
     serialization::{PgCollationId, ShortTypeId},
 };
 
@@ -37,20 +35,16 @@ pub fn hyperloglog_trans(
     fc: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     // let state: Internal = Internal::from_datum();
-    hyperloglog_trans_inner(
-        unsafe { state.to_inner() },
-        size,
-        value,
-        fc,
-        unsafe { pgx::get_getarg_type(fc, 2) },
-    )
+    hyperloglog_trans_inner(unsafe { state.to_inner() }, size, value, fc, unsafe {
+        pgx::get_getarg_type(fc, 2)
+    })
     .internal()
 }
 
 const APPROX_COUNT_DISTINCT_DEFAULT_SIZE: i32 = 32768;
 
 /// Similar to hyperloglog_trans(), except size is set to a default of 32,768
-#[pg_extern(immutable, parallel_safe,schema = "toolkit_experimental")]
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn approx_count_distinct_trans(
     state: Internal,
     // TODO we want to use crate::raw::AnyElement but it doesn't work for some reason...
@@ -73,7 +67,7 @@ pub fn hyperloglog_trans_inner(
     size: i32,
     value: Option<AnyElement>,
     fc: pg_sys::FunctionCallInfo,
-    arg_type: pg_sys::Oid
+    arg_type: pg_sys::Oid,
 ) -> Option<Inner<HyperLogLogTrans>> {
     unsafe {
         in_aggregate_context(fc, || {
@@ -90,9 +84,12 @@ pub fn hyperloglog_trans_inner(
                     let b = size.checked_next_power_of_two().unwrap().trailing_zeros();
 
                     if !(4..=18).contains(&b) {
-                        error!("Invalid value for size {}. \
+                        error!(
+                            "Invalid value for size {}. \
                             Size must be between 16 and 262144, \
-                            though less than 1024 not recommended", size)
+                            though less than 1024 not recommended",
+                            size
+                        )
                     }
 
                     let typ = arg_type;
@@ -117,9 +114,7 @@ pub fn hyperloglog_combine(
     state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    unsafe {
-        hyperloglog_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
-    }
+    unsafe { hyperloglog_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal() }
 }
 pub fn hyperloglog_combine_inner(
     state1: Option<Inner<HyperLogLogTrans>>,
@@ -150,15 +145,10 @@ pub fn hyperloglog_serialize(state: Internal) -> bytea {
 }
 
 #[pg_extern(strict, immutable, parallel_safe)]
-pub fn hyperloglog_deserialize(
-    bytes: bytea,
-    _internal: Internal,
-) -> Option<Internal> {
+pub fn hyperloglog_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
     hyperloglog_deserialize_inner(bytes).internal()
 }
-pub fn hyperloglog_deserialize_inner(
-    bytes: bytea,
-) -> Inner<HyperLogLogTrans> {
+pub fn hyperloglog_deserialize_inner(bytes: bytea) -> Inner<HyperLogLogTrans> {
     let i: HyperLogLogTrans = crate::do_deserialize!(bytes, HyperLogLogTrans);
     i.into()
 }
@@ -205,7 +195,7 @@ fn hyperloglog_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<HyperLogLog<'static>> {
-    hyperloglog_final_inner(unsafe{ state.to_inner() }, fcinfo)
+    hyperloglog_final_inner(unsafe { state.to_inner() }, fcinfo)
 }
 fn hyperloglog_final_inner(
     state: Option<Inner<HyperLogLogTrans>>,
@@ -223,7 +213,8 @@ fn hyperloglog_final_inner(
     }
 }
 
-extension_sql!("\n\
+extension_sql!(
+    "\n\
     CREATE AGGREGATE hyperloglog(size integer, value AnyElement)\n\
     (\n\
         stype = internal,\n\
@@ -235,11 +226,18 @@ extension_sql!("\n\
         parallel = safe\n\
     );\n\
 ",
-name = "hll_agg",
-requires = [hyperloglog_trans, hyperloglog_final, hyperloglog_combine, hyperloglog_serialize, hyperloglog_deserialize],
+    name = "hll_agg",
+    requires = [
+        hyperloglog_trans,
+        hyperloglog_final,
+        hyperloglog_combine,
+        hyperloglog_serialize,
+        hyperloglog_deserialize
+    ],
 );
 
-extension_sql!("\n\
+extension_sql!(
+    "\n\
     CREATE AGGREGATE toolkit_experimental.approx_count_distinct(value AnyElement)\n\
     (\n\
         stype = internal,\n\
@@ -251,8 +249,14 @@ extension_sql!("\n\
         parallel = safe\n\
     );\n\
 ",
-name = "approx_count_distinct_agg",
-requires = [approx_count_distinct_trans, hyperloglog_final, hyperloglog_combine, hyperloglog_serialize, hyperloglog_deserialize],
+    name = "approx_count_distinct_agg",
+    requires = [
+        approx_count_distinct_trans,
+        hyperloglog_final,
+        hyperloglog_combine,
+        hyperloglog_serialize,
+        hyperloglog_deserialize
+    ],
 );
 
 #[pg_extern(immutable, parallel_safe)]
@@ -261,7 +265,7 @@ pub fn hyperloglog_union(
     other: HyperLogLog,
     fc: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    hyperloglog_union_inner(unsafe{ state.to_inner() }, other, fc).internal()
+    hyperloglog_union_inner(unsafe { state.to_inner() }, other, fc).internal()
 }
 pub fn hyperloglog_union_inner(
     state: Option<Inner<HyperLogLogTrans>>,
@@ -276,8 +280,8 @@ pub fn hyperloglog_union_inner(
                     let state = HyperLogLogTrans {
                         logger: unflatten_log(other).into_owned(),
                     };
-                    return Some(state.into())
-                },
+                    return Some(state.into());
+                }
             };
             let other = unflatten_log(other);
             if state.logger.buildhasher.type_id != other.buildhasher.type_id {
@@ -290,7 +294,8 @@ pub fn hyperloglog_union_inner(
     }
 }
 
-extension_sql!("\n\
+extension_sql!(
+    "\n\
     CREATE AGGREGATE rollup(hyperloglog Hyperloglog)\n\
     (\n\
         stype = internal,\n\
@@ -302,49 +307,51 @@ extension_sql!("\n\
         parallel = safe\n\
     );\n\
 ",
-name = "hll_rollup",
-requires = [hyperloglog_union, hyperloglog_final, hyperloglog_combine, hyperloglog_serialize, hyperloglog_deserialize],
+    name = "hll_rollup",
+    requires = [
+        hyperloglog_union,
+        hyperloglog_final,
+        hyperloglog_combine,
+        hyperloglog_serialize,
+        hyperloglog_deserialize
+    ],
 );
-
-
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_hyperloglog_count(
-    sketch: HyperLogLog,
-    _accessor: AccessorDistinctCount,
-) -> i64 {
+pub fn arrow_hyperloglog_count(sketch: HyperLogLog, _accessor: AccessorDistinctCount) -> i64 {
     hyperloglog_count(sketch)
 }
 
-#[pg_extern(name="distinct_count", immutable, parallel_safe)]
-pub fn hyperloglog_count(
-    hyperloglog: HyperLogLog
-) -> i64 {
+#[pg_extern(name = "distinct_count", immutable, parallel_safe)]
+pub fn hyperloglog_count(hyperloglog: HyperLogLog) -> i64 {
     // count does not depend on the type parameters
     let log = match &hyperloglog.log {
-        Storage::Sparse { num_compressed, precision, compressed, .. } =>
-            HLL::<Datum, ()>::from_sparse_parts(compressed.slice(), *num_compressed, *precision, ()),
-        Storage::Dense { precision, registers, .. } =>
-        HLL::<Datum, ()>::from_dense_parts(registers.slice(), *precision, ()),
+        Storage::Sparse {
+            num_compressed,
+            precision,
+            compressed,
+            ..
+        } => {
+            HLL::<Datum, ()>::from_sparse_parts(compressed.slice(), *num_compressed, *precision, ())
+        }
+        Storage::Dense {
+            precision,
+            registers,
+            ..
+        } => HLL::<Datum, ()>::from_dense_parts(registers.slice(), *precision, ()),
     };
     log.immutable_estimate_count() as i64
 }
 
-
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_hyperloglog_error(
-    sketch: HyperLogLog,
-    _accessor: AccessorStderror,
-) -> f64 {
+pub fn arrow_hyperloglog_error(sketch: HyperLogLog, _accessor: AccessorStderror) -> f64 {
     hyperloglog_error(sketch)
 }
 
-#[pg_extern(name="stderror", immutable, parallel_safe)]
-pub fn hyperloglog_error(
-    hyperloglog: HyperLogLog
-) -> f64 {
+#[pg_extern(name = "stderror", immutable, parallel_safe)]
+pub fn hyperloglog_error(hyperloglog: HyperLogLog) -> f64 {
     let precision = match hyperloglog.log {
         Storage::Sparse { precision, .. } => precision,
         Storage::Dense { precision, .. } => precision,
@@ -353,10 +360,18 @@ pub fn hyperloglog_error(
 }
 
 impl HyperLogLog<'_> {
-    pub fn build_from(size: i32, type_id: Oid, collation: Option<Oid>, data: impl Iterator<Item=pg_sys::Datum>)
-    -> HyperLogLog<'static> {
+    pub fn build_from(
+        size: i32,
+        type_id: Oid,
+        collation: Option<Oid>,
+        data: impl Iterator<Item = pg_sys::Datum>,
+    ) -> HyperLogLog<'static> {
         unsafe {
-            let b = TryInto::<usize>::try_into(size).unwrap().checked_next_power_of_two().unwrap().trailing_zeros();
+            let b = TryInto::<usize>::try_into(size)
+                .unwrap()
+                .checked_next_power_of_two()
+                .unwrap()
+                .trailing_zeros();
             let hasher = DatumHashBuilder::from_type_id(type_id, collation);
             let mut logger: HLL<pg_sys::Datum, DatumHashBuilder> = HLL::new(b as u8, hasher);
 
@@ -369,8 +384,7 @@ impl HyperLogLog<'_> {
     }
 }
 
-fn flatten_log(hyperloglog: &mut HLL<Datum, DatumHashBuilder>)
--> HyperLogLog<'static> {
+fn flatten_log(hyperloglog: &mut HLL<Datum, DatumHashBuilder>) -> HyperLogLog<'static> {
     let (element_type, collation) = {
         let hasher = &hyperloglog.buildhasher;
         (ShortTypeId(hasher.type_id), PgCollationId(hasher.collation))
@@ -415,27 +429,31 @@ fn unflatten_log(hyperloglog: HyperLogLog) -> HLL<Datum, DatumHashBuilder> {
             compressed,
             element_type,
             collation,
-            compressed_bytes: _
+            compressed_bytes: _,
         } => HLL::<Datum, DatumHashBuilder>::from_sparse_parts(
             compressed.slice(),
             *num_compressed,
             *precision,
-            unsafe { DatumHashBuilder::from_type_id(element_type.0, Some(collation.0)) }
+            unsafe { DatumHashBuilder::from_type_id(element_type.0, Some(collation.0)) },
         ),
-        Storage::Dense { precision, registers, element_type, collation  } =>
-            HLL::<Datum, DatumHashBuilder>::from_dense_parts(
-                registers.slice(),
-                *precision,
-                unsafe { DatumHashBuilder::from_type_id(element_type.0, Some(collation.0)) }
-            ),
+        Storage::Dense {
+            precision,
+            registers,
+            element_type,
+            collation,
+        } => HLL::<Datum, DatumHashBuilder>::from_dense_parts(
+            registers.slice(),
+            *precision,
+            unsafe { DatumHashBuilder::from_type_id(element_type.0, Some(collation.0)) },
+        ),
     }
 }
 
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgx::*;
     use super::*;
+
     use pgx_macros::pg_test;
 
     #[pg_test]
@@ -467,12 +485,16 @@ mod tests {
             assert_eq!(text.unwrap(), expected);
 
             let (count, arrow_count) = client
-                .select("SELECT \
+                .select(
+                    "SELECT \
                     distinct_count(\
                         hyperloglog(32, v::float)\
                     ), \
                     hyperloglog(32, v::float) -> distinct_count() \
-                    FROM generate_series(1, 100) v", None, None)
+                    FROM generate_series(1, 100) v",
+                    None,
+                    None,
+                )
                 .first()
                 .get_two::<i32, i32>();
             assert_eq!(count, Some(132));
@@ -480,10 +502,7 @@ mod tests {
 
             let count2 = client
                 .select(
-                    &format!(
-                        "SELECT distinct_count('{}')",
-                        expected
-                    ),
+                    &format!("SELECT distinct_count('{}')", expected),
                     None,
                     None,
                 )
@@ -541,12 +560,16 @@ mod tests {
             assert_eq!(text.unwrap(), expected);
 
             let (count, arrow_count) = client
-                .select("SELECT \
+                .select(
+                    "SELECT \
                     distinct_count(\
                         toolkit_experimental.approx_count_distinct(v::float)\
                     ), \
                     toolkit_experimental.approx_count_distinct(v::float) -> distinct_count() \
-                    FROM generate_series(1, 100) v", None, None)
+                    FROM generate_series(1, 100) v",
+                    None,
+                    None,
+                )
                 .first()
                 .get_two::<i32, i32>();
             assert_eq!(count, Some(100));
@@ -554,10 +577,7 @@ mod tests {
 
             let count2 = client
                 .select(
-                    &format!(
-                        "SELECT distinct_count('{}')",
-                        expected
-                    ),
+                    &format!("SELECT distinct_count('{}')", expected),
                     None,
                     None,
                 )
@@ -577,39 +597,61 @@ mod tests {
             let mut control = HyperLogLogTrans {
                 logger: HLL::new(6, hasher),
             };
-            control.logger.add(&rust_str_to_text_p("first").into_datum().unwrap());
-            control.logger.add(&rust_str_to_text_p("second").into_datum().unwrap());
-            control.logger.add(&rust_str_to_text_p("first").into_datum().unwrap());
-            control.logger.add(&rust_str_to_text_p("second").into_datum().unwrap());
-            control.logger.add(&rust_str_to_text_p("third").into_datum().unwrap());
+            control
+                .logger
+                .add(&rust_str_to_text_p("first").into_datum().unwrap());
+            control
+                .logger
+                .add(&rust_str_to_text_p("second").into_datum().unwrap());
+            control
+                .logger
+                .add(&rust_str_to_text_p("first").into_datum().unwrap());
+            control
+                .logger
+                .add(&rust_str_to_text_p("second").into_datum().unwrap());
+            control
+                .logger
+                .add(&rust_str_to_text_p("third").into_datum().unwrap());
 
             let buffer = hyperloglog_serialize(Inner::from(control.clone()).internal().unwrap());
             let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
 
-            let mut expected = vec![1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 136, 136, 9, 7, 8, 74, 76, 47, 200, 231, 53, 25, 3, 0, 0, 0, 0, 0, 0, 0, 6, 9, 0, 0, 0, 1];
+            let mut expected = vec![
+                1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 136, 136, 9, 7,
+                8, 74, 76, 47, 200, 231, 53, 25, 3, 0, 0, 0, 0, 0, 0, 0, 6, 9, 0, 0, 0, 1,
+            ];
             bincode::serialize_into(&mut expected, &PgCollationId(100)).unwrap();
             assert_eq!(buffer, expected);
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
-            let new_state = hyperloglog_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
+            let new_state =
+                hyperloglog_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
 
-            control.logger.merge_all();  // Sparse representation buffers always merged on serialization
+            control.logger.merge_all(); // Sparse representation buffers always merged on serialization
             assert!(*new_state == control);
 
             // Now generate a dense represenataion and validate that
             for i in 0..500 {
-                control.logger.add(&rust_str_to_text_p(&i.to_string()).into_datum().unwrap());
+                control
+                    .logger
+                    .add(&rust_str_to_text_p(&i.to_string()).into_datum().unwrap());
             }
 
             let buffer = hyperloglog_serialize(Inner::from(control.clone()).internal().unwrap());
             let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
 
-            let mut expected = vec![1, 1, 1, 0, 0, 0, 49, 0, 0, 0, 0, 0, 0, 0, 20, 65, 2, 12, 48, 199, 20, 33, 4, 12, 49, 67, 16, 81, 66, 32, 145, 131, 24, 49, 4, 20, 33, 5, 8, 81, 66, 12, 81, 4, 8, 49, 2, 8, 65, 131, 24, 32, 133, 12, 50, 66, 12, 48, 197, 12, 81, 130, 255, 58, 6, 255, 255, 255, 255, 255, 255, 255, 3, 9, 0, 0, 0, 1];
+            let mut expected = vec![
+                1, 1, 1, 0, 0, 0, 49, 0, 0, 0, 0, 0, 0, 0, 20, 65, 2, 12, 48, 199, 20, 33, 4, 12,
+                49, 67, 16, 81, 66, 32, 145, 131, 24, 49, 4, 20, 33, 5, 8, 81, 66, 12, 81, 4, 8,
+                49, 2, 8, 65, 131, 24, 32, 133, 12, 50, 66, 12, 48, 197, 12, 81, 130, 255, 58, 6,
+                255, 255, 255, 255, 255, 255, 255, 3, 9, 0, 0, 0, 1,
+            ];
             bincode::serialize_into(&mut expected, &PgCollationId(100)).unwrap();
             assert_eq!(buffer, expected);
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
-            let new_state = hyperloglog_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
+            let new_state =
+                hyperloglog_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
 
             assert!(*new_state == control);
         }
@@ -643,10 +685,14 @@ mod tests {
             assert_eq!(text.unwrap(), expected);
 
             let count = client
-                .select("SELECT \
+                .select(
+                    "SELECT \
                 distinct_count(\
                     hyperloglog(32, v::int)\
-                ) FROM generate_series(1, 100) v", None, None)
+                ) FROM generate_series(1, 100) v",
+                    None,
+                    None,
+                )
                 .first()
                 .get_one::<i32>();
             assert_eq!(count, Some(96));
@@ -680,7 +726,8 @@ mod tests {
                 .get_one::<String>();
 
             let default_collation = ron::to_string(&PgCollationId(100)).unwrap();
-            let expected = format!("(\
+            let expected = format!(
+                "(\
                 version:1,\
                 log:Dense(\
                     element_type:TEXT,\
@@ -691,13 +738,19 @@ mod tests {
                         128,8,33,4,8,32,197,255\
                     ]\
                 )\
-            )", default_collation);
+            )",
+                default_collation
+            );
             assert_eq!(text.unwrap(), expected);
 
             let count = client
-                .select("SELECT distinct_count(\
+                .select(
+                    "SELECT distinct_count(\
                     hyperloglog(32, v::text)\
-                ) FROM generate_series(1, 100) v", None, None)
+                ) FROM generate_series(1, 100) v",
+                    None,
+                    None,
+                )
                 .first()
                 .get_one::<i32>();
             assert_eq!(count, Some(111));
@@ -752,8 +805,7 @@ mod tests {
 
             {
                 // differing unions should be a sum of the distinct counts
-                let query =
-                    "SELECT distinct_count(rollup(logs)) \
+                let query = "SELECT distinct_count(rollup(logs)) \
                     FROM (\
                         (SELECT hyperloglog(32, v::text) logs \
                          FROM generate_series(1, 100) v) \
@@ -761,18 +813,10 @@ mod tests {
                         (SELECT hyperloglog(32, v::text) \
                          FROM generate_series(50, 150) v)\
                     ) q";
-                let count = client
-                    .select(
-                        query,
-                        None,
-                        None,
-                    )
-                    .first()
-                    .get_one::<i64>();
+                let count = client.select(query, None, None).first().get_one::<i64>();
 
                 assert_eq!(count, Some(152));
             }
-
         });
     }
 
@@ -780,17 +824,12 @@ mod tests {
     fn test_hll_null_input_yields_null_output() {
         Spi::execute(|client| {
             let output = client
-                .select(
-                    "SELECT hyperloglog(32, null::int)::TEXT",
-                    None,
-                    None,
-                )
+                .select("SELECT hyperloglog(32, null::int)::TEXT", None, None)
                 .first()
                 .get_one::<String>();
             assert_eq!(output, None)
         })
     }
-
 
     // FIXME these tests don't run on CI
     // #[pg_test(error = "Invalid value for size 2. Size must be between 16 and 262144, though less than 1024 not recommended")]
@@ -812,11 +851,7 @@ mod tests {
     fn test_hll_size_min() {
         Spi::execute(|client| {
             let output = client
-                .select(
-                    "SELECT hyperloglog(16, 'foo'::text)::TEXT",
-                    None,
-                    None,
-                )
+                .select("SELECT hyperloglog(16, 'foo'::text)::TEXT", None, None)
                 .first()
                 .get_one::<String>();
             assert!(output.is_some())
@@ -827,11 +862,7 @@ mod tests {
     fn test_hll_size_max() {
         Spi::execute(|client| {
             let output = client
-                .select(
-                    "SELECT hyperloglog(262144, 'foo'::text)::TEXT",
-                    None,
-                    None,
-                )
+                .select("SELECT hyperloglog(262144, 'foo'::text)::TEXT", None, None)
                 .first()
                 .get_one::<String>();
             assert!(output.is_some())
@@ -842,12 +873,16 @@ mod tests {
     fn stderror_arrow_match() {
         Spi::execute(|client| {
             let (count, arrow_count) = client
-                .select("SELECT \
+                .select(
+                    "SELECT \
                     stderror(\
                         hyperloglog(32, v::float)\
                     ), \
                     hyperloglog(32, v::float) -> stderror() \
-                    FROM generate_series(1, 100) v", None, None)
+                    FROM generate_series(1, 100) v",
+                    None,
+                    None,
+                )
                 .first()
                 .get_two::<i32, i32>();
             assert_eq!(Some(-788581389), count);

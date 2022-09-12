@@ -2,11 +2,12 @@
 
 use pgx::*;
 
-extension_sql!("\n\
+extension_sql!(
+    "\n\
         CREATE SCHEMA toolkit_experimental;\n\
     ",
     name = "create_experimental_schema",
-    creates=[
+    creates = [
         Type(bytea),
         Type(text),
         Type(TimestampTz),
@@ -25,11 +26,16 @@ macro_rules! raw_type {
         impl FromDatum for $name {
             const NEEDS_TYPID: bool = false;
 
-            unsafe fn from_datum(datum: pg_sys::Datum, is_null: bool, _typoid: pg_sys::Oid) -> Option<Self>
+            unsafe fn from_datum(
+                datum: pg_sys::Datum,
+                is_null: bool,
+                _typoid: pg_sys::Oid,
+            ) -> Option<Self>
             where
-                Self: Sized {
+                Self: Sized,
+            {
                 if is_null {
-                    return None
+                    return None;
                 }
                 Some(Self(datum))
             }
@@ -58,7 +64,7 @@ macro_rules! raw_type {
                 v.0
             }
         }
-    }
+    };
 }
 
 #[derive(Clone, Copy)]
@@ -73,7 +79,11 @@ raw_type!(text, pg_sys::TEXTOID, pg_sys::TEXTARRAYOID);
 
 pub struct TimestampTz(pub pg_sys::Datum);
 
-raw_type!(TimestampTz, pg_sys::TIMESTAMPTZOID, pg_sys::TIMESTAMPTZARRAYOID);
+raw_type!(
+    TimestampTz,
+    pg_sys::TIMESTAMPTZOID,
+    pg_sys::TIMESTAMPTZARRAYOID
+);
 
 impl From<TimestampTz> for pg_sys::TimestampTz {
     fn from(tstz: TimestampTz) -> Self {

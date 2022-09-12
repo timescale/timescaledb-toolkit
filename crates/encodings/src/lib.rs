@@ -1,4 +1,3 @@
-
 pub mod delta {
     use crate::zigzag;
 
@@ -48,9 +47,14 @@ pub mod delta {
         #[quickcheck]
         fn quick_test_roundtrip_u64(values: Vec<u64>) -> bool {
             let mut bytes = vec![];
-            crate::prefix_varint::compress_u64s_to_vec(&mut bytes, values.iter().cloned().map(u64_encoder()));
+            crate::prefix_varint::compress_u64s_to_vec(
+                &mut bytes,
+                values.iter().cloned().map(u64_encoder()),
+            );
 
-            let output: Vec<u64> = crate::prefix_varint::u64_decompressor(&bytes).map(u64_decoder()).collect();
+            let output: Vec<u64> = crate::prefix_varint::u64_decompressor(&bytes)
+                .map(u64_decoder())
+                .collect();
             assert_eq!(values, output);
             true
         }
@@ -58,9 +62,14 @@ pub mod delta {
         #[quickcheck]
         fn quick_test_roundtrip_i64(values: Vec<i64>) -> bool {
             let mut bytes = vec![];
-            crate::prefix_varint::compress_i64s_to_vec(&mut bytes, values.iter().cloned().map(i64_encoder()));
+            crate::prefix_varint::compress_i64s_to_vec(
+                &mut bytes,
+                values.iter().cloned().map(i64_encoder()),
+            );
 
-            let output: Vec<i64> = crate::prefix_varint::i64_decompressor(&bytes).map(i64_decoder()).collect();
+            let output: Vec<i64> = crate::prefix_varint::i64_decompressor(&bytes)
+                .map(i64_decoder())
+                .collect();
             assert_eq!(values, output);
             true
         }
@@ -114,7 +123,7 @@ pub mod prefix_varint {
     /// ```
     /// based on https://github.com/stoklund/varint
 
-    pub fn size_vec<I: Iterator<Item=u64>>(bytes: &mut Vec<u8>, values: I) {
+    pub fn size_vec<I: Iterator<Item = u64>>(bytes: &mut Vec<u8>, values: I) {
         let size: usize = values.map(|v| bytes_for_value(v) as usize).sum();
         bytes.reserve(size + 9);
     }
@@ -141,7 +150,7 @@ pub mod prefix_varint {
             }
         }
     }
-    
+
     impl Default for I64Compressor<fn(i64) -> i64> {
         fn default() -> Self {
             Self::new()
@@ -179,7 +188,7 @@ pub mod prefix_varint {
             }
         }
     }
-    
+
     impl Default for U64Compressor<fn(u64) -> u64> {
         fn default() -> Self {
             Self::new()
@@ -208,11 +217,11 @@ pub mod prefix_varint {
         }
     }
 
-    pub fn compress_i64s_to_vec<I: Iterator<Item=i64>>(bytes: &mut Vec<u8>, values: I) {
+    pub fn compress_i64s_to_vec<I: Iterator<Item = i64>>(bytes: &mut Vec<u8>, values: I) {
         compress_u64s_to_vec(bytes, values.map(crate::zigzag::encode))
     }
 
-    pub fn compress_u64s_to_vec<I: Iterator<Item=u64>>(bytes: &mut Vec<u8>, values: I) {
+    pub fn compress_u64s_to_vec<I: Iterator<Item = u64>>(bytes: &mut Vec<u8>, values: I) {
         values.for_each(|v| write_to_vec(bytes, v));
     }
 
@@ -222,7 +231,7 @@ pub mod prefix_varint {
     pub fn write_to_vec(out: &mut Vec<u8>, mut value: u64) {
         if value == 0 {
             out.push(0x1);
-            return
+            return;
         }
         let bits = 64 - value.leading_zeros();
         let mut bytes = 1 + bits.wrapping_sub(1) / 7;
@@ -240,13 +249,11 @@ pub mod prefix_varint {
 
     type Value = u64;
 
-    pub fn i64_decompressor(bytes: &[u8])
-    -> impl Iterator<Item=i64> + '_ {
+    pub fn i64_decompressor(bytes: &[u8]) -> impl Iterator<Item = i64> + '_ {
         u64_decompressor(bytes).map(crate::zigzag::decode)
     }
 
-    pub fn u64_decompressor(mut bytes: &[u8])
-    -> impl Iterator<Item=u64> + '_ {
+    pub fn u64_decompressor(mut bytes: &[u8]) -> impl Iterator<Item = u64> + '_ {
         std::iter::from_fn(move || {
             if bytes.is_empty() {
                 None
@@ -270,7 +277,7 @@ pub mod prefix_varint {
         let tag_byte = value[0];
         if tag_byte & 1 == 1 {
             let value = (tag_byte >> 1) as u64;
-            return (value, 1)
+            return (value, 1);
         }
         let length = prefix_length(tag_byte) as usize;
         let value = if length < 9 {

@@ -119,7 +119,10 @@ pub fn check_user_function_type(function: pg_sys::regproc) {
     }
 }
 
-pub fn apply_to_series(mut series: Timevector_TSTZ_F64<'_>, func: pg_sys::RegProcedure) -> Timevector_TSTZ_F64<'_> {
+pub fn apply_to_series(
+    mut series: Timevector_TSTZ_F64<'_>,
+    func: pg_sys::RegProcedure,
+) -> Timevector_TSTZ_F64<'_> {
     let mut flinfo: pg_sys::FmgrInfo = unsafe { MaybeUninit::zeroed().assume_init() };
     unsafe {
         pg_sys::fmgr_info(func, &mut flinfo);
@@ -173,7 +176,10 @@ pub fn map_data_pipeline_element<'e>(
     .flatten()
 }
 
-pub fn apply_to(mut series: Timevector_TSTZ_F64<'_>, func: pg_sys::RegProcedure) -> Timevector_TSTZ_F64<'_> {
+pub fn apply_to(
+    mut series: Timevector_TSTZ_F64<'_>,
+    func: pg_sys::RegProcedure,
+) -> Timevector_TSTZ_F64<'_> {
     let mut flinfo: pg_sys::FmgrInfo = unsafe { MaybeUninit::zeroed().assume_init() };
 
     let fn_addr: unsafe extern "C" fn(*mut pg_sys::FunctionCallInfoBaseData) -> usize;

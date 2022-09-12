@@ -112,7 +112,8 @@ pub fn extract_tests_from_string(s: &str, file_stem: &str) -> TestFile {
                                 // output, consume it
                                 BlockKind::Output => {
                                     if !test.precision_limits.is_empty()
-                                        && !code_block_info.precision_limits.is_empty() {
+                                        && !code_block_info.precision_limits.is_empty()
+                                    {
                                         panic!(
                                             "cannot have precision limits on both test and output.\n{}:{} {:?}",
                                             file_stem, current_line, heading_stack
@@ -206,14 +207,13 @@ fn parse_code_block_info(info: &str) -> CodeBlockInfo {
             s if s.to_ascii_lowercase() == "sql" => info.kind = BlockKind::Sql,
             p if p.starts_with("precision") => {
                 // syntax `precision(col: bytes)`
-                let precision_err = || -> ! {
-                    panic!("invalid syntax for `precision(col: bytes)` found `{}`", p)
-                };
+                let precision_err =
+                    || -> ! { panic!("invalid syntax for `precision(col: bytes)` found `{}`", p) };
                 let arg = &p["precision".len()..];
                 if arg.as_bytes().first() != Some(&b'(') || arg.as_bytes().last() != Some(&b')') {
                     precision_err()
                 }
-                let arg = &arg[1..arg.len()-1];
+                let arg = &arg[1..arg.len() - 1];
                 let args: Vec<_> = arg.split(':').collect();
                 if args.len() != 2 {
                     precision_err()
@@ -224,7 +224,7 @@ fn parse_code_block_info(info: &str) -> CodeBlockInfo {
                 if old.is_some() {
                     panic!("duplicate precision for column {}", column)
                 }
-            },
+            }
             _ => {}
         }
     }
@@ -235,7 +235,6 @@ fn parse_code_block_info(info: &str) -> CodeBlockInfo {
 #[cfg(test)]
 mod test {
     use std::collections::HashMap;
-
 
     #[test]
     fn extract() {
@@ -319,7 +318,7 @@ select * from qat
                     output: vec![vec!["1".to_string(), "2".to_string()]],
                     transactional: false,
                     ignore_output: false,
-                    precision_limits: [(1,3)].iter().cloned().collect(),
+                    precision_limits: [(1, 3)].iter().cloned().collect(),
                 },
                 Test {
                     location: "/test/file.md:34".to_string(),

@@ -1,8 +1,8 @@
 use std::{
     ffi::{CStr, CString},
+    mem::{align_of, size_of, MaybeUninit},
     os::raw::c_char,
     slice,
-    mem::{size_of, align_of, MaybeUninit},
 };
 
 use flat_serialize::{impl_flat_serializable, FlatSerializable, WrapErr};
@@ -77,7 +77,10 @@ struct FormData_pg_database {
 type Form_pg_database = *mut FormData_pg_database;
 
 static DEFAULT_COLLATION_NAME: Lazy<CString> = Lazy::new(|| unsafe {
-    let tuple = pg_sys::SearchSysCache1(pg_sys::SysCacheIdentifier_DATABASEOID as _, pg_sys::MyDatabaseId as _);
+    let tuple = pg_sys::SearchSysCache1(
+        pg_sys::SysCacheIdentifier_DATABASEOID as _,
+        pg_sys::MyDatabaseId as _,
+    );
     if tuple.is_null() {
         pgx::error!("no database info");
     }
@@ -85,7 +88,11 @@ static DEFAULT_COLLATION_NAME: Lazy<CString> = Lazy::new(|| unsafe {
     let database_tuple: Form_pg_database = get_struct(tuple);
     let collation_name = (*database_tuple).datcollate.data.as_ptr();
     let collation_name_len = CStr::from_ptr(collation_name).to_bytes().len();
-    let collation_name = pg_sys::pg_server_to_any(collation_name, collation_name_len as _, pg_sys::pg_enc_PG_UTF8 as _);
+    let collation_name = pg_sys::pg_server_to_any(
+        collation_name,
+        collation_name_len as _,
+        pg_sys::pg_enc_PG_UTF8 as _,
+    );
     let collation_name = CStr::from_ptr(collation_name);
     pg_sys::ReleaseSysCache(tuple);
     CString::from(collation_name)
@@ -99,7 +106,7 @@ impl Serialize for PgCollationId {
         unsafe {
             let mut layout: Option<(&str, &str)> = None;
             if self.is_invalid() {
-                return layout.serialize(serializer)
+                return layout.serialize(serializer);
             }
 
             let tuple =
@@ -116,21 +123,28 @@ impl Serialize for PgCollationId {
             }
 
             let namespace_len = CStr::from_ptr(namespace).to_bytes().len();
-            let namespace = pg_sys::pg_server_to_any(namespace, namespace_len as _, pg_sys::pg_enc_PG_UTF8 as _);
+            let namespace = pg_sys::pg_server_to_any(
+                namespace,
+                namespace_len as _,
+                pg_sys::pg_enc_PG_UTF8 as _,
+            );
             let namespace = CStr::from_ptr(namespace);
             let namespace = namespace.to_str().unwrap();
 
             // the 'default' collation isn't really a collation, and we need to
             // look in pg_database to discover what real collation is
-            let collation_name =
-                if self.0 == DEFAULT_COLLATION_OID {
-                    &*DEFAULT_COLLATION_NAME
-                } else {
-                    let collation_name = (*collation_tuple).collname.data.as_ptr();
-                    let collation_name_len = CStr::from_ptr(collation_name).to_bytes().len();
-                    let collation_name = pg_sys::pg_server_to_any(collation_name, collation_name_len as _, pg_sys::pg_enc_PG_UTF8 as _);
-                    CStr::from_ptr(collation_name)
-                };
+            let collation_name = if self.0 == DEFAULT_COLLATION_OID {
+                &*DEFAULT_COLLATION_NAME
+            } else {
+                let collation_name = (*collation_tuple).collname.data.as_ptr();
+                let collation_name_len = CStr::from_ptr(collation_name).to_bytes().len();
+                let collation_name = pg_sys::pg_server_to_any(
+                    collation_name,
+                    collation_name_len as _,
+                    pg_sys::pg_enc_PG_UTF8 as _,
+                );
+                CStr::from_ptr(collation_name)
+            };
             let collation_name = collation_name.to_str().unwrap();
 
             let qualified_name: (&str, &str) = (namespace, collation_name);
@@ -162,10 +176,15 @@ impl<'de> Deserialize<'de> for PgCollationId {
         );
         let (namespace_len, name_len) = (namespace.to_bytes().len(), name.to_bytes().len());
         unsafe {
-            let namespace = pg_sys::pg_any_to_server(namespace.as_ptr(), namespace_len as _, pg_sys::pg_enc_PG_UTF8 as _);
+            let namespace = pg_sys::pg_any_to_server(
+                namespace.as_ptr(),
+                namespace_len as _,
+                pg_sys::pg_enc_PG_UTF8 as _,
+            );
             let namespace = CStr::from_ptr(namespace);
 
-            let name = pg_sys::pg_any_to_server(name.as_ptr(), name_len as _, pg_sys::pg_enc_PG_UTF8 as _);
+            let name =
+                pg_sys::pg_any_to_server(name.as_ptr(), name_len as _, pg_sys::pg_enc_PG_UTF8 as _);
             let name = CStr::from_ptr(name);
 
             let namespace_id = pg_sys::LookupExplicitNamespace(namespace.as_ptr(), true);
@@ -208,7 +227,7 @@ impl<'de> Deserialize<'de> for PgCollationId {
                 // The default collation doesn't necessarily exist in the
                 // collations catalog, so check that specially
                 if name == &**DEFAULT_COLLATION_NAME {
-                    return Ok(PgCollationId(100))
+                    return Ok(PgCollationId(100));
                 }
                 return Err(D::Error::custom(format!(
                     "invalid collation {:?}.{:?}",
@@ -233,11 +252,7 @@ unsafe fn get_struct<T>(tuple: pg_sys::HeapTuple) -> *mut T {
 mod tests {
 
     use super::PgCollationId;
-    use pgx::{
-        pg_guard,
-        pg_sys,
-        pg_test,
-    };
+    use pgx::{pg_guard, pg_sys, pg_test};
 
     // TODO is there a way we can test more of this without making it flaky?
     #[pg_test]
@@ -255,7 +270,10 @@ mod tests {
         let serialized = bincode::serialize(&PgCollationId(950)).unwrap();
         assert_eq!(
             serialized,
-            vec![1, 10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111, 103, 1, 0, 0, 0, 0, 0, 0, 0, 67]
+            vec![
+                1, 10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111, 103, 1, 0, 0,
+                0, 0, 0, 0, 0, 67
+            ]
         );
         let deserialized: PgCollationId = bincode::deserialize(&serialized).unwrap();
         assert_eq!(deserialized.0, 950);
@@ -275,7 +293,10 @@ mod tests {
         let serialized = bincode::serialize(&PgCollationId(951)).unwrap();
         assert_eq!(
             serialized,
-            vec![1, 10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111, 103, 5, 0, 0, 0, 0, 0, 0, 0, 80, 79, 83, 73, 88]
+            vec![
+                1, 10, 0, 0, 0, 0, 0, 0, 0, 112, 103, 95, 99, 97, 116, 97, 108, 111, 103, 5, 0, 0,
+                0, 0, 0, 0, 0, 80, 79, 83, 73, 88
+            ]
         );
         let deserialized: PgCollationId = bincode::deserialize(&serialized).unwrap();
         assert_eq!(deserialized.0, 951);

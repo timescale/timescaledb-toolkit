@@ -1,7 +1,6 @@
-
 use std::{convert::TryInto, mem::take, ops::Deref};
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use pgx::*;
 
@@ -16,10 +15,7 @@ use crate::{
     pg_type, ron_inout_funcs,
 };
 
-use tdigest::{
-    TDigest as InternalTDigest,
-    Centroid,
-};
+use tdigest::{Centroid, TDigest as InternalTDigest};
 
 // Intermediate state kept in postgres.  This is a tdigest object paired
 // with a vector of values that still need to be inserted.
@@ -43,7 +39,7 @@ impl TDigestTransState {
     // Update the digest with all accumulated values.
     fn digest(&mut self) {
         if self.buffer.is_empty() {
-            return
+            return;
         }
         let new = take(&mut self.buffer);
         self.digested = self.digested.merge_unsorted(new)
@@ -59,7 +55,7 @@ pub fn tdigest_trans(
     value: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    tdigest_trans_inner(unsafe{ state.to_inner() }, size, value, fcinfo).internal()
+    tdigest_trans_inner(unsafe { state.to_inner() }, size, value, fcinfo).internal()
 }
 pub fn tdigest_trans_inner(
     state: Option<Inner<TDigestTransState>>,
@@ -72,13 +68,20 @@ pub fn tdigest_trans_inner(
             let value = match value {
                 None => return state,
                 // NaNs are nonsensical in the context of a percentile, so exclude them
-                Some(value) => if value.is_nan() {return state} else {value},
+                Some(value) => {
+                    if value.is_nan() {
+                        return state;
+                    } else {
+                        value
+                    }
+                }
             };
             let mut state = match state {
-                None => TDigestTransState{
+                None => TDigestTransState {
                     buffer: vec![],
                     digested: InternalTDigest::new_with_size(size.try_into().unwrap()),
-                }.into(),
+                }
+                .into(),
                 Some(state) => state,
             };
             state.push(value);
@@ -94,10 +97,7 @@ pub fn tdigest_combine(
     state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    unsafe {
-        tdigest_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
-    }
-
+    unsafe { tdigest_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal() }
 }
 
 pub fn tdigest_combine_inner(
@@ -115,16 +115,18 @@ pub fn tdigest_combine_inner(
                     assert_eq!(state1.digested.max_size(), state2.digested.max_size());
                     let digvec = vec![state1.digested.clone(), state2.digested.clone()];
                     if !state1.buffer.is_empty() {
-                        digvec[0].merge_unsorted(state1.buffer.clone());  // merge_unsorted should take a reference
+                        digvec[0].merge_unsorted(state1.buffer.clone()); // merge_unsorted should take a reference
                     }
                     if !state2.buffer.is_empty() {
                         digvec[1].merge_unsorted(state2.buffer.clone());
                     }
 
-                    Some(TDigestTransState {
+                    Some(
+                        TDigestTransState {
                             buffer: vec![],
                             digested: InternalTDigest::merge_digests(digvec),
-                        }.into()
+                        }
+                        .into(),
                     )
                 }
             }
@@ -135,24 +137,17 @@ pub fn tdigest_combine_inner(
 use crate::raw::bytea;
 
 #[pg_extern(immutable, parallel_safe, strict)]
-pub fn tdigest_serialize(
-    state: Internal,
-) -> bytea {
+pub fn tdigest_serialize(state: Internal) -> bytea {
     let state: &mut TDigestTransState = unsafe { state.get_mut().unwrap() };
     state.digest();
     crate::do_serialize!(state)
 }
 
 #[pg_extern(strict, immutable, parallel_safe)]
-pub fn tdigest_deserialize(
-    bytes: bytea,
-    _internal: Internal,
-) -> Option<Internal> {
+pub fn tdigest_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
     tdigest_deserialize_inner(bytes).internal()
 }
-pub fn tdigest_deserialize_inner(
-    bytes: bytea,
-) -> Inner<TDigestTransState> {
+pub fn tdigest_deserialize_inner(bytes: bytea) -> Inner<TDigestTransState> {
     crate::do_deserialize!(bytes, TDigestTransState)
 }
 
@@ -180,7 +175,7 @@ impl<'input> TDigest<'input> {
             self.count,
             self.max,
             self.0.min,
-            self.max_buckets as usize
+            self.max_buckets as usize,
         )
     }
 
@@ -192,27 +187,22 @@ impl<'input> TDigest<'input> {
         // we need to flatten the vector to a single buffer that contains
         // both the size, the data, and the varlen header
         unsafe {
-            flatten!(
-                TDigest {
-                    max_buckets,
-                    buckets: centroids.len() as u32,
-                    count: digest.count(),
-                    sum: digest.sum(),
-                    min: digest.min(),
-                    max: digest.max(),
-                    centroids: centroids.into(),
-                }
-            )
+            flatten!(TDigest {
+                max_buckets,
+                buckets: centroids.len() as u32,
+                count: digest.count(),
+                sum: digest.sum(),
+                min: digest.min(),
+                max: digest.max(),
+                centroids: centroids.into(),
+            })
         }
     }
 }
 
 // PG function to generate a user-facing TDigest object from an internal TDigestTransState.
 #[pg_extern(immutable, parallel_safe)]
-fn tdigest_final(
-    state: Internal,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<TDigest<'static>> {
+fn tdigest_final(state: Internal, fcinfo: pg_sys::FunctionCallInfo) -> Option<TDigest<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let state: &mut TDigestTransState = match state.get_mut() {
@@ -226,8 +216,8 @@ fn tdigest_final(
     }
 }
 
-
-extension_sql!("\n\
+extension_sql!(
+    "\n\
     CREATE AGGREGATE tdigest(size integer, value DOUBLE PRECISION)\n\
     (\n\
         sfunc = tdigest_trans,\n\
@@ -239,8 +229,14 @@ extension_sql!("\n\
         parallel = safe\n\
     );\n\
 ",
-name = "tdigest_agg",
-requires = [tdigest_trans, tdigest_final, tdigest_combine, tdigest_serialize, tdigest_deserialize],
+    name = "tdigest_agg",
+    requires = [
+        tdigest_trans,
+        tdigest_final,
+        tdigest_combine,
+        tdigest_serialize,
+        tdigest_deserialize
+    ],
 );
 
 #[pg_extern(immutable, parallel_safe)]
@@ -249,7 +245,7 @@ pub fn tdigest_compound_trans(
     value: Option<TDigest<'static>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    tdigest_compound_trans_inner(unsafe{ state.to_inner() }, value, fcinfo).internal()
+    tdigest_compound_trans_inner(unsafe { state.to_inner() }, value, fcinfo).internal()
 }
 pub fn tdigest_compound_trans_inner(
     state: Option<Inner<InternalTDigest>>,
@@ -263,9 +259,12 @@ pub fn tdigest_compound_trans_inner(
                 (None, Some(a)) => Some(a.to_internal_tdigest().into()),
                 (Some(a), Some(b)) => {
                     assert_eq!(a.max_size(), b.max_buckets as usize);
-                    Some(InternalTDigest::merge_digests(
-                            vec![a.deref().clone(), b.to_internal_tdigest()]  // TODO: TDigest merge with self
-                        ).into())
+                    Some(
+                        InternalTDigest::merge_digests(
+                            vec![a.deref().clone(), b.to_internal_tdigest()], // TODO: TDigest merge with self
+                        )
+                        .into(),
+                    )
                 }
             }
         })
@@ -295,9 +294,12 @@ pub fn tdigest_compound_combine_inner(
                 (Some(state1), None) => Some(state1.clone().into()),
                 (Some(state1), Some(state2)) => {
                     assert_eq!(state1.max_size(), state2.max_size());
-                    Some(InternalTDigest::merge_digests(
-                            vec![state1.deref().clone(), state2.deref().clone()]  // TODO: TDigest merge with self
-                        ).into())
+                    Some(
+                        InternalTDigest::merge_digests(
+                            vec![state1.deref().clone(), state2.deref().clone()], // TODO: TDigest merge with self
+                        )
+                        .into(),
+                    )
                 }
             }
         })
@@ -314,24 +316,19 @@ fn tdigest_compound_final(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-fn tdigest_compound_serialize(
-    state: Internal,
-    _fcinfo: pg_sys::FunctionCallInfo,
-) -> bytea {
+fn tdigest_compound_serialize(state: Internal, _fcinfo: pg_sys::FunctionCallInfo) -> bytea {
     let state: Inner<InternalTDigest> = unsafe { state.to_inner().unwrap() };
     crate::do_serialize!(state)
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn tdigest_compound_deserialize(
-    bytes: bytea,
-    _internal: Internal,
-) -> Option<Internal> {
+pub fn tdigest_compound_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
     let i: InternalTDigest = crate::do_deserialize!(bytes, InternalTDigest);
     Inner::from(i).internal()
 }
 
-extension_sql!("\n\
+extension_sql!(
+    "\n\
     CREATE AGGREGATE rollup(\n\
         tdigest\n\
     ) (\n\
@@ -344,116 +341,90 @@ extension_sql!("\n\
         parallel = safe\n\
     );\n\
 ",
-name = "tdigest_rollup",
-requires = [tdigest_compound_trans, tdigest_compound_final, tdigest_compound_combine, tdigest_compound_serialize, tdigest_compound_deserialize],
+    name = "tdigest_rollup",
+    requires = [
+        tdigest_compound_trans,
+        tdigest_compound_final,
+        tdigest_compound_combine,
+        tdigest_compound_serialize,
+        tdigest_compound_deserialize
+    ],
 );
 
 //---- Available PG operations on the digest
 
-
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_tdigest_approx_percentile(
-    sketch: TDigest,
-    accessor: AccessorApproxPercentile,
-) -> f64 {
+pub fn arrow_tdigest_approx_percentile(sketch: TDigest, accessor: AccessorApproxPercentile) -> f64 {
     tdigest_quantile(accessor.percentile, sketch)
 }
 
 // Approximate the value at the given quantile (0.0-1.0)
-#[pg_extern(immutable, parallel_safe, name="approx_percentile")]
-pub fn tdigest_quantile(
-    quantile: f64,
-    digest: TDigest,
-) -> f64 {
+#[pg_extern(immutable, parallel_safe, name = "approx_percentile")]
+pub fn tdigest_quantile(quantile: f64, digest: TDigest) -> f64 {
     digest.to_internal_tdigest().estimate_quantile(quantile)
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_tdigest_approx_rank(
-    sketch: TDigest,
-    accessor: AccessorApproxPercentileRank,
-) -> f64 {
+pub fn arrow_tdigest_approx_rank(sketch: TDigest, accessor: AccessorApproxPercentileRank) -> f64 {
     tdigest_quantile_at_value(accessor.value, sketch)
 }
 
 // Approximate the quantile at the given value
-#[pg_extern(immutable, parallel_safe, name="approx_percentile_rank")]
-pub fn tdigest_quantile_at_value(
-    value: f64,
-    digest: TDigest,
-) -> f64 {
-    digest.to_internal_tdigest().estimate_quantile_at_value(value)
+#[pg_extern(immutable, parallel_safe, name = "approx_percentile_rank")]
+pub fn tdigest_quantile_at_value(value: f64, digest: TDigest) -> f64 {
+    digest
+        .to_internal_tdigest()
+        .estimate_quantile_at_value(value)
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_tdigest_num_vals(
-    sketch: TDigest,
-    _accessor: AccessorNumVals,
-) -> f64 {
+pub fn arrow_tdigest_num_vals(sketch: TDigest, _accessor: AccessorNumVals) -> f64 {
     tdigest_count(sketch)
 }
 
 // Number of elements from which the digest was built.
-#[pg_extern(immutable, parallel_safe, name="num_vals")]
-pub fn tdigest_count(
-    digest: TDigest,
-) -> f64 {
+#[pg_extern(immutable, parallel_safe, name = "num_vals")]
+pub fn tdigest_count(digest: TDigest) -> f64 {
     digest.count as f64
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_tdigest_min(
-    sketch: TDigest,
-    _accessor: AccessorMinVal,
-) -> f64 {
+pub fn arrow_tdigest_min(sketch: TDigest, _accessor: AccessorMinVal) -> f64 {
     tdigest_min(sketch)
 }
 
 // Minimum value entered in the digest.
-#[pg_extern(immutable, parallel_safe, name="min_val")]
-pub fn tdigest_min(
-    digest: TDigest,
-) -> f64 {
+#[pg_extern(immutable, parallel_safe, name = "min_val")]
+pub fn tdigest_min(digest: TDigest) -> f64 {
     digest.min
 }
 
-
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_tdigest_max(
-    sketch: TDigest,
-    _accessor: AccessorMaxVal,
-) -> f64 {
+pub fn arrow_tdigest_max(sketch: TDigest, _accessor: AccessorMaxVal) -> f64 {
     tdigest_max(sketch)
 }
 
 // Maximum value entered in the digest.
-#[pg_extern(immutable, parallel_safe, name="max_val")]
-pub fn tdigest_max(
-    digest: TDigest,
-) -> f64 {
+#[pg_extern(immutable, parallel_safe, name = "max_val")]
+pub fn tdigest_max(digest: TDigest) -> f64 {
     digest.max
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_tdigest_mean(
-    sketch: TDigest,
-    _accessor: AccessorMean,
-) -> f64 {
+pub fn arrow_tdigest_mean(sketch: TDigest, _accessor: AccessorMean) -> f64 {
     tdigest_mean(sketch)
 }
 
 // Average of all the values entered in the digest.
 // Note that this is not an approximation, though there may be loss of precision.
-#[pg_extern(immutable, parallel_safe, name="mean")]
-pub fn tdigest_mean(
-    digest: TDigest,
-) -> f64 {
+#[pg_extern(immutable, parallel_safe, name = "mean")]
+pub fn tdigest_mean(digest: TDigest) -> f64 {
     if digest.count > 0 {
         digest.sum / digest.count as f64
     } else {
@@ -464,13 +435,19 @@ pub fn tdigest_mean(
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgx::*;
     use super::*;
+
     use pgx_macros::pg_test;
 
     // Assert equality between two floats, within some fixed error range.
     fn apx_eql(value: f64, expected: f64, error: f64) {
-        assert!((value - expected).abs() < error, "Float value {} differs from expected {} by more than {}", value, expected, error);
+        assert!(
+            (value - expected).abs() < error,
+            "Float value {} differs from expected {} by more than {}",
+            value,
+            expected,
+            error
+        );
     }
 
     // Assert equality between two floats, within an error expressed as a fraction of the expected value.
@@ -482,7 +459,11 @@ mod tests {
     fn test_tdigest_aggregate() {
         Spi::execute(|client| {
             client.select("CREATE TABLE test (data DOUBLE PRECISION)", None, None);
-            client.select("INSERT INTO test SELECT generate_series(0.01, 100, 0.01)", None, None);
+            client.select(
+                "INSERT INTO test SELECT generate_series(0.01, 100, 0.01)",
+                None,
+                None,
+            );
 
             let sanity = client
                 .select("SELECT COUNT(*) FROM test", None, None)
@@ -490,20 +471,22 @@ mod tests {
                 .get_one::<i32>();
             assert_eq!(10000, sanity.unwrap());
 
-            client.select("CREATE VIEW digest AS \
+            client.select(
+                "CREATE VIEW digest AS \
                 SELECT tdigest(100, data) FROM test",
                 None,
-                None
+                None,
             );
 
             let (min, max, count) = client
-                .select("SELECT \
+                .select(
+                    "SELECT \
                     min_val(tdigest), \
                     max_val(tdigest), \
                     num_vals(tdigest) \
                     FROM digest",
                     None,
-                    None
+                    None,
                 )
                 .first()
                 .get_three::<f64, f64, f64>();
@@ -513,13 +496,14 @@ mod tests {
             apx_eql(count.unwrap(), 10000.0, 0.000001);
 
             let (min2, max2, count2) = client
-                .select("SELECT \
+                .select(
+                    "SELECT \
                     tdigest->min_val(), \
                     tdigest->max_val(), \
                     tdigest->num_vals() \
                     FROM digest",
                     None,
-                    None
+                    None,
                 )
                 .first()
                 .get_three::<f64, f64, f64>();
@@ -529,12 +513,13 @@ mod tests {
             assert_eq!(count2, count);
 
             let (mean, mean2) = client
-                .select("SELECT \
+                .select(
+                    "SELECT \
                     mean(tdigest), \
                     tdigest -> mean()
                     FROM digest",
                     None,
-                    None
+                    None,
                 )
                 .first()
                 .get_two::<f64, f64>();
@@ -548,14 +533,16 @@ mod tests {
 
                 let (est_val, est_quant) = client
                     .select(
-                        &format!("SELECT
+                        &format!(
+                            "SELECT
                             approx_percentile({}, tdigest), \
                             approx_percentile_rank({}, tdigest) \
                             FROM digest",
-                            quantile,
-                            value),
+                            quantile, value
+                        ),
                         None,
-                        None)
+                        None,
+                    )
                     .first()
                     .get_two::<f64, f64>();
 
@@ -569,14 +556,16 @@ mod tests {
 
                 let (est_val2, est_quant2) = client
                     .select(
-                        &format!("SELECT
+                        &format!(
+                            "SELECT
                             tdigest->approx_percentile({}), \
                             tdigest->approx_percentile_rank({}) \
                             FROM digest",
-                            quantile,
-                            value),
+                            quantile, value
+                        ),
                         None,
-                        None)
+                        None,
+                    )
                     .first()
                     .get_two::<f64, f64>();
                 assert_eq!(est_val2, est_val);
@@ -588,13 +577,16 @@ mod tests {
     #[pg_test]
     fn test_tdigest_small_count() {
         Spi::execute(|client| {
-            let estimate = client.select("SELECT \
+            let estimate = client
+                .select(
+                    "SELECT \
                     approx_percentile(\
                         0.99, \
                         tdigest(100, data)) \
                     FROM generate_series(1, 100) data;",
-                None,
-                None)
+                    None,
+                    None,
+                )
                 .first()
                 .get_one();
 
@@ -605,11 +597,14 @@ mod tests {
     #[pg_test]
     fn test_tdigest_io() {
         Spi::execute(|client| {
-            let output = client.select("SELECT \
+            let output = client
+                .select(
+                    "SELECT \
                 tdigest(100, data)::text \
                 FROM generate_series(1, 100) data;",
-                None,
-                None)
+                    None,
+                    None,
+                )
                 .first()
                 .get_one::<String>();
 
@@ -617,11 +612,12 @@ mod tests {
 
             assert_eq!(output, Some(expected.into()));
 
-            let estimate = client.select(
-                &format!(
-                    "SELECT approx_percentile(0.90, '{}'::tdigest)",
-                    expected
-                ), None, None)
+            let estimate = client
+                .select(
+                    &format!("SELECT approx_percentile(0.90, '{}'::tdigest)", expected),
+                    None,
+                    None,
+                )
                 .first()
                 .get_one();
             assert_eq!(estimate, Some(90.5));
@@ -642,13 +638,21 @@ mod tests {
             let buffer = tdigest_serialize(Inner::from(control.clone()).internal().unwrap());
             let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
 
-            let expected = [1, 1, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 69, 192, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 44, 64, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 64, 1, 0, 0, 0, 0, 0, 0, 0, 51, 51, 51, 51, 51, 179, 54, 64, 1, 0, 0, 0, 0, 0, 0, 0, 246, 40, 92, 143, 194, 181, 67, 64, 1, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0, 0, 0, 0, 0, 0, 144, 194, 245, 40, 92, 143, 73, 64, 5, 0, 0, 0, 0, 0, 0, 0, 246, 40, 92, 143, 194, 181, 67, 64, 0, 0, 0, 0, 0, 128, 69, 192];
+            let expected = [
+                1, 1, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 69, 192, 1, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 44, 64, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 50, 64, 1, 0,
+                0, 0, 0, 0, 0, 0, 51, 51, 51, 51, 51, 179, 54, 64, 1, 0, 0, 0, 0, 0, 0, 0, 246, 40,
+                92, 143, 194, 181, 67, 64, 1, 0, 0, 0, 0, 0, 0, 0, 100, 0, 0, 0, 0, 0, 0, 0, 144,
+                194, 245, 40, 92, 143, 73, 64, 5, 0, 0, 0, 0, 0, 0, 0, 246, 40, 92, 143, 194, 181,
+                67, 64, 0, 0, 0, 0, 0, 128, 69, 192,
+            ];
             assert_eq!(buffer, expected);
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
-            let new_state = tdigest_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
+            let new_state =
+                tdigest_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
 
-            control.digest();  // Serialized form is always digested
+            control.digest(); // Serialized form is always digested
             assert_eq!(&*new_state, &*control);
         }
     }
@@ -656,7 +660,11 @@ mod tests {
     #[pg_test]
     fn test_tdigest_compound_agg() {
         Spi::execute(|client| {
-            client.select("CREATE TABLE new_test (device INTEGER, value DOUBLE PRECISION)", None, None);
+            client.select(
+                "CREATE TABLE new_test (device INTEGER, value DOUBLE PRECISION)",
+                None,
+                None,
+            );
             client.select("INSERT INTO new_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
 
             let sanity = client
@@ -665,30 +673,50 @@ mod tests {
                 .get_one::<i32>();
             assert_eq!(Some(1010), sanity);
 
-            client.select("CREATE VIEW digests AS \
+            client.select(
+                "CREATE VIEW digests AS \
                 SELECT device, tdigest(20, value) \
                 FROM new_test \
-                GROUP BY device", None, None);
+                GROUP BY device",
+                None,
+                None,
+            );
 
-            client.select("CREATE VIEW composite AS \
+            client.select(
+                "CREATE VIEW composite AS \
                 SELECT tdigest(tdigest) \
-                FROM digests", None, None);
+                FROM digests",
+                None,
+                None,
+            );
 
-            client.select("CREATE VIEW base AS \
+            client.select(
+                "CREATE VIEW base AS \
                 SELECT tdigest(20, value) \
-                FROM new_test", None, None);
+                FROM new_test",
+                None,
+                None,
+            );
 
-            let value= client
-                .select("SELECT \
+            let value = client
+                .select(
+                    "SELECT \
                     approx_percentile(0.9, tdigest) \
-                    FROM base", None, None)
+                    FROM base",
+                    None,
+                    None,
+                )
                 .first()
                 .get_one::<f64>();
 
             let test_value = client
-                .select("SELECT \
+                .select(
+                    "SELECT \
                 approx_percentile(0.9, tdigest) \
-                    FROM composite", None, None)
+                    FROM composite",
+                    None,
+                    None,
+                )
                 .first()
                 .get_one::<f64>();
 

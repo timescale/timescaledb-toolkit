@@ -1,4 +1,3 @@
-
 use std::{collections::HashMap, ffi::CString};
 
 use pgx::*;
@@ -6,18 +5,15 @@ use pgx::*;
 use super::*;
 
 use pest::{
+    iterators::{Pair, Pairs},
+    prec_climber::{Assoc, Operator, PrecClimber},
     Parser,
-    prec_climber::{PrecClimber, Operator, Assoc},
-    iterators::{
-        Pair,
-        Pairs,
-    },
 };
 
-use Rule::*;
 use ExpressionSegment::*;
-use UnaryOp::*;
+use Rule::*;
 use Type::*;
+use UnaryOp::*;
 
 // Idealized expression grammar ignoring precedence
 // ```
@@ -37,12 +33,11 @@ use Type::*;
 pub struct ExpressionParser;
 
 pub fn parse_expression(input: &str) -> Expression {
-    let parsed = ExpressionParser::parse(calculation, input)
-        .unwrap_or_else(|e| panic!("{}", e));
+    let parsed = ExpressionParser::parse(calculation, input).unwrap_or_else(|e| panic!("{}", e));
 
     let mut variables = Vec::new();
     let expr = build_expression(parsed, &mut variables, &mut HashMap::new());
-    Expression { variables, expr, }
+    Expression { variables, expr }
 }
 
 // main parsing function.
@@ -55,11 +50,14 @@ fn build_expression<'a>(
     // when we encounter a sequence of binary operations eg `<> + <> * <>`
     // the `(Expression, op, Expression)` triple is passed to `build_binary_op()`
     // in descending precedence order.
-    PREC_CLIMBER.climb(parsed,
+    PREC_CLIMBER.climb(
+        parsed,
         |pair| parse_primary(pair, var_expressions, known_vars),
-        |left: ExpressionSegment, op: Pair<Rule>, right: ExpressionSegment| build_binary_op(op, left, right))
+        |left: ExpressionSegment, op: Pair<Rule>, right: ExpressionSegment| {
+            build_binary_op(op, left, right)
+        },
+    )
 }
-
 
 // handles everything except infix binary operators, which are handled by the
 // precedence climber and `build_binary_op()`
@@ -84,37 +82,40 @@ fn parse_primary<'a>(
         num => {
             let val: f64 = pair.as_str().parse().unwrap();
             DoubleConstant(val)
-        },
+        }
 
         val_var => ValueVar,
         time_var => TimeVar,
 
         time => {
             let s = pair.as_str();
-            let parsed_time = parse_timestamptz(&s[1..s.len()-2]);
+            let parsed_time = parse_timestamptz(&s[1..s.len() - 2]);
             TimeConstant(parsed_time)
-        },
+        }
 
         interval => {
             let s = pair.as_str();
-            let parsed_interval = parse_interval(&s[1..s.len()-2]);
+            let parsed_interval = parse_interval(&s[1..s.len() - 2]);
             IntervalConstant(parsed_interval)
-        },
+        }
 
         var => {
-            let (ty, v) = known_vars.get(pair.as_str())
+            let (ty, v) = known_vars
+                .get(pair.as_str())
                 .unwrap_or_else(|| panic!("unknown variable: {}", pair.as_str()))
                 .clone();
             UserVar(v, ty)
-        },
+        }
 
         function => {
             let mut pairs = pair.into_inner();
             let func_name = pairs.next().unwrap();
-            let (num_args, func_id) = *BUILTIN_FUNCTION.get(func_name.as_str())
+            let (num_args, func_id) = *BUILTIN_FUNCTION
+                .get(func_name.as_str())
                 .unwrap_or_else(|| panic!("unknown function: {}", func_name.as_str()));
 
-            let args: Vec<_> = pairs.map(|p| parse_primary(p, var_expressions, known_vars))
+            let args: Vec<_> = pairs
+                .map(|p| parse_primary(p, var_expressions, known_vars))
                 .collect();
             if args.len() != num_args {
                 panic!(
@@ -135,7 +136,7 @@ fn parse_primary<'a>(
                 panic!("can only apply `-` to a DOUBLE PRECISION")
             }
             Unary(Negative, value.into(), Double)
-        },
+        }
 
         not => {
             let value = pair.into_inner().next().unwrap();
@@ -144,7 +145,7 @@ fn parse_primary<'a>(
                 panic!("can only apply NOT to a BOOLEAN")
             }
             Unary(Not, value.into(), Bool)
-        },
+        }
 
         // pass the sequence of binary operation to the precedence_climber to handle
         binops => build_expression(pair.into_inner(), var_expressions, known_vars),
@@ -160,18 +161,18 @@ fn parse_primary<'a>(
                 let var_value = match pairs.next() {
                     None => return parse_primary(var_name_or_expr, var_expressions, known_vars),
                     Some(val) => val,
-
                 };
 
                 let var_value = parse_primary(var_value, var_expressions, known_vars);
 
                 let var_name = var_name_or_expr.as_str();
-                known_vars.entry(var_name)
+                known_vars
+                    .entry(var_name)
                     .and_modify(|_| panic!("duplicate var {}", var_name))
                     .or_insert_with(|| (var_value.ty().clone(), var_expressions.len()));
                 var_expressions.push(var_value);
             }
-        },
+        }
 
         tuple => {
             // the tuple rule effectively has two forms
@@ -194,27 +195,28 @@ fn parse_primary<'a>(
                     }
                     let ty = Tuple(vals.iter().map(|v| v.ty().clone()).collect());
                     BuildTuple(vals, ty)
-                },
-
+                }
             }
-        },
+        }
 
         // operations marked with a `_` or that are below a `@` are never passed
         // to us, so we can ignore them.
-        EOI | int | operation | string
-        | unary | term | function_name | WHITESPACE | calculation
-            => unreachable!("{} should be transparent", pair),
+        EOI | int | operation | string | unary | term | function_name | WHITESPACE
+        | calculation => unreachable!("{} should be transparent", pair),
 
         // infix operations should be passed to `build_binary_op()` by the
         // precedence climber, so we should never see them here.
-        add | subtract | multiply | divide
-        | power | eq | neq | lt | le
-        | gt | ge | and | or
-            => unreachable!("{} should be handled by precedence climbing", pair),
+        add | subtract | multiply | divide | power | eq | neq | lt | le | gt | ge | and | or => {
+            unreachable!("{} should be handled by precedence climbing", pair)
+        }
     }
 }
 
-fn build_binary_op(op: Pair<Rule>, left: ExpressionSegment, right: ExpressionSegment) -> ExpressionSegment {
+fn build_binary_op(
+    op: Pair<Rule>,
+    left: ExpressionSegment,
+    right: ExpressionSegment,
+) -> ExpressionSegment {
     use BinOp::*;
     use Type::Interval;
     macro_rules! return_ty {
@@ -238,7 +240,7 @@ fn build_binary_op(op: Pair<Rule>, left: ExpressionSegment, right: ExpressionSeg
                 (Interval, Interval) => Interval,
             );
             Binary(Plus, left.into(), right.into(), result_type)
-        },
+        }
 
         subtract => {
             let result_type = return_ty!("-"
@@ -247,19 +249,21 @@ fn build_binary_op(op: Pair<Rule>, left: ExpressionSegment, right: ExpressionSeg
                 (Interval, Interval) => Interval,
             );
             Binary(Minus, left.into(), right.into(), result_type)
-        },
+        }
 
-        multiply =>
-            match (left.ty(), right.ty()) {
-                (Double, Double) => Binary(Mul, left.into(), right.into(), Double),
-                (Interval, Double) => Binary(Mul, left.into(), right.into(), Interval),
-                // TODO right now BinOp(Mul, .., Interval) expects the interval on the left
-                //      and the double on the left. We could check in the executor which one
-                //      actually is, but it seems easier to just revers the value here if
-                //      they're in an unexpected order.
-                (Double, Interval) => Binary(Mul, right.into(), left.into(), Interval),
-                (l, r) => panic!("no operator `{:?} * {:?}` only `DOUBLE * DOUBLE` and `INTERVAL * FLOAT`", l, r)
-            },
+        multiply => match (left.ty(), right.ty()) {
+            (Double, Double) => Binary(Mul, left.into(), right.into(), Double),
+            (Interval, Double) => Binary(Mul, left.into(), right.into(), Interval),
+            // TODO right now BinOp(Mul, .., Interval) expects the interval on the left
+            //      and the double on the left. We could check in the executor which one
+            //      actually is, but it seems easier to just revers the value here if
+            //      they're in an unexpected order.
+            (Double, Interval) => Binary(Mul, right.into(), left.into(), Interval),
+            (l, r) => panic!(
+                "no operator `{:?} * {:?}` only `DOUBLE * DOUBLE` and `INTERVAL * FLOAT`",
+                l, r
+            ),
+        },
 
         divide => {
             let result_type = return_ty!("/"
@@ -267,72 +271,94 @@ fn build_binary_op(op: Pair<Rule>, left: ExpressionSegment, right: ExpressionSeg
                 (Interval, Double) => Interval,
             );
             Binary(Div, left.into(), right.into(), result_type)
-        },
+        }
 
         power => {
             let result_type = return_ty!("^"
                 (Double, Double) => Double,
             );
             Binary(Pow, left.into(), right.into(), result_type)
-        },
+        }
 
         eq => {
             if left.ty() != right.ty() {
-                panic!("mismatched types for `=`: {:?}, {:?}", left.ty(), right.ty())
+                panic!(
+                    "mismatched types for `=`: {:?}, {:?}",
+                    left.ty(),
+                    right.ty()
+                )
             }
             Binary(Eq, left.into(), right.into(), Bool)
-        },
+        }
 
         neq => {
             if left.ty() != right.ty() {
-                panic!("mismatched types for `!=`: {:?}, {:?}", left.ty(), right.ty())
+                panic!(
+                    "mismatched types for `!=`: {:?}, {:?}",
+                    left.ty(),
+                    right.ty()
+                )
             }
             Binary(Neq, left.into(), right.into(), Bool)
-        },
+        }
 
         lt => {
             if left.ty() != right.ty() {
-                panic!("mismatched types for `<`: {:?}, {:?}", left.ty(), right.ty())
+                panic!(
+                    "mismatched types for `<`: {:?}, {:?}",
+                    left.ty(),
+                    right.ty()
+                )
             }
             Binary(Lt, left.into(), right.into(), Bool)
-        },
+        }
 
         le => {
             if left.ty() != right.ty() {
-                panic!("mismatched types for `<=`: {:?}, {:?}", left.ty(), right.ty())
+                panic!(
+                    "mismatched types for `<=`: {:?}, {:?}",
+                    left.ty(),
+                    right.ty()
+                )
             }
             Binary(Le, left.into(), right.into(), Bool)
-        },
+        }
 
         gt => {
             if left.ty() != right.ty() {
-                panic!("mismatched types for `>`: {:?}, {:?}", left.ty(), right.ty())
+                panic!(
+                    "mismatched types for `>`: {:?}, {:?}",
+                    left.ty(),
+                    right.ty()
+                )
             }
             Binary(Gt, left.into(), right.into(), Bool)
-
-        },
+        }
 
         ge => {
             if left.ty() != right.ty() {
-                panic!("mismatched types for `>=`: {:?}, {:?}", left.ty(), right.ty())
+                panic!(
+                    "mismatched types for `>=`: {:?}, {:?}",
+                    left.ty(),
+                    right.ty()
+                )
             }
             Binary(Ge, left.into(), right.into(), Bool)
-
-        },
+        }
 
         and => {
             let result_type = return_ty!("and"
                 (Bool, Bool) => Bool,
             );
             Binary(And, left.into(), right.into(), result_type)
-        },
+        }
 
         or => {
             let result_type = return_ty!("or"
                 (Bool, Bool) => Bool,
             );
             Binary(Or, left.into(), right.into(), result_type)
-        },
+        }
 
         _ => unreachable!(),
     }
@@ -353,7 +379,7 @@ fn parse_timestamptz(val: &str) -> i64 {
             pg_sys::InvalidOid as _,
             cstr.as_ptr() as _,
             pg_sys::InvalidOid as _,
-            (-1i32) as _
+            (-1i32) as _,
         )
     };
     parsed_time as _
@@ -374,7 +400,7 @@ fn parse_interval(val: &str) -> *mut pg_sys::Interval {
             pg_sys::InvalidOid as _,
             cstr.as_ptr() as _,
             pg_sys::InvalidOid as _,
-            (-1i32) as _
+            (-1i32) as _,
         )
     };
     parsed_interval as _
@@ -390,9 +416,12 @@ static PREC_CLIMBER: once_cell::sync::Lazy<PrecClimber<Rule>> = once_cell::sync:
     PrecClimber::new(vec![
         Operator::new(or, Left),
         Operator::new(and, Left),
-        Operator::new(eq, Left) | Operator::new(neq, Left)
-        | Operator::new(lt, Left) | Operator::new(le, Left)
-        | Operator::new(gt, Left) | Operator::new(ge, Left),
+        Operator::new(eq, Left)
+            | Operator::new(neq, Left)
+            | Operator::new(lt, Left)
+            | Operator::new(le, Left)
+            | Operator::new(gt, Left)
+            | Operator::new(ge, Left),
         Operator::new(add, Left) | Operator::new(subtract, Left),
         Operator::new(multiply, Left) | Operator::new(divide, Left),
         Operator::new(power, Right),
@@ -401,33 +430,36 @@ static PREC_CLIMBER: once_cell::sync::Lazy<PrecClimber<Rule>> = once_cell::sync:
 
 // Table of builtin functions (all of them for now).
 // Maps function name to a tuple (num arguments, function identifier)
-static BUILTIN_FUNCTION: once_cell::sync::Lazy<HashMap<&str, (usize, Function)>> =  once_cell::sync::Lazy::new(|| {
-    use Function::*;
-    [
-        ("abs",   (1, Abs)),
-        ("cbrt",  (1, Cbrt)),
-        ("ceil",  (1, Ceil)),
-        ("floor", (1, Floor)),
-        ("ln",    (1, Ln)),
-        ("log10", (1, Log10)),
-        ("log",   (2, Log)),
-        ("pi",    (0, Pi)),
-        ("round", (1, Round)),
-        ("sign",  (1, Sign)),
-        ("sqrt",  (1, Sqrt)),
-        ("trunc", (1, Trunc)),
-        ("acos",  (1, Acos)),
-        ("asin",  (1, Asin)),
-        ("atan",  (1, Atan)),
-        ("atan2", (2, Atan2)),
-        ("cos",   (1, Cos)),
-        ("sin",   (1, Sin)),
-        ("tan",   (1, Tan)),
-        ("sinh",  (1, Sinh)),
-        ("cosh",  (1, Cosh)),
-        ("tanh",  (1, Tanh)),
-        ("asinh", (1, Asinh)),
-        ("acosh", (1, Acosh)),
-        ("atanh", (1, Atanh)),
-    ].into_iter().collect()
-});
+static BUILTIN_FUNCTION: once_cell::sync::Lazy<HashMap<&str, (usize, Function)>> =
+    once_cell::sync::Lazy::new(|| {
+        use Function::*;
+        [
+            ("abs", (1, Abs)),
+            ("cbrt", (1, Cbrt)),
+            ("ceil", (1, Ceil)),
+            ("floor", (1, Floor)),
+            ("ln", (1, Ln)),
+            ("log10", (1, Log10)),
+            ("log", (2, Log)),
+            ("pi", (0, Pi)),
+            ("round", (1, Round)),
+            ("sign", (1, Sign)),
+            ("sqrt", (1, Sqrt)),
+            ("trunc", (1, Trunc)),
+            ("acos", (1, Acos)),
+            ("asin", (1, Asin)),
+            ("atan", (1, Atan)),
+            ("atan2", (2, Atan2)),
+            ("cos", (1, Cos)),
+            ("sin", (1, Sin)),
+            ("tan", (1, Tan)),
+            ("sinh", (1, Sinh)),
+            ("cosh", (1, Cosh)),
+            ("tanh", (1, Tanh)),
+            ("asinh", (1, Asinh)),
+            ("acosh", (1, Acosh)),
+            ("atanh", (1, Atanh)),
+        ]
+        .into_iter()
+        .collect()
+    });

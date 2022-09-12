@@ -210,7 +210,7 @@ impl TestClient {
             CREATE MATERIALIZED VIEW regression_view AS \
                 SELECT \
                     counter_agg(ts, val) AS countagg, \
-                    hyperloglog(32, val) AS hll, \
+                    hyperloglog(1024, val) AS hll, \
                     time_weight('locf', ts, val) AS twa, \
                     uddsketch(100, 0.001, val) as udd, \
                     tdigest(100, val) as tdig, \

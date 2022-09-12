@@ -312,7 +312,7 @@ mod tests {
         for i in 0..100_000 {
             hll.add(&i);
         }
-        assert_eq!(hll.estimate_count(), 126_448);
+        assert_eq!(hll.estimate_count(), 117_304);
         assert!(!hll.is_sparse());
         assert_eq!(hll.num_bytes(), 49_153);
         assert!(hll.num_bytes() <= (1 << 16) * 6 / 8 + 1)

@@ -1,4 +1,4 @@
-name: Clippy
+name: Clippy and rustfmt
 on:
   pull_request:
   push:
@@ -13,7 +13,7 @@ on:
 
 jobs:
   clippy:
-    name: Clippy Test
+    name: Clippy/rustfmt Test
     runs-on: ubuntu-20.04
     container:
       image: timescaledev/rust-pgx:latest
@@ -55,3 +55,6 @@ jobs:
       # in the wrong order.  We don't actually care to distinguish, so redirect
       # stderr to stdout so we get the proper order.
       run: su postgres -c 'sh tools/build clippy 2>&1'
+
+    - name: Verify formatting
+      run: cargo fmt --check

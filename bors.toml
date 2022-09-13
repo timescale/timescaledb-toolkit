@@ -1,5 +1,5 @@
 status = [
-    "Clippy Test",
+    "Clippy/rustfmt Test",
     "Test Postgres (12)",
     "Test Postgres (13)",
     "Test Postgres (14)",

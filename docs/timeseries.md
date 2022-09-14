@@ -1,4 +1,4 @@
-# Timevector [<sup><mark>experimental</mark></sup>](/docs/README.md#tag-notes)
+# Timevector
 
 > [Description](#timevector-description)<br>
 > [Timevector Pipelines](#timevector-pipelines)<br>

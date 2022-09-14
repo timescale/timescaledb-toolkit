@@ -57,8 +57,8 @@ RUN set -ex \
 # install doctester
 RUN cargo install --git https://github.com/timescale/timescaledb-toolkit.git --branch main sql-doctester
 
-# add clippy
-RUN rustup component add clippy
+# add clippy and rustfmt
+RUN rustup component add clippy rustfmt
 
 FROM pgx_builder AS rust-pgx
 

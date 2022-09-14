@@ -49,30 +49,6 @@ require_cargo_pgx_old() {
 
 [ $# -ge 1 ] || usage
 
-# For reasons we don't yet understand, pgx prevents the cargo cache from
-# working across runs UNLESS all pgx commands are run from the 'extension'
-# subdirectory of the project.  Any cargo command we need to run from that
-# subdirectory, we use CARGO_TARGET_DIR="$extension_CARGO_TARGET_DIR", and for
-# all others, CARGO_TARGET_DIR="$top_CARGO_TARGET_DIR".
-#
-# If each entry in ci.yml `jobs` is guaranteed to be run in isolation, always
-# with the target dir freshly copied from the specified cache key, then we
-# don't need to bother with CARGO_TARGET_DIR here.
-#
-# However, this script is derived from one I was using for my local builds
-# anyway, and apparently everyone is suffering the slow build times locally,
-# so why have more than one way to build?  Why not use the same tool locally
-# as the official build uses?
-#
-# CARGO_TARGET_DIR_NAME allows me to call my target directory '.target'.
-# TODO Can we simplify and just force .target here?  It works fine, but I didn't want to surprise people...
-if [ -z "$CARGO_TARGET_DIR_NAME" ]; then
-    # No default to force us to set it in ci.yml, same place we configure the cache.
-    die CARGO_TARGET_DIR_NAME not set
-fi
-top_CARGO_TARGET_DIR="$PWD/$CARGO_TARGET_DIR_NAME/top"
-extension_CARGO_TARGET_DIR="$PWD/$CARGO_TARGET_DIR_NAME/extension"
-
 while [ $# -gt 0 ]; do
     arg="$1"
     shift
@@ -108,42 +84,39 @@ while [ $# -gt 0 ]; do
             ;;
 
         clippy)
-            $nop env "CARGO_TARGET_DIR=$top_CARGO_TARGET_DIR" cargo fetch
+            $nop cargo fetch
             # We need to pick a postgres version to clippy the timescaledb_toolkit crate, but it doesn't matter which one.
-            $nop env "CARGO_TARGET_DIR=$top_CARGO_TARGET_DIR" cargo clippy --workspace --features 'pg14 pg_test' -- -D warnings
+            $nop cargo clippy --workspace --features 'pg14 pg_test' -- -D warnings
             ;;
 
         test-crates)
             # Should find no dependency crates to fetch.  If it finds any, we need to update the cache key.
-            $nop env "CARGO_TARGET_DIR=$top_CARGO_TARGET_DIR" cargo fetch
-            $nop env "CARGO_TARGET_DIR=$top_CARGO_TARGET_DIR" cargo test --workspace --exclude timescaledb_toolkit
+            $nop cargo fetch
+            $nop cargo test --workspace --exclude timescaledb_toolkit
             ;;
 
         test-extension)
             cd extension
             require_pg_version
-            $nop env "CARGO_TARGET_DIR=$extension_CARGO_TARGET_DIR" cargo fetch
-            $nop env "CARGO_TARGET_DIR=$extension_CARGO_TARGET_DIR" cargo test --features "$pg pg_test" --no-default-features
+            $nop cargo fetch
+            $nop cargo test --features "$pg pg_test" --no-default-features
             ;;
 
         install)
             cd extension
             require_pg_version
             find_pg_config
-            $nop env "CARGO_TARGET_DIR=$extension_CARGO_TARGET_DIR" cargo pgx install -c "$pg_config"
+            $nop cargo pgx install -c "$pg_config"
             ;;
 
         # Requires extension has been installed.  `install` or `test-extension` takes care of that.
         test-post-install)
             require_pg_version
             find_pg_config
-            (
-                export CARGO_TARGET_DIR="$top_CARGO_TARGET_DIR"
-                $nop cargo pgx stop $pg
-                $nop cargo pgx start $pg
-                $nop cargo run --manifest-path tools/post-install/Cargo.toml "$pg_config"
-                $nop cargo run --manifest-path tools/testrunner/Cargo.toml -- -h localhost -p $pg_port
-            )
+            $nop cargo pgx stop $pg
+            $nop cargo pgx start $pg
+            $nop cargo run --manifest-path tools/post-install/Cargo.toml "$pg_config"
+            $nop cargo run --manifest-path tools/testrunner/Cargo.toml -- -h localhost -p $pg_port
             ;;
 
         test-doc)
@@ -160,10 +133,8 @@ while [ $# -gt 0 ]; do
             find_pg_config
             require_cargo_pgx
             require_cargo_pgx_old
-            (
-                export CARGO_TARGET_DIR="$top_CARGO_TARGET_DIR"
-                $nop cargo pgx start $pg
-                $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- full-update-test-source \
+            $nop cargo pgx start $pg
+            $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- full-update-test-source \
                  -h localhost \
                  -p $pg_port \
                  --cache old-versions \
@@ -171,7 +142,6 @@ while [ $# -gt 0 ]; do
                  "$pg_config" \
                  "$cargo_pgx" \
                  "$cargo_pgx_old"
-            )
             ;;
 
         *)

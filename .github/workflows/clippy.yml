@@ -19,8 +19,6 @@ jobs:
       image: timescaledev/rust-pgx:latest
       env:
         # TODO: See TODOs on duplicate block in ci.yml
-        # Must keep in sync with `path: target` in "Cache cargo target dir" job
-        CARGO_TARGET_DIR_NAME: target
         CARGO_INCREMENTAL: 0
         CARGO_NET_RETRY: 10
         CI: 1
@@ -42,15 +40,15 @@ jobs:
         path: |
           /usr/local/cargo/registry
           /usr/local/cargo/git
-        key: ${{ runner.os }}-clippy-cargo-1.7
-        restore-keys: ${{ runner.os }}-clippy-cargo-PREVIOUS
+        key: ${{ runner.os }}-clippy-cargo-1.11.0
+        restore-keys: ${{ runner.os }}-clippy-cargo-1.7
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-clippy-target-1.7
-        restore-keys: ${{ runner.os }}-clippy-target-PREVIOUS
+        key: ${{ runner.os }}-clippy-target-1.11.0
+        #restore-keys: ${{ runner.os }}-clippy-target-1.10.1
 
     - name: Run Clippy
       # Github captures stdout and stderr separately and then intermingles them

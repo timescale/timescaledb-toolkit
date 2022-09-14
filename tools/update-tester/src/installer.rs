@@ -3,7 +3,7 @@ use std::{collections::HashSet, path::Path};
 use colored::Colorize;
 use semver::Version;
 use toml_edit::Document;
-use xshell::{cmd, cp, mkdir_p, pushd, pushenv, read_dir};
+use xshell::{cmd, cp, mkdir_p, pushd, read_dir};
 
 use crate::{defer, quietly_run};
 
@@ -21,7 +21,6 @@ pub fn install_all_versions(
     let extension_dir = path!(root_dir / "extension");
     let install_toolkit = |pgx_version: Version| -> xshell::Result<()> {
         let _d = pushd(&extension_dir)?;
-        let _e = pushenv("CARGO_TARGET_DIR", "../target/extension");
         match pgx_version >= Version::new(0, 4, 0) {
             true => quietly_run(cmd!("{cargo_pgx} pgx install -c {pg_config}")),
             false => quietly_run(cmd!("{cargo_pgx_old} pgx install -c {pg_config}")),
@@ -29,7 +28,6 @@ pub fn install_all_versions(
     };
     let post_install = || -> xshell::Result<()> {
         let _d = pushd(root_dir)?;
-        let _e = pushenv("CARGO_TARGET_DIR", "target/top");
         quietly_run(cmd!(
             "cargo run --manifest-path ./tools/post-install/Cargo.toml -- {pg_config}"
         ))

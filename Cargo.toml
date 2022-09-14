@@ -7,7 +7,6 @@ members = [
     "crates/flat_serialize/flat_serialize_macro",
     "crates/flat_serialize/flat_serialize",
     "crates/t-digest",
-    "crates/hyperloglog",
     "crates/hyperloglogplusplus",
     "crates/udd-sketch",
     "crates/time-weighted-average",

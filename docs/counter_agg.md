@@ -1,4 +1,4 @@
-# Counter Aggregates [<sup><mark>experimental</mark></sup>](/docs/README.md#tag-notes)
+# Counter Aggregates
 
 > [Description](#counter-agg-description)<br>
 > [Example Usage](#counter-agg-examples)<br>

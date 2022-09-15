@@ -874,12 +874,12 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
             );
             client.select(
                 r#"INSERT INTO states VALUES
-                ('1-1-2020 10:00', 'starting', 1),
-                ('1-1-2020 10:30', 'running', 1),
-                ('1-2-2020 16:00', 'error', 2),
-                ('1-3-2020 18:30', 'starting', 3),
-                ('1-3-2020 19:30', 'running', 3),
-                ('1-4-2020 12:00', 'stopping', 4)"#,
+                ('2020-1-1 10:00', 'starting', 1),
+                ('2020-1-1 10:30', 'running', 1),
+                ('2020-1-2 16:00', 'error', 2),
+                ('2020-1-3 18:30', 'starting', 3),
+                ('2020-1-3 19:30', 'running', 3),
+                ('2020-1-4 12:00', 'stopping', 4)"#,
                 None,
                 None,
             );

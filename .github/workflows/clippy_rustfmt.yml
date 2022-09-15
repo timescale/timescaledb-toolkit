@@ -57,4 +57,5 @@ jobs:
       run: su postgres -c 'sh tools/build clippy 2>&1'
 
     - name: Verify formatting
-      run: cargo fmt --check
+      # TODO Stop adding rustfmt component when we fix our image?  Or not:  it's a harmless no-op.
+      run: rustup component add rustfmt && cargo fmt --check

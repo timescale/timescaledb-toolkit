@@ -15,6 +15,7 @@ use crate::time_vector::{Timevector_TSTZ_F64, Timevector_TSTZ_F64Data};
 pub struct LttbTrans {
     series: Vec<TSPoint>,
     resolution: usize,
+    gap_interval: i64,
 }
 
 #[pg_extern(immutable, parallel_safe)]
@@ -49,6 +50,7 @@ pub fn lttb_trans_inner(
                     LttbTrans {
                         series: vec![],
                         resolution: resolution as usize,
+                        gap_interval: 0,
                     }
                     .into()
                 }
@@ -81,14 +83,137 @@ pub fn lttb_final_inner(
                 Some(state) => state,
             };
             state.series.sort_by_key(|point| point.ts);
-            let series = Cow::from(&state.series);
-            let downsampled = lttb(&*series, state.resolution);
+            let downsampled = lttb(&state.series[..], state.resolution);
             flatten!(Timevector_TSTZ_F64 {
                 num_points: downsampled.len() as u32,
                 flags: time_vector::FLAG_IS_SORTED,
                 internal_padding: [0; 3],
                 points: (&*downsampled).into(),
                 null_val: std::vec::from_elem(0_u8, (downsampled.len() + 7) / 8).into()
+            })
+            .into()
+        })
+    }
+}
+
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub fn gp_lttb_trans(
+    state: Internal,
+    time: crate::raw::TimestampTz,
+    val: Option<f64>,
+    gap: crate::raw::Interval,
+    resolution: i32,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal> {
+    let state = unsafe { state.to_inner() };
+    let needs_interval = state.is_none();
+
+    // Don't love this code, but need to compute gap_val if needed before time is moved
+    let gap_val = if needs_interval {
+        crate::datum_utils::interval_to_ms(&time, &gap)
+    } else {
+        0
+    };
+
+    let mut trans = lttb_trans_inner(state, time, val, resolution, fcinfo);
+    if needs_interval {
+        trans.as_mut().map(|s| {
+            s.gap_interval = gap_val;
+            s
+        });
+    }
+    trans.internal()
+}
+
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub fn gp_lttb_final(
+    state: Internal,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Timevector_TSTZ_F64<'static>> {
+    gap_preserving_lttb_final_inner(unsafe { state.to_inner() }, fcinfo)
+}
+pub fn gap_preserving_lttb_final_inner(
+    state: Option<Inner<LttbTrans>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Timevector_TSTZ_F64<'static>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            let mut state = match state {
+                None => return None,
+                Some(state) => state,
+            };
+            state.series.sort_by_key(|point| point.ts);
+
+            let count = state.series.len();
+            let max_gap = if state.gap_interval > 0 {
+                state.gap_interval
+            } else {
+                let range = state.series[count - 1].ts - state.series[0].ts;
+                range / state.resolution as i64
+            };
+
+            // Tracking endpoints remaining will keep us from assigning too many points
+            // to early LTTB computations when there are lots of gaps later in the timeseries
+            let mut endpoints_remaining = 2;
+            let mut start = 0;
+            for i in 0..count - 1 {
+                if state.series[i + 1].ts - state.series[i].ts > max_gap {
+                    if i == start {
+                        endpoints_remaining += 1;
+                    } else {
+                        endpoints_remaining += 2;
+                    }
+                    start = i + 1;
+                }
+            }
+
+            let mut points_remaining = state.resolution as i64;
+            let mut downsampled = vec![];
+            start = 0;
+
+            for i in 0..count - 1 {
+                if state.series[i + 1].ts - state.series[i].ts > max_gap {
+                    if i == start {
+                        // 1 len subarray
+                        downsampled.push(state.series[i]);
+                        start = i + 1;
+                        points_remaining -= 1;
+                        endpoints_remaining -= 1;
+                    } else {
+                        let sgmt_pct_of_remaining_pts =
+                            (i - start - 1) as f64 / (count - start - endpoints_remaining) as f64;
+                        let pts_for_sgmt = std::cmp::max(
+                            ((points_remaining - endpoints_remaining as i64) as f64
+                                * sgmt_pct_of_remaining_pts) as usize,
+                            0,
+                        ) + 2;
+                        downsampled
+                            .append(&mut lttb(&state.series[start..=i], pts_for_sgmt).into_owned());
+                        start = i + 1;
+                        points_remaining -= pts_for_sgmt as i64;
+                        endpoints_remaining -= 2;
+                    }
+                }
+            }
+            // remainder
+            if start == count - 1 {
+                downsampled.push(state.series[count - 1]);
+            } else {
+                downsampled.append(
+                    &mut lttb(
+                        &state.series[start..count],
+                        std::cmp::max(points_remaining, 2) as usize,
+                    )
+                    .into_owned(),
+                );
+            }
+
+            flatten!(Timevector_TSTZ_F64 {
+                num_points: downsampled.len() as u32,
+                flags: time_vector::FLAG_IS_SORTED,
+                internal_padding: [0; 3],
+                null_val: std::vec::from_elem(0_u8, (downsampled.len() + 7) / 8).into(),
+                points: downsampled.into(),
             })
             .into()
         })
@@ -105,6 +230,28 @@ CREATE AGGREGATE lttb(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution integer
 ",
     name = "lttb_agg",
     requires = [lttb_trans, lttb_final],
+);
+
+extension_sql!("\n\
+CREATE AGGREGATE toolkit_experimental.gp_lttb(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution integer) (\n\
+    sfunc = lttb_trans,\n\
+    stype = internal,\n\
+    finalfunc = toolkit_experimental.gp_lttb_final\n\
+);\n\
+",
+name = "gp_lttb_agg",
+requires = [lttb_trans, gp_lttb_final],
+);
+
+extension_sql!("\n\
+CREATE AGGREGATE toolkit_experimental.gp_lttb(ts TIMESTAMPTZ, value DOUBLE PRECISION, gapsize INTERVAL, resolution integer) (\n\
+    sfunc = toolkit_experimental.gp_lttb_trans,\n\
+    stype = internal,\n\
+    finalfunc = toolkit_experimental.gp_lttb_final\n\
+);\n\
+",
+name = "gp_lttb_agg_with_size",
+requires = [gp_lttb_trans, gp_lttb_final],
 );
 
 // based on https://github.com/jeromefroe/lttb-rs version 0.2.0
@@ -381,6 +528,123 @@ mod tests {
             assert_eq!(
                 result.next().unwrap()[1].value(),
                 Some("(\"2020-01-11 00:00:00+00\",14)")
+            );
+            assert!(result.next().is_none());
+        })
+    }
+
+    #[pg_test]
+    fn test_gp_lttb() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            let mut result = client.select(
+                r#"SELECT unnest(toolkit_experimental.gp_lttb(ts, val, 7))::TEXT
+                FROM (VALUES
+                    ('2020-1-1'::timestamptz, 10),
+                    ('2020-1-2'::timestamptz, 21),
+                    ('2020-1-3'::timestamptz, 19),
+                    ('2020-1-4'::timestamptz, 32),
+                    ('2020-1-5'::timestamptz, 12),
+                    ('2020-2-6'::timestamptz, 14),
+                    ('2020-3-7'::timestamptz, 18),
+                    ('2020-3-8'::timestamptz, 29),
+                    ('2020-3-9'::timestamptz, 23),
+                    ('2020-3-10'::timestamptz, 27),
+                    ('2020-3-11'::timestamptz, 14)
+                ) AS v(ts, val)"#,
+                None,
+                None,
+            );
+
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(\"2020-01-01 00:00:00+00\",10)")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(\"2020-01-04 00:00:00+00\",32)")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(\"2020-01-05 00:00:00+00\",12)")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(\"2020-02-06 00:00:00+00\",14)")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(\"2020-03-07 00:00:00+00\",18)")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(\"2020-03-08 00:00:00+00\",29)")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(\"2020-03-11 00:00:00+00\",14)")
+            );
+            assert!(result.next().is_none());
+        })
+    }
+
+    #[pg_test]
+    fn test_gp_lttb_with_gap() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            let mut result = client.select(
+                r#"SELECT unnest(toolkit_experimental.gp_lttb(ts, val, '36hr', 5))::TEXT
+                FROM (VALUES
+                    ('2020-1-1'::timestamptz, 10),
+                    ('2020-1-2'::timestamptz, 21),
+                    ('2020-1-4'::timestamptz, 32),
+                    ('2020-1-5'::timestamptz, 12),
+                    ('2020-2-6'::timestamptz, 14),
+                    ('2020-3-7'::timestamptz, 18),
+                    ('2020-3-8'::timestamptz, 29),
+                    ('2020-3-10'::timestamptz, 27),
+                    ('2020-3-11'::timestamptz, 14)
+                ) AS v(ts, val)"#,
+                None,
+                None,
+            );
+
+            // This should include everything, despite target resolution of 5
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(\"2020-01-01 00:00:00+00\",10)")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(\"2020-01-02 00:00:00+00\",21)")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(\"2020-01-04 00:00:00+00\",32)")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(\"2020-01-05 00:00:00+00\",12)")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(\"2020-02-06 00:00:00+00\",14)")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(\"2020-03-07 00:00:00+00\",18)")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(\"2020-03-08 00:00:00+00\",29)")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(\"2020-03-10 00:00:00+00\",27)")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(\"2020-03-11 00:00:00+00\",14)")
             );
             assert!(result.next().is_none());
         })

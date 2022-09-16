@@ -63,12 +63,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "arrayvec"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "23b62fc65de8e4e7f52534fb52b0f3ed04746ae267519eef2a83941e8085068b"
-
-[[package]]
 name = "asap"
 version = "0.1.0"
 
@@ -884,7 +878,6 @@ checksum = "494b4d60369511e7dea41cf646832512a94e542f68bb9c49e54518e0f468eb47"
 name = "hyperloglogplusplus"
 version = "0.1.0"
 dependencies = [
- "arrayvec",
  "encodings",
  "fnv",
  "quickcheck",

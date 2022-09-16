@@ -1,64 +1,91 @@
 use colored::Colorize;
+use semver::{BuildMetadata, Prerelease, Version};
 
+use crate::{defer, parser, Deferred};
 use postgres::{Client, NoTls, SimpleQueryMessage};
-
 use postgres_connection_configuration::ConnectionConfig;
-
-use crate::{defer, Deferred};
-
 mod stabilization;
 
-pub fn run_update_tests(
+use crate::parser::Test;
+use postgres::error::DbError;
+
+use std::{borrow::Cow, error::Error, fmt};
+pub fn run_update_tests<OnErr: FnMut(Test, TestError)>(
     root_config: &ConnectionConfig,
-    current_version: String,
-    old_versions: Vec<String>,
+    current_toolkit_version: String,
+    old_toolkit_versions: Vec<String>,
+    mut on_error: OnErr,
 ) -> Result<(), xshell::Error> {
-    for old_version in old_versions {
+    for old_toolkit_version in old_toolkit_versions {
         eprintln!(
             " {} {} -> {}",
             "Testing".bold().cyan(),
-            old_version,
-            current_version
+            old_toolkit_version,
+            current_toolkit_version
         );
 
-        let test_db_name = format!("tsdb_toolkit_test_{}--{}", old_version, current_version);
+        let test_db_name = format!(
+            "tsdb_toolkit_test_{}--{}",
+            old_toolkit_version, current_toolkit_version
+        );
         let test_config = root_config.with_db(&test_db_name);
         with_temporary_db(&test_db_name, root_config, || {
             let mut test_client = connect_to(&test_config);
 
-            test_client.install_toolkit_at_version(&old_version);
+            test_client.install_toolkit_at_version(&old_toolkit_version);
             let installed_version = test_client.get_installed_extension_version();
             assert_eq!(
-                installed_version, old_version,
+                installed_version, old_toolkit_version,
                 "installed unexpected version"
             );
 
-            let validation_values = test_client.create_test_objects();
+            test_client.set_timezone_utc();
 
-            test_client.update_to_current_version();
+            let errors =
+                test_client.create_test_objects_from_file(test_config, installed_version.clone());
+
+            for (test, error) in errors {
+                match error {
+                    Ok(..) => continue,
+                    Err(error) => on_error(test, error),
+                }
+            }
+
+            test_client.update_to_current_toolkit_version();
             let new_version = test_client.get_installed_extension_version();
             assert_eq!(
-                new_version, current_version,
+                new_version, current_toolkit_version,
                 "updated to unexpected version"
             );
 
-            test_client.validate_test_objects(validation_values);
+            let errors =
+                test_client.validate_test_objects_from_files(test_config, installed_version);
 
-            test_client.check_no_references_to_the_old_binary_leaked(&current_version);
+            for (test, error) in errors {
+                match error {
+                    Ok(..) => continue,
+                    Err(error) => on_error(test, error),
+                }
+            }
+
+            test_client.check_no_references_to_the_old_binary_leaked(&current_toolkit_version);
 
             test_client.validate_stable_objects_exist();
         });
         eprintln!(
             "{} {} -> {}",
             "Finished".bold().green(),
-            old_version,
-            current_version
+            old_toolkit_version,
+            current_toolkit_version
         );
     }
     Ok(())
 }
 
-pub fn create_test_objects_for_package_testing(root_config: &ConnectionConfig) {
+pub fn create_test_objects_for_package_testing<OnErr: FnMut(Test, TestError)>(
+    root_config: &ConnectionConfig,
+    mut on_error: OnErr,
+) -> Result<(), xshell::Error> {
     eprintln!(" {}", "Creating test objects".bold().cyan());
 
     let test_db_name = "tsdb_toolkit_test";
@@ -82,9 +109,20 @@ pub fn create_test_objects_for_package_testing(root_config: &ConnectionConfig) {
         .simple_query(create)
         .unwrap_or_else(|e| panic!("could not install extension due to {}", e,));
 
+    let current_toolkit_version = test_client.get_installed_extension_version();
+
+    test_client.set_timezone_utc();
     // create test objects
-    let _results = test_client.create_test_objects();
-    eprintln!("{}", "Finished creating objects".bold().green());
+    let errors = test_client.create_test_objects_from_file(test_config, current_toolkit_version);
+
+    for (test, error) in errors {
+        match error {
+            Ok(..) => continue,
+            Err(error) => on_error(test, error),
+        }
+    }
+    eprintln!("{}", "Finished Object Creation".bold().green());
+    Ok(())
 }
 
 fn connect_to(config: &ConnectionConfig<'_>) -> TestClient {
@@ -98,26 +136,35 @@ fn connect_to(config: &ConnectionConfig<'_>) -> TestClient {
     TestClient(client)
 }
 
-pub fn update_to_and_validate_new_toolkit_version(root_config: &ConnectionConfig) {
+pub fn update_to_and_validate_new_toolkit_version<OnErr: FnMut(Test, TestError)>(
+    current_toolkit_version: String,
+    root_config: &ConnectionConfig,
+    mut on_error: OnErr,
+) -> Result<(), xshell::Error> {
     // update extension to new version
     let test_db_name = "tsdb_toolkit_test";
     let test_config = root_config.with_db(test_db_name);
 
     let mut test_client = connect_to(&test_config);
-    test_client.update_to_current_version();
 
+    test_client.set_timezone_utc();
+    // get the currently installed version before updating
+    let old_toolkit_version = test_client.get_installed_extension_version();
+
+    test_client.update_to_current_toolkit_version();
     // run validation tests
-    let expected_results: QueryValues = vec![vec![
-        Some("100".to_string()),
-        Some("108".to_string()),
-        Some("149.5".to_string()),
-        Some("108.96220333142547".to_string()),
-        Some("109.50489521100047".to_string()),
-        Some("1.7995661075080858".to_string()),
-    ]];
-    test_client.validate_test_objects(expected_results);
+    let errors = test_client.validate_test_objects_from_files(test_config, old_toolkit_version);
 
-    eprintln!("{}", "Finished validating objects".bold().green());
+    for (test, error) in errors {
+        match error {
+            Ok(..) => continue,
+            Err(error) => on_error(test, error),
+        }
+    }
+
+    test_client.check_no_references_to_the_old_binary_leaked(&current_toolkit_version);
+
+    test_client.validate_stable_objects_exist();
 
     // This close needs to happen before trying to drop the DB or else panics with `There is 1 other session using the database.`
     test_client
@@ -126,12 +173,13 @@ pub fn update_to_and_validate_new_toolkit_version(root_config: &ConnectionConfig
         .unwrap_or_else(|e| panic!("Could not close connection to postgres DB due to {}", e));
     // if the validation passes, drop the db
     let mut client = connect_to(root_config).0;
-    eprintln!("{}", "Tests pass, dropping database.".bold().green());
+    eprintln!("{}", "Dropping database.".bold().green());
 
     let drop = format!(r#"DROP DATABASE IF EXISTS "{}""#, test_db_name);
     client
         .simple_query(&drop)
         .unwrap_or_else(|e| panic!("could not drop db {} due to {}", test_db_name, e));
+    Ok(())
 }
 
 //---------------//
@@ -179,99 +227,143 @@ struct TestClient(Client);
 type QueryValues = Vec<Vec<Option<String>>>;
 
 impl TestClient {
-    fn install_toolkit_at_version(&mut self, old_version: &str) {
+    fn install_toolkit_at_version(&mut self, old_toolkit_version: &str) {
         let create = format!(
             r#"CREATE EXTENSION timescaledb_toolkit VERSION "{}""#,
-            old_version
+            old_toolkit_version
         );
         self.simple_query(&create).unwrap_or_else(|e| {
             panic!(
                 "could not install extension at version {} due to {}",
-                old_version, e,
+                old_toolkit_version, e,
             )
         });
     }
 
-    #[must_use]
-    fn create_test_objects(&mut self) -> QueryValues {
-        let create_data_table = "\
-            CREATE TABLE test_data(ts timestamptz, val DOUBLE PRECISION);\
-            INSERT INTO test_data \
-                SELECT '2020-01-01 00:00:00+00'::timestamptz + i * '1 hour'::interval, \
-                100 + i % 100\
-            FROM generate_series(0, 10000) i;\
-        ";
-        self.simple_query(create_data_table)
-            .unwrap_or_else(|e| panic!("could create the data table due to {}", e));
-
-        // TODO JOSH - I want to have additional stuff for newer versions,
-        //             but it's not ready yet
-        let create_test_view = "\
-            CREATE MATERIALIZED VIEW regression_view AS \
-                SELECT \
-                    counter_agg(ts, val) AS countagg, \
-                    hyperloglog(1024, val) AS hll, \
-                    time_weight('locf', ts, val) AS twa, \
-                    uddsketch(100, 0.001, val) as udd, \
-                    tdigest(100, val) as tdig, \
-                    stats_agg(val) as stats \
-                FROM test_data;\
-        ";
-        self.simple_query(create_test_view)
-            .unwrap_or_else(|e| panic!("could create the regression view due to {}", e));
-
-        let query_test_view = "\
-            SET TIME ZONE 'UTC'; \
-            SELECT \
-                num_resets(countagg), \
-                distinct_count(hll), \
-                average(twa), \
-                approx_percentile(0.1, udd), \
-                approx_percentile(0.1, tdig), \
-                kurtosis(stats) \
-            FROM regression_view;\
-        ";
-        let view_output = self
-            .simple_query(query_test_view)
-            .unwrap_or_else(|e| panic!("could query the regression view due to {}", e));
-        get_values(view_output)
+    fn set_timezone_utc(&mut self) {
+        self.simple_query("SET TIME ZONE 'UTC';")
+            .unwrap_or_else(|e| panic!("could not set time zone to UTC due to {}", e));
     }
 
-    fn update_to_current_version(&mut self) {
+    fn create_test_objects_from_file(
+        &mut self,
+        root_config: ConnectionConfig<'_>,
+        current_toolkit_version: String,
+    ) -> Vec<(Test, Result<(), TestError>)> {
+        let all_tests = parser::extract_tests("tests/update");
+        // Hack to match previous versions of toolkit that don't conform to Semver.
+        let current_toolkit_semver = match current_toolkit_version.as_str() {
+            "1.4" => Version {
+                major: 1,
+                minor: 4,
+                patch: 0,
+                pre: Prerelease::EMPTY,
+                build: BuildMetadata::EMPTY,
+            },
+            "1.5" => Version {
+                major: 1,
+                minor: 5,
+                patch: 0,
+                pre: Prerelease::EMPTY,
+                build: BuildMetadata::EMPTY,
+            },
+            "1.10.0-dev" => Version {
+                major: 1,
+                minor: 10,
+                patch: 0,
+                pre: Prerelease::EMPTY,
+                build: BuildMetadata::EMPTY,
+            },
+            x => Version::parse(x).unwrap(),
+        };
+
+        let errors: Vec<_> = all_tests
+            .into_iter()
+            .flat_map(|tests| {
+                let mut client = connect_to(&root_config).0;
+                tests
+                    .tests
+                    .into_iter()
+                    .filter(|x| x.creation)
+                    .filter(|x| match &x.min_toolkit_version {
+                        Some(version) => version <= &current_toolkit_semver,
+                        None => true,
+                    })
+                    .map(move |test| {
+                        let output = run_test(&mut client, &test);
+                        (test.clone(), output)
+                    })
+            })
+            .collect();
+        errors
+    }
+
+    fn update_to_current_toolkit_version(&mut self) {
         let update = "ALTER EXTENSION timescaledb_toolkit UPDATE";
         self.simple_query(update)
             .unwrap_or_else(|e| panic!("could not update extension due to {}", e));
     }
 
-    fn validate_test_objects(&mut self, validation_values: QueryValues) {
-        let query_test_view = "\
-            SET TIME ZONE 'UTC'; \
-            SELECT \
-                num_resets(countagg), \
-                distinct_count(hll), \
-                average(twa), \
-                approx_percentile(0.1, udd), \
-                approx_percentile(0.1, tdig), \
-                kurtosis(stats) \
-            FROM regression_view;\
-        ";
-        let view_output = self
-            .simple_query(query_test_view)
-            .unwrap_or_else(|e| panic!("could query the regression view due to {}", e));
-        let new_values = get_values(view_output);
-        assert_eq!(
-            new_values, validation_values,
-            "values returned by the view changed on update",
-        );
+    fn validate_test_objects_from_files(
+        &mut self,
+        root_config: ConnectionConfig<'_>,
+        old_toolkit_version: String,
+    ) -> Vec<(Test, Result<(), TestError>)> {
+        let all_tests = parser::extract_tests("tests/update");
+
+        let old_toolkit_semver = match old_toolkit_version.as_str() {
+            "1.4" => Version {
+                major: 1,
+                minor: 4,
+                patch: 0,
+                pre: Prerelease::EMPTY,
+                build: BuildMetadata::EMPTY,
+            },
+            "1.5" => Version {
+                major: 1,
+                minor: 5,
+                patch: 0,
+                pre: Prerelease::EMPTY,
+                build: BuildMetadata::EMPTY,
+            },
+            "1.10.0-dev" => Version {
+                major: 1,
+                minor: 10,
+                patch: 0,
+                pre: Prerelease::EMPTY,
+                build: BuildMetadata::EMPTY,
+            },
+            x => Version::parse(x).unwrap(),
+        };
+        let errors: Vec<_> = all_tests
+            .into_iter()
+            .flat_map(|tests| {
+                let mut client = connect_to(&root_config).0;
+                tests
+                    .tests
+                    .into_iter()
+                    .filter(|x| x.validation)
+                    .filter(|x| match &x.min_toolkit_version {
+                        Some(min_version) => min_version <= &old_toolkit_semver,
+                        None => true,
+                    })
+                    .map(move |test| {
+                        let output = run_test(&mut client, &test);
+                        // ensure that the DB is dropped after the client
+                        (test.clone(), output)
+                    })
+            })
+            .collect();
+        errors
     }
 
-    fn check_no_references_to_the_old_binary_leaked(&mut self, current_version: &str) {
+    fn check_no_references_to_the_old_binary_leaked(&mut self, current_toolkit_version: &str) {
         let query_get_leaked_objects = format!(
             "SELECT pg_proc.proname \
             FROM pg_catalog.pg_proc \
             WHERE pg_proc.probin LIKE '$libdir/timescaledb_toolkit%' \
               AND pg_proc.probin <> '$libdir/timescaledb_toolkit-{}';",
-            current_version,
+            current_toolkit_version,
         );
         let leaks = self
             .simple_query(&query_get_leaked_objects)
@@ -361,4 +453,241 @@ fn get_values(query_results: Vec<SimpleQueryMessage>) -> QueryValues {
             _ => unreachable!(),
         })
         .collect()
+}
+
+// Functions below this line are originally from sql-doctester/src/runner.rs
+
+pub fn validate_output(output: Vec<SimpleQueryMessage>, test: &Test) -> Result<(), TestError> {
+    use SimpleQueryMessage::*;
+
+    let mut rows = Vec::with_capacity(test.output.len());
+    for r in output {
+        match r {
+            Row(r) => {
+                let mut row: Vec<String> = Vec::with_capacity(r.len());
+                for i in 0..r.len() {
+                    row.push(r.get(i).unwrap_or("").to_string())
+                }
+                rows.push(row);
+            }
+            CommandComplete(_) => {
+                break;
+            }
+            _ => unreachable!(),
+        }
+    }
+    let output_error = |header: &str| {
+        format!(
+            "{}\n{expected}\n{}{}\n\n{received}\n{}{}\n\n{delta}\n{}",
+            header,
+            stringify_table(&test.output),
+            format!("({} rows)", test.output.len()).dimmed(),
+            stringify_table(&rows),
+            format!("({} rows)", rows.len()).dimmed(),
+            stringify_delta(&test.output, &rows),
+            expected = "Expected".bold().blue(),
+            received = "Received".bold().blue(),
+            delta = "Delta".bold().blue(),
+        )
+    };
+
+    if test.output.len() != rows.len() {
+        return Err(TestError::OutputError(output_error(
+            "output has a different number of rows than expected.",
+        )));
+    }
+
+    fn clamp_len<'s>(mut col: &'s str, idx: usize, test: &Test) -> &'s str {
+        let max_len = test.precision_limits.get(&idx);
+        if let Some(&max_len) = max_len {
+            if col.len() > max_len {
+                col = &col[..max_len]
+            }
+        }
+        col
+    }
+
+    let all_eq = test.output.iter().zip(rows.iter()).all(|(out, row)| {
+        out.len() == row.len()
+            && out
+                .iter()
+                .zip(row.iter())
+                .enumerate()
+                .all(|(i, (o, r))| clamp_len(o, i, test) == clamp_len(r, i, test))
+    });
+    if !all_eq {
+        return Err(TestError::OutputError(output_error(
+            "output has a different values than expected.",
+        )));
+    }
+    Ok(())
+}
+fn stringify_table(table: &[Vec<String>]) -> String {
+    use std::{cmp::max, fmt::Write};
+    if table.is_empty() {
+        return "---".to_string();
+    }
+    let mut width = vec![0; table[0].len()];
+    for row in table {
+        // Ensure that we have width for every column
+        // TODO this shouldn't be needed, but sometimes is?
+        if width.len() < row.len() {
+            width.extend((0..row.len() - width.len()).map(|_| 0));
+        }
+        for (i, value) in row.iter().enumerate() {
+            width[i] = max(width[i], value.len())
+        }
+    }
+    let mut output = String::with_capacity(width.iter().sum::<usize>() + width.len() * 3);
+    for row in table {
+        for (i, value) in row.iter().enumerate() {
+            if i != 0 {
+                output.push_str(" | ")
+            }
+            let _ = write!(&mut output, "{:>width$}", value, width = width[i]);
+        }
+        output.push('\n')
+    }
+
+    output
+}
+
+#[allow(clippy::needless_range_loop)]
+fn stringify_delta(left: &[Vec<String>], right: &[Vec<String>]) -> String {
+    use std::{cmp::max, fmt::Write};
+
+    static EMPTY_ROW: Vec<String> = vec![];
+    static EMPTY_VAL: String = String::new();
+
+    let mut width = vec![
+        0;
+        max(
+            left.get(0).map(Vec::len).unwrap_or(0),
+            right.get(0).map(Vec::len).unwrap_or(0)
+        )
+    ];
+    let num_rows = max(left.len(), right.len());
+    for i in 0..num_rows {
+        let left = left.get(i).unwrap_or(&EMPTY_ROW);
+        let right = right.get(i).unwrap_or(&EMPTY_ROW);
+        let cols = max(left.len(), right.len());
+        for j in 0..cols {
+            let left = left.get(j).unwrap_or(&EMPTY_VAL);
+            let right = right.get(j).unwrap_or(&EMPTY_VAL);
+            if left == right {
+                width[j] = max(width[j], left.len())
+            } else {
+                width[j] = max(width[j], left.len() + right.len() + 2)
+            }
+        }
+    }
+    let mut output = String::with_capacity(width.iter().sum::<usize>() + width.len() * 3);
+    for i in 0..num_rows {
+        let left = left.get(i).unwrap_or(&EMPTY_ROW);
+        let right = right.get(i).unwrap_or(&EMPTY_ROW);
+        let cols = max(left.len(), right.len());
+        for j in 0..cols {
+            let left = left.get(j).unwrap_or(&EMPTY_VAL);
+            let right = right.get(j).unwrap_or(&EMPTY_VAL);
+            if j != 0 {
+                let _ = write!(&mut output, " | ");
+            }
+            let (value, padding) = if left == right {
+                (left.to_string(), width[j] - left.len())
+            } else {
+                let padding = width[j] - (left.len() + right.len() + 2);
+                let value = format!(
+                    "{}{}{}{}",
+                    "-".magenta(),
+                    left.magenta(),
+                    "+".yellow(),
+                    right.yellow()
+                );
+                (value, padding)
+            };
+            // trick to ensure correct padding, the color characters are counted
+            // if done the normal way.
+            let _ = write!(&mut output, "{:>padding$}{}", "", value, padding = padding);
+        }
+        let _ = writeln!(&mut output);
+    }
+    output
+}
+
+#[derive(Debug)]
+pub enum TestError {
+    PgError(postgres::Error),
+    OutputError(String),
+}
+
+impl fmt::Display for TestError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TestError::PgError(error) => {
+                match error.source().and_then(|e| e.downcast_ref::<DbError>()) {
+                    Some(e) => {
+                        use postgres::error::ErrorPosition::*;
+                        let pos = match e.position() {
+                            Some(Original(pos)) => format!("At character {}", pos),
+                            Some(Internal { position, query }) => {
+                                format!("In internal query `{}` at {}", query, position)
+                            }
+                            None => String::new(),
+                        };
+                        write!(
+                            f,
+                            "{}\n{}\n{}\n{}",
+                            "Postgres Error:".bold().red(),
+                            e,
+                            e.detail().unwrap_or(""),
+                            pos,
+                        )
+                    }
+                    None => write!(f, "{}", error),
+                }
+            }
+            TestError::OutputError(err) => write!(f, "{} {}", "Error:".bold().red(), err),
+        }
+    }
+}
+
+impl From<postgres::Error> for TestError {
+    fn from(error: postgres::Error) -> Self {
+        TestError::PgError(error)
+    }
+}
+
+impl TestError {
+    pub fn annotate_position<'s>(&self, sql: &'s str) -> Cow<'s, str> {
+        match self.location() {
+            None => sql.into(),
+            Some(pos) => format!(
+                "{}{}{}",
+                &sql[..pos as usize],
+                "~>".bright_red(),
+                &sql[pos as usize..],
+            )
+            .into(),
+        }
+    }
+
+    fn location(&self) -> Option<u32> {
+        use postgres::error::ErrorPosition::*;
+        match self {
+            TestError::OutputError(..) => None,
+            TestError::PgError(e) => match e
+                .source()
+                .and_then(|e| e.downcast_ref::<DbError>().and_then(DbError::position))
+            {
+                None => None,
+                Some(Internal { .. }) => None,
+                Some(Original(pos)) => Some(pos.saturating_sub(1)),
+            },
+        }
+    }
+}
+
+fn run_test(client: &mut Client, test: &Test) -> Result<(), TestError> {
+    let output = client.simple_query(&test.text)?;
+    validate_output(output, test)
 }

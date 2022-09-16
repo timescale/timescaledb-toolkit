@@ -32,6 +32,7 @@ macro_rules! path {
 }
 
 mod installer;
+mod parser;
 mod testrunner;
 
 fn main() {
@@ -149,6 +150,8 @@ fn main() {
                     .long("database")
                     .takes_value(true)
             )
+
+            .arg(Arg::new("ROOT_DIR").takes_value(true).default_value("."))
 	)
 // Mutates help, removing the short flag (-h) so that it can be used by HOST
 	.mut_arg("help", |_h| {
@@ -188,6 +191,21 @@ fn main() {
                 .value_of("CARGO_PGX_OLD")
                 .expect("missing cargo_pgx_old");
 
+            let mut num_errors = 0;
+            let stdout = io::stdout();
+            let mut out = stdout.lock();
+            let on_error = |test: parser::Test, error: testrunner::TestError| {
+                num_errors += 1;
+                let _ = writeln!(
+                    &mut out,
+                    "{} {}\n",
+                    test.location.bold().blue(),
+                    test.header.bold().dimmed()
+                );
+                let _ = writeln!(&mut out, "{}", error.annotate_position(&test.text));
+                let _ = writeln!(&mut out, "{}\n", error);
+            };
+
             let res = try_main(
                 root_dir,
                 cache_dir,
@@ -196,11 +214,16 @@ fn main() {
                 cargo_pgx,
                 cargo_pgx_old,
                 reinstall,
+                on_error,
             );
             if let Err(err) = res {
                 eprintln!("{}", err);
                 process::exit(1);
             }
+            if num_errors > 0 {
+                process::exit(1)
+            }
+            let _ = writeln!(&mut out, "{}\n", "Tests Passed".bold().green());
         }
         Some(("create-test-objects", create_test_object_matches)) => {
             let connection_config = ConnectionConfig {
@@ -211,11 +234,35 @@ fn main() {
                 database: create_test_object_matches.value_of("DB"),
             };
 
-            let res = try_create_objects(&connection_config);
+            let mut num_errors = 0;
+            let stdout = io::stdout();
+            let mut out = stdout.lock();
+            let on_error = |test: parser::Test, error: testrunner::TestError| {
+                num_errors += 1;
+                let _ = writeln!(
+                    &mut out,
+                    "{} {}\n",
+                    test.location.bold().blue(),
+                    test.header.bold().dimmed()
+                );
+                let _ = writeln!(&mut out, "{}", error.annotate_position(&test.text));
+                let _ = writeln!(&mut out, "{}\n", error);
+            };
+
+            let res = try_create_objects(&connection_config, on_error);
             if let Err(err) = res {
                 eprintln!("{}", err);
                 process::exit(1);
             }
+            if num_errors > 0 {
+                let _ = writeln!(&mut out, "{}\n", "Object Creation Failed".bold().red());
+                process::exit(1)
+            }
+            let _ = writeln!(
+                &mut out,
+                "{}\n",
+                "Objects Created Successfully".bold().green()
+            );
         }
         Some(("validate-test-objects", validate_test_object_matches)) => {
             let connection_config = ConnectionConfig {
@@ -225,18 +272,46 @@ fn main() {
                 password: validate_test_object_matches.value_of("PASSWORD"),
                 database: validate_test_object_matches.value_of("DB"),
             };
+            let mut num_errors = 0;
+            let stdout = io::stdout();
+            let mut out = stdout.lock();
+            let on_error = |test: parser::Test, error: testrunner::TestError| {
+                num_errors += 1;
+                let _ = writeln!(
+                    &mut out,
+                    "{} {}\n",
+                    test.location.bold().blue(),
+                    test.header.bold().dimmed()
+                );
+                let _ = writeln!(&mut out, "{}", error.annotate_position(&test.text));
+                let _ = writeln!(&mut out, "{}\n", error);
+            };
 
-            let res = try_validate_objects(&connection_config);
+            let root_dir = validate_test_object_matches
+                .value_of("ROOT_DIR")
+                .expect("missing path to root of the toolkit repo");
+            let res = try_validate_objects(&connection_config, root_dir, on_error);
             if let Err(err) = res {
                 eprintln!("{}", err);
                 process::exit(1);
             }
+            if num_errors > 0 {
+                let _ = writeln!(&mut out, "{}\n", "Validation Failed".bold().red());
+                process::exit(1)
+            }
+
+            let _ = writeln!(
+                &mut out,
+                "{}\n",
+                "Validations Completed Successfully".bold().green()
+            );
         }
         _ => unreachable!(), // if all subcommands are defined, anything else is unreachable
     }
 }
 
-fn try_main(
+#[allow(clippy::too_many_arguments)]
+fn try_main<OnErr: FnMut(parser::Test, testrunner::TestError)>(
     root_dir: &str,
     cache_dir: Option<&str>,
     db_conn: &ConnectionConfig<'_>,
@@ -244,6 +319,7 @@ fn try_main(
     cargo_pgx: &str,
     cargo_pgx_old: &str,
     reinstall: HashSet<&str>,
+    on_error: OnErr,
 ) -> xshell::Result<()> {
     let (current_version, old_versions) = get_version_info(root_dir)?;
     if old_versions.is_empty() {
@@ -263,16 +339,25 @@ fn try_main(
         &reinstall,
     )?;
 
-    testrunner::run_update_tests(db_conn, current_version, old_versions)
+    testrunner::run_update_tests(db_conn, current_version, old_versions, on_error)
 }
-fn try_create_objects(db_conn: &ConnectionConfig<'_>) -> xshell::Result<()> {
-    testrunner::create_test_objects_for_package_testing(db_conn);
-    Ok(())
+fn try_create_objects<OnErr: FnMut(parser::Test, testrunner::TestError)>(
+    db_conn: &ConnectionConfig<'_>,
+    on_error: OnErr,
+) -> xshell::Result<()> {
+    testrunner::create_test_objects_for_package_testing(db_conn, on_error)
 }
 
-fn try_validate_objects(db_conn: &ConnectionConfig<'_>) -> xshell::Result<()> {
-    testrunner::update_to_and_validate_new_toolkit_version(db_conn);
-    Ok(())
+fn try_validate_objects<OnErr: FnMut(parser::Test, testrunner::TestError)>(
+    _conn: &ConnectionConfig<'_>,
+    root_dir: &str,
+    on_error: OnErr,
+) -> xshell::Result<()> {
+    let (current_version, old_versions) = get_version_info(root_dir)?;
+    if old_versions.is_empty() {
+        panic!("no old versions to upgrade from")
+    }
+    testrunner::update_to_and_validate_new_toolkit_version(current_version, _conn, on_error)
 }
 
 fn get_version_info(root_dir: &str) -> xshell::Result<(String, Vec<String>)> {

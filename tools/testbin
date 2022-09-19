@@ -3,7 +3,7 @@
 # This script automates binary upgrade testing.
 
 # Sample run:
-# tools/testbin -version 1.11.0 -bindir .. -dbroot /tmp/db -pgport 28800 deb
+# OS_NAME=ubuntu OS_VERSION=20.04 tools/testbin -version 1.11.0 -bindir .. -dbroot /tmp/db -pgport 28800 deb
 
 # A released toolkit lists the versions it is upgradeable from in
 # extension/timescaledb_toolkit.control .  This script processes those entries
@@ -16,6 +16,14 @@
 # To ensure this script's assumptions about the control file and the control
 # file itself are in agreement, run `tools/testbin check-control` for each
 # pull request.
+
+# The distinction between environment variables and command-line options is
+# possibly inconsistent.  The approach now is for general parameters to come
+# from the command line, and system-specific parameters to come from the
+# environment.  Specifically, these are required in the environment for deb
+# packages only:
+# - OS_NAME
+# - OS_VERSION
 
 set -ex
 
@@ -104,10 +112,10 @@ finish_test() {
 }
 
 test_deb() {
+    [ -n "$OS_NAME" ] || die 'OS_NAME environment variable must be set to the distribution name e.g. debian or ubuntu'
+    [ -n "$OS_VERSION" ] || die 'OS_VERSION environment variable must be set to the distribution version number'
+
     ARCH=`dpkg --print-architecture`
-    # Could parameterize these, but we're only supporting Ubuntu 20.04 right now.
-    OS_NAME=ubuntu
-    OS_VERSION=20.04
     EPOCH=
     MIN_DEB_ARM=`cmp_version $MIN_DEB_ARM`
     MIN_DEB_EPOCH=`cmp_version $MIN_DEB_EPOCH`

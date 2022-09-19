@@ -169,3 +169,6 @@ jobs:
 
     - name: Run Update Tests
       run: su postgres -c 'sh tools/build -pg$PGVERSION -cargo-pgx /home/postgres/pgx/0.4/bin/cargo-pgx -cargo-pgx-old /home/postgres/pgx/0.2/bin/cargo-pgx test-updates 2>&1'
+
+    - name: Check tools/testbin
+      run: sh tools/testbin check-control

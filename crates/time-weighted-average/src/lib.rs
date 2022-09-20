@@ -189,6 +189,16 @@ impl TimeWeightSummary {
         let duration = (self.last.ts - self.first.ts) as f64;
         Ok(self.w_sum / duration)
     }
+
+    /// Evaluate the integral in microseconds.
+    pub fn time_weighted_integral(&self) -> f64 {
+        if self.last.ts == self.first.ts {
+            // the integral of a duration of zero width is zero
+            0.0
+        } else {
+            self.w_sum
+        }
+    }
 }
 
 impl TimeWeightMethod {

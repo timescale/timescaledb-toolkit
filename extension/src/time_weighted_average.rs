@@ -5,9 +5,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     accessors::{
-        AccessorAverage, AccessorFirstTime, AccessorFirstVal, AccessorLastTime, AccessorLastVal,
+        toolkit_experimental, AccessorAverage, AccessorFirstTime, AccessorFirstVal,
+        AccessorLastTime, AccessorLastVal,
     },
     aggregate_utils::in_aggregate_context,
+    duration::DurationUnit,
     flatten,
     palloc::{Inner, Internal, InternalAsValue, ToInternal},
     pg_type, ron_inout_funcs,
@@ -177,7 +179,7 @@ pub fn time_weight_trans_inner(
                         point_buffer: vec![],
                         // TODO technically not portable to ASCII-compatible charsets
                         method: match method.trim().to_lowercase().as_str() {
-                            "linear" => TimeWeightMethod::Linear,
+                            "linear" | "trapezoidal" => TimeWeightMethod::Linear,
                             "locf" => TimeWeightMethod::LOCF,
                             _ => panic!("unknown method"),
                         },
@@ -401,6 +403,18 @@ pub fn arrow_time_weighted_average_average(
     time_weighted_average_average(sketch)
 }
 
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_time_weighted_average_integral(
+    tws: Option<TimeWeightSummary>,
+    accessor: toolkit_experimental::AccessorIntegral,
+) -> Option<f64> {
+    time_weighted_average_integral(
+        tws,
+        String::from_utf8_lossy(accessor.bytes.as_slice()).to_string(),
+    )
+}
+
 #[pg_extern(immutable, parallel_safe, name = "average")]
 pub fn time_weighted_average_average(tws: Option<TimeWeightSummary>) -> Option<f64> {
     match tws {
@@ -422,6 +436,43 @@ pub fn time_weighted_average_average(tws: Option<TimeWeightSummary>) -> Option<f
 #[pg_extern(
     immutable,
     parallel_safe,
+    name = "integral",
+    schema = "toolkit_experimental"
+)]
+pub fn time_weighted_average_integral(
+    tws: Option<TimeWeightSummary>,
+    unit: default!(String, "'second'"),
+) -> Option<f64> {
+    let unit = match DurationUnit::from_str(&unit) {
+        Some(unit) => unit,
+        None => pgx::error!(
+            "Unrecognized duration unit: {}. Valid units are: usecond, msecond, second, minute, hour",
+            unit,
+        ),
+    };
+    let integral_microsecs = tws?.internal().time_weighted_integral();
+    Some(DurationUnit::Microsec.convert_unit(integral_microsecs, unit))
+}
+
+fn interpolate<'a>(
+    tws: Option<TimeWeightSummary>,
+    start: crate::raw::TimestampTz,
+    interval: crate::raw::Interval,
+    prev: Option<TimeWeightSummary>,
+    next: Option<TimeWeightSummary>,
+) -> Option<TimeWeightSummary<'a>> {
+    match tws {
+        None => None,
+        Some(tws) => {
+            let interval = crate::datum_utils::interval_to_ms(&start, &interval);
+            Some(tws.interpolate(start.into(), interval, prev, next))
+        }
+    }
+}
+
+#[pg_extern(
+    immutable,
+    parallel_safe,
     name = "interpolated_average",
     schema = "toolkit_experimental"
 )]
@@ -432,15 +483,26 @@ pub fn time_weighted_average_interpolated_average(
     prev: Option<TimeWeightSummary>,
     next: Option<TimeWeightSummary>,
 ) -> Option<f64> {
-    let target = match tws {
-        None => None,
-        Some(tws) => {
-            let interval = crate::datum_utils::interval_to_ms(&start, &interval);
-            Some(tws.interpolate(start.into(), interval, prev, next))
-        }
-    };
-
+    let target = interpolate(tws, start, interval, prev, next);
     time_weighted_average_average(target)
+}
+
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "interpolated_integral",
+    schema = "toolkit_experimental"
+)]
+pub fn time_weighted_average_interpolated_integral(
+    tws: Option<TimeWeightSummary>,
+    start: crate::raw::TimestampTz,
+    interval: crate::raw::Interval,
+    prev: Option<TimeWeightSummary>,
+    next: Option<TimeWeightSummary>,
+    unit: String,
+) -> Option<f64> {
+    let target = interpolate(tws, start, interval, prev, next);
+    time_weighted_average_integral(target, unit)
 }
 
 #[cfg(any(test, feature = "pg_test"))]
@@ -465,8 +527,17 @@ mod tests {
                 "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION); SET TIME ZONE 'UTC'";
             client.select(stmt, None, None);
 
-            // add a couple points
-            let stmt = "INSERT INTO test VALUES('2020-01-01 00:00:00+00', 10.0), ('2020-01-01 00:01:00+00', 20.0)";
+            // add a point
+            let stmt = "INSERT INTO test VALUES('2020-01-01 00:00:00+00', 10.0)";
+            client.select(stmt, None, None);
+
+            let stmt = "SELECT toolkit_experimental.integral(time_weight('Trapezoidal', ts, val), 'hrs') FROM test";
+            assert_eq!(select_one!(client, stmt, f64), 0.0);
+            let stmt = "SELECT toolkit_experimental.integral(time_weight('LOCF', ts, val), 'msecond') FROM test";
+            assert_eq!(select_one!(client, stmt, f64), 0.0);
+
+            // add another point
+            let stmt = "INSERT INTO test VALUES('2020-01-01 00:01:00+00', 20.0)";
             client.select(stmt, None, None);
 
             // test basic with 2 points
@@ -506,6 +577,11 @@ mod tests {
             let stmt = "SELECT average(time_weight('LOCF', ts, val)) FROM test";
             assert!((select_one!(client, stmt, f64) - 15.0).abs() < f64::EPSILON);
 
+            let stmt = "SELECT toolkit_experimental.integral(time_weight('Linear', ts, val), 'mins') FROM test";
+            assert!((select_one!(client, stmt, f64) - 60.0).abs() < f64::EPSILON);
+            let stmt = "SELECT toolkit_experimental.integral(time_weight('LOCF', ts, val), 'hour') FROM test";
+            assert!((select_one!(client, stmt, f64) - 1.0).abs() < f64::EPSILON);
+
             //non-evenly spaced values
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:08:00+00', 30.0), ('2020-01-01 00:10:00+00', 10.0), ('2020-01-01 00:10:30+00', 20.0), ('2020-01-01 00:20:00+00', 30.0)";
             client.select(stmt, None, None);
@@ -519,15 +595,35 @@ mod tests {
             // arrow syntax should be the same
             assert!((select_one!(client, stmt, f64) - 21.25).abs() < f64::EPSILON);
 
+            let stmt = "SELECT toolkit_experimental.integral(time_weight('Linear', ts, val), 'microseconds') FROM test";
+            assert!((select_one!(client, stmt, f64) - 25500000000.00).abs() < f64::EPSILON);
+            let stmt = "SELECT time_weight('Linear', ts, val) \
+                ->toolkit_experimental.integral('microseconds') \
+            FROM test";
+            // arrow syntax should be the same
+            assert!((select_one!(client, stmt, f64) - 25500000000.00).abs() < f64::EPSILON);
+            let stmt = "SELECT time_weight('Linear', ts, val) \
+                ->toolkit_experimental.integral() \
+            FROM test";
+            assert!((select_one!(client, stmt, f64) - 25500.00).abs() < f64::EPSILON);
+
             let stmt = "SELECT average(time_weight('LOCF', ts, val)) FROM test";
             // expected = (10 + 20 + 10 + 20 + 10*4 + 30*2 +10*.5 + 20*9.5) / 20 = 17.75 using last value and carrying for each point
             assert!((select_one!(client, stmt, f64) - 17.75).abs() < f64::EPSILON);
+
+            let stmt = "SELECT toolkit_experimental.integral(time_weight('LOCF', ts, val), 'milliseconds') FROM test";
+            assert!((select_one!(client, stmt, f64) - 21300000.0).abs() < f64::EPSILON);
 
             //make sure this works with whatever ordering we throw at it
             let stmt = "SELECT average(time_weight('Linear', ts, val ORDER BY random())) FROM test";
             assert!((select_one!(client, stmt, f64) - 21.25).abs() < f64::EPSILON);
             let stmt = "SELECT average(time_weight('LOCF', ts, val ORDER BY random())) FROM test";
             assert!((select_one!(client, stmt, f64) - 17.75).abs() < f64::EPSILON);
+
+            let stmt = "SELECT toolkit_experimental.integral(time_weight('Linear', ts, val ORDER BY random()), 'seconds') FROM test";
+            assert!((select_one!(client, stmt, f64) - 25500.0).abs() < f64::EPSILON);
+            let stmt = "SELECT toolkit_experimental.integral(time_weight('LOCF', ts, val ORDER BY random())) FROM test";
+            assert!((select_one!(client, stmt, f64) - 21300.0).abs() < f64::EPSILON);
 
             // make sure we get the same result if we do multi-level aggregation
             let stmt = "WITH t AS (SELECT date_trunc('minute', ts), time_weight('Linear', ts, val) AS tws FROM test GROUP BY 1) SELECT average(rollup(tws)) FROM t";
@@ -720,9 +816,27 @@ mod tests {
                 toolkit_experimental.interpolated_average(
                     agg,
                     bucket,
-                    '1 day'::interval, 
-                    LAG(agg) OVER (ORDER BY bucket), 
+                    '1 day'::interval,
+                    LAG(agg) OVER (ORDER BY bucket),
                     LEAD(agg) OVER (ORDER BY bucket)
+                ) FROM (
+                    SELECT bucket, time_weight('LOCF', time, value) as agg 
+                    FROM test 
+                    GROUP BY bucket
+                ) s
+                ORDER BY bucket"#,
+                None,
+                None,
+            );
+            let mut integrals = client.select(
+                r#"SELECT
+                toolkit_experimental.interpolated_integral(
+                    agg,
+                    bucket,
+                    '1 day'::interval, 
+                    LAG(agg) OVER (ORDER BY bucket),
+                    LEAD(agg) OVER (ORDER BY bucket),
+                    'hours'
                 ) FROM (
                     SELECT bucket, time_weight('LOCF', time, value) as agg 
                     FROM test 
@@ -738,17 +852,30 @@ mod tests {
                 averages.next().unwrap()[1].value(),
                 Some((4. * 10. + 4. * 40. + 8. * 20.) / 16.)
             );
+            assert_eq!(
+                integrals.next().unwrap()[1].value(),
+                Some(4. * 10. + 4. * 40. + 8. * 20.)
+            );
             // Day 2, 2 hours @ 20, 10 @ 15, 8 @ 50, 4 @ 25
             assert_eq!(
                 averages.next().unwrap()[1].value(),
                 Some((2. * 20. + 10. * 15. + 8. * 50. + 4. * 25.) / 24.)
+            );
+            assert_eq!(
+                integrals.next().unwrap()[1].value(),
+                Some(2. * 20. + 10. * 15. + 8. * 50. + 4. * 25.)
             );
             // Day 3, 10 hours @ 25, 2 @ 30, 4 @ 0
             assert_eq!(
                 averages.next().unwrap()[1].value(),
                 Some((10. * 25. + 2. * 30.) / 16.)
             );
+            assert_eq!(
+                integrals.next().unwrap()[1].value(),
+                Some(10. * 25. + 2. * 30.)
+            );
             assert!(averages.next().is_none());
+            assert!(integrals.next().is_none());
         });
     }
 }

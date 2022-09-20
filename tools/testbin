@@ -1,0 +1,258 @@
+#!/bin/sh
+
+# This script automates binary upgrade testing.
+
+# Sample run:
+# OS_NAME=ubuntu OS_VERSION=20.04 tools/testbin -version 1.11.0 -bindir .. -dbroot /tmp/db -pgport 28800 deb
+
+# A released toolkit lists the versions it is upgradeable from in
+# extension/timescaledb_toolkit.control .  This script processes those entries
+# and for each version from which upgrading is supported:
+# 1. Install old binaries (deb or rpm) for each supported postgresql release
+# 2. Run the 1st half of the upgrade tests
+# 3. Install the binary for the version under test
+# 4. Run the 2nd half of the upgrade tests
+
+# To ensure this script's assumptions about the control file and the control
+# file itself are in agreement, run `tools/testbin check-control` for each
+# pull request.
+
+# The distinction between environment variables and command-line options is
+# possibly inconsistent.  The approach now is for general parameters to come
+# from the command line, and system-specific parameters to come from the
+# environment.  Specifically, these are required in the environment for deb
+# packages only:
+# - OS_NAME
+# - OS_VERSION
+
+set -ex
+
+# Minimum version we support arm64 deb - could possibly go lower.
+# I know 1.8 at least builds on arm.
+MIN_DEB_ARM=1.10.1
+# We added 1: epoch at 1.7.0.
+MIN_DEB_EPOCH=1.7.0
+PG_VERSIONS='12 13 14'
+CONTROL=extension/timescaledb_toolkit.control
+# Pattern we require in $CONTROL for finding versions to test upgrade from.
+UPGRADEABLE_RE="^# upgradeable_from = '[0-9][-dev0-9., ]*'$"
+
+print() {
+    printf '%s\n' "$*"
+}
+
+die() {
+    st=${?:-0}
+    if [ $st -eq 0 ]; then
+        st=2
+    fi
+    print "$*" >&2
+    exit $st
+}
+
+usage() {
+    print 'testbin check-control' >&2
+    die 'testbin [-n] -bindir DIR -dbroot DIR -pgport N -version VERSION ( deb | rpm )'
+}
+
+# Run this before each merge so the control file doesn't get out of sync with this script.
+check_control() {
+    count=`grep -c "$UPGRADEABLE_RE" $CONTROL || :`
+    if [ "$count" -ne 1 ]; then
+        die "$CONTROL must contain exactly one line matching /$UPGRADEABLE_RE/"
+    fi
+}
+
+# Requires:
+# - PG_PORT_BASE
+# - PG_VERSION
+# Sets:
+# - DB
+# - PG_PORT
+select_pg() {
+    PG_PORT=$(( $PG_PORT_BASE + $PG_VERSION ))
+    DB=$DB_ROOT/$PG_VERSION
+}
+
+# Start postgres and create a database.
+# Must select_pg first.
+# Sets:
+# - PG14PID (or PG13PID etc.; depends on value of PG_VERSION)
+start_postgres() {
+    $nop initdb "$DB"
+    $nop mkdir "$DB/lock"
+    $nop postgres -D "$DB" -k "$DB/lock" -p "$PG_PORT" & eval PG${PG_VERSION}PID=$!
+    for i in 1 2 3 4 5; do
+        if $nop psql -h 127.1 -p $PG_PORT postgres < /dev/null; then
+            $nop createdb -h 127.1 -p $PG_PORT
+            return
+        fi
+        echo $i...
+        sleep 1
+    done
+    die "failed to start postgres"
+}
+
+# Stop postgres and create a database.
+# Use select_pg to set which one to stop.
+stop_postgres() {
+    eval pid=\$PG${PG_VERSION}PID
+    [ -n "$pid" ] && $nop kill $pid
+    $nop rm -rf "$DB"
+}
+
+start_test() {
+    start_postgres
+    $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- create-test-objects -u $LOGNAME -h 127.1 -p $PG_PORT
+}
+
+finish_test() {
+    $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- validate-test-objects -u $LOGNAME -h 127.1 -p $PG_PORT
+    stop_postgres
+}
+
+test_deb() {
+    [ -n "$OS_NAME" ] || die 'OS_NAME environment variable must be set to the distribution name e.g. debian or ubuntu'
+    [ -n "$OS_VERSION" ] || die 'OS_VERSION environment variable must be set to the distribution version number'
+
+    ARCH=`dpkg --print-architecture`
+    EPOCH=
+    MIN_DEB_ARM=`cmp_version $MIN_DEB_ARM`
+    MIN_DEB_EPOCH=`cmp_version $MIN_DEB_EPOCH`
+    for from_version; do
+        # We released 1.10.0-dev by accident.  We have to support upgrades
+        # from it (and we tested that at the time), but we pulled the deb, so
+        # we can't test it here.
+        [ $from_version = 1.10.0-dev ] && continue
+        cmp_version=`cmp_version $from_version`
+        [ "$ARCH" -eq arm64 ] && [ $cmp_version -lt $MIN_DEB_ARM ] && continue
+        [ $cmp_version -ge $MIN_DEB_EPOCH ] && EPOCH=1:
+        for PG_VERSION in $PG_VERSIONS; do
+            select_pg $PG_VERSION
+            deb=timescaledb-toolkit-postgresql-${PG_VERSION}=${EPOCH}${from_version}~${OS_NAME}${OS_VERSION}
+            $nop sudo apt-get -qq install $deb
+
+            PATH=/usr/lib/postgresql/$PG_VERSION/bin:$PATH start_test
+        done
+        for PG_VERSION in $PG_VERSIONS; do
+            select_pg $PG_VERSION
+            deb=timescaledb-toolkit-postgresql-${PG_VERSION}_${TOOLKIT_VERSION}~${OS_NAME}${OS_VERSION}_${ARCH}.deb
+            $nop sudo dpkg -i "$BINDIR/$deb"
+
+            finish_test
+
+            $nop sudo dpkg -P timescaledb-toolkit-postgresql-$PG_VERSION
+        done
+    done
+}
+
+test_rpm() {
+    ARCH=x86_64
+    # TODO Support arm64 RPM?  TimescaleDB RPMs are amd64-only at time of writing.
+    #ARCH=`rpm -E '%{_arch}'`
+    for from_version; do
+        for PG_VERSION in $PG_VERSIONS; do
+            select_pg $PG_VERSION
+            rpm=timescaledb-toolkit-postgresql-$PG_VERSION
+            # yum doesn't seem to allow force-install of a specific version.
+            # If the package is already installed at a different version,
+            # the install command below does nothing.
+            # So, uninstall if installed.
+            rpm -q $rpm > /dev/null && $nop sudo rpm -e $rpm
+            $nop sudo yum install $rpm-$from_version
+
+            PATH=/usr/pgsql-$PG_VERSION/bin:$PATH start_test
+        done
+        for PG_VERSION in $PG_VERSIONS; do
+            select_pg $PG_VERSION
+            rpm=timescaledb-toolkit-postgresql-$PG_VERSION-$TOOLKIT_VERSION.$ARCH.rpm
+            $nop sudo rpm -i "$BINDIR/$rpm"
+
+            finish_test
+
+            $nop sudo rpm -e timescaledb-toolkit-postgresql-$PG_VERSION
+        done
+    done
+}
+
+# Format 3-part version string for numeric comparison.
+# If this script has survived to see one of the 3 parts incremented past 99:
+# congratulations!  It is not hard to fix.
+cmp_version() {
+    minpat=${1#*.}
+    printf '%02d%02d%02d' ${1%%.*} ${minpat%.*} ${minpat#*.} 2> /dev/null
+}
+
+print_upgradeable_from() {
+    # TODO We never shipped a 1.4 deb and the 1.5 deb is called 1.5.0
+    #  Let's draw the line there and remove those from upgradeable_from.
+    #  Someone who needs to upgrade from 1.4 or 1.5 can upgrade to 1.10.1 and then beyond.
+    sed -n "s/'//g; s/,//g; s/^# upgradeable_from = 1\.4 1\.5 //p" $CONTROL
+}
+
+cleanup() {
+    set +e
+    for PG_VERSION in $PG_VERSIONS; do
+        select_pg $PG_VERSION
+        stop_postgres
+    done
+    $nop rmdir "$DB_ROOT"
+}
+
+run() {
+    [ -n "$LOGNAME" ] || die 'LOGNAME environment variable must be set to the login name'
+    [ -d "$BINDIR" ] || die '-bindir required'
+    [ -n "$DB_ROOT" ] || die '-dbroot required'
+    [ -e "$DB_ROOT" ] && die "cowardly refusing to clobber $DB_ROOT"
+    [ -n "$PG_PORT_BASE" ] || die '-pgport required'
+    [ -n "$TOOLKIT_VERSION" ] || die '-version required'
+
+    trap cleanup 0
+    test_$1 `print_upgradeable_from`
+    trap - 0
+
+    echo DONE
+    $nop rmdir "$DB_ROOT"
+}
+
+while [ $# -gt 0 ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+        -n)
+            nop=:
+            ;;
+
+        -bindir)
+            BINDIR=$1
+            shift
+            ;;
+
+        -dbroot)
+            DB_ROOT=$1
+            shift
+            ;;
+
+        -pgport)
+            PG_PORT_BASE=$1
+            shift
+            ;;
+
+        -version)
+            TOOLKIT_VERSION=$1
+            shift
+            ;;
+
+        check-control)
+            check_control
+            ;;
+
+        deb|rpm)
+            run $arg
+            ;;
+
+        *)
+            usage
+            ;;
+    esac
+done

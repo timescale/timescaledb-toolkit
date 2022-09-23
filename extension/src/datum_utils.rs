@@ -369,7 +369,7 @@ impl From<(Oid, Vec<Datum>)> for DatumStore<'_> {
 
             for datum in datums {
                 unsafe {
-                    let ptr = pg_sys::pg_detoast_datum_packed(datum as *mut pg_sys::varlena);
+                    let ptr = pg_sys::pg_detoast_datum_packed(datum.cast_mut_ptr());
                     let va_len = varsize_any(ptr);
 
                     ptrs.push(ptr);

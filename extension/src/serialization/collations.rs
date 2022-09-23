@@ -209,7 +209,7 @@ impl<'de> Deserialize<'de> for PgCollationId {
                 pgx::Datum::from(name.as_ptr()),
                 pgx::Datum::from(pg_sys::GetDatabaseEncoding()),
                 pgx::Datum::from(namespace_id),
-                0, //unused
+                Datum::from(0), //unused
             );
 
             if collation_id == pg_sys::InvalidOid {
@@ -217,9 +217,9 @@ impl<'de> Deserialize<'de> for PgCollationId {
                     pg_sys::SysCacheIdentifier_COLLNAMEENCNSP as _,
                     Anum_pg_collation_oid as _,
                     pgx::Datum::from(name.as_ptr()),
-                    (-1isize) as usize,
+                    Datum::from((-1isize) as usize),
                     pgx::Datum::from(namespace_id),
-                    0, //unused
+                    Datum::from(0), //unused
                 );
             }
 

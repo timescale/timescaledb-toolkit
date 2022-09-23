@@ -65,7 +65,7 @@ impl PartialEq for PgAnyElement {
                     value: other.datum,
                     isnull: false,
                 };
-                (*(*info).flinfo).fn_addr.unwrap()(info) != 0
+                (*(*info).flinfo).fn_addr.unwrap()(info) != Datum::from(0)
             }
         }
     }

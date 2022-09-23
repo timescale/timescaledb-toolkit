@@ -1,5 +1,5 @@
 use crate::raw::TimestampTz;
-use pgx::*;
+use pgx::{*, prelude::*};
 
 #[pg_extern(
     name = "generate_periodic_normal_series",
@@ -8,7 +8,7 @@ use pgx::*;
 pub fn default_generate_periodic_normal_series(
     series_start: crate::raw::TimestampTz,
     rng_seed: Option<i64>,
-) -> impl std::iter::Iterator<Item = (name!(time, TimestampTz), name!(value, f64))> + 'static {
+) -> TableIterator<'static, (name!(time, TimestampTz), name!(value, f64))> {
     generate_periodic_normal_series(series_start, None, None, None, None, None, None, rng_seed)
 }
 
@@ -22,7 +22,7 @@ pub fn alternate_generate_periodic_normal_series(
     periodic_magnitude: f64,
     standard_deviation: f64,
     rng_seed: Option<i64>,
-) -> impl std::iter::Iterator<Item = (name!(time, TimestampTz), name!(value, f64))> + 'static {
+) -> TableIterator<'static, (name!(time, TimestampTz), name!(value, f64))> {
     generate_periodic_normal_series(
         series_start,
         Some(periods_per_series * points_per_period * seconds_between_points * 1000000),
@@ -46,7 +46,7 @@ pub fn generate_periodic_normal_series(
     periodic_magnitude: Option<f64>,
     standard_deviation: Option<f64>,
     rng_seed: Option<i64>,
-) -> impl std::iter::Iterator<Item = (name!(time, TimestampTz), name!(value, f64))> + 'static {
+) -> TableIterator<'static, (name!(time, TimestampTz), name!(value, f64))> {
     // Convenience consts to make defaults more readable
     const SECOND: i64 = 1000000;
     const MIN: i64 = 60 * SECOND;
@@ -73,7 +73,7 @@ pub fn generate_periodic_normal_series(
     let distribution = rand_distr::Normal::new(0.0, standard_deviation).unwrap();
 
     let series_start: i64 = series_start.into();
-    (0..series_len)
+    TableIterator::new((0..series_len)
         .step_by(sample_interval as usize)
         .map(move |accum| {
             let time = series_start + accum;
@@ -82,7 +82,7 @@ pub fn generate_periodic_normal_series(
                     * periodic_magnitude;
             let error = distribution.sample(&mut rng);
             (time.into(), base + error)
-        })
+        }))
 }
 
 // Returns days in month

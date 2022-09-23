@@ -8,7 +8,7 @@ use pg_sys::{Datum, Oid};
 use pgx::*;
 
 use crate::{
-    accessors::{AccessorDistinctCount, AccessorStderror},
+    // accessors::{AccessorDistinctCount, AccessorStderror},
     aggregate_utils::{get_collation, in_aggregate_context},
     datum_utils::DatumHashBuilder,
     flatten,
@@ -317,11 +317,11 @@ extension_sql!(
     ],
 );
 
-#[pg_operator(immutable, parallel_safe)]
-#[opname(->)]
-pub fn arrow_hyperloglog_count(sketch: HyperLogLog, _accessor: AccessorDistinctCount) -> i64 {
-    hyperloglog_count(sketch)
-}
+// #[pg_operator(immutable, parallel_safe)]
+// #[opname(->)]
+// pub fn arrow_hyperloglog_count(sketch: HyperLogLog, _accessor: AccessorDistinctCount) -> i64 {
+//     hyperloglog_count(sketch)
+// }
 
 #[pg_extern(name = "distinct_count", immutable, parallel_safe)]
 pub fn hyperloglog_count(hyperloglog: HyperLogLog) -> i64 {
@@ -344,11 +344,11 @@ pub fn hyperloglog_count(hyperloglog: HyperLogLog) -> i64 {
     log.immutable_estimate_count() as i64
 }
 
-#[pg_operator(immutable, parallel_safe)]
-#[opname(->)]
-pub fn arrow_hyperloglog_error(sketch: HyperLogLog, _accessor: AccessorStderror) -> f64 {
-    hyperloglog_error(sketch)
-}
+// #[pg_operator(immutable, parallel_safe)]
+// #[opname(->)]
+// pub fn arrow_hyperloglog_error(sketch: HyperLogLog, _accessor: AccessorStderror) -> f64 {
+//     hyperloglog_error(sketch)
+// }
 
 #[pg_extern(name = "stderror", immutable, parallel_safe)]
 pub fn hyperloglog_error(hyperloglog: HyperLogLog) -> f64 {

@@ -186,7 +186,7 @@ macro_rules! pg_type_impl {
                         return None;
                     }
 
-                    let mut ptr = pg_sys::pg_detoast_datum_packed(datum as *mut pg_sys::varlena);
+                    let mut ptr = pg_sys::pg_detoast_datum_packed(datum.cast_mut_ptr());
                     //TODO is there a better way to do this?
                     if pgx::varatt_is_1b(ptr) {
                         ptr = pg_sys::pg_detoast_datum_copy(ptr);

@@ -291,8 +291,8 @@ impl<'de> Deserialize<'de> for PgTypId {
                 pg_sys::Anum_pg_type_oid as _,
                 pgx::Datum::from(name.as_ptr()),
                 pgx::Datum::from(namespace_id),
-                0, //unused
-                0, //unused
+                Datum::from(0), //unused
+                Datum::from(0), //unused
             );
             if type_id == pg_sys::InvalidOid {
                 return Err(D::Error::custom(format!(

@@ -24,8 +24,6 @@ extension_sql!(
 macro_rules! raw_type {
     ($name:ident, $tyid: path, $arrayid: path) => {
         impl FromDatum for $name {
-            const NEEDS_TYPID: bool = false;
-
             unsafe fn from_datum(
                 datum: pg_sys::Datum,
                 is_null: bool,

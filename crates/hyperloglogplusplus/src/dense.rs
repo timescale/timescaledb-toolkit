@@ -136,7 +136,7 @@ impl<'s> Storage<'s> {
             Ok(i) => return bias_data[i],
             Err(0) => Right(0),
             Err(i) if i == raw_estimates.len() => Left(i - 1),
-            Err(i) => (Both(i - 1, i)),
+            Err(i) => Both(i - 1, i),
         };
         let mut neighbors = [0; 6];
         let mut distances = [0.0; 6];

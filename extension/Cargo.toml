@@ -1,6 +1,7 @@
 [package]
 name = "timescaledb_toolkit"
-version = "1.11.0-dev"
+# single quotes on version number for easier parsing
+version = '1.12.0-dev'
 edition = "2021"
 
 [lib]

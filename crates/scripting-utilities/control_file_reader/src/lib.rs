@@ -5,8 +5,8 @@ use std::fmt;
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// extract the current version from the control file
-pub fn get_current_version(control_file: &str) -> Result<String> {
-    get_field_val(control_file, "default_version").map(|v| v.to_string())
+pub fn get_current_version(manifest_file: &str) -> Result<String> {
+    get_field_val(manifest_file, "version").map(|v| v.to_string())
 }
 
 /// extract the list of versions we're upgradeable-from from the control file
@@ -23,7 +23,9 @@ pub fn get_upgradeable_from(control_file: &str) -> Result<Vec<String>> {
 /// find a `<field name> = '<field value>'` in `file` and extract `<field value>`
 pub fn get_field_val<'a>(file: &'a str, field_name: &str) -> Result<&'a str> {
     file.lines()
-        .filter(|line| line.contains(field_name))
+        .filter(|line| {
+            line.starts_with(field_name) || line.starts_with(&format!("# {}", field_name))
+        })
         .map(get_quoted_field)
         .next()
         .ok_or(Error::FieldNotFound)

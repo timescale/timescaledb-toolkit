@@ -213,8 +213,8 @@ where
                     pg_sys::DirectFunctionCall2Coll(
                         Some($calc),
                         pg_sys::InvalidOid,
-                        left as _,
-                        right as _,
+                        pgx::Datum::from(left),
+                        pgx::Datum::from(right),
                     ) as _
                 };
                 assert!(!res.is_null());
@@ -231,7 +231,7 @@ where
                     pg_sys::DirectFunctionCall2Coll(
                         Some($calc),
                         pg_sys::InvalidOid,
-                        left as _,
+                        pgx::Datum::from(left),
                         right.into_datum().unwrap(),
                     ) as _
                 };
@@ -249,8 +249,8 @@ where
                     pg_sys::DirectFunctionCall2Coll(
                         Some($calc),
                         pg_sys::InvalidOid,
-                        left as _,
-                        right as _,
+                        pgx::Datum::from(left),
+                        pgx::Datum::from(right),
                     ) as _
                 };
 

@@ -650,7 +650,7 @@ mod tests {
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
             let new_state =
-                tdigest_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
+                tdigest_deserialize_inner(bytea(pgx::Datum::from(&*expected as *const pg_sys::varlena)));
 
             control.digest(); // Serialized form is always digested
             assert_eq!(&*new_state, &*control);

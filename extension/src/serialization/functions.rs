@@ -60,7 +60,7 @@ impl<'de> Deserialize<'de> for PgProcId {
             pg_sys::DirectFunctionCall1Coll(
                 Some(regprocedurein),
                 pg_sys::InvalidOid,
-                qualified_name.as_ptr() as pg_sys::Datum,
+                pgx::Datum::from(qualified_name.as_ptr()),
             )
         };
 

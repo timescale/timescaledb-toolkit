@@ -626,7 +626,7 @@ mod tests {
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
             let new_state =
-                hyperloglog_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
+                hyperloglog_deserialize_inner(bytea(pgx::Datum::from(&*expected as *const pg_sys::varlena)));
 
             control.logger.merge_all(); // Sparse representation buffers always merged on serialization
             assert!(*new_state == control);
@@ -652,7 +652,7 @@ mod tests {
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
             let new_state =
-                hyperloglog_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
+                hyperloglog_deserialize_inner(bytea(pgx::Datum::from(&*expected as *const pg_sys::varlena)));
 
             assert!(*new_state == control);
         }

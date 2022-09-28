@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use once_cell::sync::Lazy;
 
-use pg_sys::{Datum, Oid};
+use pg_sys::{Oid};
 use pgx::*;
 
 // TODO short collation serializer?
@@ -79,7 +79,7 @@ type Form_pg_database = *mut FormData_pg_database;
 static DEFAULT_COLLATION_NAME: Lazy<CString> = Lazy::new(|| unsafe {
     let tuple = pg_sys::SearchSysCache1(
         pg_sys::SysCacheIdentifier_DATABASEOID as _,
-        pg_sys::MyDatabaseId as _,
+        pgx::Datum::from(pg_sys::MyDatabaseId),
     );
     if tuple.is_null() {
         pgx::error!("no database info");
@@ -110,7 +110,7 @@ impl Serialize for PgCollationId {
             }
 
             let tuple =
-                pg_sys::SearchSysCache1(pg_sys::SysCacheIdentifier_COLLOID as _, self.0 as _);
+                pg_sys::SearchSysCache1(pg_sys::SysCacheIdentifier_COLLOID as _, pgx::Datum::from(self.0));
             if tuple.is_null() {
                 pgx::error!("no collation info for oid {}", self.0);
             }
@@ -206,9 +206,9 @@ impl<'de> Deserialize<'de> for PgCollationId {
             let mut collation_id = pg_sys::GetSysCacheOid(
                 pg_sys::SysCacheIdentifier_COLLNAMEENCNSP as _,
                 Anum_pg_collation_oid as _,
-                name.as_ptr() as Datum,
-                pg_sys::GetDatabaseEncoding() as _,
-                namespace_id as Datum,
+                pgx::Datum::from(name.as_ptr()),
+                pgx::Datum::from(pg_sys::GetDatabaseEncoding()),
+                pgx::Datum::from(namespace_id),
                 0, //unused
             );
 
@@ -216,9 +216,9 @@ impl<'de> Deserialize<'de> for PgCollationId {
                 collation_id = pg_sys::GetSysCacheOid(
                     pg_sys::SysCacheIdentifier_COLLNAMEENCNSP as _,
                     Anum_pg_collation_oid as _,
-                    name.as_ptr() as Datum,
+                    pgx::Datum::from(name.as_ptr()),
                     (-1isize) as usize,
-                    namespace_id as Datum,
+                    pgx::Datum::from(namespace_id),
                     0, //unused
                 );
             }

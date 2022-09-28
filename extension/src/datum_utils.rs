@@ -25,9 +25,9 @@ pub(crate) unsafe fn deep_copy_datum(datum: Datum, typoid: Oid) -> Datum {
         let size = (*tentry).typlen as usize;
         let copy = pg_sys::palloc0(size);
         std::ptr::copy(datum as *const u8, copy as *mut u8, size);
-        copy as Datum
+        pgx::Datum::from(copy)
     } else {
-        pg_sys::pg_detoast_datum_copy(datum as _) as _
+        pgx::Datum::from(pg_sys::pg_detoast_datum_copy(datum as _))
     }
 }
 
@@ -456,7 +456,7 @@ impl<'a, 'b> Iterator for DatumStoreIterator<'a, 'b> {
                         let va = store.data.slice().as_ptr().offset(*next_offset as _)
                             as *const pg_sys::varlena;
                         *next_offset += padded_va_len(va) as u32;
-                        Some(va as pg_sys::Datum)
+                        Some(pgx::Datum::from(va))
                     }
                 }
             }
@@ -470,7 +470,7 @@ impl<'a, 'b> Iterator for DatumStoreIterator<'a, 'b> {
                     None
                 } else {
                     *next_index += 1;
-                    Some(unsafe { store.data.slice().as_ptr().offset(idx as _) } as pg_sys::Datum)
+                    Some(pgx::Datum::from(unsafe { store.data.slice().as_ptr().offset(idx as _) }))
                 }
             }
         }
@@ -563,7 +563,7 @@ impl<'a> Iterator for DatumStoreIntoIterator<'a> {
                         let va = store.data.slice().as_ptr().offset(*next_offset as _)
                             as *const pg_sys::varlena;
                         *next_offset += padded_va_len(va) as u32;
-                        Some(va as pg_sys::Datum)
+                        Some(pgx::Datum::from(va))
                     }
                 }
             }
@@ -577,7 +577,7 @@ impl<'a> Iterator for DatumStoreIntoIterator<'a> {
                     None
                 } else {
                     *next_index += 1;
-                    Some(unsafe { store.data.slice().as_ptr().offset(idx as _) } as pg_sys::Datum)
+                    Some(pgx::Datum::from(unsafe { store.data.slice().as_ptr().offset(idx as _) }))
                 }
             }
         }

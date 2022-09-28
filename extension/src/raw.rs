@@ -93,7 +93,7 @@ impl From<TimestampTz> for pg_sys::TimestampTz {
 
 impl From<pg_sys::TimestampTz> for TimestampTz {
     fn from(ts: pg_sys::TimestampTz) -> Self {
-        Self(ts as _)
+        Self(pgx::Datum::from(ts))
     }
 }
 

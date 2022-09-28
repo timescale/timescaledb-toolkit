@@ -3,7 +3,6 @@
 use pgx::*;
 
 use crate::{
-    accessors::AccessorUnnest,
     aggregate_utils::in_aggregate_context,
     build,
     palloc::{Inner, Internal, InternalAsValue, ToInternal},

@@ -385,7 +385,7 @@ impl From<(Oid, Vec<Datum>)> for DatumStore<'_> {
                     let va_len = varsize_any(ptr);
                     std::ptr::copy(
                         ptr,
-                        std::ptr::addr_of_mut!(buffer[target_byte]),
+                        std::ptr::addr_of_mut!(buffer[target_byte]) as *mut pg_sys::varlena,
                         va_len,
                     );
                     target_byte += round_to_multiple(va_len, 8);
@@ -454,7 +454,7 @@ impl<'a, 'b> Iterator for DatumStoreIterator<'a, 'b> {
                 } else {
                     unsafe {
                         let va = store.data.slice().as_ptr().offset(*next_offset as _)
-                            as *const pg_sys::varlena;
+                           .cast_mut_ptr();
                         *next_offset += padded_va_len(va) as u32;
                         Some(pgx::Datum::from(va))
                     }
@@ -561,7 +561,7 @@ impl<'a> Iterator for DatumStoreIntoIterator<'a> {
                 } else {
                     unsafe {
                         let va = store.data.slice().as_ptr().offset(*next_offset as _)
-                            as *const pg_sys::varlena;
+                           .cast_mut_ptr();
                         *next_offset += padded_va_len(va) as u32;
                         Some(pgx::Datum::from(va))
                     }

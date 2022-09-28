@@ -1050,7 +1050,7 @@ pub fn freq_text_iter(
         .zip(counts)
         .map_while(move |(value, (&count, &overcount))| {
             let total = agg.values_seen as f64;
-            let data = unsafe { varlena_to_string(value as *const pg_sys::varlena) };
+            let data = unsafe { varlena_to_string(value.cast_mut_ptr()) };
             let min_freq = (count - overcount) as f64 / total;
             let max_freq = count as f64 / total;
             Some((data, min_freq, max_freq))
@@ -1204,7 +1204,7 @@ pub fn topn_text(
         n,
         min_freq,
     )
-    .map(|value| unsafe { varlena_to_string(value as *const pg_sys::varlena) })
+    .map(|value| unsafe { varlena_to_string(value.cast_mut_ptr()) })
 }
 
 #[pg_extern(
@@ -1471,8 +1471,8 @@ mod tests {
 
         let bytes = unsafe {
             std::slice::from_raw_parts(
-                vardata_any(first.0 as *const pg_sys::varlena).cast_mut_ptr(),
-                varsize_any_exhdr(first.0 as *const pg_sys::varlena),
+                vardata_any(first.0.cast_mut_ptr()),
+                varsize_any_exhdr(first.0.cast_mut_ptr()),
             )
         };
         let expected = [
@@ -1530,8 +1530,8 @@ mod tests {
 
         let bytes = unsafe {
             std::slice::from_raw_parts(
-                vardata_any(second.0 as *const pg_sys::varlena).cast_mut_ptr(),
-                varsize_any_exhdr(second.0 as *const pg_sys::varlena),
+                vardata_any(second.0.cast_mut_ptr()).cast_mut_ptr(),
+                varsize_any_exhdr(second.0.cast_mut_ptr()),
             )
         };
         let expected = [
@@ -1598,8 +1598,8 @@ mod tests {
 
         let bytes = unsafe {
             std::slice::from_raw_parts(
-                vardata_any(combined.0 as *const pg_sys::varlena).cast_mut_ptr(),
-                varsize_any_exhdr(combined.0 as *const pg_sys::varlena),
+                vardata_any(combined.0.cast_mut_ptr()).cast_mut_ptr(),
+                varsize_any_exhdr(combined.0.cast_mut_ptr()),
             )
         };
         let expected = [

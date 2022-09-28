@@ -75,7 +75,7 @@ impl Eq for PgAnyElement {}
 
 impl Hash for PgAnyElement {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.datum.hash(state);
+        self.datum.value().hash(state);
     }
 }
 

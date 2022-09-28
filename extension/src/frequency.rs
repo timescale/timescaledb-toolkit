@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use pgx::*;
+use pgx::{*, iter::{TableIterator, SetOfIterator}};
 
 use pg_sys::{Datum, Oid};
 
@@ -976,19 +976,17 @@ extension_sql!(
 pub fn freq_iter(
     agg: SpaceSavingAggregate<'_>,
     ty: AnyElement,
-) -> impl std::iter::Iterator<
-    Item = (
-        name!(value, AnyElement),
-        name!(min_freq, f64),
-        name!(max_freq, f64),
-    ),
-> + '_ {
+) -> TableIterator<'static, (
+    name!(value, AnyElement),
+    name!(min_freq, f64),
+    name!(max_freq, f64),
+)> {
     unsafe {
         if ty.oid() != agg.type_oid {
             pgx::error!("mischatched types")
         }
         let counts = agg.counts.slice().iter().zip(agg.overcounts.slice().iter());
-        agg.datums.clone().into_iter().zip(counts).map_while(
+        TableIterator::new(agg.datums.clone().into_iter().zip(counts).map_while(
             move |(value, (&count, &overcount))| {
                 let total = agg.values_seen as f64;
                 let value = AnyElement::from_datum(value, false, agg.type_oid).unwrap();
@@ -996,7 +994,7 @@ pub fn freq_iter(
                 let max_freq = count as f64 / total;
                 Some((value, min_freq, max_freq))
             },
-        )
+        ))
     }
 }
 
@@ -1008,15 +1006,13 @@ pub fn freq_iter(
 )]
 pub fn freq_bigint_iter(
     agg: SpaceSavingBigIntAggregate<'_>,
-) -> impl std::iter::Iterator<
-    Item = (
-        name!(value, i64),
-        name!(min_freq, f64),
-        name!(max_freq, f64),
-    ),
-> + '_ {
+) -> TableIterator<'static, (
+    name!(value, i64),
+    name!(min_freq, f64),
+    name!(max_freq, f64),
+)> {
     let counts = agg.counts.slice().iter().zip(agg.overcounts.slice().iter());
-    agg.datums
+    TableIterator::new(agg.datums
         .clone()
         .into_iter()
         .zip(counts)
@@ -1025,7 +1021,7 @@ pub fn freq_bigint_iter(
             let min_freq = (count - overcount) as f64 / total;
             let max_freq = count as f64 / total;
             Some((value, min_freq, max_freq))
-        })
+        }))
 }
 
 #[pg_extern(
@@ -1036,15 +1032,16 @@ pub fn freq_bigint_iter(
 )]
 pub fn freq_text_iter(
     agg: SpaceSavingTextAggregate<'_>,
-) -> impl std::iter::Iterator<
-    Item = (
+) -> TableIterator<
+    'static,
+    (
         name!(value, String),
         name!(min_freq, f64),
         name!(max_freq, f64),
-    ),
-> + '_ {
+    )
+> {
     let counts = agg.counts.slice().iter().zip(agg.overcounts.slice().iter());
-    agg.datums
+    TableIterator::new(agg.datums
         .clone()
         .into_iter()
         .zip(counts)
@@ -1054,7 +1051,7 @@ pub fn freq_text_iter(
             let min_freq = (count - overcount) as f64 / total;
             let max_freq = count as f64 / total;
             Some((data, min_freq, max_freq))
-        })
+        }))
 }
 
 fn validate_topn_for_topn_agg(
@@ -1091,7 +1088,7 @@ pub fn topn(
     agg: SpaceSavingAggregate<'_>,
     n: i32,
     ty: AnyElement,
-) -> impl std::iter::Iterator<Item = AnyElement> + '_ {
+) -> SetOfIterator<AnyElement> {
     if ty.oid() != agg.type_oid {
         pgx::error!("mischatched types")
     }
@@ -1106,7 +1103,7 @@ pub fn topn(
     let min_freq = if agg.topn == 0 { agg.freq_param } else { 0. };
 
     let type_oid: u32 = agg.type_oid;
-    TopNIterator::new(
+    SetOfIterator::new(TopNIterator::new(
         agg.datums.clone().into_iter(),
         agg.counts.clone().into_vec(),
         agg.values_seen as f64,
@@ -1114,7 +1111,7 @@ pub fn topn(
         min_freq,
     )
     // TODO Shouldn't failure to convert to AnyElement cause error, not early stop?
-    .map_while(move |value| unsafe { AnyElement::from_datum(value, false, type_oid) })
+    .map_while(move |value| unsafe { AnyElement::from_datum(value, false, type_oid) }))
 }
 
 #[pg_extern(
@@ -1126,7 +1123,7 @@ pub fn topn(
 pub fn default_topn(
     agg: SpaceSavingAggregate<'_>,
     ty: AnyElement,
-) -> impl std::iter::Iterator<Item = AnyElement> + '_ {
+) -> SetOfIterator<AnyElement> {
     if agg.topn == 0 {
         pgx::error!("frequency aggregates require a N parameter to topn")
     }
@@ -1143,7 +1140,7 @@ pub fn default_topn(
 pub fn topn_bigint(
     agg: SpaceSavingBigIntAggregate<'_>,
     n: i32,
-) -> impl std::iter::Iterator<Item = i64> + '_ {
+) -> SetOfIterator<i64> {
     validate_topn_for_topn_agg(
         n,
         agg.topn,
@@ -1153,13 +1150,13 @@ pub fn topn_bigint(
     );
     let min_freq = if agg.topn == 0 { agg.freq_param } else { 0. };
 
-    TopNIterator::new(
+    SetOfIterator::new(TopNIterator::new(
         agg.datums.clone().into_iter(),
         agg.counts.clone().into_vec(),
         agg.values_seen as f64,
         n,
         min_freq,
-    )
+    ))
 }
 
 #[pg_extern(
@@ -1170,7 +1167,7 @@ pub fn topn_bigint(
 )]
 pub fn default_topn_bigint(
     agg: SpaceSavingBigIntAggregate<'_>,
-) -> impl std::iter::Iterator<Item = i64> + '_ {
+) -> SetOfIterator<i64> {
     if agg.topn == 0 {
         pgx::error!("frequency aggregates require a N parameter to topn")
     }
@@ -1187,7 +1184,7 @@ pub fn default_topn_bigint(
 pub fn topn_text(
     agg: SpaceSavingTextAggregate<'_>,
     n: i32,
-) -> impl std::iter::Iterator<Item = String> + '_ {
+) -> SetOfIterator<String> {
     validate_topn_for_topn_agg(
         n,
         agg.topn,
@@ -1197,14 +1194,14 @@ pub fn topn_text(
     );
     let min_freq = if agg.topn == 0 { agg.freq_param } else { 0. };
 
-    TopNIterator::new(
+    SetOfIterator::new(TopNIterator::new(
         agg.datums.clone().into_iter(),
         agg.counts.clone().into_vec(),
         agg.values_seen as f64,
         n,
         min_freq,
     )
-    .map(|value| unsafe { varlena_to_string(value.cast_mut_ptr()) })
+    .map(|value| unsafe { varlena_to_string(value.cast_mut_ptr()) }))
 }
 
 #[pg_extern(
@@ -1215,7 +1212,7 @@ pub fn topn_text(
 )]
 pub fn default_topn_text(
     agg: SpaceSavingTextAggregate<'_>,
-) -> impl std::iter::Iterator<Item = String> + '_ {
+) -> SetOfIterator<String> {
     if agg.topn == 0 {
         pgx::error!("frequency aggregates require a N parameter to topn")
     }

@@ -374,7 +374,7 @@ macro_rules! do_deserialize {
         let state: $t = unsafe {
             let input: $crate::raw::bytea = $bytes;
             let input: pgx::pg_sys::Datum = input.into();
-            let detoasted = pg_sys::pg_detoast_datum_packed(input as *mut _);
+            let detoasted = pg_sys::pg_detoast_datum_packed(input.cast_mut_ptr());
             let len = pgx::varsize_any_exhdr(detoasted);
             let data = pgx::vardata_any(detoasted);
             let bytes = std::slice::from_raw_parts(data as *mut u8, len);

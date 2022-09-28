@@ -233,7 +233,7 @@ where
                         pg_sys::InvalidOid,
                         pgx::Datum::from(left),
                         right.into_datum().unwrap(),
-                    ) as _
+                    ).value() as _
                 };
                 assert!(!res.is_null());
                 Value::Interval(res)
@@ -251,7 +251,7 @@ where
                         pg_sys::InvalidOid,
                         pgx::Datum::from(left),
                         pgx::Datum::from(right),
-                    ) as _
+                    ).value() as _
                 };
 
                 Value::Time(res)

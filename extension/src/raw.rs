@@ -1,6 +1,11 @@
 #![allow(non_camel_case_types)]
 
-use pgx::*;
+use pgx::{
+    utils::sql_entity_graph::metadata::{
+        ArgumentError, Returns, ReturnsError, SqlMapping, SqlTranslatable,
+    },
+    *,
+};
 
 extension_sql!(
     "\n\
@@ -60,6 +65,16 @@ macro_rules! raw_type {
         impl From<$name> for pg_sys::Datum {
             fn from(v: $name) -> Self {
                 v.0
+            }
+        }
+
+        // SAFETY: all calls to raw_type! use type names that are valid SQL
+        unsafe impl SqlTranslatable for $name {
+            fn argument_sql() -> Result<SqlMapping, ArgumentError> {
+                Ok(SqlMapping::literal(stringify!($name)))
+            }
+            fn return_sql() -> Result<Returns, ReturnsError> {
+                Ok(Returns::One(SqlMapping::literal(stringify!($name))))
             }
         }
     };

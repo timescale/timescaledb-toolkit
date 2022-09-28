@@ -30,10 +30,9 @@ All versions of the extension contain experimental features in the `toolkit_expe
 The engineering team regularly tests the extension on the following platforms:
 
 - x86_64-unknown-linux-gnu (Ubuntu Linux 20.04) (tested prior to every merge)
+- aarch64-unknown-linux-gnu (Ubuntu Linux 20.04) (tested at release time)
 - x86_64-apple-darwin (MacOS 12) (tested frequently on eng workstation)
 - aarch64-apple-darwin (MacOS 12) (tested frequently on eng workstation)
-
-aarch64-unknown-linux-gnu support is [in development](https://github.com/timescale/timescaledb-toolkit/issues/382).
 
 As for other platforms:  patches welcome!
 

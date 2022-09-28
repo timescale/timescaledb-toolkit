@@ -64,6 +64,6 @@ impl<'de> Deserialize<'de> for PgProcId {
             )
         };
 
-        Ok(Self(oid as _))
+        Ok(Self(oid.value() as _))
     }
 }

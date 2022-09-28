@@ -215,7 +215,7 @@ where
                         pg_sys::InvalidOid,
                         pgx::Datum::from(left),
                         pgx::Datum::from(right),
-                    ) as _
+                    ).cast_mut_ptr()
                 };
                 assert!(!res.is_null());
                 Value::Interval(res)

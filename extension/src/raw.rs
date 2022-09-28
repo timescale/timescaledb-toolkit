@@ -100,7 +100,7 @@ raw_type!(
 
 impl From<TimestampTz> for pg_sys::TimestampTz {
     fn from(tstz: TimestampTz) -> Self {
-        tstz.0 as _
+        tstz.0.value() as _
     }
 }
 

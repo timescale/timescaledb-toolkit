@@ -40,7 +40,7 @@ unsafe impl InternalAsValue for Internal {
     // }
 
     unsafe fn to_inner<T>(self) -> Option<Inner<T>> {
-        self.unwrap().map(|p| Inner(NonNull::new(p as _).unwrap()))
+        self.unwrap().map(|p| Inner(NonNull::new(p.cast_mut_ptr()).unwrap()))
     }
 }
 

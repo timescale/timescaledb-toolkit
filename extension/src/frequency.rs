@@ -1858,7 +1858,7 @@ mod tests {
         }
 
         let state = space_saving_final(state, fcinfo).unwrap();
-        let vals: std::collections::HashSet<usize> = state.datums.iter().collect();
+        let vals: std::collections::HashSet<usize> = state.datums.iter().map(|datum| datum.value()).collect();
 
         for (val, &count) in counts.iter().enumerate() {
             if count >= 3 {
@@ -1903,9 +1903,9 @@ mod tests {
         }
 
         let state = space_saving_final(state, fcinfo).unwrap();
-        let value = unsafe { AnyElement::from_datum(0, false, pg_sys::INT4OID) };
+        let value = unsafe { AnyElement::from_datum(Datum::from(0), false, pg_sys::INT4OID) };
         let t: Vec<AnyElement> = default_topn(state, value.unwrap()).collect();
-        let agg_topn: Vec<usize> = t.iter().map(|x| x.datum()).collect();
+        let agg_topn: Vec<usize> = t.iter().map(|x| x.datum().value()).collect();
 
         let mut temp: Vec<(usize, &usize)> = counts.iter().enumerate().collect();
         temp.sort_by(|(_, cnt1), (_, cnt2)| cnt2.cmp(cnt1)); // descending order by count

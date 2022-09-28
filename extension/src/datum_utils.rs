@@ -453,9 +453,8 @@ impl<'a, 'b> Iterator for DatumStoreIterator<'a, 'b> {
                     None
                 } else {
                     unsafe {
-                        let va = store.data.slice().as_ptr().offset(*next_offset as _)
-                           .cast_mut_ptr();
-                        *next_offset += padded_va_len(va) as u32;
+                        let va = store.data.slice().as_ptr().offset(*next_offset as _);
+                        *next_offset += padded_va_len(va as *const _) as u32;
                         Some(pgx::Datum::from(va))
                     }
                 }
@@ -560,9 +559,8 @@ impl<'a> Iterator for DatumStoreIntoIterator<'a> {
                     None
                 } else {
                     unsafe {
-                        let va = store.data.slice().as_ptr().offset(*next_offset as _)
-                           .cast_mut_ptr();
-                        *next_offset += padded_va_len(va) as u32;
+                        let va = store.data.slice().as_ptr().offset(*next_offset as _);
+                        *next_offset += padded_va_len(va as *const _) as u32;
                         Some(pgx::Datum::from(va))
                     }
                 }

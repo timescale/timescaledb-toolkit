@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use pgx::*;
+use pgx::{*, iter::{TableIterator, SetOfIterator}};
 
 use super::*;
 
@@ -134,7 +134,7 @@ pub fn point_lambda(
     lambda: toolkit_experimental::Lambda,
     time: crate::raw::TimestampTz,
     value: f64,
-) -> impl std::iter::Iterator<Item = (name!(time, crate::raw::TimestampTz), name!(value, f64))> {
+) -> TableIterator<'static, (name!(time, crate::raw::TimestampTz), name!(value, f64))> {
     let expression = lambda.parse();
     if !expression.expr.ty_is_ts_point() {
         panic!("invalid return type, must return a (TimestampTZ, DOUBLE PRECISION)")
@@ -145,7 +145,7 @@ pub fn point_lambda(
         Value::Tuple(columns) => columns,
         _ => unreachable!(),
     };
-    Some((columns[0].time().into(), columns[1].float())).into_iter()
+    TableIterator::new(Some((columns[0].time().into(), columns[1].float())).into_iter())
 }
 
 #[pg_extern(stable, parallel_safe, schema = "toolkit_experimental")]
@@ -153,7 +153,7 @@ pub fn trace_lambda(
     lambda: toolkit_experimental::Lambda,
     time: crate::raw::TimestampTz,
     value: f64,
-) -> impl std::iter::Iterator<Item = String> {
+) -> SetOfIterator<'static, String> {
     let expression = lambda.parse();
 
     let mut trace: Vec<_> = vec![];
@@ -164,9 +164,9 @@ pub fn trace_lambda(
     let _ = executor.exec(value, time.into());
     let col1_size = trace.iter().map(|(e, _)| e.len()).max().unwrap_or(0);
 
-    trace
+    SetOfIterator::new(trace
         .into_iter()
-        .map(move |(e, v)| format!("{:>width$}: {:?}", e, v, width = col1_size))
+        .map(move |(e, v)| format!("{:>width$}: {:?}", e, v, width = col1_size)))
 }
 
 //
@@ -373,7 +373,7 @@ impl PartialOrd for Value {
                     pg_sys::InvalidOid,
                     pgx::Datum::from(*l0),
                     pgx::Datum::from(*r0),
-                ) as i32;
+                ).value() as i32;
                 res.cmp(&0).into()
             },
             (_, _) => None,
@@ -404,7 +404,7 @@ impl PartialEq for Value {
                     pgx::Datum::from(*l0),
                     pgx::Datum::from(*r0),
                 );
-                res != 0
+                res.value() != 0
             },
             (_, _) => false,
         }

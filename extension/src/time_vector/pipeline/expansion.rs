@@ -1,6 +1,6 @@
-use std::{iter::Iterator, mem::take};
+use std::mem::take;
 
-use pgx::*;
+use pgx::{*, iter::TableIterator};
 
 use super::*;
 
@@ -84,7 +84,7 @@ pub fn arrow_finalize_with_unnest<'p>(
 pub fn arrow_run_pipeline_then_unnest(
     timevector: Timevector_TSTZ_F64,
     pipeline: toolkit_experimental::PipelineThenUnnest,
-) -> impl Iterator<Item = (name!(time, crate::raw::TimestampTz), name!(value, f64))> {
+) -> TableIterator<'static, (name!(time, crate::raw::TimestampTz), name!(value, f64))> {
     let series = run_pipeline_elements(timevector, pipeline.elements.iter())
         .0
         .into_owned();

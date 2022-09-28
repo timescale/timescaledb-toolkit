@@ -180,7 +180,7 @@ pub(crate) unsafe fn pipeline_support_helper(
     use std::mem::{size_of, MaybeUninit};
 
     let input = input.unwrap().unwrap();
-    let input: *mut pg_sys::Node = input as _;
+    let input: *mut pg_sys::Node = input.cast_mut_ptr();
     if !pgx::is_a(input, pg_sys::NodeTag_T_SupportRequestSimplify) {
         return no_change();
     }

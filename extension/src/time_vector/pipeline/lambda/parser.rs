@@ -236,7 +236,7 @@ fn build_binary_op(
         add => {
             let result_type = return_ty!("+"
                 (Double, Double) => Double,
-                (Time, Interval) => Time,
+                (Type::Time, Interval) => Type::Time,
                 (Interval, Interval) => Interval,
             );
             Binary(Plus, left.into(), right.into(), result_type)
@@ -245,7 +245,7 @@ fn build_binary_op(
         subtract => {
             let result_type = return_ty!("-"
                 (Double, Double) => Double,
-                (Time, Interval) => Time,
+                (Type::Time, Interval) => Type::Time,
                 (Interval, Interval) => Interval,
             );
             Binary(Minus, left.into(), right.into(), result_type)
@@ -382,7 +382,7 @@ fn parse_timestamptz(val: &str) -> i64 {
             pgx::Datum::from(-1i32),
         )
     };
-    parsed_time as _
+    parsed_time.value() as _
 }
 
 fn parse_interval(val: &str) -> *mut pg_sys::Interval {
@@ -403,7 +403,7 @@ fn parse_interval(val: &str) -> *mut pg_sys::Interval {
             pgx::Datum::from(-1i32),
         )
     };
-    parsed_interval as _
+    parsed_interval.cast_mut_ptr()
 }
 
 // This static determines the precedence of infix operators

@@ -89,7 +89,7 @@ pub fn map_lambda_over_series(
 pub fn map_series_pipeline_element<'e>(
     function: crate::raw::regproc,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
-    map_series_element(function.0.value().try_into().unwrap()).flatten()
+    map_series_element(crate::raw::regproc::from(function.0)).flatten()
 }
 
 pub fn map_series_element<'a>(function: crate::raw::regproc) -> Element<'a> {
@@ -200,7 +200,7 @@ pub fn apply_to(
                 fncollation: pg_sys::InvalidOid,
                 isnull: false,
                 nargs: 1,
-                args: Default::default(),
+                args: pg_sys::__IncompleteArrayField::new(),
             }),
         }
     };

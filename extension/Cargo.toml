@@ -19,8 +19,8 @@ pg_test = ["approx"]
 [dependencies]
 # Keep synchronized with `cargo install --version N.N.N cargo-pgx` in Readme.md and docker/ci/Dockerfile
 # Also `pgx-tests` down below in `dev-dependencies`.
-pgx = "=0.4.5"
-pgx-macros = "=0.4.5"
+pgx = "=0.5.0-beta.1"
+pgx-macros = "=0.5.0-beta.1"
 encodings = {path="../crates/encodings"}
 flat_serialize = {path="../crates/flat_serialize/flat_serialize"}
 flat_serialize_macro = {path="../crates/flat_serialize/flat_serialize_macro"}
@@ -53,5 +53,5 @@ spfunc = "0.1.0"
 statrs = "0.15.0"
 
 [dev-dependencies]
-pgx-tests = "=0.4.5"
+pgx-tests = "=0.5.0-beta.1"
 approx = "0.4.0"

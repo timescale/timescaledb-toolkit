@@ -1,6 +1,6 @@
 #![allow(clippy::identity_op)] // clippy gets confused by flat_serialize! enums
 
-use std::convert::TryInto;
+use std::{convert::TryInto, hash::{Hash, Hasher}};
 
 use serde::{Deserialize, Serialize};
 
@@ -19,9 +19,19 @@ use crate::{
 
 use hyperloglogplusplus::{HyperLogLog as HLL, HyperLogLogStorage};
 
+// pgx doesn't implement Eq/Hash but it's okay here since we treat Datums as raw bytes
+#[derive(Debug, Copy, Clone, PartialEq)]
+struct HashableDatum(Datum);
+impl Eq for HashableDatum {}
+impl Hash for HashableDatum {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.0.value().hash(state)
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, PartialEq, Eq)]
 pub struct HyperLogLogTrans {
-    logger: HLL<'static, Datum, DatumHashBuilder>,
+    logger: HLL<'static, HashableDatum, DatumHashBuilder>,
 }
 
 use crate::raw::AnyElement;
@@ -102,7 +112,7 @@ pub fn hyperloglog_trans_inner(
                 }
                 Some(state) => state,
             };
-            state.logger.add(&value);
+            state.logger.add(&HashableDatum(value));
             Some(state)
         })
     }
@@ -333,13 +343,13 @@ pub fn hyperloglog_count(hyperloglog: HyperLogLog) -> i64 {
             compressed,
             ..
         } => {
-            HLL::<Datum, ()>::from_sparse_parts(compressed.slice(), *num_compressed, *precision, ())
+            HLL::<HashableDatum, ()>::from_sparse_parts(compressed.slice(), *num_compressed, *precision, ())
         }
         Storage::Dense {
             precision,
             registers,
             ..
-        } => HLL::<Datum, ()>::from_dense_parts(registers.slice(), *precision, ()),
+        } => HLL::<HashableDatum, ()>::from_dense_parts(registers.slice(), *precision, ()),
     };
     log.immutable_estimate_count() as i64
 }
@@ -373,10 +383,10 @@ impl HyperLogLog<'_> {
                 .unwrap()
                 .trailing_zeros();
             let hasher = DatumHashBuilder::from_type_id(type_id, collation);
-            let mut logger: HLL<pg_sys::Datum, DatumHashBuilder> = HLL::new(b as u8, hasher);
+            let mut logger: HLL<HashableDatum, DatumHashBuilder> = HLL::new(b as u8, hasher);
 
             for datum in data {
-                logger.add(&datum);
+                logger.add(&HashableDatum(datum));
             }
 
             flatten_log(&mut logger)
@@ -384,7 +394,7 @@ impl HyperLogLog<'_> {
     }
 }
 
-fn flatten_log(hyperloglog: &mut HLL<Datum, DatumHashBuilder>) -> HyperLogLog<'static> {
+fn flatten_log(hyperloglog: &mut HLL<HashableDatum, DatumHashBuilder>) -> HyperLogLog<'static> {
     let (element_type, collation) = {
         let hasher = &hyperloglog.buildhasher;
         (ShortTypeId(hasher.type_id), PgCollationId(hasher.collation))
@@ -421,7 +431,7 @@ fn flatten_log(hyperloglog: &mut HLL<Datum, DatumHashBuilder>) -> HyperLogLog<'s
     flat
 }
 
-fn unflatten_log(hyperloglog: HyperLogLog) -> HLL<Datum, DatumHashBuilder> {
+fn unflatten_log(hyperloglog: HyperLogLog) -> HLL<HashableDatum, DatumHashBuilder> {
     match &hyperloglog.log {
         Storage::Sparse {
             num_compressed,
@@ -430,7 +440,7 @@ fn unflatten_log(hyperloglog: HyperLogLog) -> HLL<Datum, DatumHashBuilder> {
             element_type,
             collation,
             compressed_bytes: _,
-        } => HLL::<Datum, DatumHashBuilder>::from_sparse_parts(
+        } => HLL::<HashableDatum, DatumHashBuilder>::from_sparse_parts(
             compressed.slice(),
             *num_compressed,
             *precision,
@@ -441,7 +451,7 @@ fn unflatten_log(hyperloglog: HyperLogLog) -> HLL<Datum, DatumHashBuilder> {
             registers,
             element_type,
             collation,
-        } => HLL::<Datum, DatumHashBuilder>::from_dense_parts(
+        } => HLL::<HashableDatum, DatumHashBuilder>::from_dense_parts(
             registers.slice(),
             *precision,
             unsafe { DatumHashBuilder::from_type_id(element_type.0, Some(collation.0)) },
@@ -600,19 +610,19 @@ mod tests {
             };
             control
                 .logger
-                .add(&rust_str_to_text_p("first").into_datum().unwrap());
+                .add(&HashableDatum(rust_str_to_text_p("first").into_datum().unwrap()));
             control
                 .logger
-                .add(&rust_str_to_text_p("second").into_datum().unwrap());
+                .add(&HashableDatum(rust_str_to_text_p("second").into_datum().unwrap()));
             control
                 .logger
-                .add(&rust_str_to_text_p("first").into_datum().unwrap());
+                .add(&HashableDatum(rust_str_to_text_p("first").into_datum().unwrap()));
             control
                 .logger
-                .add(&rust_str_to_text_p("second").into_datum().unwrap());
+                .add(&HashableDatum(rust_str_to_text_p("second").into_datum().unwrap()));
             control
                 .logger
-                .add(&rust_str_to_text_p("third").into_datum().unwrap());
+                .add(&HashableDatum(rust_str_to_text_p("third").into_datum().unwrap()));
 
             let buffer = hyperloglog_serialize(Inner::from(control.clone()).internal().unwrap());
             let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0.cast_mut_ptr());
@@ -635,7 +645,7 @@ mod tests {
             for i in 0..500 {
                 control
                     .logger
-                    .add(&rust_str_to_text_p(&i.to_string()).into_datum().unwrap());
+                    .add(&HashableDatum(rust_str_to_text_p(&i.to_string()).into_datum().unwrap()));
             }
 
             let buffer = hyperloglog_serialize(Inner::from(control.clone()).internal().unwrap());

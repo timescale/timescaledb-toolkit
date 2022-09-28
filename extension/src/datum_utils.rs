@@ -24,10 +24,10 @@ pub(crate) unsafe fn deep_copy_datum(datum: Datum, typoid: Oid) -> Datum {
         // only varlena's can be toasted, manually copy anything with len >0
         let size = (*tentry).typlen as usize;
         let copy = pg_sys::palloc0(size);
-        std::ptr::copy(datum as *const u8, copy as *mut u8, size);
+        std::ptr::copy(datum.cast_mut_ptr(), copy as *mut u8, size);
         pgx::Datum::from(copy)
     } else {
-        pgx::Datum::from(pg_sys::pg_detoast_datum_copy(datum as _))
+        pgx::Datum::from(pg_sys::pg_detoast_datum_copy(datum.cast_mut_ptr()))
     }
 }
 
@@ -45,7 +45,7 @@ pub fn interval_to_ms(ref_time: &crate::raw::TimestampTz, interval: &crate::raw:
             interval.0,
         )
     };
-    bound as i64 - ref_time.0 as i64
+    bound.value() as i64 - ref_time.0.value() as i64
 }
 
 pub struct TextSerializableDatumWriter {
@@ -189,14 +189,14 @@ impl Hasher for DatumHashBuilder {
         let value = unsafe {
             let value = (*(*self.info).flinfo).fn_addr.unwrap()(self.info);
             (*self.info).args.as_mut_slice(1)[0] = pg_sys::NullableDatum {
-                value: 0,
+                value: Datum::from(0_usize),
                 isnull: true,
             };
             (*self.info).isnull = false;
             //FIXME 32bit vs 64 bit get value from datum on 32b arch
             value
         };
-        value as u64
+        value.value() as u64
     }
 
     fn write(&mut self, bytes: &[u8]) {
@@ -212,7 +212,7 @@ impl Hasher for DatumHashBuilder {
     fn write_usize(&mut self, i: usize) {
         unsafe {
             (*self.info).args.as_mut_slice(1)[0] = pg_sys::NullableDatum {
-                value: i,
+                value: Datum::from(i),
                 isnull: false,
             };
             (*self.info).isnull = false;
@@ -353,7 +353,7 @@ impl From<(Oid, Vec<Datum>)> for DatumStore<'_> {
 
             let mut data: Vec<u8> = vec![];
             for datum in datums {
-                data.extend_from_slice(&datum.to_ne_bytes());
+                data.extend_from_slice(&datum.value().to_ne_bytes());
             }
 
             DatumStore {
@@ -384,7 +384,7 @@ impl From<(Oid, Vec<Datum>)> for DatumStore<'_> {
                 unsafe {
                     let va_len = varsize_any(ptr);
                     std::ptr::copy(
-                        ptr as *const u8,
+                        ptr,
                         std::ptr::addr_of_mut!(buffer[target_byte]),
                         va_len,
                     );
@@ -411,7 +411,7 @@ impl From<(Oid, Vec<Datum>)> for DatumStore<'_> {
             for (i, datum) in datums.iter().enumerate() {
                 unsafe {
                     std::ptr::copy(
-                        *datum as *const u8,
+                        *datum.cast_mut_ptr(),
                         std::ptr::addr_of_mut!(buffer[i * len]),
                         tlen as usize,
                     )

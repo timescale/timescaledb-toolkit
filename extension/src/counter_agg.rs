@@ -264,7 +264,7 @@ pub fn counter_agg_trans_inner(
                 None => {
                     let mut s = CounterSummaryTransState::new();
                     if let Some(r) = bounds {
-                        s.bounds = get_range(r.0 as *mut pg_sys::varlena);
+                        s.bounds = get_range(r.0.cast_mut_ptr());
                     }
                     s.push_point(p);
                     Some(s.into())
@@ -564,7 +564,7 @@ pub fn arrow_counter_agg_with_bounds(
 fn counter_agg_with_bounds(summary: CounterSummary, bounds: tstzrange) -> CounterSummary {
     // TODO dedup with previous by using apply_bounds
     unsafe {
-        let ptr = bounds.0 as *mut pg_sys::varlena;
+        let ptr = bounds.0.cast_mut_ptr();
         let mut builder = CounterSummaryBuilder::from(summary.to_internal_counter_summary());
         builder.set_bounds(get_range(ptr));
         CounterSummary::from_internal_counter_summary(builder.build())
@@ -1104,7 +1104,7 @@ mod tests {
             let mut control = state.unwrap();
             let buffer =
                 counter_summary_trans_serialize(Inner::from(control.clone()).internal().unwrap());
-            let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
+            let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0.cast_mut_ptr());
 
             let expected = [
                 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 96, 194, 134, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 36,

@@ -435,7 +435,7 @@ pub mod toolkit_experimental {
             let mut overcounts = Vec::new();
 
             for entry in &trans.entries {
-                values.push(entry.value as i64);
+                values.push(entry.value.value() as i64);
                 counts.push(entry.count);
                 overcounts.push(entry.overcount);
             }
@@ -583,7 +583,7 @@ pub fn topn_agg_with_skew_text_trans(
     value: Option<crate::raw::text>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    let txt = value.map(|v| unsafe { pg_sys::pg_detoast_datum_copy(v.0 as *mut pg_sys::varlena) });
+    let txt = value.map(|v| unsafe { pg_sys::pg_detoast_datum_copy(v.0.cast_mut_ptr()) });
     let value = match txt {
         None => None,
         Some(val) => unsafe {
@@ -645,7 +645,7 @@ pub fn freq_agg_text_trans(
     value: Option<crate::raw::text>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    let txt = value.map(|v| unsafe { pg_sys::pg_detoast_datum_copy(v.0 as *mut pg_sys::varlena) });
+    let txt = value.map(|v| unsafe { pg_sys::pg_detoast_datum_copy(v.0.cast_mut_ptr()) });
     let value = match txt {
         None => None,
         Some(val) => unsafe {
@@ -1471,7 +1471,7 @@ mod tests {
 
         let bytes = unsafe {
             std::slice::from_raw_parts(
-                vardata_any(first.0 as *const pg_sys::varlena) as *const u8,
+                vardata_any(first.0 as *const pg_sys::varlena).cast_mut_ptr(),
                 varsize_any_exhdr(first.0 as *const pg_sys::varlena),
             )
         };
@@ -1530,7 +1530,7 @@ mod tests {
 
         let bytes = unsafe {
             std::slice::from_raw_parts(
-                vardata_any(second.0 as *const pg_sys::varlena) as *const u8,
+                vardata_any(second.0 as *const pg_sys::varlena).cast_mut_ptr(),
                 varsize_any_exhdr(second.0 as *const pg_sys::varlena),
             )
         };
@@ -1598,7 +1598,7 @@ mod tests {
 
         let bytes = unsafe {
             std::slice::from_raw_parts(
-                vardata_any(combined.0 as *const pg_sys::varlena) as *const u8,
+                vardata_any(combined.0 as *const pg_sys::varlena).cast_mut_ptr(),
                 varsize_any_exhdr(combined.0 as *const pg_sys::varlena),
             )
         };

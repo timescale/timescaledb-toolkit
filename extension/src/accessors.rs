@@ -461,7 +461,7 @@ ron_inout_funcs!(AccessorWithBounds);
 
 #[pg_extern(immutable, parallel_safe, name = "with_bounds")]
 pub fn accessor_with_bounds(bounds: crate::raw::tstzrange) -> AccessorWithBounds<'static> {
-    let range = unsafe { crate::range::get_range(bounds.0 as *mut pg_sys::varlena) };
+    let range = unsafe { crate::range::get_range(bounds.0.cast_mut_ptr()) };
     let mut accessor = build! {
         AccessorWithBounds {
             lower: 0,

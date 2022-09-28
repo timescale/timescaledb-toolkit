@@ -230,7 +230,7 @@ fn gauge_agg_trans_inner(
                 None => {
                     let mut s = GaugeSummaryTransState::new();
                     if let Some(r) = bounds {
-                        s.bounds = get_range(r.0 as *mut pg_sys::varlena);
+                        s.bounds = get_range(r.0.cast_mut_ptr());
                     }
                     s.push_point(p);
                     Some(s.into())
@@ -516,7 +516,7 @@ fn arrow_with_bounds(sketch: GaugeSummary, accessor: AccessorWithBounds) -> Gaug
 fn with_bounds(summary: GaugeSummary, bounds: tstzrange) -> GaugeSummary {
     // TODO dedup with previous by using apply_bounds
     unsafe {
-        let ptr = bounds.0 as *mut pg_sys::varlena;
+        let ptr = bounds.0.cast_mut_ptr();
         let mut builder = GaugeSummaryBuilder::from(MetricSummary::from(summary));
         builder.set_bounds(get_range(ptr));
         builder.build().into()

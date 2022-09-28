@@ -89,11 +89,11 @@ pub fn map_lambda_over_series(
 pub fn map_series_pipeline_element<'e>(
     function: crate::raw::regproc,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
-    map_series_element(function.0.try_into().unwrap()).flatten()
+    map_series_element(function.0.value().try_into().unwrap()).flatten()
 }
 
 pub fn map_series_element<'a>(function: crate::raw::regproc) -> Element<'a> {
-    let function: pg_sys::regproc = function.0.try_into().unwrap();
+    let function: pg_sys::regproc = function.0.value().try_into().unwrap();
     check_user_function_type(function);
     Element::MapSeries {
         function: PgProcId(function),
@@ -155,7 +155,7 @@ pub fn map_data_pipeline_element<'e>(
     let mut argtypes: *mut pg_sys::Oid = ptr::null_mut();
     let mut nargs: ::std::os::raw::c_int = 0;
     let rettype = unsafe {
-        pg_sys::get_func_signature(function.0.try_into().unwrap(), &mut argtypes, &mut nargs)
+        pg_sys::get_func_signature(function.0.value().try_into().unwrap(), &mut argtypes, &mut nargs)
     };
 
     if nargs != 1 {
@@ -171,7 +171,7 @@ pub fn map_data_pipeline_element<'e>(
     }
 
     Element::MapData {
-        function: PgProcId(function.0.try_into().unwrap()),
+        function: PgProcId(function.0.value().try_into().unwrap()),
     }
     .flatten()
 }
@@ -182,7 +182,7 @@ pub fn apply_to(
 ) -> Timevector_TSTZ_F64<'_> {
     let mut flinfo: pg_sys::FmgrInfo = unsafe { MaybeUninit::zeroed().assume_init() };
 
-    let fn_addr: unsafe extern "C" fn(*mut pg_sys::FunctionCallInfoBaseData) -> usize;
+    let fn_addr: unsafe extern "C" fn(*mut pg_sys::FunctionCallInfoBaseData) -> Datum;
     let mut fc_info = unsafe {
         pg_sys::fmgr_info(func, &mut flinfo);
         fn_addr = flinfo.fn_addr.expect("null function in timevector map");

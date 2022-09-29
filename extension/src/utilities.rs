@@ -1,5 +1,5 @@
 use crate::raw::TimestampTz;
-use pgx::{prelude::*, *};
+use pgx::prelude::*;
 
 #[pg_extern(
     name = "generate_periodic_normal_series",

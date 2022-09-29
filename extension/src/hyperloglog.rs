@@ -26,6 +26,7 @@ use hyperloglogplusplus::{HyperLogLog as HLL, HyperLogLogStorage};
 #[derive(Debug, Copy, Clone, PartialEq)]
 struct HashableDatum(Datum);
 impl Eq for HashableDatum {}
+#[allow(clippy::derive_hash_xor_eq)] // partialeq and hash implementations match
 impl Hash for HashableDatum {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.value().hash(state)

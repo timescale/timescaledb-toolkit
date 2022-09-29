@@ -4,6 +4,10 @@
 #![allow(clippy::extra_unused_lifetimes)]
 // every function calling in_aggregate_context should be unsafe
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
+// since 0.5 pgx requires non-elided lifetimes on extern functions: https://github.com/tcdi/pgx/issues/721
+#![allow(clippy::needless_lifetimes)]
+// triggered by pg_extern macros
+#![allow(clippy::useless_conversion)]
 
 pub mod accessors;
 pub mod asap;

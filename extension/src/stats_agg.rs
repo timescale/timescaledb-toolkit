@@ -1339,7 +1339,7 @@ mod tests {
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
             let new_state =
-                stats1d_trans_deserialize_inner(bytea(pgx::Datum::from(&*expected.as_ptr())));
+                stats1d_trans_deserialize_inner(bytea(pgx::Datum::from(expected.as_ptr())));
 
             assert_eq!(&*new_state, &*control);
         }

@@ -1468,7 +1468,7 @@ mod tests {
 
         let bytes = unsafe {
             std::slice::from_raw_parts(
-                vardata_any(first.0.cast_mut_ptr()),
+                vardata_any(first.0.cast_mut_ptr()) as *const u8,
                 varsize_any_exhdr(first.0.cast_mut_ptr()),
             )
         };
@@ -1525,13 +1525,13 @@ mod tests {
 
         let second = super::space_saving_serialize(state);
 
-        let bytes = unsafe {
+        let bytes: &[u8] = unsafe {
             std::slice::from_raw_parts(
-                vardata_any(second.0.cast_mut_ptr()).cast_mut_ptr(),
+                vardata_any(second.0.cast_mut_ptr()) as *const u8,
                 varsize_any_exhdr(second.0.cast_mut_ptr()),
             )
         };
-        let expected = [
+        let expected: [u8; 513] = [
             1, 1, // versions
             22, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence
             155, 0, 0, 0, 0, 0, 0, 0, // elements seen
@@ -1595,11 +1595,11 @@ mod tests {
 
         let bytes = unsafe {
             std::slice::from_raw_parts(
-                vardata_any(combined.0.cast_mut_ptr()).cast_mut_ptr(),
+                vardata_any(combined.0.cast_mut_ptr()) as *const u8,
                 varsize_any_exhdr(combined.0.cast_mut_ptr()),
             )
         };
-        let expected = [
+        let expected: [u8; 513] = [
             1, 1, // versions
             22, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence
             210, 0, 0, 0, 0, 0, 0, 0, // elements seen

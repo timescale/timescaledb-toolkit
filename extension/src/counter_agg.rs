@@ -1120,7 +1120,7 @@ mod tests {
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
             let new_state = counter_summary_trans_deserialize_inner(bytea(
-                pgx::Datum::from(&*expected.as_ptr()),
+                pgx::Datum::from(expected.as_ptr()),
             ));
 
             control.combine_summaries(); // Serialized form is always combined

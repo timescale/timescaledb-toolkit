@@ -473,7 +473,10 @@ fn irate_left<'a>(summary: GaugeSummary<'a>) -> Option<f64> {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_irate_right<'a>(sketch: GaugeSummary<'a>, _accessor: AccessorIrateRight<'a>) -> Option<f64> {
+fn arrow_irate_right<'a>(
+    sketch: GaugeSummary<'a>,
+    _accessor: AccessorIrateRight<'a>,
+) -> Option<f64> {
     irate_right(sketch)
 }
 
@@ -506,7 +509,10 @@ fn idelta_right<'a>(summary: GaugeSummary<'a>) -> f64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_with_bounds<'a>(sketch: GaugeSummary<'a>, accessor: AccessorWithBounds<'a>) -> GaugeSummary<'static> {
+fn arrow_with_bounds<'a>(
+    sketch: GaugeSummary<'a>,
+    accessor: AccessorWithBounds<'a>,
+) -> GaugeSummary<'static> {
     let mut builder = GaugeSummaryBuilder::from(MetricSummary::from(sketch));
     builder.set_bounds(accessor.bounds());
     builder.build().into()

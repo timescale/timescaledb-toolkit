@@ -355,7 +355,10 @@ extension_sql!(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_tdigest_approx_percentile<'a>(sketch: TDigest<'a>, accessor: AccessorApproxPercentile<'a>) -> f64 {
+pub fn arrow_tdigest_approx_percentile<'a>(
+    sketch: TDigest<'a>,
+    accessor: AccessorApproxPercentile<'a>,
+) -> f64 {
     tdigest_quantile(accessor.percentile, sketch)
 }
 
@@ -367,7 +370,10 @@ pub fn tdigest_quantile<'a>(quantile: f64, digest: TDigest<'a>) -> f64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_tdigest_approx_rank<'a>(sketch: TDigest<'a>, accessor: AccessorApproxPercentileRank<'a>) -> f64 {
+pub fn arrow_tdigest_approx_rank<'a>(
+    sketch: TDigest<'a>,
+    accessor: AccessorApproxPercentileRank<'a>,
+) -> f64 {
     tdigest_quantile_at_value(accessor.value, sketch)
 }
 
@@ -649,8 +655,7 @@ mod tests {
             assert_eq!(buffer, expected);
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
-            let new_state =
-                tdigest_deserialize_inner(bytea(pgx::Datum::from(expected.as_ptr())));
+            let new_state = tdigest_deserialize_inner(bytea(pgx::Datum::from(expected.as_ptr())));
 
             control.digest(); // Serialized form is always digested
             assert_eq!(&*new_state, &*control);

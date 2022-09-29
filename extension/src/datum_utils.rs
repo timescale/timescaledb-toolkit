@@ -469,7 +469,9 @@ impl<'a, 'b> Iterator for DatumStoreIterator<'a, 'b> {
                     None
                 } else {
                     *next_index += 1;
-                    Some(pgx::Datum::from(unsafe { store.data.slice().as_ptr().offset(idx as _) }))
+                    Some(pgx::Datum::from(unsafe {
+                        store.data.slice().as_ptr().offset(idx as _)
+                    }))
                 }
             }
         }
@@ -575,7 +577,9 @@ impl<'a> Iterator for DatumStoreIntoIterator<'a> {
                     None
                 } else {
                     *next_index += 1;
-                    Some(pgx::Datum::from(unsafe { store.data.slice().as_ptr().offset(idx as _) }))
+                    Some(pgx::Datum::from(unsafe {
+                        store.data.slice().as_ptr().offset(idx as _)
+                    }))
                 }
             }
         }

@@ -155,7 +155,11 @@ pub fn map_data_pipeline_element<'e>(
     let mut argtypes: *mut pg_sys::Oid = ptr::null_mut();
     let mut nargs: ::std::os::raw::c_int = 0;
     let rettype = unsafe {
-        pg_sys::get_func_signature(function.0.value().try_into().unwrap(), &mut argtypes, &mut nargs)
+        pg_sys::get_func_signature(
+            function.0.value().try_into().unwrap(),
+            &mut argtypes,
+            &mut nargs,
+        )
     };
 
     if nargs != 1 {

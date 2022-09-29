@@ -694,7 +694,10 @@ extension_sql!(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats1d_average<'a>(sketch: StatsSummary1D<'a>, _accessor: AccessorAverage<'a>) -> Option<f64> {
+pub fn arrow_stats1d_average<'a>(
+    sketch: StatsSummary1D<'a>,
+    _accessor: AccessorAverage<'a>,
+) -> Option<f64> {
     stats1d_average(sketch)
 }
 
@@ -705,7 +708,10 @@ pub(crate) fn stats1d_average<'a>(summary: StatsSummary1D<'a>) -> Option<f64> {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats1d_sum<'a>(sketch: StatsSummary1D<'a>, _accessor: AccessorSum<'a>) -> Option<f64> {
+pub fn arrow_stats1d_sum<'a>(
+    sketch: StatsSummary1D<'a>,
+    _accessor: AccessorSum<'a>,
+) -> Option<f64> {
     stats1d_sum(sketch)
 }
 
@@ -758,13 +764,19 @@ fn stats1d_variance<'a>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats1d_skewness<'a>(sketch: StatsSummary1D<'a>, accessor: AccessorSkewness<'a>) -> Option<f64> {
+pub fn arrow_stats1d_skewness<'a>(
+    sketch: StatsSummary1D<'a>,
+    accessor: AccessorSkewness<'a>,
+) -> Option<f64> {
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
     stats1d_skewness(sketch, &*method)
 }
 
 #[pg_extern(name = "skewness", immutable, parallel_safe)]
-fn stats1d_skewness<'a>(summary: StatsSummary1D<'a>, method: default!(&str, "'sample'")) -> Option<f64> {
+fn stats1d_skewness<'a>(
+    summary: StatsSummary1D<'a>,
+    method: default!(&str, "'sample'"),
+) -> Option<f64> {
     match method_kind(method) {
         Population => summary.to_internal().skewness_pop(),
         Sample => summary.to_internal().skewness_samp(),
@@ -773,13 +785,19 @@ fn stats1d_skewness<'a>(summary: StatsSummary1D<'a>, method: default!(&str, "'sa
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats1d_kurtosis<'a>(sketch: StatsSummary1D<'a>, accessor: AccessorKurtosis<'a>) -> Option<f64> {
+pub fn arrow_stats1d_kurtosis<'a>(
+    sketch: StatsSummary1D<'a>,
+    accessor: AccessorKurtosis<'a>,
+) -> Option<f64> {
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
     stats1d_kurtosis(sketch, &*method)
 }
 
 #[pg_extern(name = "kurtosis", immutable, parallel_safe)]
-fn stats1d_kurtosis<'a>(summary: StatsSummary1D<'a>, method: default!(&str, "'sample'")) -> Option<f64> {
+fn stats1d_kurtosis<'a>(
+    summary: StatsSummary1D<'a>,
+    method: default!(&str, "'sample'"),
+) -> Option<f64> {
     match method_kind(method) {
         Population => summary.to_internal().kurtosis_pop(),
         Sample => summary.to_internal().kurtosis_samp(),
@@ -788,7 +806,10 @@ fn stats1d_kurtosis<'a>(summary: StatsSummary1D<'a>, method: default!(&str, "'sa
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats1d_num_vals<'a>(sketch: StatsSummary1D<'a>, _accessor: AccessorNumVals<'a>) -> i64 {
+pub fn arrow_stats1d_num_vals<'a>(
+    sketch: StatsSummary1D<'a>,
+    _accessor: AccessorNumVals<'a>,
+) -> i64 {
     stats1d_num_vals(sketch)
 }
 
@@ -799,7 +820,10 @@ fn stats1d_num_vals<'a>(summary: StatsSummary1D<'a>) -> i64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_average_x<'a>(sketch: StatsSummary2D<'a>, _accessor: AccessorAverageX<'a>) -> Option<f64> {
+pub fn arrow_stats2d_average_x<'a>(
+    sketch: StatsSummary2D<'a>,
+    _accessor: AccessorAverageX<'a>,
+) -> Option<f64> {
     stats2d_average_x(sketch)
 }
 
@@ -810,7 +834,10 @@ fn stats2d_average_x<'a>(summary: StatsSummary2D<'a>) -> Option<f64> {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_average_y<'a>(sketch: StatsSummary2D<'a>, _accessor: AccessorAverageY<'a>) -> Option<f64> {
+pub fn arrow_stats2d_average_y<'a>(
+    sketch: StatsSummary2D<'a>,
+    _accessor: AccessorAverageY<'a>,
+) -> Option<f64> {
     stats2d_average_y(sketch)
 }
 
@@ -821,7 +848,10 @@ fn stats2d_average_y<'a>(summary: StatsSummary2D<'a>) -> Option<f64> {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_sum_x<'a>(sketch: StatsSummary2D<'a>, _accessor: AccessorSumX<'a>) -> Option<f64> {
+pub fn arrow_stats2d_sum_x<'a>(
+    sketch: StatsSummary2D<'a>,
+    _accessor: AccessorSumX<'a>,
+) -> Option<f64> {
     stats2d_sum_x(sketch)
 }
 
@@ -832,7 +862,10 @@ fn stats2d_sum_x<'a>(summary: StatsSummary2D<'a>) -> Option<f64> {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_sum_y<'a>(sketch: StatsSummary2D<'a>, _accessor: AccessorSumY<'a>) -> Option<f64> {
+pub fn arrow_stats2d_sum_y<'a>(
+    sketch: StatsSummary2D<'a>,
+    _accessor: AccessorSumY<'a>,
+) -> Option<f64> {
     stats2d_sum_y(sketch)
 }
 
@@ -936,7 +969,10 @@ pub fn arrow_stats2d_skewness_x<'a>(
 }
 
 #[pg_extern(name = "skewness_x", strict, immutable, parallel_safe)]
-fn stats2d_skewness_x<'a>(summary: StatsSummary2D<'a>, method: default!(&str, "'sample'")) -> Option<f64> {
+fn stats2d_skewness_x<'a>(
+    summary: StatsSummary2D<'a>,
+    method: default!(&str, "'sample'"),
+) -> Option<f64> {
     match method_kind(method) {
         Population => Some(summary.to_internal().skewness_pop()?.x),
         Sample => Some(summary.to_internal().skewness_samp()?.x),
@@ -954,7 +990,10 @@ pub fn arrow_stats2d_skewness_y<'a>(
 }
 
 #[pg_extern(name = "skewness_y", strict, immutable, parallel_safe)]
-fn stats2d_skewness_y<'a>(summary: StatsSummary2D<'a>, method: default!(&str, "'sample'")) -> Option<f64> {
+fn stats2d_skewness_y<'a>(
+    summary: StatsSummary2D<'a>,
+    method: default!(&str, "'sample'"),
+) -> Option<f64> {
     match method_kind(method) {
         Population => Some(summary.to_internal().skewness_pop()?.y),
         Sample => Some(summary.to_internal().skewness_samp()?.y),
@@ -972,7 +1011,10 @@ pub fn arrow_stats2d_kurtosis_x<'a>(
 }
 
 #[pg_extern(name = "kurtosis_x", strict, immutable, parallel_safe)]
-fn stats2d_kurtosis_x<'a>(summary: StatsSummary2D<'a>, method: default!(&str, "'sample'")) -> Option<f64> {
+fn stats2d_kurtosis_x<'a>(
+    summary: StatsSummary2D<'a>,
+    method: default!(&str, "'sample'"),
+) -> Option<f64> {
     match method_kind(method) {
         Population => Some(summary.to_internal().kurtosis_pop()?.x),
         Sample => Some(summary.to_internal().kurtosis_samp()?.x),
@@ -990,7 +1032,10 @@ pub fn arrow_stats2d_kurtosis_y<'a>(
 }
 
 #[pg_extern(name = "kurtosis_y", strict, immutable, parallel_safe)]
-fn stats2d_kurtosis_y<'a>(summary: StatsSummary2D<'a>, method: default!(&str, "'sample'")) -> Option<f64> {
+fn stats2d_kurtosis_y<'a>(
+    summary: StatsSummary2D<'a>,
+    method: default!(&str, "'sample'"),
+) -> Option<f64> {
     match method_kind(method) {
         Population => Some(summary.to_internal().kurtosis_pop()?.y),
         Sample => Some(summary.to_internal().kurtosis_samp()?.y),
@@ -999,7 +1044,10 @@ fn stats2d_kurtosis_y<'a>(summary: StatsSummary2D<'a>, method: default!(&str, "'
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_num_vals<'a>(sketch: StatsSummary2D<'a>, _accessor: AccessorNumVals<'a>) -> i64 {
+pub fn arrow_stats2d_num_vals<'a>(
+    sketch: StatsSummary2D<'a>,
+    _accessor: AccessorNumVals<'a>,
+) -> i64 {
     stats2d_num_vals(sketch)
 }
 
@@ -1010,7 +1058,10 @@ fn stats2d_num_vals<'a>(summary: StatsSummary2D<'a>) -> i64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_slope<'a>(sketch: StatsSummary2D<'a>, _accessor: AccessorSlope<'a>) -> Option<f64> {
+pub fn arrow_stats2d_slope<'a>(
+    sketch: StatsSummary2D<'a>,
+    _accessor: AccessorSlope<'a>,
+) -> Option<f64> {
     stats2d_slope(sketch)
 }
 
@@ -1021,7 +1072,10 @@ fn stats2d_slope<'a>(summary: StatsSummary2D<'a>) -> Option<f64> {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_corr<'a>(sketch: StatsSummary2D<'a>, _accessor: AccessorCorr<'a>) -> Option<f64> {
+pub fn arrow_stats2d_corr<'a>(
+    sketch: StatsSummary2D<'a>,
+    _accessor: AccessorCorr<'a>,
+) -> Option<f64> {
     stats2d_corr(sketch)
 }
 
@@ -1074,7 +1128,10 @@ fn stats2d_determination_coeff<'a>(summary: StatsSummary2D<'a>) -> Option<f64> {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_covar<'a>(sketch: Option<StatsSummary2D<'a>>, accessor: AccessorCovar<'a>) -> Option<f64> {
+pub fn arrow_stats2d_covar<'a>(
+    sketch: Option<StatsSummary2D<'a>>,
+    accessor: AccessorCovar<'a>,
+) -> Option<f64> {
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
     stats2d_covar(sketch, &*method)
 }

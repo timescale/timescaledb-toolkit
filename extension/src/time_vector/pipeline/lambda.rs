@@ -1,6 +1,9 @@
 use std::borrow::Cow;
 
-use pgx::{*, iter::{TableIterator, SetOfIterator}};
+use pgx::{
+    iter::{SetOfIterator, TableIterator},
+    *,
+};
 
 use super::*;
 
@@ -164,9 +167,11 @@ pub fn trace_lambda<'a>(
     let _ = executor.exec(value, time.into());
     let col1_size = trace.iter().map(|(e, _)| e.len()).max().unwrap_or(0);
 
-    SetOfIterator::new(trace
-        .into_iter()
-        .map(move |(e, v)| format!("{:>width$}: {:?}", e, v, width = col1_size)))
+    SetOfIterator::new(
+        trace
+            .into_iter()
+            .map(move |(e, v)| format!("{:>width$}: {:?}", e, v, width = col1_size)),
+    )
 }
 
 //
@@ -373,7 +378,8 @@ impl PartialOrd for Value {
                     pg_sys::InvalidOid,
                     pgx::Datum::from(*l0),
                     pgx::Datum::from(*r0),
-                ).value() as i32;
+                )
+                .value() as i32;
                 res.cmp(&0).into()
             },
             (_, _) => None,

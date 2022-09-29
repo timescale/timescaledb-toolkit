@@ -8,7 +8,7 @@ use flat_serialize::{impl_flat_serializable, FlatSerializable, WrapErr};
 
 use serde::{Deserialize, Serialize};
 
-use pg_sys::{Oid};
+use pg_sys::Oid;
 use pgx::*;
 
 /// Possibly a premature optimization, `ShortTypId` provides the ability to
@@ -213,8 +213,10 @@ impl Serialize for PgTypId {
         S: serde::Serializer,
     {
         unsafe {
-            let tuple =
-                pg_sys::SearchSysCache1(pg_sys::SysCacheIdentifier_TYPEOID as _, pgx::Datum::from(self.0));
+            let tuple = pg_sys::SearchSysCache1(
+                pg_sys::SysCacheIdentifier_TYPEOID as _,
+                pgx::Datum::from(self.0),
+            );
             if tuple.is_null() {
                 pgx::error!("no type info for oid {}", self.0);
             }

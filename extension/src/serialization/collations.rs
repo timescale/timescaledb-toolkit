@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use once_cell::sync::Lazy;
 
-use pg_sys::{Oid};
+use pg_sys::Oid;
 use pgx::*;
 
 // TODO short collation serializer?
@@ -109,8 +109,10 @@ impl Serialize for PgCollationId {
                 return layout.serialize(serializer);
             }
 
-            let tuple =
-                pg_sys::SearchSysCache1(pg_sys::SysCacheIdentifier_COLLOID as _, pgx::Datum::from(self.0));
+            let tuple = pg_sys::SearchSysCache1(
+                pg_sys::SysCacheIdentifier_COLLOID as _,
+                pgx::Datum::from(self.0),
+            );
             if tuple.is_null() {
                 pgx::error!("no collation info for oid {}", self.0);
             }

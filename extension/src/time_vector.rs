@@ -1,6 +1,6 @@
 #![allow(clippy::identity_op)] // clippy gets confused by pg_type! enums
 
-use pgx::{*, iter::TableIterator};
+use pgx::{iter::TableIterator, *};
 
 use crate::{
     aggregate_utils::in_aggregate_context,
@@ -107,11 +107,12 @@ pub static TIMEVECTOR_OID: once_cell::sync::Lazy<pg_sys::Oid> =
 #[pg_extern(immutable, parallel_safe)]
 pub fn unnest<'a>(
     series: Timevector_TSTZ_F64<'a>,
-) -> TableIterator<'a, (name!(time, crate::raw::TimestampTz), name!(value, f64))>
-{
-    TableIterator::new(series
-        .into_iter()
-        .map(|points| (points.ts.into(), points.val)))
+) -> TableIterator<'a, (name!(time, crate::raw::TimestampTz), name!(value, f64))> {
+    TableIterator::new(
+        series
+            .into_iter()
+            .map(|points| (points.ts.into(), points.val)),
+    )
 }
 
 #[pg_operator(immutable, parallel_safe)]
@@ -119,8 +120,7 @@ pub fn unnest<'a>(
 pub fn arrow_timevector_unnest<'a>(
     series: Timevector_TSTZ_F64<'a>,
     _accessor: crate::accessors::AccessorUnnest<'a>,
-) -> TableIterator<'a, (name!(time, crate::raw::TimestampTz), name!(value, f64))>
-{
+) -> TableIterator<'a, (name!(time, crate::raw::TimestampTz), name!(value, f64))> {
     unnest(series)
 }
 

@@ -1020,8 +1020,7 @@ mod tests {
             assert_eq!(buffer, expected);
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
-            let new_state =
-                uddsketch_deserialize_inner(bytea(pgx::Datum::from(expected.as_ptr())));
+            let new_state = uddsketch_deserialize_inner(bytea(pgx::Datum::from(expected.as_ptr())));
             assert_eq!(&*new_state, &*control);
         }
     }

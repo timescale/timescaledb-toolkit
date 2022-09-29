@@ -323,7 +323,10 @@ fn time_weight_final_inner(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_time_weight_first_val<'a>(sketch: TimeWeightSummary<'a>, _accessor: AccessorFirstVal<'a>) -> f64 {
+pub fn arrow_time_weight_first_val<'a>(
+    sketch: TimeWeightSummary<'a>,
+    _accessor: AccessorFirstVal<'a>,
+) -> f64 {
     time_weight_first_val(sketch)
 }
 
@@ -334,7 +337,10 @@ fn time_weight_first_val<'a>(summary: TimeWeightSummary<'a>) -> f64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_time_weight_last_val<'a>(sketch: TimeWeightSummary<'a>, _accessor: AccessorLastVal<'a>) -> f64 {
+pub fn arrow_time_weight_last_val<'a>(
+    sketch: TimeWeightSummary<'a>,
+    _accessor: AccessorLastVal<'a>,
+) -> f64 {
     time_weight_last_val(sketch)
 }
 
@@ -791,9 +797,8 @@ mod tests {
             assert_eq!(buffer, expected);
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
-            let new_state = time_weight_trans_deserialize_inner(bytea(
-                pgx::Datum::from(expected.as_ptr()),
-            ));
+            let new_state =
+                time_weight_trans_deserialize_inner(bytea(pgx::Datum::from(expected.as_ptr())));
 
             control.combine_summaries(); // Serialized form is always combined
             assert_eq!(&*new_state, &*control);

@@ -1,6 +1,6 @@
 use std::mem::take;
 
-use pgx::{*, iter::TableIterator};
+use pgx::{iter::TableIterator, *};
 
 use super::*;
 

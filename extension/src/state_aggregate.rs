@@ -6,7 +6,7 @@
 
 #![allow(non_camel_case_types)]
 
-use pgx::{*, iter::TableIterator};
+use pgx::{iter::TableIterator, *};
 use serde::{Deserialize, Serialize};
 
 use aggregate_builder::aggregate;

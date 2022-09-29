@@ -1,6 +1,9 @@
 #![allow(clippy::identity_op)] // clippy gets confused by flat_serialize! enums
 
-use std::{convert::TryInto, hash::{Hash, Hasher}};
+use std::{
+    convert::TryInto,
+    hash::{Hash, Hasher},
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -329,7 +332,10 @@ extension_sql!(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_hyperloglog_count<'a>(sketch: HyperLogLog<'a>, _accessor: AccessorDistinctCount<'a>) -> i64 {
+pub fn arrow_hyperloglog_count<'a>(
+    sketch: HyperLogLog<'a>,
+    _accessor: AccessorDistinctCount<'a>,
+) -> i64 {
     hyperloglog_count(sketch)
 }
 
@@ -342,9 +348,12 @@ pub fn hyperloglog_count<'a>(hyperloglog: HyperLogLog<'a>) -> i64 {
             precision,
             compressed,
             ..
-        } => {
-            HLL::<HashableDatum, ()>::from_sparse_parts(compressed.slice(), *num_compressed, *precision, ())
-        }
+        } => HLL::<HashableDatum, ()>::from_sparse_parts(
+            compressed.slice(),
+            *num_compressed,
+            *precision,
+            (),
+        ),
         Storage::Dense {
             precision,
             registers,
@@ -356,7 +365,10 @@ pub fn hyperloglog_count<'a>(hyperloglog: HyperLogLog<'a>) -> i64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_hyperloglog_error<'a>(sketch: HyperLogLog<'a>, _accessor: AccessorStderror<'a>) -> f64 {
+pub fn arrow_hyperloglog_error<'a>(
+    sketch: HyperLogLog<'a>,
+    _accessor: AccessorStderror<'a>,
+) -> f64 {
     hyperloglog_error(sketch)
 }
 
@@ -608,21 +620,21 @@ mod tests {
             let mut control = HyperLogLogTrans {
                 logger: HLL::new(6, hasher),
             };
-            control
-                .logger
-                .add(&HashableDatum(rust_str_to_text_p("first").into_datum().unwrap()));
-            control
-                .logger
-                .add(&HashableDatum(rust_str_to_text_p("second").into_datum().unwrap()));
-            control
-                .logger
-                .add(&HashableDatum(rust_str_to_text_p("first").into_datum().unwrap()));
-            control
-                .logger
-                .add(&HashableDatum(rust_str_to_text_p("second").into_datum().unwrap()));
-            control
-                .logger
-                .add(&HashableDatum(rust_str_to_text_p("third").into_datum().unwrap()));
+            control.logger.add(&HashableDatum(
+                rust_str_to_text_p("first").into_datum().unwrap(),
+            ));
+            control.logger.add(&HashableDatum(
+                rust_str_to_text_p("second").into_datum().unwrap(),
+            ));
+            control.logger.add(&HashableDatum(
+                rust_str_to_text_p("first").into_datum().unwrap(),
+            ));
+            control.logger.add(&HashableDatum(
+                rust_str_to_text_p("second").into_datum().unwrap(),
+            ));
+            control.logger.add(&HashableDatum(
+                rust_str_to_text_p("third").into_datum().unwrap(),
+            ));
 
             let buffer = hyperloglog_serialize(Inner::from(control.clone()).internal().unwrap());
             let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0.cast_mut_ptr());
@@ -643,9 +655,9 @@ mod tests {
 
             // Now generate a dense represenataion and validate that
             for i in 0..500 {
-                control
-                    .logger
-                    .add(&HashableDatum(rust_str_to_text_p(&i.to_string()).into_datum().unwrap()));
+                control.logger.add(&HashableDatum(
+                    rust_str_to_text_p(&i.to_string()).into_datum().unwrap(),
+                ));
             }
 
             let buffer = hyperloglog_serialize(Inner::from(control.clone()).internal().unwrap());

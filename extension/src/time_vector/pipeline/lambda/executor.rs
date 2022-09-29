@@ -215,7 +215,8 @@ where
                         pg_sys::InvalidOid,
                         pgx::Datum::from(left),
                         pgx::Datum::from(right),
-                    ).cast_mut_ptr()
+                    )
+                    .cast_mut_ptr()
                 };
                 assert!(!res.is_null());
                 Value::Interval(res)
@@ -233,7 +234,8 @@ where
                         pg_sys::InvalidOid,
                         pgx::Datum::from(left),
                         right.into_datum().unwrap(),
-                    ).value() as _
+                    )
+                    .value() as _
                 };
                 assert!(!res.is_null());
                 Value::Interval(res)
@@ -251,7 +253,8 @@ where
                         pg_sys::InvalidOid,
                         pgx::Datum::from(left),
                         pgx::Datum::from(right),
-                    ).value() as _
+                    )
+                    .value() as _
                 };
 
                 Value::Time(res)

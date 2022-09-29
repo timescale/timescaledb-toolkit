@@ -81,9 +81,9 @@ pub fn arrow_finalize_with_unnest<'p>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline_then_unnest(
-    timevector: Timevector_TSTZ_F64,
-    pipeline: toolkit_experimental::PipelineThenUnnest,
+pub fn arrow_run_pipeline_then_unnest<'a>(
+    timevector: Timevector_TSTZ_F64<'a>,
+    pipeline: toolkit_experimental::PipelineThenUnnest<'a>,
 ) -> TableIterator<'static, (name!(time, crate::raw::TimestampTz), name!(value, f64))> {
     let series = run_pipeline_elements(timevector, pipeline.elements.iter())
         .0
@@ -136,9 +136,9 @@ pub fn arrow_force_materialize<'e>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline_then_materialize(
-    timevector: Timevector_TSTZ_F64,
-    pipeline: toolkit_experimental::PipelineForceMaterialize,
+pub fn arrow_run_pipeline_then_materialize<'a>(
+    timevector: Timevector_TSTZ_F64<'a>,
+    pipeline: toolkit_experimental::PipelineForceMaterialize<'a>,
 ) -> toolkit_experimental::Timevector_TSTZ_F64<'static> {
     run_pipeline_elements(timevector, pipeline.elements.iter()).in_current_context()
 }

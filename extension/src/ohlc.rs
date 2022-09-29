@@ -147,9 +147,9 @@ pub fn ohlc_transition_inner(
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn ohlc_rollup_trans(
+pub fn ohlc_rollup_trans<'a>(
     state: Internal,
-    value: Option<OpenHighLowClose>,
+    value: Option<OpenHighLowClose<'a>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     ohlc_rollup_trans_inner(unsafe { state.to_inner() }, value, fcinfo).internal()
@@ -283,49 +283,49 @@ extension_sql!(
 );
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn open(aggregate: Option<OpenHighLowClose>) -> f64 {
+pub fn open<'a>(aggregate: Option<OpenHighLowClose<'a>>) -> f64 {
     let ohlc = aggregate.unwrap();
     ohlc.open()
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn high(aggregate: Option<OpenHighLowClose>) -> f64 {
+pub fn high<'a>(aggregate: Option<OpenHighLowClose<'a>>) -> f64 {
     let ohlc = aggregate.unwrap();
     ohlc.high()
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn low(aggregate: Option<OpenHighLowClose>) -> f64 {
+pub fn low<'a>(aggregate: Option<OpenHighLowClose<'a>>) -> f64 {
     let ohlc = aggregate.unwrap();
     ohlc.low()
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn close(aggregate: Option<OpenHighLowClose>) -> f64 {
+pub fn close<'a>(aggregate: Option<OpenHighLowClose<'a>>) -> f64 {
     let ohlc = aggregate.unwrap();
     ohlc.close()
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn open_time(aggregate: Option<OpenHighLowClose>) -> crate::raw::TimestampTz {
+pub fn open_time<'a>(aggregate: Option<OpenHighLowClose<'a>>) -> crate::raw::TimestampTz {
     let ohlc = aggregate.unwrap();
     ohlc.open_time().into()
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn high_time(aggregate: Option<OpenHighLowClose>) -> crate::raw::TimestampTz {
+pub fn high_time<'a>(aggregate: Option<OpenHighLowClose<'a>>) -> crate::raw::TimestampTz {
     let ohlc = aggregate.unwrap();
     ohlc.high_time().into()
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn low_time(aggregate: Option<OpenHighLowClose>) -> crate::raw::TimestampTz {
+pub fn low_time<'a>(aggregate: Option<OpenHighLowClose<'a>>) -> crate::raw::TimestampTz {
     let ohlc = aggregate.unwrap();
     ohlc.low_time().into()
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn close_time(aggregate: Option<OpenHighLowClose>) -> crate::raw::TimestampTz {
+pub fn close_time<'a>(aggregate: Option<OpenHighLowClose<'a>>) -> crate::raw::TimestampTz {
     let ohlc = aggregate.unwrap();
     ohlc.close_time().into()
 }

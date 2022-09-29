@@ -127,7 +127,7 @@ impl toolkit_experimental::count_min_sketch {
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn approx_count(item: String, aggregate: Option<CountMinSketch>) -> Option<i64> {
+pub fn approx_count<'a>(item: String, aggregate: Option<CountMinSketch<'a>>) -> Option<i64> {
     aggregate.map(|sketch| CountMinSketch::to_internal_countminsketch(&sketch).estimate(item))
 }
 

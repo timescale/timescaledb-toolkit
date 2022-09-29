@@ -289,9 +289,9 @@ pub fn counter_agg_trans_no_bounds(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn counter_agg_summary_trans(
+pub fn counter_agg_summary_trans<'a>(
     state: Internal,
-    value: Option<CounterSummary>,
+    value: Option<CounterSummary<'a>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     counter_agg_summary_trans_inner(unsafe { state.to_inner() }, value, fcinfo).internal()
@@ -465,95 +465,95 @@ extension_sql!(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_delta(sketch: CounterSummary, _accessor: AccessorDelta) -> f64 {
+pub fn arrow_counter_agg_delta<'a>(sketch: CounterSummary<'a>, _accessor: AccessorDelta<'a>) -> f64 {
     counter_agg_delta(sketch)
 }
 
 #[pg_extern(name = "delta", strict, immutable, parallel_safe)]
-fn counter_agg_delta(summary: CounterSummary) -> f64 {
+fn counter_agg_delta<'a>(summary: CounterSummary<'a>) -> f64 {
     summary.to_internal_counter_summary().delta()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_rate(sketch: CounterSummary, _accessor: AccessorRate) -> Option<f64> {
+pub fn arrow_counter_agg_rate<'a>(sketch: CounterSummary<'a>, _accessor: AccessorRate<'a>) -> Option<f64> {
     counter_agg_rate(sketch)
 }
 
 #[pg_extern(name = "rate", strict, immutable, parallel_safe)]
-fn counter_agg_rate(summary: CounterSummary) -> Option<f64> {
+fn counter_agg_rate<'a>(summary: CounterSummary<'a>) -> Option<f64> {
     summary.to_internal_counter_summary().rate()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_time_delta(sketch: CounterSummary, _accessor: AccessorTimeDelta) -> f64 {
+pub fn arrow_counter_agg_time_delta<'a>(sketch: CounterSummary<'a>, _accessor: AccessorTimeDelta<'a>) -> f64 {
     counter_agg_time_delta(sketch)
 }
 
 #[pg_extern(name = "time_delta", strict, immutable, parallel_safe)]
-fn counter_agg_time_delta(summary: CounterSummary) -> f64 {
+fn counter_agg_time_delta<'a>(summary: CounterSummary<'a>) -> f64 {
     summary.to_internal_counter_summary().time_delta()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_irate_left(
-    sketch: CounterSummary,
-    _accessor: AccessorIrateLeft,
+pub fn arrow_counter_agg_irate_left<'a>(
+    sketch: CounterSummary<'a>,
+    _accessor: AccessorIrateLeft<'a>,
 ) -> Option<f64> {
     counter_agg_irate_left(sketch)
 }
 
 #[pg_extern(name = "irate_left", strict, immutable, parallel_safe)]
-fn counter_agg_irate_left(summary: CounterSummary) -> Option<f64> {
+fn counter_agg_irate_left<'a>(summary: CounterSummary<'a>) -> Option<f64> {
     summary.to_internal_counter_summary().irate_left()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_irate_right(
-    sketch: CounterSummary,
-    _accessor: AccessorIrateRight,
+pub fn arrow_counter_agg_irate_right<'a>(
+    sketch: CounterSummary<'a>,
+    _accessor: AccessorIrateRight<'a>,
 ) -> Option<f64> {
     counter_agg_irate_right(sketch)
 }
 
 #[pg_extern(name = "irate_right", strict, immutable, parallel_safe)]
-fn counter_agg_irate_right(summary: CounterSummary) -> Option<f64> {
+fn counter_agg_irate_right<'a>(summary: CounterSummary<'a>) -> Option<f64> {
     summary.to_internal_counter_summary().irate_right()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_idelta_left(sketch: CounterSummary, _accessor: AccessorIdeltaLeft) -> f64 {
+pub fn arrow_counter_agg_idelta_left<'a>(sketch: CounterSummary<'a>, _accessor: AccessorIdeltaLeft<'a>) -> f64 {
     counter_agg_idelta_left(sketch)
 }
 
 #[pg_extern(name = "idelta_left", strict, immutable, parallel_safe)]
-fn counter_agg_idelta_left(summary: CounterSummary) -> f64 {
+fn counter_agg_idelta_left<'a>(summary: CounterSummary<'a>) -> f64 {
     summary.to_internal_counter_summary().idelta_left()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_idelta_right(
-    sketch: CounterSummary,
-    _accessor: AccessorIdeltaRight,
+pub fn arrow_counter_agg_idelta_right<'a>(
+    sketch: CounterSummary<'a>,
+    _accessor: AccessorIdeltaRight<'a>,
 ) -> f64 {
     counter_agg_idelta_right(sketch)
 }
 
 #[pg_extern(name = "idelta_right", strict, immutable, parallel_safe)]
-fn counter_agg_idelta_right(summary: CounterSummary) -> f64 {
+fn counter_agg_idelta_right<'a>(summary: CounterSummary<'a>) -> f64 {
     summary.to_internal_counter_summary().idelta_right()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_with_bounds(
-    sketch: CounterSummary,
-    accessor: AccessorWithBounds,
+pub fn arrow_counter_agg_with_bounds<'a>(
+    sketch: CounterSummary<'a>,
+    accessor: AccessorWithBounds<'a>,
 ) -> CounterSummary<'static> {
     let mut builder = CounterSummaryBuilder::from(sketch.to_internal_counter_summary());
     builder.set_bounds(accessor.bounds());
@@ -561,7 +561,7 @@ pub fn arrow_counter_agg_with_bounds(
 }
 
 #[pg_extern(name = "with_bounds", strict, immutable, parallel_safe)]
-fn counter_agg_with_bounds(summary: CounterSummary, bounds: tstzrange) -> CounterSummary {
+fn counter_agg_with_bounds<'a>(summary: CounterSummary<'a>, bounds: tstzrange) -> CounterSummary<'static> {
     // TODO dedup with previous by using apply_bounds
     unsafe {
         let ptr = bounds.0.cast_mut_ptr();
@@ -584,16 +584,16 @@ fn counter_agg_with_bounds(summary: CounterSummary, bounds: tstzrange) -> Counte
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_extrapolated_delta(
-    sketch: CounterSummary,
-    accessor: AccessorExtrapolatedDelta,
+pub fn arrow_counter_agg_extrapolated_delta<'a>(
+    sketch: CounterSummary<'a>,
+    accessor: AccessorExtrapolatedDelta<'a>,
 ) -> Option<f64> {
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
     counter_agg_extrapolated_delta(sketch, &*method)
 }
 
 #[pg_extern(name = "extrapolated_delta", strict, immutable, parallel_safe)]
-fn counter_agg_extrapolated_delta(summary: CounterSummary, method: &str) -> Option<f64> {
+fn counter_agg_extrapolated_delta<'a>(summary: CounterSummary<'a>, method: &str) -> Option<f64> {
     match method_kind(method) {
         Prometheus => summary
             .to_internal_counter_summary()
@@ -608,12 +608,12 @@ fn counter_agg_extrapolated_delta(summary: CounterSummary, method: &str) -> Opti
     parallel_safe,
     schema = "toolkit_experimental"
 )]
-fn counter_agg_interpolated_delta(
-    summary: CounterSummary,
+fn counter_agg_interpolated_delta<'a>(
+    summary: CounterSummary<'a>,
     start: crate::raw::TimestampTz,
     interval: crate::raw::Interval,
-    prev: Option<CounterSummary>,
-    next: Option<CounterSummary>,
+    prev: Option<CounterSummary<'a>>,
+    next: Option<CounterSummary<'a>>,
 ) -> f64 {
     let interval = crate::datum_utils::interval_to_ms(&start, &interval);
     summary
@@ -624,16 +624,16 @@ fn counter_agg_interpolated_delta(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_extrapolated_rate(
-    sketch: CounterSummary,
-    accessor: AccessorExtrapolatedRate,
+pub fn arrow_counter_agg_extrapolated_rate<'a>(
+    sketch: CounterSummary<'a>,
+    accessor: AccessorExtrapolatedRate<'a>,
 ) -> Option<f64> {
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
     counter_agg_extrapolated_rate(sketch, &*method)
 }
 
 #[pg_extern(name = "extrapolated_rate", strict, immutable, parallel_safe)]
-fn counter_agg_extrapolated_rate(summary: CounterSummary, method: &str) -> Option<f64> {
+fn counter_agg_extrapolated_rate<'a>(summary: CounterSummary<'a>, method: &str) -> Option<f64> {
     match method_kind(method) {
         Prometheus => summary
             .to_internal_counter_summary()
@@ -648,12 +648,12 @@ fn counter_agg_extrapolated_rate(summary: CounterSummary, method: &str) -> Optio
     parallel_safe,
     schema = "toolkit_experimental"
 )]
-fn counter_agg_interpolated_rate(
-    summary: CounterSummary,
+fn counter_agg_interpolated_rate<'a>(
+    summary: CounterSummary<'a>,
     start: crate::raw::TimestampTz,
     interval: crate::raw::Interval,
-    prev: Option<CounterSummary>,
-    next: Option<CounterSummary>,
+    prev: Option<CounterSummary<'a>>,
+    next: Option<CounterSummary<'a>>,
 ) -> Option<f64> {
     let interval = crate::datum_utils::interval_to_ms(&start, &interval);
     summary
@@ -664,137 +664,137 @@ fn counter_agg_interpolated_rate(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_num_elements(
-    sketch: CounterSummary,
-    _accessor: AccessorNumElements,
+pub fn arrow_counter_agg_num_elements<'a>(
+    sketch: CounterSummary<'a>,
+    _accessor: AccessorNumElements<'a>,
 ) -> i64 {
     counter_agg_num_elements(sketch)
 }
 
 #[pg_extern(name = "num_elements", strict, immutable, parallel_safe)]
-fn counter_agg_num_elements(summary: CounterSummary) -> i64 {
+fn counter_agg_num_elements<'a>(summary: CounterSummary<'a>) -> i64 {
     summary.to_internal_counter_summary().stats.n as i64
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_num_changes(sketch: CounterSummary, _accessor: AccessorNumChanges) -> i64 {
+pub fn arrow_counter_agg_num_changes<'a>(sketch: CounterSummary<'a>, _accessor: AccessorNumChanges<'a>) -> i64 {
     counter_agg_num_changes(sketch)
 }
 
 #[pg_extern(name = "num_changes", strict, immutable, parallel_safe)]
-fn counter_agg_num_changes(summary: CounterSummary) -> i64 {
+fn counter_agg_num_changes<'a>(summary: CounterSummary<'a>) -> i64 {
     summary.to_internal_counter_summary().num_changes as i64
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_num_resets(sketch: CounterSummary, _accessor: AccessorNumResets) -> i64 {
+pub fn arrow_counter_agg_num_resets<'a>(sketch: CounterSummary<'a>, _accessor: AccessorNumResets<'a>) -> i64 {
     counter_agg_num_resets(sketch)
 }
 
 #[pg_extern(name = "num_resets", strict, immutable, parallel_safe)]
-fn counter_agg_num_resets(summary: CounterSummary) -> i64 {
+fn counter_agg_num_resets<'a>(summary: CounterSummary<'a>) -> i64 {
     summary.to_internal_counter_summary().num_resets as i64
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_slope(sketch: CounterSummary, _accessor: AccessorSlope) -> Option<f64> {
+pub fn arrow_counter_agg_slope<'a>(sketch: CounterSummary<'a>, _accessor: AccessorSlope<'a>) -> Option<f64> {
     counter_agg_slope(sketch)
 }
 
 #[pg_extern(name = "slope", strict, immutable, parallel_safe)]
-fn counter_agg_slope(summary: CounterSummary) -> Option<f64> {
+fn counter_agg_slope<'a>(summary: CounterSummary<'a>) -> Option<f64> {
     summary.to_internal_counter_summary().stats.slope()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_intercept(
-    sketch: CounterSummary,
-    _accessor: AccessorIntercept,
+pub fn arrow_counter_agg_intercept<'a>(
+    sketch: CounterSummary<'a>,
+    _accessor: AccessorIntercept<'a>,
 ) -> Option<f64> {
     counter_agg_intercept(sketch)
 }
 
 #[pg_extern(name = "intercept", strict, immutable, parallel_safe)]
-fn counter_agg_intercept(summary: CounterSummary) -> Option<f64> {
+fn counter_agg_intercept<'a>(summary: CounterSummary<'a>) -> Option<f64> {
     summary.to_internal_counter_summary().stats.intercept()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_corr(sketch: CounterSummary, _accessor: AccessorCorr) -> Option<f64> {
+pub fn arrow_counter_agg_corr<'a>(sketch: CounterSummary<'a>, _accessor: AccessorCorr<'a>) -> Option<f64> {
     counter_agg_corr(sketch)
 }
 
 #[pg_extern(name = "corr", strict, immutable, parallel_safe)]
-fn counter_agg_corr(summary: CounterSummary) -> Option<f64> {
+fn counter_agg_corr<'a>(summary: CounterSummary<'a>) -> Option<f64> {
     summary.to_internal_counter_summary().stats.corr()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_zero_time(
-    sketch: CounterSummary,
-    _accessor: AccessorCounterZeroTime,
+pub fn arrow_counter_agg_zero_time<'a>(
+    sketch: CounterSummary<'a>,
+    _accessor: AccessorCounterZeroTime<'a>,
 ) -> Option<crate::raw::TimestampTz> {
     counter_agg_counter_zero_time(sketch)
 }
 
 #[pg_extern(name = "counter_zero_time", strict, immutable, parallel_safe)]
-fn counter_agg_counter_zero_time(summary: CounterSummary) -> Option<crate::raw::TimestampTz> {
+fn counter_agg_counter_zero_time<'a>(summary: CounterSummary<'a>) -> Option<crate::raw::TimestampTz> {
     Some(((summary.to_internal_counter_summary().stats.x_intercept()? * 1_000_000.0) as i64).into())
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_first_val(sketch: CounterSummary, _accessor: AccessorFirstVal) -> f64 {
+pub fn arrow_counter_agg_first_val<'a>(sketch: CounterSummary<'a>, _accessor: AccessorFirstVal<'a>) -> f64 {
     counter_agg_first_val(sketch)
 }
 
 #[pg_extern(name = "first_val", strict, immutable, parallel_safe)]
-fn counter_agg_first_val(summary: CounterSummary) -> f64 {
+fn counter_agg_first_val<'a>(summary: CounterSummary<'a>) -> f64 {
     summary.to_internal_counter_summary().first.val
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_last_val(sketch: CounterSummary, _accessor: AccessorLastVal) -> f64 {
+pub fn arrow_counter_agg_last_val<'a>(sketch: CounterSummary<'a>, _accessor: AccessorLastVal<'a>) -> f64 {
     counter_agg_last_val(sketch)
 }
 
 #[pg_extern(name = "last_val", strict, immutable, parallel_safe)]
-fn counter_agg_last_val(summary: CounterSummary) -> f64 {
+fn counter_agg_last_val<'a>(summary: CounterSummary<'a>) -> f64 {
     summary.to_internal_counter_summary().last.val
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_first_time(
-    sketch: CounterSummary,
-    _accessor: AccessorFirstTime,
+pub fn arrow_counter_agg_first_time<'a>(
+    sketch: CounterSummary<'a>,
+    _accessor: AccessorFirstTime<'a>,
 ) -> crate::raw::TimestampTz {
     counter_agg_first_time(sketch)
 }
 
 #[pg_extern(name = "first_time", strict, immutable, parallel_safe)]
-fn counter_agg_first_time(summary: CounterSummary) -> crate::raw::TimestampTz {
+fn counter_agg_first_time<'a>(summary: CounterSummary<'a>) -> crate::raw::TimestampTz {
     summary.to_internal_counter_summary().first.ts.into()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_last_time(
-    sketch: CounterSummary,
-    _accessor: AccessorLastTime,
+pub fn arrow_counter_agg_last_time<'a>(
+    sketch: CounterSummary<'a>,
+    _accessor: AccessorLastTime<'a>,
 ) -> crate::raw::TimestampTz {
     counter_agg_last_time(sketch)
 }
 
 #[pg_extern(name = "last_time", strict, immutable, parallel_safe)]
-fn counter_agg_last_time(summary: CounterSummary) -> crate::raw::TimestampTz {
+fn counter_agg_last_time<'a>(summary: CounterSummary<'a>) -> crate::raw::TimestampTz {
     summary.to_internal_counter_summary().last.ts.into()
 }
 
@@ -1120,7 +1120,7 @@ mod tests {
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
             let new_state = counter_summary_trans_deserialize_inner(bytea(
-                pgx::Datum::from(&*expected.cast_mut_ptr()),
+                pgx::Datum::from(&*expected.as_ptr()),
             ));
 
             control.combine_summaries(); // Serialized form is always combined

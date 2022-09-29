@@ -112,9 +112,9 @@ pub mod toolkit_experimental {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline(
-    timevector: Timevector_TSTZ_F64,
-    pipeline: toolkit_experimental::UnstableTimevectorPipeline,
+pub fn arrow_run_pipeline<'a>(
+    timevector: Timevector_TSTZ_F64<'a>,
+    pipeline: toolkit_experimental::UnstableTimevectorPipeline<'a>,
 ) -> Timevector_TSTZ_F64<'static> {
     run_pipeline_elements(timevector, pipeline.elements.iter()).in_current_context()
 }

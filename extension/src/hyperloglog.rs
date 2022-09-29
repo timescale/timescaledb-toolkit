@@ -270,9 +270,9 @@ extension_sql!(
 );
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn hyperloglog_union(
+pub fn hyperloglog_union<'a>(
     state: Internal,
-    other: HyperLogLog,
+    other: HyperLogLog<'a>,
     fc: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     hyperloglog_union_inner(unsafe { state.to_inner() }, other, fc).internal()
@@ -334,7 +334,7 @@ extension_sql!(
 // }
 
 #[pg_extern(name = "distinct_count", immutable, parallel_safe)]
-pub fn hyperloglog_count(hyperloglog: HyperLogLog) -> i64 {
+pub fn hyperloglog_count<'a>(hyperloglog: HyperLogLog<'a>) -> i64 {
     // count does not depend on the type parameters
     let log = match &hyperloglog.log {
         Storage::Sparse {
@@ -361,7 +361,7 @@ pub fn hyperloglog_count(hyperloglog: HyperLogLog) -> i64 {
 // }
 
 #[pg_extern(name = "stderror", immutable, parallel_safe)]
-pub fn hyperloglog_error(hyperloglog: HyperLogLog) -> f64 {
+pub fn hyperloglog_error<'a>(hyperloglog: HyperLogLog<'a>) -> f64 {
     let precision = match hyperloglog.log {
         Storage::Sparse { precision, .. } => precision,
         Storage::Dense { precision, .. } => precision,

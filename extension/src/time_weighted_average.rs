@@ -210,9 +210,9 @@ pub fn time_weight_trans_inner(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn time_weight_summary_trans(
+pub fn time_weight_summary_trans<'a>(
     state: Internal,
-    next: Option<TimeWeightSummary>,
+    next: Option<TimeWeightSummary<'a>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     time_weight_summary_trans_inner(unsafe { state.to_inner() }, next, fcinfo).internal()
@@ -323,51 +323,51 @@ fn time_weight_final_inner(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_time_weight_first_val(sketch: TimeWeightSummary, _accessor: AccessorFirstVal) -> f64 {
+pub fn arrow_time_weight_first_val<'a>(sketch: TimeWeightSummary<'a>, _accessor: AccessorFirstVal<'a>) -> f64 {
     time_weight_first_val(sketch)
 }
 
 #[pg_extern(name = "first_val", strict, immutable, parallel_safe)]
-fn time_weight_first_val(summary: TimeWeightSummary) -> f64 {
+fn time_weight_first_val<'a>(summary: TimeWeightSummary<'a>) -> f64 {
     summary.first.val
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_time_weight_last_val(sketch: TimeWeightSummary, _accessor: AccessorLastVal) -> f64 {
+pub fn arrow_time_weight_last_val<'a>(sketch: TimeWeightSummary<'a>, _accessor: AccessorLastVal<'a>) -> f64 {
     time_weight_last_val(sketch)
 }
 
 #[pg_extern(name = "last_val", strict, immutable, parallel_safe)]
-fn time_weight_last_val(summary: TimeWeightSummary) -> f64 {
+fn time_weight_last_val<'a>(summary: TimeWeightSummary<'a>) -> f64 {
     summary.last.val
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_time_weight_first_time(
-    sketch: TimeWeightSummary,
-    _accessor: AccessorFirstTime,
+pub fn arrow_time_weight_first_time<'a>(
+    sketch: TimeWeightSummary<'a>,
+    _accessor: AccessorFirstTime<'a>,
 ) -> crate::raw::TimestampTz {
     time_weight_first_time(sketch)
 }
 
 #[pg_extern(name = "first_time", strict, immutable, parallel_safe)]
-fn time_weight_first_time(summary: TimeWeightSummary) -> crate::raw::TimestampTz {
+fn time_weight_first_time<'a>(summary: TimeWeightSummary<'a>) -> crate::raw::TimestampTz {
     summary.first.ts.into()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_time_weight_last_time(
-    sketch: TimeWeightSummary,
-    _accessor: AccessorLastTime,
+pub fn arrow_time_weight_last_time<'a>(
+    sketch: TimeWeightSummary<'a>,
+    _accessor: AccessorLastTime<'a>,
 ) -> crate::raw::TimestampTz {
     time_weight_last_time(sketch)
 }
 
 #[pg_extern(name = "last_time", strict, immutable, parallel_safe)]
-fn time_weight_last_time(summary: TimeWeightSummary) -> crate::raw::TimestampTz {
+fn time_weight_last_time<'a>(summary: TimeWeightSummary<'a>) -> crate::raw::TimestampTz {
     summary.last.ts.into()
 }
 
@@ -408,18 +408,18 @@ extension_sql!(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_time_weighted_average_average(
-    sketch: Option<TimeWeightSummary>,
-    _accessor: AccessorAverage,
+pub fn arrow_time_weighted_average_average<'a>(
+    sketch: Option<TimeWeightSummary<'a>>,
+    _accessor: AccessorAverage<'a>,
 ) -> Option<f64> {
     time_weighted_average_average(sketch)
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_time_weighted_average_integral(
-    tws: Option<TimeWeightSummary>,
-    accessor: toolkit_experimental::AccessorIntegral,
+pub fn arrow_time_weighted_average_integral<'a>(
+    tws: Option<TimeWeightSummary<'a>>,
+    accessor: toolkit_experimental::AccessorIntegral<'a>,
 ) -> Option<f64> {
     time_weighted_average_integral(
         tws,
@@ -428,7 +428,7 @@ pub fn arrow_time_weighted_average_integral(
 }
 
 #[pg_extern(immutable, parallel_safe, name = "average")]
-pub fn time_weighted_average_average(tws: Option<TimeWeightSummary>) -> Option<f64> {
+pub fn time_weighted_average_average<'a>(tws: Option<TimeWeightSummary<'a>>) -> Option<f64> {
     match tws {
         None => None,
         Some(tws) => match tws.internal().time_weighted_average() {
@@ -451,8 +451,8 @@ pub fn time_weighted_average_average(tws: Option<TimeWeightSummary>) -> Option<f
     name = "integral",
     schema = "toolkit_experimental"
 )]
-pub fn time_weighted_average_integral(
-    tws: Option<TimeWeightSummary>,
+pub fn time_weighted_average_integral<'a>(
+    tws: Option<TimeWeightSummary<'a>>,
     unit: default!(String, "'second'"),
 ) -> Option<f64> {
     let unit = match DurationUnit::from_str(&unit) {
@@ -488,12 +488,12 @@ fn interpolate<'a>(
     name = "interpolated_average",
     schema = "toolkit_experimental"
 )]
-pub fn time_weighted_average_interpolated_average(
-    tws: Option<TimeWeightSummary>,
+pub fn time_weighted_average_interpolated_average<'a>(
+    tws: Option<TimeWeightSummary<'a>>,
     start: crate::raw::TimestampTz,
     interval: crate::raw::Interval,
-    prev: Option<TimeWeightSummary>,
-    next: Option<TimeWeightSummary>,
+    prev: Option<TimeWeightSummary<'a>>,
+    next: Option<TimeWeightSummary<'a>>,
 ) -> Option<f64> {
     let target = interpolate(tws, start, interval, prev, next);
     time_weighted_average_average(target)
@@ -505,12 +505,12 @@ pub fn time_weighted_average_interpolated_average(
     name = "interpolated_integral",
     schema = "toolkit_experimental"
 )]
-pub fn time_weighted_average_interpolated_integral(
-    tws: Option<TimeWeightSummary>,
+pub fn time_weighted_average_interpolated_integral<'a>(
+    tws: Option<TimeWeightSummary<'a>>,
     start: crate::raw::TimestampTz,
     interval: crate::raw::Interval,
-    prev: Option<TimeWeightSummary>,
-    next: Option<TimeWeightSummary>,
+    prev: Option<TimeWeightSummary<'a>>,
+    next: Option<TimeWeightSummary<'a>>,
     unit: String,
 ) -> Option<f64> {
     let target = interpolate(tws, start, interval, prev, next);

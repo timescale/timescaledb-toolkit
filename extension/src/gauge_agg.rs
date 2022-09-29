@@ -255,9 +255,9 @@ fn gauge_agg_trans_no_bounds(
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-fn gauge_agg_summary_trans(
+fn gauge_agg_summary_trans<'a>(
     state: Internal,
-    value: Option<GaugeSummary>,
+    value: Option<GaugeSummary<'a>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     gauge_agg_summary_trans_inner(unsafe { state.to_inner() }, value, fcinfo).internal()
@@ -429,91 +429,91 @@ extension_sql!(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_delta(sketch: GaugeSummary, _accessor: AccessorDelta) -> f64 {
+fn arrow_delta<'a>(sketch: GaugeSummary<'a>, _accessor: AccessorDelta<'a>) -> f64 {
     delta(sketch)
 }
 
 #[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
-fn delta(summary: GaugeSummary) -> f64 {
+fn delta<'a>(summary: GaugeSummary<'a>) -> f64 {
     MetricSummary::from(summary).delta()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_gauge_agg_rate(sketch: GaugeSummary, _accessor: AccessorRate) -> Option<f64> {
+fn arrow_gauge_agg_rate<'a>(sketch: GaugeSummary<'a>, _accessor: AccessorRate<'a>) -> Option<f64> {
     rate(sketch)
 }
 
 #[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
-fn rate(summary: GaugeSummary) -> Option<f64> {
+fn rate<'a>(summary: GaugeSummary<'a>) -> Option<f64> {
     MetricSummary::from(summary).rate()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_time_delta(sketch: GaugeSummary, _accessor: AccessorTimeDelta) -> f64 {
+fn arrow_time_delta<'a>(sketch: GaugeSummary<'a>, _accessor: AccessorTimeDelta<'a>) -> f64 {
     time_delta(sketch)
 }
 
 #[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
-fn time_delta(summary: GaugeSummary) -> f64 {
+fn time_delta<'a>(summary: GaugeSummary<'a>) -> f64 {
     MetricSummary::from(summary).time_delta()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_irate_left(sketch: GaugeSummary, _accessor: AccessorIrateLeft) -> Option<f64> {
+fn arrow_irate_left<'a>(sketch: GaugeSummary<'a>, _accessor: AccessorIrateLeft<'a>) -> Option<f64> {
     irate_left(sketch)
 }
 
 #[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
-fn irate_left(summary: GaugeSummary) -> Option<f64> {
+fn irate_left<'a>(summary: GaugeSummary<'a>) -> Option<f64> {
     MetricSummary::from(summary).irate_left()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_irate_right(sketch: GaugeSummary, _accessor: AccessorIrateRight) -> Option<f64> {
+fn arrow_irate_right<'a>(sketch: GaugeSummary<'a>, _accessor: AccessorIrateRight<'a>) -> Option<f64> {
     irate_right(sketch)
 }
 
 #[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
-fn irate_right(summary: GaugeSummary) -> Option<f64> {
+fn irate_right<'a>(summary: GaugeSummary<'a>) -> Option<f64> {
     MetricSummary::from(summary).irate_right()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_idelta_left(sketch: GaugeSummary, _accessor: AccessorIdeltaLeft) -> f64 {
+fn arrow_idelta_left<'a>(sketch: GaugeSummary<'a>, _accessor: AccessorIdeltaLeft<'a>) -> f64 {
     idelta_left(sketch)
 }
 
 #[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
-fn idelta_left(summary: GaugeSummary) -> f64 {
+fn idelta_left<'a>(summary: GaugeSummary<'a>) -> f64 {
     MetricSummary::from(summary).idelta_left()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_idelta_right(sketch: GaugeSummary, _accessor: AccessorIdeltaRight) -> f64 {
+fn arrow_idelta_right<'a>(sketch: GaugeSummary<'a>, _accessor: AccessorIdeltaRight<'a>) -> f64 {
     idelta_right(sketch)
 }
 
 #[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
-fn idelta_right(summary: GaugeSummary) -> f64 {
+fn idelta_right<'a>(summary: GaugeSummary<'a>) -> f64 {
     MetricSummary::from(summary).idelta_right()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_with_bounds(sketch: GaugeSummary, accessor: AccessorWithBounds) -> GaugeSummary<'static> {
+fn arrow_with_bounds<'a>(sketch: GaugeSummary<'a>, accessor: AccessorWithBounds<'a>) -> GaugeSummary<'static> {
     let mut builder = GaugeSummaryBuilder::from(MetricSummary::from(sketch));
     builder.set_bounds(accessor.bounds());
     builder.build().into()
 }
 
 #[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
-fn with_bounds(summary: GaugeSummary, bounds: tstzrange) -> GaugeSummary {
+fn with_bounds<'a>(summary: GaugeSummary<'a>, bounds: tstzrange) -> GaugeSummary {
     // TODO dedup with previous by using apply_bounds
     unsafe {
         let ptr = bounds.0.cast_mut_ptr();
@@ -525,25 +525,25 @@ fn with_bounds(summary: GaugeSummary, bounds: tstzrange) -> GaugeSummary {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_extrapolated_delta(
-    sketch: GaugeSummary,
-    _accessor: AccessorExtrapolatedDelta,
+fn arrow_extrapolated_delta<'a>(
+    sketch: GaugeSummary<'a>,
+    _accessor: AccessorExtrapolatedDelta<'a>,
 ) -> Option<f64> {
     extrapolated_delta(sketch)
 }
 
 #[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
-fn extrapolated_delta(summary: GaugeSummary) -> Option<f64> {
+fn extrapolated_delta<'a>(summary: GaugeSummary<'a>) -> Option<f64> {
     MetricSummary::from(summary).prometheus_delta().unwrap()
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-fn interpolated_delta(
-    summary: GaugeSummary,
+fn interpolated_delta<'a>(
+    summary: GaugeSummary<'a>,
     start: crate::raw::TimestampTz,
     interval: crate::raw::Interval,
-    prev: Option<GaugeSummary>,
-    next: Option<GaugeSummary>,
+    prev: Option<GaugeSummary<'a>>,
+    next: Option<GaugeSummary<'a>>,
 ) -> f64 {
     let interval = crate::datum_utils::interval_to_ms(&start, &interval);
     MetricSummary::from(summary.interpolate(start.into(), interval, prev, next)).delta()
@@ -551,25 +551,25 @@ fn interpolated_delta(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_extrapolated_rate(
-    sketch: GaugeSummary,
-    _accessor: AccessorExtrapolatedRate,
+fn arrow_extrapolated_rate<'a>(
+    sketch: GaugeSummary<'a>,
+    _accessor: AccessorExtrapolatedRate<'a>,
 ) -> Option<f64> {
     extrapolated_rate(sketch)
 }
 
 #[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
-fn extrapolated_rate(summary: GaugeSummary) -> Option<f64> {
+fn extrapolated_rate<'a>(summary: GaugeSummary<'a>) -> Option<f64> {
     MetricSummary::from(summary).prometheus_rate().unwrap()
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-fn interpolated_rate(
-    summary: GaugeSummary,
+fn interpolated_rate<'a>(
+    summary: GaugeSummary<'a>,
     start: crate::raw::TimestampTz,
     interval: crate::raw::Interval,
-    prev: Option<GaugeSummary>,
-    next: Option<GaugeSummary>,
+    prev: Option<GaugeSummary<'a>>,
+    next: Option<GaugeSummary<'a>>,
 ) -> Option<f64> {
     let interval = crate::datum_utils::interval_to_ms(&start, &interval);
     MetricSummary::from(summary.interpolate(start.into(), interval, prev, next)).rate()
@@ -577,70 +577,70 @@ fn interpolated_rate(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_num_elements(sketch: GaugeSummary, _accessor: AccessorNumElements) -> i64 {
+fn arrow_num_elements<'a>(sketch: GaugeSummary<'a>, _accessor: AccessorNumElements<'a>) -> i64 {
     num_elements(sketch)
 }
 
 #[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
-fn num_elements(summary: GaugeSummary) -> i64 {
+fn num_elements<'a>(summary: GaugeSummary<'a>) -> i64 {
     MetricSummary::from(summary).stats.n as i64
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_num_changes(sketch: GaugeSummary, _accessor: AccessorNumChanges) -> i64 {
+fn arrow_num_changes<'a>(sketch: GaugeSummary<'a>, _accessor: AccessorNumChanges<'a>) -> i64 {
     num_changes(sketch)
 }
 
 #[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
-fn num_changes(summary: GaugeSummary) -> i64 {
+fn num_changes<'a>(summary: GaugeSummary<'a>) -> i64 {
     MetricSummary::from(summary).num_changes as i64
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_slope(sketch: GaugeSummary, _accessor: AccessorSlope) -> Option<f64> {
+fn arrow_slope<'a>(sketch: GaugeSummary<'a>, _accessor: AccessorSlope<'a>) -> Option<f64> {
     slope(sketch)
 }
 
 #[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
-fn slope(summary: GaugeSummary) -> Option<f64> {
+fn slope<'a>(summary: GaugeSummary<'a>) -> Option<f64> {
     MetricSummary::from(summary).stats.slope()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_intercept(sketch: GaugeSummary, _accessor: AccessorIntercept) -> Option<f64> {
+fn arrow_intercept<'a>(sketch: GaugeSummary<'a>, _accessor: AccessorIntercept<'a>) -> Option<f64> {
     intercept(sketch)
 }
 
 #[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
-fn intercept(summary: GaugeSummary) -> Option<f64> {
+fn intercept<'a>(summary: GaugeSummary<'a>) -> Option<f64> {
     MetricSummary::from(summary).stats.intercept()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_corr(sketch: GaugeSummary, _accessor: AccessorCorr) -> Option<f64> {
+fn arrow_corr<'a>(sketch: GaugeSummary<'a>, _accessor: AccessorCorr<'a>) -> Option<f64> {
     corr(sketch)
 }
 
 #[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
-fn corr(summary: GaugeSummary) -> Option<f64> {
+fn corr<'a>(summary: GaugeSummary<'a>) -> Option<f64> {
     MetricSummary::from(summary).stats.corr()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-fn arrow_zero_time(
-    sketch: GaugeSummary,
-    __accessor: AccessorCounterZeroTime,
+fn arrow_zero_time<'a>(
+    sketch: GaugeSummary<'a>,
+    __accessor: AccessorCounterZeroTime<'a>,
 ) -> Option<crate::raw::TimestampTz> {
     gauge_zero_time(sketch)
 }
 
 #[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
-fn gauge_zero_time(summary: GaugeSummary) -> Option<crate::raw::TimestampTz> {
+fn gauge_zero_time<'a>(summary: GaugeSummary<'a>) -> Option<crate::raw::TimestampTz> {
     Some(((MetricSummary::from(summary).stats.x_intercept()? * 1_000_000.0) as i64).into())
 }
 

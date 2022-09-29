@@ -973,10 +973,10 @@ extension_sql!(
     name = "into_values",
     schema = "toolkit_experimental"
 )]
-pub fn freq_iter(
-    agg: SpaceSavingAggregate<'_>,
+pub fn freq_iter<'a>(
+    agg: SpaceSavingAggregate<'a>,
     ty: AnyElement,
-) -> TableIterator<'static, (
+) -> TableIterator<'a, (
     name!(value, AnyElement),
     name!(min_freq, f64),
     name!(max_freq, f64),
@@ -1004,9 +1004,9 @@ pub fn freq_iter(
     name = "into_values",
     schema = "toolkit_experimental"
 )]
-pub fn freq_bigint_iter(
-    agg: SpaceSavingBigIntAggregate<'_>,
-) -> TableIterator<'static, (
+pub fn freq_bigint_iter<'a>(
+    agg: SpaceSavingBigIntAggregate<'a>,
+) -> TableIterator<'a, (
     name!(value, i64),
     name!(min_freq, f64),
     name!(max_freq, f64),
@@ -1030,10 +1030,10 @@ pub fn freq_bigint_iter(
     name = "into_values",
     schema = "toolkit_experimental"
 )]
-pub fn freq_text_iter(
-    agg: SpaceSavingTextAggregate<'_>,
+pub fn freq_text_iter<'a>(
+    agg: SpaceSavingTextAggregate<'a>,
 ) -> TableIterator<
-    'static,
+    'a,
     (
         name!(value, String),
         name!(min_freq, f64),

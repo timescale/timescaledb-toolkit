@@ -6,7 +6,7 @@
 
 #![allow(non_camel_case_types)]
 
-use pgx::*;
+use pgx::{*, iter::TableIterator};
 use serde::{Deserialize, Serialize};
 
 use aggregate_builder::aggregate;
@@ -324,7 +324,7 @@ impl StateAggTransState {
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn duration_in(state: String, aggregate: Option<StateAgg>) -> crate::raw::Interval {
+pub fn duration_in<'a>(state: String, aggregate: Option<StateAgg<'a>>) -> crate::raw::Interval {
     let time: i64 = aggregate
         .and_then(|aggregate| aggregate.get(&state))
         .unwrap_or(0);
@@ -351,13 +351,13 @@ pub fn duration_in(state: String, aggregate: Option<StateAgg>) -> crate::raw::In
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn interpolated_duration_in(
+pub fn interpolated_duration_in<'a>(
     state: String,
-    aggregate: Option<StateAgg>,
+    aggregate: Option<StateAgg<'a>>,
     start: TimestampTz,
     interval: crate::raw::Interval,
-    prev: Option<StateAgg>,
-    next: Option<StateAgg>,
+    prev: Option<StateAgg<'a>>,
+    next: Option<StateAgg<'a>>,
 ) -> crate::raw::Interval {
     match aggregate {
         None => pgx::error!(
@@ -374,15 +374,15 @@ pub fn interpolated_duration_in(
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn into_values(
-    agg: StateAgg<'_>,
-) -> impl std::iter::Iterator<Item = (name!(state, String), name!(duration, i64))> + '_ {
+pub fn into_values<'a>(
+    agg: StateAgg<'a>,
+) -> TableIterator<'a, (pgx::name!(state, String), pgx::name!(duration, i64))> {
     let states: String = agg.states_as_str().to_owned();
-    agg.durations.clone().into_iter().map(move |record| {
+    TableIterator::new(agg.durations.clone().into_iter().map(move |record| {
         let beg = record.state_beg as usize;
         let end = record.state_end as usize;
         (states[beg..end].to_owned(), record.duration)
-    })
+    }))
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, FlatSerializable, PartialEq, Serialize)]

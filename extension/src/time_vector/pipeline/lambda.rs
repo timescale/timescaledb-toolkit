@@ -70,8 +70,8 @@ impl<'a> LambdaData<'a> {
 //
 
 #[pg_extern(stable, parallel_safe, schema = "toolkit_experimental")]
-pub fn bool_lambda(
-    lambda: toolkit_experimental::Lambda,
+pub fn bool_lambda<'a>(
+    lambda: toolkit_experimental::Lambda<'a>,
     time: crate::raw::TimestampTz,
     value: f64,
 ) -> bool {
@@ -87,8 +87,8 @@ pub fn bool_lambda(
 }
 
 #[pg_extern(stable, parallel_safe, schema = "toolkit_experimental")]
-pub fn f64_lambda(
-    lambda: toolkit_experimental::Lambda,
+pub fn f64_lambda<'a>(
+    lambda: toolkit_experimental::Lambda<'a>,
     time: crate::raw::TimestampTz,
     value: f64,
 ) -> f64 {
@@ -101,8 +101,8 @@ pub fn f64_lambda(
 }
 
 #[pg_extern(stable, parallel_safe, schema = "toolkit_experimental")]
-pub fn ttz_lambda(
-    lambda: toolkit_experimental::Lambda,
+pub fn ttz_lambda<'a>(
+    lambda: toolkit_experimental::Lambda<'a>,
     time: crate::raw::TimestampTz,
     value: f64,
 ) -> crate::raw::TimestampTz {
@@ -116,8 +116,8 @@ pub fn ttz_lambda(
 
 use crate::raw::Interval;
 #[pg_extern(stable, parallel_safe, schema = "toolkit_experimental")]
-pub fn interval_lambda(
-    lambda: toolkit_experimental::Lambda,
+pub fn interval_lambda<'a>(
+    lambda: toolkit_experimental::Lambda<'a>,
     time: crate::raw::TimestampTz,
     value: f64,
 ) -> Interval {
@@ -130,8 +130,8 @@ pub fn interval_lambda(
 }
 
 #[pg_extern(stable, parallel_safe, schema = "toolkit_experimental")]
-pub fn point_lambda(
-    lambda: toolkit_experimental::Lambda,
+pub fn point_lambda<'a>(
+    lambda: toolkit_experimental::Lambda<'a>,
     time: crate::raw::TimestampTz,
     value: f64,
 ) -> TableIterator<'static, (name!(time, crate::raw::TimestampTz), name!(value, f64))> {
@@ -149,8 +149,8 @@ pub fn point_lambda(
 }
 
 #[pg_extern(stable, parallel_safe, schema = "toolkit_experimental")]
-pub fn trace_lambda(
-    lambda: toolkit_experimental::Lambda,
+pub fn trace_lambda<'a>(
+    lambda: toolkit_experimental::Lambda<'a>,
     time: crate::raw::TimestampTz,
     value: f64,
 ) -> SetOfIterator<'static, String> {

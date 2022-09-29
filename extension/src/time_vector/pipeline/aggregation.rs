@@ -103,9 +103,9 @@ pub mod toolkit_experimental {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline_then_stats_agg(
-    mut timevector: Timevector_TSTZ_F64,
-    pipeline: toolkit_experimental::PipelineThenStatsAgg,
+pub fn arrow_run_pipeline_then_stats_agg<'a>(
+    mut timevector: Timevector_TSTZ_F64<'a>,
+    pipeline: toolkit_experimental::PipelineThenStatsAgg<'a>,
 ) -> StatsSummary1D<'static> {
     if timevector.has_nulls() {
         panic!("Unable to compute stats aggregate over timevector containing nulls");
@@ -187,7 +187,7 @@ ALTER FUNCTION "arrow_run_pipeline_then_stats_agg" SUPPORT toolkit_experimental.
     name = "sum_cast",
     schema = "toolkit_experimental"
 )]
-pub fn sum_pipeline_element(accessor: AccessorSum) -> toolkit_experimental::PipelineThenSum {
+pub fn sum_pipeline_element<'a>(accessor: AccessorSum<'a>) -> toolkit_experimental::PipelineThenSum {
     let _ = accessor;
     build! {
         PipelineThenSum {
@@ -209,9 +209,9 @@ extension_sql!(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_pipeline_then_sum(
-    timevector: Timevector_TSTZ_F64,
-    pipeline: toolkit_experimental::PipelineThenSum,
+pub fn arrow_pipeline_then_sum<'a>(
+    timevector: Timevector_TSTZ_F64<'a>,
+    pipeline: toolkit_experimental::PipelineThenSum<'a>,
 ) -> Option<f64> {
     let pipeline = pipeline.0;
     let pipeline = build! {
@@ -271,8 +271,8 @@ ALTER FUNCTION "arrow_pipeline_then_sum" SUPPORT toolkit_experimental.pipeline_s
 );
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn average_pipeline_element(
-    accessor: AccessorAverage,
+pub fn average_pipeline_element<'a>(
+    accessor: AccessorAverage<'a>,
 ) -> toolkit_experimental::PipelineThenAverage {
     let _ = accessor;
     build! {
@@ -299,9 +299,9 @@ extension_sql!(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_pipeline_then_average(
-    timevector: Timevector_TSTZ_F64,
-    pipeline: toolkit_experimental::PipelineThenAverage,
+pub fn arrow_pipeline_then_average<'a>(
+    timevector: Timevector_TSTZ_F64<'a>,
+    pipeline: toolkit_experimental::PipelineThenAverage<'a>,
 ) -> Option<f64> {
     let pipeline = pipeline.0;
     let pipeline = build! {
@@ -366,8 +366,8 @@ ALTER FUNCTION "arrow_pipeline_then_average" SUPPORT toolkit_experimental.pipeli
     name = "num_vals_cast",
     schema = "toolkit_experimental"
 )]
-pub fn num_vals_pipeline_element(
-    accessor: AccessorNumVals,
+pub fn num_vals_pipeline_element<'a>(
+    accessor: AccessorNumVals<'a>,
 ) -> toolkit_experimental::PipelineThenNumVals {
     let _ = accessor;
     build! {
@@ -394,9 +394,9 @@ extension_sql!(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_pipeline_then_num_vals(
-    timevector: Timevector_TSTZ_F64,
-    pipeline: toolkit_experimental::PipelineThenNumVals,
+pub fn arrow_pipeline_then_num_vals<'a>(
+    timevector: Timevector_TSTZ_F64<'a>,
+    pipeline: toolkit_experimental::PipelineThenNumVals<'a>,
 ) -> i64 {
     run_pipeline_elements(timevector, pipeline.elements.iter()).num_vals() as _
 }
@@ -450,9 +450,9 @@ ALTER FUNCTION "arrow_pipeline_then_num_vals" SUPPORT toolkit_experimental.pipel
 // TODO support gauge
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline_then_counter_agg(
-    mut timevector: Timevector_TSTZ_F64,
-    pipeline: toolkit_experimental::PipelineThenCounterAgg,
+pub fn arrow_run_pipeline_then_counter_agg<'a>(
+    mut timevector: Timevector_TSTZ_F64<'a>,
+    pipeline: toolkit_experimental::PipelineThenCounterAgg<'a>,
 ) -> Option<CounterSummary<'static>> {
     timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
     if timevector.num_points() == 0 {
@@ -535,9 +535,9 @@ ALTER FUNCTION "arrow_run_pipeline_then_counter_agg" SUPPORT toolkit_experimenta
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline_then_hyperloglog(
-    mut timevector: Timevector_TSTZ_F64,
-    pipeline: toolkit_experimental::PipelineThenHyperLogLog,
+pub fn arrow_run_pipeline_then_hyperloglog<'a>(
+    mut timevector: Timevector_TSTZ_F64<'a>,
+    pipeline: toolkit_experimental::PipelineThenHyperLogLog<'a>,
 ) -> HyperLogLog<'static> {
     timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
     HyperLogLog::build_from(
@@ -618,9 +618,9 @@ ALTER FUNCTION "arrow_run_pipeline_then_hyperloglog" SUPPORT toolkit_experimenta
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline_then_percentile_agg(
-    mut timevector: Timevector_TSTZ_F64,
-    pipeline: toolkit_experimental::PipelineThenPercentileAgg,
+pub fn arrow_run_pipeline_then_percentile_agg<'a>(
+    mut timevector: Timevector_TSTZ_F64<'a>,
+    pipeline: toolkit_experimental::PipelineThenPercentileAgg<'a>,
 ) -> UddSketch<'static> {
     timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
     UddSketch::from_iter(timevector.into_iter().map(|p| p.val))

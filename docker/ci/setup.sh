@@ -18,15 +18,27 @@ case "$1" in
                 libclang-dev \
                 postgresql-common \
                 sudo
-        # Install postgresql from postgresql.org repositories.
-        /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
-        # TODO install timescaledb here too
+
+        # Setup the postgresql.org package repository.
+        # Don't use the -y flag as it is not supported on old versions of the script.
+        yes | sh /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh
+
+        # Setup the timescaledb package repository.
+        wget --quiet -O - https://packagecloud.io/timescale/timescaledb/gpgkey | apt-key add -
+        mkdir -p /etc/apt/sources.list.d
+        # TODO Don't duplicate os name and version here.  Deduplicate with packaging scripts.
+        cat > /etc/apt/sources.list.d/timescaledb.list <<EOF
+deb https://packagecloud.io/timescale/timescaledb/debian/ bullseye main
+EOF
+
         apt-get -qq update
 
         for pg in 12 13 14; do
             apt-get -qq install \
                     postgresql-$pg \
                     postgresql-server-dev-$pg
+            # timescaledb packages Recommend toolkit, which we don't want here.
+            apt-get -qq install --no-install-recommends timescaledb-2-postgresql-$pg
         done
 
         # We install as user postgres, so that needs write access to these.
@@ -38,31 +50,6 @@ case "$1" in
 
     unprivileged)
         rustup component add clippy rustfmt
-
-        # TODO Install binaries above.
-        # Build the TimescaleDB extension for all the servers that we
-        # installed above.
-
-        git clone --single-branch --branch 2.5.x https://github.com/timescale/timescaledb.git
-
-        cd timescaledb
-
-        set +e
-        cmake -S . -B build-12 -DPG_CONFIG=/usr/lib/postgresql/12/bin/pg_config -DCMAKE_BUILD_TYPE="RelWithDebInfo" -DUSE_OPENSSL=false -DSEND_TELEMETRY_DEFAULT=false -DREGRESS_CHECKS=false
-        cmake -S . -B build-13 -DPG_CONFIG=/usr/lib/postgresql/13/bin/pg_config -DCMAKE_BUILD_TYPE="RelWithDebInfo" -DUSE_OPENSSL=false -DSEND_TELEMETRY_DEFAULT=false -DREGRESS_CHECKS=false
-        cmake -S . -B build-14 -DPG_CONFIG=/usr/lib/postgresql/14/bin/pg_config -DCMAKE_BUILD_TYPE="RelWithDebInfo" -DUSE_OPENSSL=false -DSEND_TELEMETRY_DEFAULT=false -DREGRESS_CHECKS=false
-
-        cmake --build build-12 --parallel
-        cmake --build build-13 --parallel
-        cmake --build build-14 --parallel
-
-        cmake --install build-12
-        cmake --install build-13
-        cmake --install build-14
-
-        set -e
-        cd ..
-        rm -rf timescaledb
 
         # Install cargo pgx
         # Keep synchronized with `cargo install --version N.N.N cargo-pgx` in Readme.md and Cargo.toml

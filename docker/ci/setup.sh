@@ -19,6 +19,9 @@ case "$1" in
                 postgresql-common \
                 sudo
 
+        # We'll run tools/testbin as this user, and it needs to (un)install packages.
+        echo 'postgres ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
+
         # Setup the postgresql.org package repository.
         # Don't use the -y flag as it is not supported on old versions of the script.
         yes | sh /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh

@@ -2,6 +2,11 @@
 
 set -ex
 
+if [ -z "$OS_NAME" ] || [ -z "$OS_CODE_NAME" ]; then
+    echo >&2 'OS_NAME and OS_CODE_NAME environment variables must be set'
+    exit 2
+fi
+
 case "$1" in
     '')
         # The postgresql packages create this user, but with /var/lib/postgresql as the home directory.
@@ -31,7 +36,7 @@ case "$1" in
         mkdir -p /etc/apt/sources.list.d
         # TODO Don't duplicate os name and version here.  Deduplicate with packaging scripts.
         cat > /etc/apt/sources.list.d/timescaledb.list <<EOF
-deb https://packagecloud.io/timescale/timescaledb/debian/ bullseye main
+deb https://packagecloud.io/timescale/timescaledb/$OS_NAME/ $OS_CODE_NAME main
 EOF
 
         apt-get -qq update

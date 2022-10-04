@@ -26,14 +26,7 @@ require_pg_version() {
 find_pg_config() {
     if [ -z "$pg_config" ]; then
         require_pg_version
-        full_version=$(
-            cd "$HOME/.pgx"
-            set -- $pg_version.*/pgx-install
-            [ "$1" = "$pg_version.*/pgx-install" ] && die "$pg_version not installed in $HOME/.pgx"
-            set -- $(dirname $*)
-            [ $# -eq 1 ] || die "too many installations for $pg_version, found: $*"
-            echo $1)
-        pg_config="$HOME/.pgx/$full_version/pgx-install/bin/pg_config"
+        pg_config=`sed -ne 's/"//g' -e s/^pg$pg_version=//p ~/.pgx/config.toml`
     fi
     [ -x "$pg_config" ] || die "$pg_config not executable"
 }

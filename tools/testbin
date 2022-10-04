@@ -111,7 +111,7 @@ finish_test() {
     stop_postgres
 }
 
-test_deb() {
+deb_init() {
     [ -n "$OS_NAME" ] || die 'OS_NAME environment variable must be set to the distribution name e.g. debian or ubuntu'
     [ -n "$OS_VERSION" ] || die 'OS_VERSION environment variable must be set to the distribution version number'
 
@@ -119,21 +119,32 @@ test_deb() {
     EPOCH=
     MIN_DEB_ARM=`cmp_version $MIN_DEB_ARM`
     MIN_DEB_EPOCH=`cmp_version $MIN_DEB_EPOCH`
-    for from_version; do
+}
+
+# Requires:
+# - FROM_VERSION
+deb_start_test() {
         # We released 1.10.0-dev by accident.  We have to support upgrades
         # from it (and we tested that at the time), but we pulled the deb, so
         # we can't test it here.
-        [ $from_version = 1.10.0-dev ] && continue
-        cmp_version=`cmp_version $from_version`
-        [ "$ARCH" -eq arm64 ] && [ $cmp_version -lt $MIN_DEB_ARM ] && continue
+        [ $FROM_VERSION = 1.10.0-dev ] && return 1
+        cmp_version=`cmp_version $FROM_VERSION`
+        [ "$ARCH" -eq arm64 ] && [ $cmp_version -lt $MIN_DEB_ARM ] && return 1
+
         [ $cmp_version -ge $MIN_DEB_EPOCH ] && EPOCH=1:
         for PG_VERSION in $PG_VERSIONS; do
             select_pg $PG_VERSION
-            deb=timescaledb-toolkit-postgresql-${PG_VERSION}=${EPOCH}${from_version}~${OS_NAME}${OS_VERSION}
+            deb=timescaledb-toolkit-postgresql-${PG_VERSION}=${EPOCH}${FROM_VERSION}~${OS_NAME}${OS_VERSION}
             $nop sudo apt-get -qq install $deb
 
             PATH=/usr/lib/postgresql/$PG_VERSION/bin:$PATH start_test
         done
+}
+
+test_deb() {
+    deb_init
+    for FROM_VERSION; do
+        deb_start_test || continue
         for PG_VERSION in $PG_VERSIONS; do
             select_pg $PG_VERSION
             deb=timescaledb-toolkit-postgresql-${PG_VERSION}_${TOOLKIT_VERSION}~${OS_NAME}${OS_VERSION}_${ARCH}.deb
@@ -142,6 +153,20 @@ test_deb() {
             finish_test
 
             $nop sudo dpkg -P timescaledb-toolkit-postgresql-$PG_VERSION
+        done
+    done
+}
+
+test_ci() {
+    deb_init
+    for FROM_VERSION; do
+        deb_start_test || continue
+        for PG_VERSION in $PG_VERSIONS; do
+            select_pg $PG_VERSION
+            $nop sudo dpkg -P timescaledb-toolkit-postgresql-$PG_VERSION
+            $nop tools/build -pg$PG_VERSION install
+
+            finish_test
         done
     done
 }
@@ -201,10 +226,12 @@ cleanup() {
 
 run() {
     [ -n "$LOGNAME" ] || die 'LOGNAME environment variable must be set to the login name'
-    [ -d "$BINDIR" ] || die '-bindir required'
     [ -n "$DB_ROOT" ] || die '-dbroot required'
     [ -e "$DB_ROOT" ] && die "cowardly refusing to clobber $DB_ROOT"
     [ -n "$PG_PORT_BASE" ] || die '-pgport required'
+
+    # TODO Requiring -bindir and -version when not all methods need them is awkward but eh.
+    [ -d "$BINDIR" ] || die '-bindir required'
     [ -n "$TOOLKIT_VERSION" ] || die '-version required'
 
     trap cleanup 0
@@ -247,7 +274,7 @@ while [ $# -gt 0 ]; do
             check_control
             ;;
 
-        deb|rpm)
+        ci|deb|rpm)
             run $arg
             ;;
 

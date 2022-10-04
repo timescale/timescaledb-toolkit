@@ -16,7 +16,7 @@ die() {
 }
 
 usage() {
-    die 'build [ -n -pg1[234] ] ( test-crates | test-extension | test-post-install | test-doc | test-updates | clippy)'
+    die 'build [ -n -pg1[234] ] ( test-crates | test-extension | install | test-doc | test-updates | clippy)'
 }
 
 require_pg_version() {
@@ -96,19 +96,19 @@ while [ $# -gt 0 ]; do
             ;;
 
         install)
-            cd extension
             require_pg_version
             find_pg_config
-            $nop cargo pgx install -c "$pg_config"
+            (cd extension && $nop cargo pgx install -c "$pg_config")
+            $nop cargo run --manifest-path tools/post-install/Cargo.toml "$pg_config"
             ;;
 
-        # Requires extension has been installed.  `install` or `test-extension` takes care of that.
+        # Reruns the tests test-extension does if they're left installed.
+        # TODO Remove this and testrunner.
         test-post-install)
             require_pg_version
             find_pg_config
             $nop cargo pgx stop $pg
             $nop cargo pgx start $pg
-            $nop cargo run --manifest-path tools/post-install/Cargo.toml "$pg_config"
             $nop cargo run --manifest-path tools/testrunner/Cargo.toml -- -h localhost -p $pg_port
             ;;
 

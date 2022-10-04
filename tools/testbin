@@ -52,7 +52,7 @@ die() {
 
 usage() {
     print 'testbin check-control' >&2
-    die 'testbin [-n] -bindir DIR -dbroot DIR -pgport N -version VERSION ( deb | rpm )'
+    die 'testbin [-n] -bindir DIR -dbroot DIR -pgport N -version VERSION ( ci | deb | rpm )'
 }
 
 # Run this before each merge so the control file doesn't get out of sync with this script.

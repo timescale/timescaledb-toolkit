@@ -124,21 +124,21 @@ deb_init() {
 # Requires:
 # - FROM_VERSION
 deb_start_test() {
-        # We released 1.10.0-dev by accident.  We have to support upgrades
-        # from it (and we tested that at the time), but we pulled the deb, so
-        # we can't test it here.
-        [ $FROM_VERSION = 1.10.0-dev ] && return 1
-        cmp_version=`cmp_version $FROM_VERSION`
-        [ "$ARCH" -eq arm64 ] && [ $cmp_version -lt $MIN_DEB_ARM ] && return 1
+    # We released 1.10.0-dev by accident.  We have to support upgrades
+    # from it (and we tested that at the time), but we pulled the deb, so
+    # we can't test it here.
+    [ $FROM_VERSION = 1.10.0-dev ] && return 1
+    cmp_version=`cmp_version $FROM_VERSION`
+    [ "$ARCH" -eq arm64 ] && [ $cmp_version -lt $MIN_DEB_ARM ] && return 1
 
-        [ $cmp_version -ge $MIN_DEB_EPOCH ] && EPOCH=1:
-        for PG_VERSION in $PG_VERSIONS; do
-            select_pg $PG_VERSION
-            deb=timescaledb-toolkit-postgresql-${PG_VERSION}=${EPOCH}${FROM_VERSION}~${OS_NAME}${OS_VERSION}
-            $nop sudo apt-get -qq install $deb
+    [ $cmp_version -ge $MIN_DEB_EPOCH ] && EPOCH=1:
+    for PG_VERSION in $PG_VERSIONS; do
+        select_pg $PG_VERSION
+        deb=timescaledb-toolkit-postgresql-${PG_VERSION}=${EPOCH}${FROM_VERSION}~${OS_NAME}${OS_VERSION}
+        $nop sudo apt-get -qq install $deb
 
-            PATH=/usr/lib/postgresql/$PG_VERSION/bin:$PATH start_test
-        done
+        PATH=/usr/lib/postgresql/$PG_VERSION/bin:$PATH start_test
+    done
 }
 
 test_deb() {

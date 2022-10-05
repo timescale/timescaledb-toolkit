@@ -90,7 +90,7 @@ start_postgres() {
         echo $i...
         sleep 1
     done
-    die "failed to start postgres"
+    die "failed to start postgres $PGVERSION"
 }
 
 # Stop postgres and create a database.
@@ -98,7 +98,12 @@ start_postgres() {
 stop_postgres() {
     eval pid=\$PG${PG_VERSION}PID
     [ -n "$pid" ] && $nop kill $pid
-    $nop rm -rf "$DB"
+    for i in 1 2 3 4 5; do
+        $nop rm -rf "$DB" && return
+        echo "try $i..."
+        sleep 1
+    done
+    die "failed to start postgres $PGVERSION"
 }
 
 start_test() {
@@ -129,7 +134,7 @@ deb_start_test() {
     # we can't test it here.
     [ $FROM_VERSION = 1.10.0-dev ] && return 1
     cmp_version=`cmp_version $FROM_VERSION`
-    [ "$ARCH" -eq arm64 ] && [ $cmp_version -lt $MIN_DEB_ARM ] && return 1
+    [ "$ARCH" = arm64 ] && [ $cmp_version -lt $MIN_DEB_ARM ] && return 1
 
     [ $cmp_version -ge $MIN_DEB_EPOCH ] && EPOCH=1:
     for PG_VERSION in $PG_VERSIONS; do

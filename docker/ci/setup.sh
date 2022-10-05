@@ -47,10 +47,9 @@ EOF
                     postgresql-server-dev-$pg
             # timescaledb packages Recommend toolkit, which we don't want here.
             apt-get -qq install --no-install-recommends timescaledb-2-postgresql-$pg
+            # We install as user postgres, so that needs write access to these.
+            chown postgres /usr/lib/postgresql/$pg/lib /usr/share/postgresql/$pg/extension
         done
-
-        # We install as user postgres, so that needs write access to these.
-        chown postgres /usr/lib/postgresql/14/lib /usr/share/postgresql/14/extension
 
         cd ~postgres
         exec su postgres -c "$0 unprivileged"

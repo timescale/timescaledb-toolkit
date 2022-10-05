@@ -369,7 +369,8 @@ impl From<(Oid, Vec<Datum>)> for DatumStore<'_> {
 
             for datum in datums {
                 unsafe {
-                    let ptr = pg_sys::pg_detoast_datum_packed(datum.cast_mut_ptr());
+                    let ptr =
+                        pg_sys::pg_detoast_datum_packed(datum.cast_mut_ptr::<pg_sys::varlena>());
                     let va_len = varsize_any(ptr);
 
                     ptrs.push(ptr);
@@ -384,8 +385,8 @@ impl From<(Oid, Vec<Datum>)> for DatumStore<'_> {
                 unsafe {
                     let va_len = varsize_any(ptr);
                     std::ptr::copy(
-                        ptr,
-                        std::ptr::addr_of_mut!(buffer[target_byte]) as *mut pg_sys::varlena,
+                        ptr as *const u8,
+                        std::ptr::addr_of_mut!(buffer[target_byte]),
                         va_len,
                     );
                     target_byte += round_to_multiple(va_len, 8);
@@ -411,7 +412,7 @@ impl From<(Oid, Vec<Datum>)> for DatumStore<'_> {
             for (i, datum) in datums.iter().enumerate() {
                 unsafe {
                     std::ptr::copy(
-                        *datum.cast_mut_ptr(),
+                        datum.cast_mut_ptr(),
                         std::ptr::addr_of_mut!(buffer[i * len]),
                         tlen as usize,
                     )

@@ -135,9 +135,9 @@ deb_start_test() {
     for PG_VERSION in $PG_VERSIONS; do
         select_pg $PG_VERSION
         deb=timescaledb-toolkit-postgresql-${PG_VERSION}=${EPOCH}${FROM_VERSION}~${OS_NAME}${OS_VERSION}
-        $nop sudo apt-get -qq install $deb
+        $nop sudo apt-get -qq install $deb || die
 
-        PATH=/usr/lib/postgresql/$PG_VERSION/bin:$PATH start_test
+        PATH=/usr/lib/postgresql/$PG_VERSION/bin:$PATH start_test || die
     done
 }
 
@@ -164,6 +164,8 @@ test_ci() {
         for PG_VERSION in $PG_VERSIONS; do
             select_pg $PG_VERSION
             $nop sudo dpkg -P timescaledb-toolkit-postgresql-$PG_VERSION
+            # Installing (and possibly uninstalling) toolkit binary gives this back to root but we need to write to it.
+            $nop sudo chown $LOGNAME /usr/lib/postgresql/$PG_VERSION/lib /usr/share/postgresql/$PG_VERSION/extension
             $nop tools/build -pg$PG_VERSION install
 
             finish_test

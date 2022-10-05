@@ -255,23 +255,8 @@ pub(crate) unsafe fn pipeline_support_helper(
         UnstableTimevectorPipeline::from_datum((*old_const).constvalue, false, 0).unwrap();
     let new_pipeline = make_new_pipeline(old_pipeline, (*new_element_const).constvalue);
 
-    /// Copies a `pg_sys::Const`, since it doesn't implement `Copy` or `Clone`.
-    fn copy_const_hack(const_: &pg_sys::Const) -> pg_sys::Const {
-        pg_sys::Const {
-            xpr: const_.xpr,
-            consttype: const_.consttype,
-            consttypmod: const_.consttypmod,
-            constcollid: const_.constcollid,
-            constlen: const_.constlen,
-            constvalue: const_.constvalue,
-            constisnull: const_.constisnull,
-            constbyval: const_.constbyval,
-            location: const_.location,
-        }
-    }
-
     let new_const = pg_sys::palloc(size_of::<pg_sys::Const>()).cast();
-    *new_const = copy_const_hack(&*new_element_const);
+    *new_const = *new_element_const;
     (*new_const).constvalue = new_pipeline;
 
     let new_executor = pg_sys::palloc(size_of::<pg_sys::FuncExpr>()).cast();

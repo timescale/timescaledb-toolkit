@@ -50,7 +50,7 @@ pub fn hyperloglog_trans(
 ) -> Option<Internal> {
     // let state: Internal = Internal::from_datum();
     hyperloglog_trans_inner(unsafe { state.to_inner() }, size, value, fc, unsafe {
-        pgx::get_getarg_type(fc, 2)
+        pgx::pg_getarg_type(fc, 2)
     })
     .internal()
 }
@@ -71,7 +71,7 @@ pub fn approx_count_distinct_trans(
         APPROX_COUNT_DISTINCT_DEFAULT_SIZE,
         value,
         fc,
-        unsafe { pgx::get_getarg_type(fc, 1) },
+        unsafe { pgx::pg_getarg_type(fc, 1) },
     )
     .internal()
 }

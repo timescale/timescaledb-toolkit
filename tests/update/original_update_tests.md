@@ -3,7 +3,6 @@
 
 
 ```sql,creation,min-toolkit-version=1.4.0
-SET TIME ZONE 'UTC';
 CREATE TABLE test_data(ts timestamptz, val DOUBLE PRECISION);
     INSERT INTO test_data
         SELECT '2020-01-01 00:00:00+00'::timestamptz + i * '1 hour'::interval,
@@ -24,7 +23,6 @@ CREATE MATERIALIZED VIEW regression_view AS
 
 
 ```sql,validation,min-toolkit-version=1.4.0
-SET timezone to 'UTC';
 SELECT
     num_resets(countagg),
     distinct_count(hll),

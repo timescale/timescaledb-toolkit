@@ -1,7 +1,6 @@
 # Time Vector Tests
 
 ```sql,creation
-SET timezone to 'UTC';
 CREATE TABLE time_vector_data(time TIMESTAMPTZ, value DOUBLE PRECISION);
 INSERT INTO time_vector_data VALUES
     ('2020-1-1', 30.0),
@@ -12,7 +11,6 @@ INSERT INTO time_vector_data VALUES
 ```
 
 ```sql,validation
-SET timezone to 'UTC';
 SELECT unnest(timevector(time,value))::TEXT FROM time_vector_data;
 ```
 
@@ -27,7 +25,6 @@ SELECT unnest(timevector(time,value))::TEXT FROM time_vector_data;
  ```
 
 ```sql,creation
-SET timezone to 'UTC';
 CREATE TABLE tv_rollup_data(time TIMESTAMPTZ, value DOUBLE PRECISION, bucket INTEGER);
 INSERT INTO tv_rollup_data VALUES
     ('2020-1-1', 30.0, 1),

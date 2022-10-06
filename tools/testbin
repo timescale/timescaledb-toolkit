@@ -32,6 +32,7 @@ set -ex
 MIN_DEB_ARM=1.10.1
 # We added 1: epoch at 1.7.0.
 MIN_DEB_EPOCH=1.7.0
+# TODO Drop default and require -pgversions after existing usage updated.
 PG_VERSIONS='12 13 14'
 CONTROL=extension/timescaledb_toolkit.control
 # Pattern we require in $CONTROL for finding versions to test upgrade from.
@@ -90,7 +91,7 @@ start_postgres() {
         echo $i...
         sleep 1
     done
-    die "failed to start postgres"
+    die "failed to start postgres $PGVERSION"
 }
 
 # Stop postgres and create a database.
@@ -98,7 +99,12 @@ start_postgres() {
 stop_postgres() {
     eval pid=\$PG${PG_VERSION}PID
     [ -n "$pid" ] && $nop kill $pid
-    $nop rm -rf "$DB"
+    for i in 1 2 3 4 5; do
+        $nop rm -rf "$DB" && return
+        echo "try $i..."
+        sleep 1
+    done
+    die "failed to start postgres $PGVERSION"
 }
 
 start_test() {
@@ -129,15 +135,15 @@ deb_start_test() {
     # we can't test it here.
     [ $FROM_VERSION = 1.10.0-dev ] && return 1
     cmp_version=`cmp_version $FROM_VERSION`
-    [ "$ARCH" -eq arm64 ] && [ $cmp_version -lt $MIN_DEB_ARM ] && return 1
+    [ "$ARCH" = arm64 ] && [ $cmp_version -lt $MIN_DEB_ARM ] && return 1
 
     [ $cmp_version -ge $MIN_DEB_EPOCH ] && EPOCH=1:
     for PG_VERSION in $PG_VERSIONS; do
         select_pg $PG_VERSION
         deb=timescaledb-toolkit-postgresql-${PG_VERSION}=${EPOCH}${FROM_VERSION}~${OS_NAME}${OS_VERSION}
-        $nop sudo apt-get -qq install $deb
+        $nop sudo apt-get -qq install $deb || die
 
-        PATH=/usr/lib/postgresql/$PG_VERSION/bin:$PATH start_test
+        PATH=/usr/lib/postgresql/$PG_VERSION/bin:$PATH start_test || die
     done
 }
 
@@ -164,6 +170,8 @@ test_ci() {
         for PG_VERSION in $PG_VERSIONS; do
             select_pg $PG_VERSION
             $nop sudo dpkg -P timescaledb-toolkit-postgresql-$PG_VERSION
+            # Installing (and possibly uninstalling) toolkit binary gives this back to root but we need to write to it.
+            $nop sudo chown $LOGNAME /usr/lib/postgresql/$PG_VERSION/lib /usr/share/postgresql/$PG_VERSION/extension
             $nop tools/build -pg$PG_VERSION install
 
             finish_test
@@ -229,6 +237,7 @@ run() {
     [ -n "$DB_ROOT" ] || die '-dbroot required'
     [ -e "$DB_ROOT" ] && die "cowardly refusing to clobber $DB_ROOT"
     [ -n "$PG_PORT_BASE" ] || die '-pgport required'
+    [ -n "$PG_VERSIONS" ] || die '-pgversions required'
 
     # TODO Requiring -bindir and -version when not all methods need them is awkward but eh.
     [ -d "$BINDIR" ] || die '-bindir required'
@@ -262,6 +271,11 @@ while [ $# -gt 0 ]; do
 
         -pgport)
             PG_PORT_BASE=$1
+            shift
+            ;;
+
+        -pgversions)
+            PG_VERSIONS=$1
             shift
             ;;
 

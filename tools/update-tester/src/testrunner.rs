@@ -39,8 +39,6 @@ pub fn run_update_tests<OnErr: FnMut(Test, TestError)>(
                 "installed unexpected version"
             );
 
-            test_client.set_timezone_utc();
-
             let errors =
                 test_client.create_test_objects_from_file(test_config, installed_version.clone());
 
@@ -111,7 +109,6 @@ pub fn create_test_objects_for_package_testing<OnErr: FnMut(Test, TestError)>(
 
     let current_toolkit_version = test_client.get_installed_extension_version();
 
-    test_client.set_timezone_utc();
     // create test objects
     let errors = test_client.create_test_objects_from_file(test_config, current_toolkit_version);
 
@@ -146,8 +143,6 @@ pub fn update_to_and_validate_new_toolkit_version<OnErr: FnMut(Test, TestError)>
     let test_config = root_config.with_db(test_db_name);
 
     let mut test_client = connect_to(&test_config);
-
-    test_client.set_timezone_utc();
 
     // get the currently installed version before updating
     let old_toolkit_version = test_client.get_installed_extension_version();
@@ -241,11 +236,6 @@ impl TestClient {
         });
     }
 
-    fn set_timezone_utc(&mut self) {
-        self.simple_query("SET TIME ZONE 'UTC';")
-            .unwrap_or_else(|e| panic!("could not set time zone to UTC due to {}", e));
-    }
-
     fn create_test_objects_from_file(
         &mut self,
         root_config: ConnectionConfig<'_>,
@@ -282,6 +272,10 @@ impl TestClient {
             .into_iter()
             .flat_map(|tests| {
                 let mut client = connect_to(&root_config).0;
+                client
+                    .simple_query("SET TIME ZONE 'UTC';")
+                    .unwrap_or_else(|e| panic!("could not set time zone to UTC due to {}", e));
+
                 tests
                     .tests
                     .into_iter()
@@ -340,6 +334,10 @@ impl TestClient {
             .into_iter()
             .flat_map(|tests| {
                 let mut client = connect_to(&root_config).0;
+                client
+                    .simple_query("SET TIME ZONE 'UTC';")
+                    .unwrap_or_else(|e| panic!("could not set time zone to UTC due to {}", e));
+
                 tests
                     .tests
                     .into_iter()

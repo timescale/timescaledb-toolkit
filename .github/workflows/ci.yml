@@ -10,13 +10,17 @@ on:
     # we build at 8am UTC, 3am Eastern, midnight Pacific
     - cron:  '0 8 * * 1-4'
   workflow_dispatch:
+    inputs:
+      container-image:
+        description: 'Container image to pull from DockerHub'
+        required: false
 
 jobs:
   testpostgres:
     name: Test Postgres
     runs-on: ubuntu-20.04
     container:
-      image: timescaledev/rust-pgx:latest
+      image: ${{ inputs.container-image || 'timescaledev/rust-pgx:latest' }}
     strategy:
       matrix:
         pgversion: [12, 13, 14]
@@ -85,7 +89,7 @@ jobs:
     name: Test Crates
     runs-on: ubuntu-20.04
     container:
-      image: timescaledev/rust-pgx:latest
+      image: ${{ inputs.container-image || 'timescaledev/rust-pgx:latest' }}
       env:
         CARGO_INCREMENTAL: 0
         CARGO_NET_RETRY: 10
@@ -125,7 +129,7 @@ jobs:
     name: Test Updates
     runs-on: ubuntu-20.04
     container:
-      image: timescaledev/rust-pgx:latest
+      image: ${{ inputs.container-image || 'timescaledev/rust-pgx:latest' }}
       env:
         PGVERSION: 14
 

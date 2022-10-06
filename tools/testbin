@@ -32,6 +32,8 @@ set -ex
 MIN_DEB_ARM=1.10.1
 # We added 1: epoch at 1.7.0.
 MIN_DEB_EPOCH=1.7.0
+# TODO Drop default and require -pgversions after existing usage updated.
+PG_VERSIONS='12 13 14'
 CONTROL=extension/timescaledb_toolkit.control
 # Pattern we require in $CONTROL for finding versions to test upgrade from.
 UPGRADEABLE_RE="^# upgradeable_from = '[0-9][-dev0-9., ]*'$"

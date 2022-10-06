@@ -24,6 +24,7 @@ CREATE MATERIALIZED VIEW regression_view AS
 
 
 ```sql,validation,min-toolkit-version=1.4.0
+SET timezone to 'UTC';
 SELECT
     num_resets(countagg),
     distinct_count(hll),

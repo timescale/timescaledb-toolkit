@@ -148,6 +148,7 @@ pub fn update_to_and_validate_new_toolkit_version<OnErr: FnMut(Test, TestError)>
     let mut test_client = connect_to(&test_config);
 
     test_client.set_timezone_utc();
+
     // get the currently installed version before updating
     let old_toolkit_version = test_client.get_installed_extension_version();
 
@@ -470,9 +471,7 @@ pub fn validate_output(output: Vec<SimpleQueryMessage>, test: &Test) -> Result<(
                 }
                 rows.push(row);
             }
-            CommandComplete(_) => {
-                break;
-            }
+            CommandComplete(_) => {}
             _ => unreachable!(),
         }
     }

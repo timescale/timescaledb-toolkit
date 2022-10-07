@@ -167,8 +167,11 @@ jobs:
         key: ${{ runner.os }}-test-old-versions-1.12.0
         restore-keys: ${{ runner.os }}-test-old-versions-1.11.0
 
-    - name: Run Update Tests
-      run: su postgres -c 'sh tools/build -pg$PGVERSION -cargo-pgx /home/postgres/pgx/0.4/bin/cargo-pgx -cargo-pgx-old /home/postgres/pgx/0.2/bin/cargo-pgx test-updates 2>&1'
+    - name: Run binary update tests
+      # TODO We've always tested only one postgres version here.  We test them all at release
+      #  time anyway.  If we want to test them here, too, let's make it less slow first.
+      run: |
+        su postgres -c 'OS_NAME=debian OS_VERSION=11 tools/testbin -version no -bindir / -dbroot /tmp/db -pgport 28800 -pgversions 14 ci 2>&1'
 
     - name: Check tools/testbin
       run: sh tools/testbin check-control

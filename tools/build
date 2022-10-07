@@ -114,11 +114,13 @@ while [ $# -gt 0 ]; do
 
         test-doc)
             require_pg_version
+            $nop cargo pgx start $pg
             $nop cargo run -p sql-doctester -- \
                  -h localhost \
                  -p $pg_port \
                  -s "CREATE EXTENSION timescaledb; CREATE EXTENSION timescaledb_toolkit; SET SESSION TIMEZONE TO 'UTC'" \
                  docs
+            $nop cargo pgx stop $pg
             ;;
 
         test-updates)
@@ -135,6 +137,7 @@ while [ $# -gt 0 ]; do
                  "$pg_config" \
                  "$cargo_pgx" \
                  "$cargo_pgx_old"
+            $nop cargo pgx stop $pg
             ;;
 
         *)

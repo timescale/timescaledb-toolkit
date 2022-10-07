@@ -127,9 +127,8 @@ impl toolkit_experimental::count_min_sketch {
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn approx_count(item: String, aggregate: Option<CountMinSketch>) -> i64 {
-    let sketch = aggregate.unwrap();
-    CountMinSketch::to_internal_countminsketch(&sketch).estimate(item)
+pub fn approx_count(item: String, aggregate: Option<CountMinSketch>) -> Option<i64> {
+    aggregate.map(|sketch| CountMinSketch::to_internal_countminsketch(&sketch).estimate(item))
 }
 
 #[cfg(any(test, feature = "pg_test"))]
@@ -258,6 +257,21 @@ mod tests {
             let output = client
                 .select(
                     "SELECT toolkit_experimental.count_min_sketch(NULL::TEXT, 0.1, 0.1)::TEXT",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>();
+            assert_eq!(output, None)
+        })
+    }
+
+    #[pg_test]
+    fn test_approx_count_null_input_yields_null_output() {
+        Spi::execute(|client| {
+            let output = client
+                .select(
+                    "SELECT toolkit_experimental.approx_count('1'::text, NULL::toolkit_experimental.countminsketch)",
                     None,
                     None,
                 )

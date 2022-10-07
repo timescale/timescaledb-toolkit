@@ -48,7 +48,7 @@ pub fn hyperloglog_trans(
     value: Option<AnyElement>,
     fc: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    // let state: Internal = Internal::from_datum();
+    // let state: Internal = Internal::from_polymorphic_datum();
     hyperloglog_trans_inner(unsafe { state.to_inner() }, size, value, fc, unsafe {
         pgx::pg_getarg_type(fc, 2)
     })
@@ -65,7 +65,7 @@ pub fn approx_count_distinct_trans(
     value: Option<AnyElement>,
     fc: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    // let state: Internal = Internal::from_datum();
+    // let state: Internal = Internal::from_polymorphic_datum();
     hyperloglog_trans_inner(
         unsafe { state.to_inner() },
         APPROX_COUNT_DISTINCT_DEFAULT_SIZE,

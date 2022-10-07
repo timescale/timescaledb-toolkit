@@ -177,7 +177,7 @@ macro_rules! pg_type_impl {
             }
 
             impl<$lifetemplate> pgx::FromDatum for $name<$lifetemplate> {
-                unsafe fn from_datum(datum: pgx::pg_sys::Datum, is_null: bool, _: pg_sys::Oid) -> Option<Self>
+                unsafe fn from_polymorphic_datum(datum: pgx::pg_sys::Datum, is_null: bool, _: pg_sys::Oid) -> Option<Self>
                 where
                     Self: Sized,
                 {

@@ -29,7 +29,7 @@ extension_sql!(
 macro_rules! raw_type {
     ($name:ident, $tyid: path, $arrayid: path) => {
         impl FromDatum for $name {
-            unsafe fn from_datum(
+            unsafe fn from_polymorphic_datum(
                 datum: pg_sys::Datum,
                 is_null: bool,
                 _typoid: pg_sys::Oid,

@@ -137,7 +137,7 @@ pub fn apply_to_series(
             //        and the sub-function will allocate the returned timevector
             series.cached_datum_or_flatten(),
         );
-        Timevector_TSTZ_F64::from_datum(res, false, pg_sys::InvalidOid)
+        Timevector_TSTZ_F64::from_polymorphic_datum(res, false, pg_sys::InvalidOid)
             .expect("unexpected NULL in timevector mapping function")
     }
 }
@@ -215,7 +215,7 @@ pub fn apply_to(
         args[0].value = val.into_datum().unwrap();
         args[0].isnull = false;
         let res = fn_addr(fc_info);
-        f64::from_datum(res, fc_info.isnull, pg_sys::InvalidOid)
+        f64::from_polymorphic_datum(res, fc_info.isnull, pg_sys::InvalidOid)
             .expect("unexpected NULL in timevector mapping function")
     };
 

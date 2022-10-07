@@ -146,7 +146,8 @@ pub fn arrow_run_pipeline_then_materialize<'a>(
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_materialize_support(input: pgx::Internal) -> pgx::Internal {
     pipeline_support_helper(input, |old_pipeline, new_element| {
-        let new_element = PipelineForceMaterialize::from_datum(new_element, false, 0).unwrap();
+        let new_element =
+            PipelineForceMaterialize::from_polymorphic_datum(new_element, false, 0).unwrap();
         arrow_force_materialize(old_pipeline, new_element)
             .into_datum()
             .unwrap()

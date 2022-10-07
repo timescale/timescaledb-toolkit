@@ -563,7 +563,7 @@ pub fn topn_agg_with_skew_bigint_trans(
     let value = match value {
         None => None,
         Some(val) => unsafe {
-            AnyElement::from_datum(pgx::Datum::from(val), false, pg_sys::INT8OID)
+            AnyElement::from_polymorphic_datum(pgx::Datum::from(val), false, pg_sys::INT8OID)
         },
     };
 
@@ -590,7 +590,7 @@ pub fn topn_agg_with_skew_text_trans(
     let value = match txt {
         None => None,
         Some(val) => unsafe {
-            AnyElement::from_datum(pgx::Datum::from(val), false, pg_sys::TEXTOID)
+            AnyElement::from_polymorphic_datum(pgx::Datum::from(val), false, pg_sys::TEXTOID)
         },
     };
 
@@ -635,7 +635,7 @@ pub fn freq_agg_bigint_trans(
     let value = match value {
         None => None,
         Some(val) => unsafe {
-            AnyElement::from_datum(pgx::Datum::from(val), false, pg_sys::INT8OID)
+            AnyElement::from_polymorphic_datum(pgx::Datum::from(val), false, pg_sys::INT8OID)
         },
     };
     freq_agg_trans(state, freq, value, fcinfo)
@@ -652,7 +652,7 @@ pub fn freq_agg_text_trans(
     let value = match txt {
         None => None,
         Some(val) => unsafe {
-            AnyElement::from_datum(pgx::Datum::from(val), false, pg_sys::TEXTOID)
+            AnyElement::from_polymorphic_datum(pgx::Datum::from(val), false, pg_sys::TEXTOID)
         },
     };
     freq_agg_trans(state, freq, value, fcinfo)
@@ -995,7 +995,7 @@ pub fn freq_iter<'a>(
         TableIterator::new(agg.datums.clone().into_iter().zip(counts).map_while(
             move |(value, (&count, &overcount))| {
                 let total = agg.values_seen as f64;
-                let value = AnyElement::from_datum(value, false, agg.type_oid).unwrap();
+                let value = AnyElement::from_polymorphic_datum(value, false, agg.type_oid).unwrap();
                 let min_freq = (count - overcount) as f64 / total;
                 let max_freq = count as f64 / total;
                 Some((value, min_freq, max_freq))
@@ -1113,7 +1113,9 @@ pub fn topn(agg: SpaceSavingAggregate<'_>, n: i32, ty: AnyElement) -> SetOfItera
             min_freq,
         )
         // TODO Shouldn't failure to convert to AnyElement cause error, not early stop?
-        .map_while(move |value| unsafe { AnyElement::from_datum(value, false, type_oid) }),
+        .map_while(move |value| unsafe {
+            AnyElement::from_polymorphic_datum(value, false, type_oid)
+        }),
     )
 }
 
@@ -1450,8 +1452,9 @@ mod tests {
 
         for i in 11..=20 {
             for j in i..=20 {
-                let value =
-                    unsafe { AnyElement::from_datum(pgx::Datum::from(j), false, pg_sys::INT4OID) };
+                let value = unsafe {
+                    AnyElement::from_polymorphic_datum(pgx::Datum::from(j), false, pg_sys::INT4OID)
+                };
                 state = super::freq_agg_trans(state, freq, value, fcinfo).unwrap();
             }
         }
@@ -1509,8 +1512,9 @@ mod tests {
         for i in (1..=10).rev() {
             // reverse here introduces less error in the aggregate
             for j in i..=20 {
-                let value =
-                    unsafe { AnyElement::from_datum(pgx::Datum::from(j), false, pg_sys::INT4OID) };
+                let value = unsafe {
+                    AnyElement::from_polymorphic_datum(pgx::Datum::from(j), false, pg_sys::INT4OID)
+                };
                 state = super::freq_agg_trans(state, freq, value, fcinfo).unwrap();
             }
         }
@@ -1843,8 +1847,9 @@ mod tests {
 
         for _ in 0..200 {
             let v = rand100.sample(&mut rng);
-            let value =
-                unsafe { AnyElement::from_datum(pgx::Datum::from(v), false, pg_sys::INT4OID) };
+            let value = unsafe {
+                AnyElement::from_polymorphic_datum(pgx::Datum::from(v), false, pg_sys::INT4OID)
+            };
             state = super::freq_agg_trans(state, freq, value, fcinfo).unwrap();
             counts[v] += 1;
         }
@@ -1886,8 +1891,9 @@ mod tests {
             if v == usize::MAX {
                 continue; // These tail values can start to add up at low skew values
             }
-            let value =
-                unsafe { AnyElement::from_datum(pgx::Datum::from(v), false, pg_sys::INT4OID) };
+            let value = unsafe {
+                AnyElement::from_polymorphic_datum(pgx::Datum::from(v), false, pg_sys::INT4OID)
+            };
             state = super::topn_agg_with_skew_trans(state, n as i32, skew, value, fcinfo).unwrap();
             if v < 100 {
                 // anything greater than 100 will not be in the top values
@@ -1896,7 +1902,8 @@ mod tests {
         }
 
         let state = space_saving_final(state, fcinfo).unwrap();
-        let value = unsafe { AnyElement::from_datum(Datum::from(0), false, pg_sys::INT4OID) };
+        let value =
+            unsafe { AnyElement::from_polymorphic_datum(Datum::from(0), false, pg_sys::INT4OID) };
         let t: Vec<AnyElement> = default_topn(state, value.unwrap()).collect();
         let agg_topn: Vec<usize> = t.iter().map(|x| x.datum().value()).collect();
 

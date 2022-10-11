@@ -105,13 +105,15 @@ pub static TIMEVECTOR_OID: once_cell::sync::Lazy<pg_sys::Oid> =
     once_cell::sync::Lazy::new(Timevector_TSTZ_F64::type_oid);
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn unnest<'a>(
+pub fn unnest<'a, 'b>(
     series: Timevector_TSTZ_F64<'a>,
-) -> TableIterator<'a, (name!(time, crate::raw::TimestampTz), name!(value, f64))> {
+) -> TableIterator<'b, (name!(time, crate::raw::TimestampTz), name!(value, f64))> {
     TableIterator::new(
         series
             .into_iter()
-            .map(|points| (points.ts.into(), points.val)),
+            .map(|points| (points.ts.into(), points.val))
+            .collect::<Vec<_>>()
+            .into_iter(),
     )
 }
 

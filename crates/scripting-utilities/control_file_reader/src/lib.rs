@@ -5,8 +5,8 @@ use std::fmt;
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// extract the current version from the control file
-pub fn get_current_version(manifest_file: &str) -> Result<String> {
-    get_field_val(manifest_file, "version").map(|v| v.to_string())
+pub fn get_current_version(control_file: &str) -> Result<String> {
+    get_field_val(control_file, "version").map(|v| v.to_string())
 }
 
 /// extract the list of versions we're upgradeable-from from the control file

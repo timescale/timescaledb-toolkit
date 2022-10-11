@@ -12,7 +12,7 @@ use colored::Colorize;
 
 use xshell::{read_file, Cmd};
 
-use control_file_reader::{get_current_version, get_upgradeable_from};
+use control_file_reader::get_upgradeable_from;
 use postgres_connection_configuration::ConnectionConfig;
 
 // macro for literate path joins
@@ -368,8 +368,16 @@ fn get_version_info(root_dir: &str) -> xshell::Result<(String, Vec<String>)> {
     let manifest_contents = read_file(manifest_file)?;
     let control_contents = read_file(control_file)?;
 
-    let current_version = get_current_version(&manifest_contents)
-        .unwrap_or_else(|e| panic!("{} in manifest {}", e, manifest_contents));
+    let current_version = manifest_contents
+        .parse::<toml_edit::Document>()
+        .expect("failed to parse extension/Cargo.toml")
+        .get("package")
+        .expect("failed to find [package] in extension/Cargo.toml")
+        .get("version")
+        .expect("failed to find package.version in extension/Cargo.toml")
+        .as_str()
+        .expect("package.version not a string in extension/Cargo.toml")
+        .to_owned();
 
     let upgradable_from = get_upgradeable_from(&control_contents)
         .unwrap_or_else(|e| panic!("{} in control file {}", e, control_contents));

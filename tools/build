@@ -16,7 +16,7 @@ die() {
 }
 
 usage() {
-    die 'build [ -n -pg1[234] ] ( test-crates | test-extension | install | test-doc | test-updates | clippy)'
+    die 'build [ -n -pg1[234] ] ( test-crates | test-extension | install | test-doc | clippy)'
 }
 
 require_pg_version() {
@@ -31,15 +31,6 @@ find_pg_config() {
     [ -x "$pg_config" ] || die "$pg_config not executable"
 }
 
-require_cargo_pgx() {
-    [ -n "$cargo_pgx" ] || die 'specify path to cargo-pgx (0.4 series or newer)'
-}
-
-require_cargo_pgx_old() {
-    [ -n "$cargo_pgx_old" ] || die 'specify path to cargo-pgx (0.2-0.3 series)'
-}
-
-
 [ $# -ge 1 ] || usage
 
 while [ $# -gt 0 ]; do
@@ -52,16 +43,6 @@ while [ $# -gt 0 ]; do
 
         -pgconfig)
             pg_config="$1"
-            shift
-            ;;
-
-        -cargo-pgx)
-            cargo_pgx="$1"
-            shift
-            ;;
-
-        -cargo-pgx-old)
-            cargo_pgx_old="$1"
             shift
             ;;
 
@@ -120,23 +101,6 @@ while [ $# -gt 0 ]; do
                  -p $pg_port \
                  -s "CREATE EXTENSION timescaledb; CREATE EXTENSION timescaledb_toolkit; SET SESSION TIMEZONE TO 'UTC'" \
                  docs
-            $nop cargo pgx stop $pg
-            ;;
-
-        test-updates)
-            require_pg_version
-            find_pg_config
-            require_cargo_pgx
-            require_cargo_pgx_old
-            $nop cargo pgx start $pg
-            $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- full-update-test-source \
-                 -h localhost \
-                 -p $pg_port \
-                 --cache old-versions \
-                 . \
-                 "$pg_config" \
-                 "$cargo_pgx" \
-                 "$cargo_pgx_old"
             $nop cargo pgx stop $pg
             ;;
 

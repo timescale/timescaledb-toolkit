@@ -41,6 +41,8 @@ fn main() {
         .subcommand_required(true)
         .arg_required_else_help(true)
 	.subcommand(
+            // TODO Remove?  This was backwards-compatibility for tools/build
+            //   test-updates which we no longer use (using tools/testbin now).
             Command::new("full-update-test-source")
             .long_flag("full-update-test-source")
             .about("Run update-test, building toolkit from source unless a local cache is supplied")

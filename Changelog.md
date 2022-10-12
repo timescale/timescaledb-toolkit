@@ -7,6 +7,10 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 ## Next Release (Date TBD)
 
 #### New experimental features
+- [#596](https://github.com/timescale/timescaledb-toolkit/pull/596): Introduce Candlestick Aggregate.
+  Users can use either the `toolkit_experimental.candlestick_agg(timestamp, price, volume)` aggregate or the `toolkit_experimental.candlestick(timestamp, open, high, low, close, volume)` function, depending on whether they are starting from tick data or already aggregated data.
+  Both the aggregate form and the function form of `Candlestick` support the following (experimental) accessors (in addition to being re-aggregated via rollup):
+  `open`, `high`, `low`, `close`, `open_time`, `high_time`, `low_time`, `close_time`, `volume`, `vwap` (Volume Weighted Average Price)
 
 #### Stabilized features
 

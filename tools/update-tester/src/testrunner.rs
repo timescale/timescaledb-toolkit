@@ -32,15 +32,8 @@ pub fn run_update_tests<OnErr: FnMut(Test, TestError)>(
         with_temporary_db(&test_db_name, root_config, || {
             let mut test_client = connect_to(&test_config);
 
-            test_client.install_toolkit_at_version(&old_toolkit_version);
-            let installed_version = test_client.get_installed_extension_version();
-            assert_eq!(
-                installed_version, old_toolkit_version,
-                "installed unexpected version"
-            );
-
-            let errors =
-                test_client.create_test_objects_from_file(test_config, installed_version.clone());
+            let errors = test_client
+                .create_test_objects_from_files(test_config, old_toolkit_version.clone());
 
             for (test, error) in errors {
                 match error {
@@ -49,15 +42,8 @@ pub fn run_update_tests<OnErr: FnMut(Test, TestError)>(
                 }
             }
 
-            test_client.update_to_current_toolkit_version();
-            let new_version = test_client.get_installed_extension_version();
-            assert_eq!(
-                new_version, current_toolkit_version,
-                "updated to unexpected version"
-            );
-
-            let errors =
-                test_client.validate_test_objects_from_files(test_config, installed_version);
+            let errors = test_client
+                .validate_test_objects_from_files(test_config, old_toolkit_version.clone());
 
             for (test, error) in errors {
                 match error {
@@ -65,10 +51,6 @@ pub fn run_update_tests<OnErr: FnMut(Test, TestError)>(
                     Err(error) => on_error(test, error),
                 }
             }
-
-            test_client.check_no_references_to_the_old_binary_leaked(&current_toolkit_version);
-
-            test_client.validate_stable_objects_exist();
         });
         eprintln!(
             "{} {} -> {}",
@@ -110,7 +92,7 @@ pub fn create_test_objects_for_package_testing<OnErr: FnMut(Test, TestError)>(
     let current_toolkit_version = test_client.get_installed_extension_version();
 
     // create test objects
-    let errors = test_client.create_test_objects_from_file(test_config, current_toolkit_version);
+    let errors = test_client.create_test_objects_from_files(test_config, current_toolkit_version);
 
     for (test, error) in errors {
         match error {
@@ -134,7 +116,6 @@ fn connect_to(config: &ConnectionConfig<'_>) -> TestClient {
 }
 
 pub fn update_to_and_validate_new_toolkit_version<OnErr: FnMut(Test, TestError)>(
-    current_toolkit_version: String,
     root_config: &ConnectionConfig,
     mut on_error: OnErr,
 ) -> Result<(), xshell::Error> {
@@ -157,10 +138,6 @@ pub fn update_to_and_validate_new_toolkit_version<OnErr: FnMut(Test, TestError)>
             Err(error) => on_error(test, error),
         }
     }
-
-    test_client.check_no_references_to_the_old_binary_leaked(&current_toolkit_version);
-
-    test_client.validate_stable_objects_exist();
 
     // This close needs to happen before trying to drop the DB or else panics with `There is 1 other session using the database.`
     test_client
@@ -236,7 +213,7 @@ impl TestClient {
         });
     }
 
-    fn create_test_objects_from_file(
+    fn create_test_objects_from_files(
         &mut self,
         root_config: ConnectionConfig<'_>,
         current_toolkit_version: String,
@@ -271,10 +248,35 @@ impl TestClient {
         let errors: Vec<_> = all_tests
             .into_iter()
             .flat_map(|tests| {
-                let mut client = connect_to(&root_config).0;
-                client
+                let mut db_creation_client = connect_to(&root_config);
+
+                let test_db_name = format!("{}_{}", tests.name, current_toolkit_version);
+
+                let drop = format!(r#"DROP DATABASE IF EXISTS "{}""#, test_db_name);
+                db_creation_client
+                    .simple_query(&drop)
+                    .unwrap_or_else(|e| panic!("could not drop db {} due to {}", test_db_name, e));
+                let create = format!(r#"CREATE DATABASE "{}" LOCALE 'C'"#, test_db_name);
+                db_creation_client
+                    .simple_query(&create)
+                    .unwrap_or_else(|e| {
+                        panic!("could not create db {} due to {}", test_db_name, e)
+                    });
+
+                let test_config = root_config.with_db(&test_db_name);
+
+                let mut test_client = connect_to(&test_config);
+                test_client
                     .simple_query("SET TIME ZONE 'UTC';")
                     .unwrap_or_else(|e| panic!("could not set time zone to UTC due to {}", e));
+
+                // install new version and make sure it is correct
+                test_client.install_toolkit_at_version(&current_toolkit_version);
+                let installed_version = test_client.get_installed_extension_version();
+                assert_eq!(
+                    installed_version, current_toolkit_version,
+                    "installed unexpected version"
+                );
 
                 tests
                     .tests
@@ -285,8 +287,8 @@ impl TestClient {
                         None => true,
                     })
                     .map(move |test| {
-                        let output = run_test(&mut client, &test);
-                        (test.clone(), output)
+                        let output = run_test(&mut test_client, &test);
+                        (test, output)
                     })
             })
             .collect();
@@ -333,8 +335,19 @@ impl TestClient {
         let errors: Vec<_> = all_tests
             .into_iter()
             .flat_map(|tests| {
-                let mut client = connect_to(&root_config).0;
-                client
+                let test_db_name = format!("{}_{}", tests.name, old_toolkit_version);
+
+                let test_config = root_config.with_db(&test_db_name);
+
+                let mut test_client = connect_to(&test_config);
+
+                test_client.update_to_current_toolkit_version();
+                let new_toolkit_version = test_client.get_installed_extension_version();
+                test_client.check_no_references_to_the_old_binary_leaked(&new_toolkit_version);
+
+                test_client.validate_stable_objects_exist();
+
+                test_client
                     .simple_query("SET TIME ZONE 'UTC';")
                     .unwrap_or_else(|e| panic!("could not set time zone to UTC due to {}", e));
 
@@ -347,9 +360,9 @@ impl TestClient {
                         None => true,
                     })
                     .map(move |test| {
-                        let output = run_test(&mut client, &test);
+                        let output = run_test(&mut test_client, &test);
                         // ensure that the DB is dropped after the client
-                        (test.clone(), output)
+                        (test, output)
                     })
             })
             .collect();

@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ffi::OsStr, fs};
+use std::{collections::HashMap, ffi::OsStr, fs, path::Path};
 
 use pulldown_cmark::{
     CodeBlockKind::Fenced,
@@ -10,7 +10,7 @@ use semver::Version;
 #[derive(Debug, PartialEq, Eq)]
 #[must_use]
 pub struct TestFile {
-    name: String,
+    pub name: String,
     stateless: bool,
     pub tests: Vec<Test>,
 }
@@ -213,8 +213,10 @@ pub fn extract_tests_from_string(s: &str, file_stem: &str) -> TestFile {
             _ => (),
         }
     }
+    // create filename from full path
+    let file_name = Path::new(&file_stem).file_stem().unwrap().to_str().unwrap();
     TestFile {
-        name: file_stem.to_string(),
+        name: file_name.to_string(),
         stateless,
         tests,
     }
@@ -360,7 +362,7 @@ select * from qat
 
         let tests = super::extract_tests_from_string(file, "/test/file.md");
         let expected = TestFile {
-            name: "/test/file.md".to_string(),
+            name: "file".to_string(),
             stateless: false,
             tests: vec![
                 Test {

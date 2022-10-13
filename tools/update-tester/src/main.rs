@@ -346,11 +346,11 @@ fn try_validate_objects<OnErr: FnMut(parser::Test, testrunner::TestError)>(
     root_dir: &str,
     on_error: OnErr,
 ) -> xshell::Result<()> {
-    let (current_version, old_versions) = get_version_info(root_dir)?;
+    let (_current_version, old_versions) = get_version_info(root_dir)?;
     if old_versions.is_empty() {
         panic!("no old versions to upgrade from")
     }
-    testrunner::update_to_and_validate_new_toolkit_version(current_version, _conn, on_error)
+    testrunner::update_to_and_validate_new_toolkit_version(_conn, on_error)
 }
 
 fn get_version_info(root_dir: &str) -> xshell::Result<(String, Vec<String>)> {

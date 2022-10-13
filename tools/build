@@ -133,7 +133,6 @@ while [ $# -gt 0 ]; do
                  -h localhost \
                  -p $pg_port \
                  --cache old-versions \
-                 . \
                  "$pg_config" \
                  "$cargo_pgx" \
                  "$cargo_pgx_old"

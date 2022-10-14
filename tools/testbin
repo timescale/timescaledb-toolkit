@@ -103,11 +103,17 @@ deb_init() {
 
 # Requires:
 # - FROM_VERSION
-deb_start_test() {
+skip_from_version() {
     # We released 1.10.0-dev by accident.  We have to support upgrades
-    # from it (and we tested that at the time), but we pulled the deb, so
+    # from it (and we tested that at the time), but we pulled the binaries, so
     # we can't test it here.
-    [ $FROM_VERSION = 1.10.0-dev ] && return 1
+    [ $FROM_VERSION = 1.10.0-dev ] && return
+}
+
+# Requires:
+# - FROM_VERSION
+deb_start_test() {
+    skip_from_version && return 1
     cmp_version=`cmp_version $FROM_VERSION`
     [ "$ARCH" = arm64 ] && [ $cmp_version -lt $MIN_DEB_ARM ] && return 1
 
@@ -154,10 +160,9 @@ test_ci() {
 }
 
 test_rpm() {
-    ARCH=x86_64
-    # TODO Support arm64 RPM?  TimescaleDB RPMs are amd64-only at time of writing.
-    #ARCH=`rpm -E '%{_arch}'`
-    for from_version; do
+    ARCH=`rpm -E '%{_arch}'`
+    for FROM_VERSION; do
+        skip_from_version && continue
         for PG_VERSION in $PG_VERSIONS; do
             select_pg $PG_VERSION
             rpm=timescaledb-toolkit-postgresql-$PG_VERSION
@@ -166,14 +171,14 @@ test_rpm() {
             # the install command below does nothing.
             # So, uninstall if installed.
             rpm -q $rpm > /dev/null && $nop sudo rpm -e $rpm
-            $nop sudo yum install $rpm-$from_version
+            $nop sudo yum -q -y install $rpm-$FROM_VERSION
 
             PATH=/usr/pgsql-$PG_VERSION/bin:$PATH start_test
         done
         for PG_VERSION in $PG_VERSIONS; do
             select_pg $PG_VERSION
-            rpm=timescaledb-toolkit-postgresql-$PG_VERSION-$TOOLKIT_VERSION.$ARCH.rpm
-            $nop sudo rpm -i "$BINDIR/$rpm"
+            rpm=timescaledb-toolkit-postgresql-$PG_VERSION-$TOOLKIT_VERSION-0.el$OS_VERSION.$ARCH.rpm
+            $nop sudo rpm -U "$BINDIR/$rpm"
 
             finish_test
 

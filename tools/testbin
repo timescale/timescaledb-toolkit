@@ -3,7 +3,7 @@
 # This script automates binary upgrade testing.
 
 # Sample run:
-# OS_NAME=ubuntu OS_VERSION=20.04 tools/testbin -version 1.11.0 -bindir .. -dbroot /tmp/db -pgport 28800 deb
+# OS_NAME=ubuntu OS_VERSION=20.04 tools/testbin -version 1.11.0 -bindir .. -pgversions '13 14' deb
 
 # A released toolkit lists the versions it is upgradeable from in
 # extension/timescaledb_toolkit.control .  This script processes those entries
@@ -57,7 +57,7 @@ die() {
 
 usage() {
     print 'testbin check-control' >&2
-    die 'testbin [-n] -bindir DIR -dbroot DIR -pgport N -version VERSION ( ci | deb | rpm )'
+    die 'testbin [-n] -bindir DIR -version VERSION -pgversions "[V1] [V2]..." ( ci | deb | rpm )'
 }
 
 # Run this before each merge so the control file doesn't get out of sync with this script.

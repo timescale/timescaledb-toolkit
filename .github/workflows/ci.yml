@@ -63,15 +63,15 @@ jobs:
         path: |
           /usr/local/cargo/registry
           /usr/local/cargo/git
-        key: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-cargo-1.12.0
-        restore-keys: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-cargo-1.11.0
+        key: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-cargo-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
+        restore-keys: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-cargo-
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-1.12.0
-        restore-keys: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-1.11.0
+        key: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
+        restore-keys: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-
 
     - name: Run pgx tests
       run: su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-extension 2>&1'
@@ -112,15 +112,15 @@ jobs:
         path: |
           /usr/local/cargo/registry
           /usr/local/cargo/git
-        key: ${{ runner.os }}-test-crates-cargo-1.12.0
-        restore-keys: ${{ runner.os }}-test-crates-cargo-1.11.0
+        key: ${{ runner.os }}-test-crates-cargo-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
+        restore-keys: ${{ runner.os }}-test-crates-cargo-
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-test-crates-target-1.12.0
-        restore-keys: ${{ runner.os }}-test-crates-target-1.11.0
+        key: ${{ runner.os }}-test-crates-target-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
+        restore-keys: ${{ runner.os }}-test-crates-target-
 
     - name: Run Crates Tests
       run: su postgres -c 'sh tools/build test-crates 2>&1'
@@ -154,22 +154,22 @@ jobs:
         path: |
           /usr/local/cargo/registry
           /usr/local/cargo/git
-        key: ${{ runner.os }}-test-updates-cargo-1.12.0
-        restore-keys: ${{ runner.os }}-test-crates-cargo-1.11.0
+        key: ${{ runner.os }}-test-updates-cargo-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
+        restore-keys: ${{ runner.os }}-test-crates-cargo-
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
         path: target
-        key: ${{ runner.os }}-test-updates-target-1.12.0
-        restore-keys: ${{ runner.os }}-test-crates-target-1.11.0
+        key: ${{ runner.os }}-test-updates-target-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
+        restore-keys: ${{ runner.os }}-test-crates-target-
 
     - name: Cache old versions dir
       uses: actions/cache@v2
       with:
         path: old-versions
-        key: ${{ runner.os }}-test-old-versions-1.12.0
-        restore-keys: ${{ runner.os }}-test-old-versions-1.11.0
+        key: ${{ runner.os }}-test-old-versions-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
+        restore-keys: ${{ runner.os }}-test-old-versions-
 
     - name: Run binary update tests
       # TODO We've always tested only one postgres version here.  We test them all at release

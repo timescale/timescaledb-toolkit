@@ -32,6 +32,10 @@ set -ex
 MIN_DEB_ARM=1.10.1
 # We added 1: epoch at 1.7.0.
 MIN_DEB_EPOCH=1.7.0
+# TODO Unfortunate that pgx allows neither specifying nor querying the port it
+#   starts postgres on, so we duplicate that knowledge.  Watch out for
+#   that changing!
+PGX_PORT_BASE=28800
 # TODO Drop default and require -pgversions after existing usage updated.
 PG_VERSIONS='12 13 14'
 CONTROL=extension/timescaledb_toolkit.control
@@ -65,56 +69,26 @@ check_control() {
 }
 
 # Requires:
-# - PG_PORT_BASE
+# - PGX_PORT_BASE
 # - PG_VERSION
 # Sets:
-# - DB
 # - PG_PORT
 select_pg() {
-    PG_PORT=$(( $PG_PORT_BASE + $PG_VERSION ))
-    DB=$DB_ROOT/$PG_VERSION
+    PG_PORT=$(( $PGX_PORT_BASE + $PG_VERSION ))
 }
 
-# Start postgres and create a database.
+# Start postgres and run the first half (old toolkit) of the test.
 # Must select_pg first.
-# Sets:
-# - PG14PID (or PG13PID etc.; depends on value of PG_VERSION)
-start_postgres() {
-    $nop initdb "$DB"
-    $nop mkdir "$DB/lock"
-    $nop postgres -D "$DB" -k "$DB/lock" -p "$PG_PORT" & eval PG${PG_VERSION}PID=$!
-    for i in 1 2 3 4 5; do
-        if $nop psql -h 127.1 -p $PG_PORT postgres < /dev/null; then
-            $nop createdb -h 127.1 -p $PG_PORT
-            return
-        fi
-        echo $i...
-        sleep 1
-    done
-    die "failed to start postgres $PGVERSION"
-}
-
-# Stop postgres and create a database.
-# Use select_pg to set which one to stop.
-stop_postgres() {
-    eval pid=\$PG${PG_VERSION}PID
-    [ -n "$pid" ] && $nop kill $pid
-    for i in 1 2 3 4 5; do
-        $nop rm -rf "$DB" && return
-        echo "try $i..."
-        sleep 1
-    done
-    die "failed to start postgres $PGVERSION"
-}
-
 start_test() {
-    start_postgres
+    $nop cargo pgx start pg$PG_VERSION
     $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- create-test-objects -u $LOGNAME -h 127.1 -p $PG_PORT
 }
 
+# Run the second half (new toolkit) of the test and stop postgres.
+# Must select_pg first.
 finish_test() {
     $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- validate-test-objects -u $LOGNAME -h 127.1 -p $PG_PORT
-    stop_postgres
+    $nop cargo pgx stop pg$PG_VERSION
 }
 
 deb_init() {
@@ -227,18 +201,13 @@ cleanup() {
     set +e
     for PG_VERSION in $PG_VERSIONS; do
         select_pg $PG_VERSION
-        stop_postgres
+        $nop cargo pgx stop pg$PG_VERSION
     done
-    $nop rmdir "$DB_ROOT"
 }
 
 run() {
     [ -n "$LOGNAME" ] || die 'LOGNAME environment variable must be set to the login name'
-    [ -n "$DB_ROOT" ] || die '-dbroot required'
-    [ -e "$DB_ROOT" ] && die "cowardly refusing to clobber $DB_ROOT"
-    [ -n "$PG_PORT_BASE" ] || die '-pgport required'
     [ -n "$PG_VERSIONS" ] || die '-pgversions required'
-
     # TODO Requiring -bindir and -version when not all methods need them is awkward but eh.
     [ -d "$BINDIR" ] || die '-bindir required'
     [ -n "$TOOLKIT_VERSION" ] || die '-version required'
@@ -248,7 +217,6 @@ run() {
     trap - 0
 
     echo DONE
-    $nop rmdir "$DB_ROOT"
 }
 
 while [ $# -gt 0 ]; do
@@ -264,13 +232,8 @@ while [ $# -gt 0 ]; do
             shift
             ;;
 
-        -dbroot)
-            DB_ROOT=$1
-            shift
-            ;;
-
-        -pgport)
-            PG_PORT_BASE=$1
+        -dbroot | -pgport)
+            # TODO remove flags
             shift
             ;;
 

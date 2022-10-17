@@ -76,7 +76,6 @@ fn main() {
             )
             .arg(Arg::new("CACHE").short('c').long("cache").takes_value(true))
             .arg(Arg::new("REINSTALL").long("reinstall").takes_value(true))
-            .arg(Arg::new("ROOT_DIR").takes_value(true))
             .arg(Arg::new("PG_CONFIG").takes_value(true))
             .arg(Arg::new("CARGO_PGX").takes_value(true))
             .arg(Arg::new("CARGO_PGX_OLD").takes_value(true)),
@@ -150,8 +149,6 @@ fn main() {
                     .long("database")
                     .takes_value(true)
             )
-
-            .arg(Arg::new("ROOT_DIR").takes_value(true).default_value("."))
 	)
 // Mutates help, removing the short flag (-h) so that it can be used by HOST
 	.mut_arg("help", |_h| {
@@ -172,9 +169,7 @@ fn main() {
 
             let cache_dir = full_update_matches.value_of("CACHE");
 
-            let root_dir = full_update_matches
-                .value_of("ROOT_DIR")
-                .expect("missing path to root of the toolkit repo");
+            let root_dir = ".";
 
             let reinstall = full_update_matches
                 .value_of("REINSTALL")
@@ -287,9 +282,7 @@ fn main() {
                 let _ = writeln!(&mut out, "{}\n", error);
             };
 
-            let root_dir = validate_test_object_matches
-                .value_of("ROOT_DIR")
-                .expect("missing path to root of the toolkit repo");
+            let root_dir = ".";
             let res = try_validate_objects(&connection_config, root_dir, on_error);
             if let Err(err) = res {
                 eprintln!("{}", err);

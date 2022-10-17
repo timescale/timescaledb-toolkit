@@ -11,6 +11,7 @@ This change log should be updated as part of a PR if the work is something that'
 
 ### Bug fixes
 [#568](https://github.com/timescale/timescaledb-toolkit/pull/568): Allow `approx_count` accessor function to take NULL inputs.
+
 ### Other notable changes
 - [#547](https://github.com/timescale/timescaledb-toolkit/pull/547): Update pgx to 0.5.0. This is necessary for adding Postgres 15 support coming soon.
 - [#571](https://github.com/timescale/timescaledb-toolkit/pull/571): Update CI docker image for pgx 0.5.0
@@ -30,6 +31,7 @@ This change log should be updated as part of a PR if the work is something that'
 
 ### Features stabilized
 - [#498](https://github.com/timescale/timescaledb-toolkit/pull/498): Stabilize `asap_smooth` aggregate.
+
 ### Bug fixes
 
 - [#509](https://github.com/timescale/timescaledb-toolkit/pull/509), [#531](https://github.com/timescale/timescaledb-toolkit/pull/531): Fix bugs in`hyperloglog`. Error rates are now significantly more consistent when the number of buckets are close to the actual cardinality.

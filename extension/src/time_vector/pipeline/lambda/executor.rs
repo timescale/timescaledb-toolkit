@@ -213,9 +213,10 @@ where
                     pg_sys::DirectFunctionCall2Coll(
                         Some($calc),
                         pg_sys::InvalidOid,
-                        left as _,
-                        right as _,
-                    ) as _
+                        pgx::Datum::from(left),
+                        pgx::Datum::from(right),
+                    )
+                    .cast_mut_ptr()
                 };
                 assert!(!res.is_null());
                 Value::Interval(res)
@@ -231,9 +232,10 @@ where
                     pg_sys::DirectFunctionCall2Coll(
                         Some($calc),
                         pg_sys::InvalidOid,
-                        left as _,
+                        pgx::Datum::from(left),
                         right.into_datum().unwrap(),
-                    ) as _
+                    )
+                    .value() as _
                 };
                 assert!(!res.is_null());
                 Value::Interval(res)
@@ -249,9 +251,10 @@ where
                     pg_sys::DirectFunctionCall2Coll(
                         Some($calc),
                         pg_sys::InvalidOid,
-                        left as _,
-                        right as _,
-                    ) as _
+                        pgx::Datum::from(left),
+                        pgx::Datum::from(right),
+                    )
+                    .value() as _
                 };
 
                 Value::Time(res)

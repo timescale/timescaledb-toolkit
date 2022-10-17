@@ -1,6 +1,11 @@
 #![allow(non_camel_case_types)]
 
-use pgx::*;
+use pgx::{
+    utils::sql_entity_graph::metadata::{
+        ArgumentError, Returns, ReturnsError, SqlMapping, SqlTranslatable,
+    },
+    *,
+};
 
 extension_sql!(
     "\n\
@@ -24,9 +29,7 @@ extension_sql!(
 macro_rules! raw_type {
     ($name:ident, $tyid: path, $arrayid: path) => {
         impl FromDatum for $name {
-            const NEEDS_TYPID: bool = false;
-
-            unsafe fn from_datum(
+            unsafe fn from_polymorphic_datum(
                 datum: pg_sys::Datum,
                 is_null: bool,
                 _typoid: pg_sys::Oid,
@@ -64,6 +67,16 @@ macro_rules! raw_type {
                 v.0
             }
         }
+
+        // SAFETY: all calls to raw_type! use type names that are valid SQL
+        unsafe impl SqlTranslatable for $name {
+            fn argument_sql() -> Result<SqlMapping, ArgumentError> {
+                Ok(SqlMapping::literal(stringify!($name)))
+            }
+            fn return_sql() -> Result<Returns, ReturnsError> {
+                Ok(Returns::One(SqlMapping::literal(stringify!($name))))
+            }
+        }
     };
 }
 
@@ -87,13 +100,13 @@ raw_type!(
 
 impl From<TimestampTz> for pg_sys::TimestampTz {
     fn from(tstz: TimestampTz) -> Self {
-        tstz.0 as _
+        tstz.0.value() as _
     }
 }
 
 impl From<pg_sys::TimestampTz> for TimestampTz {
     fn from(ts: pg_sys::TimestampTz) -> Self {
-        Self(ts as _)
+        Self(pgx::Datum::from(ts))
     }
 }
 

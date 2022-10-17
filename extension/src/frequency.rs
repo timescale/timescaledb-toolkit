@@ -2,7 +2,10 @@
 
 use std::fmt;
 
-use pgx::*;
+use pgx::{
+    iter::{SetOfIterator, TableIterator},
+    *,
+};
 
 use pg_sys::{Datum, Oid};
 
@@ -435,7 +438,7 @@ pub mod toolkit_experimental {
             let mut overcounts = Vec::new();
 
             for entry in &trans.entries {
-                values.push(entry.value as i64);
+                values.push(entry.value.value() as i64);
                 counts.push(entry.count);
                 overcounts.push(entry.overcount);
             }
@@ -560,7 +563,7 @@ pub fn topn_agg_with_skew_bigint_trans(
     let value = match value {
         None => None,
         Some(val) => unsafe {
-            AnyElement::from_datum(val as pg_sys::Datum, false, pg_sys::INT8OID)
+            AnyElement::from_polymorphic_datum(pgx::Datum::from(val), false, pg_sys::INT8OID)
         },
     };
 
@@ -583,11 +586,11 @@ pub fn topn_agg_with_skew_text_trans(
     value: Option<crate::raw::text>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    let txt = value.map(|v| unsafe { pg_sys::pg_detoast_datum_copy(v.0 as *mut pg_sys::varlena) });
+    let txt = value.map(|v| unsafe { pg_sys::pg_detoast_datum_copy(v.0.cast_mut_ptr()) });
     let value = match txt {
         None => None,
         Some(val) => unsafe {
-            AnyElement::from_datum(val as pg_sys::Datum, false, pg_sys::TEXTOID)
+            AnyElement::from_polymorphic_datum(pgx::Datum::from(val), false, pg_sys::TEXTOID)
         },
     };
 
@@ -632,7 +635,7 @@ pub fn freq_agg_bigint_trans(
     let value = match value {
         None => None,
         Some(val) => unsafe {
-            AnyElement::from_datum(val as pg_sys::Datum, false, pg_sys::INT8OID)
+            AnyElement::from_polymorphic_datum(pgx::Datum::from(val), false, pg_sys::INT8OID)
         },
     };
     freq_agg_trans(state, freq, value, fcinfo)
@@ -645,11 +648,11 @@ pub fn freq_agg_text_trans(
     value: Option<crate::raw::text>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    let txt = value.map(|v| unsafe { pg_sys::pg_detoast_datum_copy(v.0 as *mut pg_sys::varlena) });
+    let txt = value.map(|v| unsafe { pg_sys::pg_detoast_datum_copy(v.0.cast_mut_ptr()) });
     let value = match txt {
         None => None,
         Some(val) => unsafe {
-            AnyElement::from_datum(val as pg_sys::Datum, false, pg_sys::TEXTOID)
+            AnyElement::from_polymorphic_datum(pgx::Datum::from(val), false, pg_sys::TEXTOID)
         },
     };
     freq_agg_trans(state, freq, value, fcinfo)
@@ -973,29 +976,37 @@ extension_sql!(
     name = "into_values",
     schema = "toolkit_experimental"
 )]
-pub fn freq_iter(
-    agg: SpaceSavingAggregate<'_>,
+pub fn freq_iter<'a, 'b>(
+    agg: SpaceSavingAggregate<'a>,
     ty: AnyElement,
-) -> impl std::iter::Iterator<
-    Item = (
+) -> TableIterator<
+    'b,
+    (
         name!(value, AnyElement),
         name!(min_freq, f64),
         name!(max_freq, f64),
     ),
-> + '_ {
+> {
     unsafe {
         if ty.oid() != agg.type_oid {
             pgx::error!("mischatched types")
         }
         let counts = agg.counts.slice().iter().zip(agg.overcounts.slice().iter());
-        agg.datums.clone().into_iter().zip(counts).map_while(
-            move |(value, (&count, &overcount))| {
-                let total = agg.values_seen as f64;
-                let value = AnyElement::from_datum(value, false, agg.type_oid).unwrap();
-                let min_freq = (count - overcount) as f64 / total;
-                let max_freq = count as f64 / total;
-                Some((value, min_freq, max_freq))
-            },
+        TableIterator::new(
+            agg.datums
+                .clone()
+                .into_iter()
+                .zip(counts)
+                .map_while(move |(value, (&count, &overcount))| {
+                    let total = agg.values_seen as f64;
+                    let value =
+                        AnyElement::from_polymorphic_datum(value, false, agg.type_oid).unwrap();
+                    let min_freq = (count - overcount) as f64 / total;
+                    let max_freq = count as f64 / total;
+                    Some((value, min_freq, max_freq))
+                })
+                .collect::<Vec<_>>()
+                .into_iter(),
         )
     }
 }
@@ -1006,26 +1017,31 @@ pub fn freq_iter(
     name = "into_values",
     schema = "toolkit_experimental"
 )]
-pub fn freq_bigint_iter(
-    agg: SpaceSavingBigIntAggregate<'_>,
-) -> impl std::iter::Iterator<
-    Item = (
+pub fn freq_bigint_iter<'a, 'b>(
+    agg: SpaceSavingBigIntAggregate<'a>,
+) -> TableIterator<
+    'b,
+    (
         name!(value, i64),
         name!(min_freq, f64),
         name!(max_freq, f64),
     ),
-> + '_ {
+> {
     let counts = agg.counts.slice().iter().zip(agg.overcounts.slice().iter());
-    agg.datums
-        .clone()
-        .into_iter()
-        .zip(counts)
-        .map_while(move |(value, (&count, &overcount))| {
-            let total = agg.values_seen as f64;
-            let min_freq = (count - overcount) as f64 / total;
-            let max_freq = count as f64 / total;
-            Some((value, min_freq, max_freq))
-        })
+    TableIterator::new(
+        agg.datums
+            .clone()
+            .into_iter()
+            .zip(counts)
+            .map_while(move |(value, (&count, &overcount))| {
+                let total = agg.values_seen as f64;
+                let min_freq = (count - overcount) as f64 / total;
+                let max_freq = count as f64 / total;
+                Some((value, min_freq, max_freq))
+            })
+            .collect::<Vec<_>>()
+            .into_iter(),
+    )
 }
 
 #[pg_extern(
@@ -1034,27 +1050,32 @@ pub fn freq_bigint_iter(
     name = "into_values",
     schema = "toolkit_experimental"
 )]
-pub fn freq_text_iter(
-    agg: SpaceSavingTextAggregate<'_>,
-) -> impl std::iter::Iterator<
-    Item = (
+pub fn freq_text_iter<'a, 'b>(
+    agg: SpaceSavingTextAggregate<'a>,
+) -> TableIterator<
+    'b,
+    (
         name!(value, String),
         name!(min_freq, f64),
         name!(max_freq, f64),
     ),
-> + '_ {
+> {
     let counts = agg.counts.slice().iter().zip(agg.overcounts.slice().iter());
-    agg.datums
-        .clone()
-        .into_iter()
-        .zip(counts)
-        .map_while(move |(value, (&count, &overcount))| {
-            let total = agg.values_seen as f64;
-            let data = unsafe { varlena_to_string(value as *const pg_sys::varlena) };
-            let min_freq = (count - overcount) as f64 / total;
-            let max_freq = count as f64 / total;
-            Some((data, min_freq, max_freq))
-        })
+    TableIterator::new(
+        agg.datums
+            .clone()
+            .into_iter()
+            .zip(counts)
+            .map_while(move |(value, (&count, &overcount))| {
+                let total = agg.values_seen as f64;
+                let data = unsafe { varlena_to_string(value.cast_mut_ptr()) };
+                let min_freq = (count - overcount) as f64 / total;
+                let max_freq = count as f64 / total;
+                Some((data, min_freq, max_freq))
+            })
+            .collect::<Vec<_>>()
+            .into_iter(),
+    )
 }
 
 fn validate_topn_for_topn_agg(
@@ -1087,11 +1108,7 @@ fn validate_topn_for_topn_agg(
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn topn(
-    agg: SpaceSavingAggregate<'_>,
-    n: i32,
-    ty: AnyElement,
-) -> impl std::iter::Iterator<Item = AnyElement> + '_ {
+pub fn topn(agg: SpaceSavingAggregate<'_>, n: i32, ty: AnyElement) -> SetOfIterator<AnyElement> {
     if ty.oid() != agg.type_oid {
         pgx::error!("mischatched types")
     }
@@ -1106,15 +1123,21 @@ pub fn topn(
     let min_freq = if agg.topn == 0 { agg.freq_param } else { 0. };
 
     let type_oid: u32 = agg.type_oid;
-    TopNIterator::new(
-        agg.datums.clone().into_iter(),
-        agg.counts.clone().into_vec(),
-        agg.values_seen as f64,
-        n,
-        min_freq,
+    SetOfIterator::new(
+        TopNIterator::new(
+            agg.datums.clone().into_iter(),
+            agg.counts.clone().into_vec(),
+            agg.values_seen as f64,
+            n,
+            min_freq,
+        )
+        // TODO Shouldn't failure to convert to AnyElement cause error, not early stop?
+        .map_while(move |value| unsafe {
+            AnyElement::from_polymorphic_datum(value, false, type_oid)
+        })
+        .collect::<Vec<_>>()
+        .into_iter(),
     )
-    // TODO Shouldn't failure to convert to AnyElement cause error, not early stop?
-    .map_while(move |value| unsafe { AnyElement::from_datum(value, false, type_oid) })
 }
 
 #[pg_extern(
@@ -1123,10 +1146,7 @@ pub fn topn(
     name = "topn",
     schema = "toolkit_experimental"
 )]
-pub fn default_topn(
-    agg: SpaceSavingAggregate<'_>,
-    ty: AnyElement,
-) -> impl std::iter::Iterator<Item = AnyElement> + '_ {
+pub fn default_topn(agg: SpaceSavingAggregate<'_>, ty: AnyElement) -> SetOfIterator<AnyElement> {
     if agg.topn == 0 {
         pgx::error!("frequency aggregates require a N parameter to topn")
     }
@@ -1140,10 +1160,7 @@ pub fn default_topn(
     name = "topn",
     schema = "toolkit_experimental"
 )]
-pub fn topn_bigint(
-    agg: SpaceSavingBigIntAggregate<'_>,
-    n: i32,
-) -> impl std::iter::Iterator<Item = i64> + '_ {
+pub fn topn_bigint(agg: SpaceSavingBigIntAggregate<'_>, n: i32) -> SetOfIterator<i64> {
     validate_topn_for_topn_agg(
         n,
         agg.topn,
@@ -1153,12 +1170,16 @@ pub fn topn_bigint(
     );
     let min_freq = if agg.topn == 0 { agg.freq_param } else { 0. };
 
-    TopNIterator::new(
-        agg.datums.clone().into_iter(),
-        agg.counts.clone().into_vec(),
-        agg.values_seen as f64,
-        n,
-        min_freq,
+    SetOfIterator::new(
+        TopNIterator::new(
+            agg.datums.clone().into_iter(),
+            agg.counts.clone().into_vec(),
+            agg.values_seen as f64,
+            n,
+            min_freq,
+        )
+        .collect::<Vec<_>>()
+        .into_iter(),
     )
 }
 
@@ -1168,9 +1189,7 @@ pub fn topn_bigint(
     name = "topn",
     schema = "toolkit_experimental"
 )]
-pub fn default_topn_bigint(
-    agg: SpaceSavingBigIntAggregate<'_>,
-) -> impl std::iter::Iterator<Item = i64> + '_ {
+pub fn default_topn_bigint(agg: SpaceSavingBigIntAggregate<'_>) -> SetOfIterator<i64> {
     if agg.topn == 0 {
         pgx::error!("frequency aggregates require a N parameter to topn")
     }
@@ -1184,10 +1203,7 @@ pub fn default_topn_bigint(
     name = "topn",
     schema = "toolkit_experimental"
 )]
-pub fn topn_text(
-    agg: SpaceSavingTextAggregate<'_>,
-    n: i32,
-) -> impl std::iter::Iterator<Item = String> + '_ {
+pub fn topn_text(agg: SpaceSavingTextAggregate<'_>, n: i32) -> SetOfIterator<String> {
     validate_topn_for_topn_agg(
         n,
         agg.topn,
@@ -1197,14 +1213,18 @@ pub fn topn_text(
     );
     let min_freq = if agg.topn == 0 { agg.freq_param } else { 0. };
 
-    TopNIterator::new(
-        agg.datums.clone().into_iter(),
-        agg.counts.clone().into_vec(),
-        agg.values_seen as f64,
-        n,
-        min_freq,
+    SetOfIterator::new(
+        TopNIterator::new(
+            agg.datums.clone().into_iter(),
+            agg.counts.clone().into_vec(),
+            agg.values_seen as f64,
+            n,
+            min_freq,
+        )
+        .map(|value| unsafe { varlena_to_string(value.cast_mut_ptr()) })
+        .collect::<Vec<_>>()
+        .into_iter(),
     )
-    .map(|value| unsafe { varlena_to_string(value as *const pg_sys::varlena) })
 }
 
 #[pg_extern(
@@ -1213,9 +1233,7 @@ pub fn topn_text(
     name = "topn",
     schema = "toolkit_experimental"
 )]
-pub fn default_topn_text(
-    agg: SpaceSavingTextAggregate<'_>,
-) -> impl std::iter::Iterator<Item = String> + '_ {
+pub fn default_topn_text(agg: SpaceSavingTextAggregate<'_>) -> SetOfIterator<String> {
     if agg.topn == 0 {
         pgx::error!("frequency aggregates require a N parameter to topn")
     }
@@ -1461,8 +1479,9 @@ mod tests {
 
         for i in 11..=20 {
             for j in i..=20 {
-                let value =
-                    unsafe { AnyElement::from_datum(j as pg_sys::Datum, false, pg_sys::INT4OID) };
+                let value = unsafe {
+                    AnyElement::from_polymorphic_datum(pgx::Datum::from(j), false, pg_sys::INT4OID)
+                };
                 state = super::freq_agg_trans(state, freq, value, fcinfo).unwrap();
             }
         }
@@ -1471,8 +1490,8 @@ mod tests {
 
         let bytes = unsafe {
             std::slice::from_raw_parts(
-                vardata_any(first.0 as *const pg_sys::varlena) as *const u8,
-                varsize_any_exhdr(first.0 as *const pg_sys::varlena),
+                vardata_any(first.0.cast_mut_ptr()) as *const u8,
+                varsize_any_exhdr(first.0.cast_mut_ptr()),
             )
         };
         let expected = [
@@ -1520,21 +1539,22 @@ mod tests {
         for i in (1..=10).rev() {
             // reverse here introduces less error in the aggregate
             for j in i..=20 {
-                let value =
-                    unsafe { AnyElement::from_datum(j as pg_sys::Datum, false, pg_sys::INT4OID) };
+                let value = unsafe {
+                    AnyElement::from_polymorphic_datum(pgx::Datum::from(j), false, pg_sys::INT4OID)
+                };
                 state = super::freq_agg_trans(state, freq, value, fcinfo).unwrap();
             }
         }
 
         let second = super::space_saving_serialize(state);
 
-        let bytes = unsafe {
+        let bytes: &[u8] = unsafe {
             std::slice::from_raw_parts(
-                vardata_any(second.0 as *const pg_sys::varlena) as *const u8,
-                varsize_any_exhdr(second.0 as *const pg_sys::varlena),
+                vardata_any(second.0.cast_mut_ptr()) as *const u8,
+                varsize_any_exhdr(second.0.cast_mut_ptr()),
             )
         };
-        let expected = [
+        let expected: [u8; 513] = [
             1, 1, // versions
             22, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence
             155, 0, 0, 0, 0, 0, 0, 0, // elements seen
@@ -1598,11 +1618,11 @@ mod tests {
 
         let bytes = unsafe {
             std::slice::from_raw_parts(
-                vardata_any(combined.0 as *const pg_sys::varlena) as *const u8,
-                varsize_any_exhdr(combined.0 as *const pg_sys::varlena),
+                vardata_any(combined.0.cast_mut_ptr()) as *const u8,
+                varsize_any_exhdr(combined.0.cast_mut_ptr()),
             )
         };
-        let expected = [
+        let expected: [u8; 513] = [
             1, 1, // versions
             22, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence
             210, 0, 0, 0, 0, 0, 0, 0, // elements seen
@@ -1854,14 +1874,16 @@ mod tests {
 
         for _ in 0..200 {
             let v = rand100.sample(&mut rng);
-            let value =
-                unsafe { AnyElement::from_datum(v as pg_sys::Datum, false, pg_sys::INT4OID) };
+            let value = unsafe {
+                AnyElement::from_polymorphic_datum(pgx::Datum::from(v), false, pg_sys::INT4OID)
+            };
             state = super::freq_agg_trans(state, freq, value, fcinfo).unwrap();
             counts[v] += 1;
         }
 
         let state = space_saving_final(state, fcinfo).unwrap();
-        let vals: std::collections::HashSet<usize> = state.datums.iter().collect();
+        let vals: std::collections::HashSet<usize> =
+            state.datums.iter().map(|datum| datum.value()).collect();
 
         for (val, &count) in counts.iter().enumerate() {
             if count >= 3 {
@@ -1896,8 +1918,9 @@ mod tests {
             if v == usize::MAX {
                 continue; // These tail values can start to add up at low skew values
             }
-            let value =
-                unsafe { AnyElement::from_datum(v as pg_sys::Datum, false, pg_sys::INT4OID) };
+            let value = unsafe {
+                AnyElement::from_polymorphic_datum(pgx::Datum::from(v), false, pg_sys::INT4OID)
+            };
             state = super::topn_agg_with_skew_trans(state, n as i32, skew, value, fcinfo).unwrap();
             if v < 100 {
                 // anything greater than 100 will not be in the top values
@@ -1906,9 +1929,10 @@ mod tests {
         }
 
         let state = space_saving_final(state, fcinfo).unwrap();
-        let value = unsafe { AnyElement::from_datum(0, false, pg_sys::INT4OID) };
+        let value =
+            unsafe { AnyElement::from_polymorphic_datum(Datum::from(0), false, pg_sys::INT4OID) };
         let t: Vec<AnyElement> = default_topn(state, value.unwrap()).collect();
-        let agg_topn: Vec<usize> = t.iter().map(|x| x.datum()).collect();
+        let agg_topn: Vec<usize> = t.iter().map(|x| x.datum().value()).collect();
 
         let mut temp: Vec<(usize, &usize)> = counts.iter().enumerate().collect();
         temp.sort_by(|(_, cnt1), (_, cnt2)| cnt2.cmp(cnt1)); // descending order by count

@@ -1,9 +1,8 @@
 #![allow(clippy::identity_op)] // clippy gets confused by pg_type! enums
 
-use pgx::*;
+use pgx::{iter::TableIterator, *};
 
 use crate::{
-    accessors::AccessorUnnest,
     aggregate_utils::in_aggregate_context,
     build,
     palloc::{Inner, Internal, InternalAsValue, ToInternal},
@@ -106,22 +105,24 @@ pub static TIMEVECTOR_OID: once_cell::sync::Lazy<pg_sys::Oid> =
     once_cell::sync::Lazy::new(Timevector_TSTZ_F64::type_oid);
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn unnest(
-    series: Timevector_TSTZ_F64<'_>,
-) -> impl std::iter::Iterator<Item = (name!(time, crate::raw::TimestampTz), name!(value, f64))> + '_
-{
-    series
-        .into_iter()
-        .map(|points| (points.ts.into(), points.val))
+pub fn unnest<'a, 'b>(
+    series: Timevector_TSTZ_F64<'a>,
+) -> TableIterator<'b, (name!(time, crate::raw::TimestampTz), name!(value, f64))> {
+    TableIterator::new(
+        series
+            .into_iter()
+            .map(|points| (points.ts.into(), points.val))
+            .collect::<Vec<_>>()
+            .into_iter(),
+    )
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_timevector_unnest<'a>(
     series: Timevector_TSTZ_F64<'a>,
-    _accessor: AccessorUnnest,
-) -> impl std::iter::Iterator<Item = (name!(time, crate::raw::TimestampTz), name!(value, f64))> + 'a
-{
+    _accessor: crate::accessors::AccessorUnnest<'a>,
+) -> TableIterator<'a, (name!(time, crate::raw::TimestampTz), name!(value, f64))> {
     unnest(series)
 }
 
@@ -199,9 +200,9 @@ pub fn timevector_trans_inner(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn timevector_tstz_f64_compound_trans(
+pub fn timevector_tstz_f64_compound_trans<'a>(
     state: Internal,
-    series: Option<Timevector_TSTZ_F64>,
+    series: Option<Timevector_TSTZ_F64<'a>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     inner_compound_trans(unsafe { state.to_inner() }, series, fcinfo).internal()

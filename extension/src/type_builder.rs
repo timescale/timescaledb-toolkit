@@ -128,7 +128,7 @@ macro_rules! pg_type_impl {
                             *self = self.0.flatten();
                             self.cached_datum_or_flatten()
                         },
-                        FromInput(bytes) | Flattened(bytes) => bytes.as_ptr() as _,
+                        FromInput(bytes) | Flattened(bytes) => pgx::Datum::from(bytes.as_ptr()),
                     }
                 }
             }
@@ -177,7 +177,7 @@ macro_rules! pg_type_impl {
             }
 
             impl<$lifetemplate> pgx::FromDatum for $name<$lifetemplate> {
-                unsafe fn from_datum(datum: pgx::pg_sys::Datum, is_null: bool, _: pg_sys::Oid) -> Option<Self>
+                unsafe fn from_polymorphic_datum(datum: pgx::pg_sys::Datum, is_null: bool, _: pg_sys::Oid) -> Option<Self>
                 where
                     Self: Sized,
                 {
@@ -186,7 +186,7 @@ macro_rules! pg_type_impl {
                         return None;
                     }
 
-                    let mut ptr = pg_sys::pg_detoast_datum_packed(datum as *mut pg_sys::varlena);
+                    let mut ptr = pg_sys::pg_detoast_datum_packed(datum.cast_mut_ptr());
                     //TODO is there a better way to do this?
                     if pgx::varatt_is_1b(ptr) {
                         ptr = pg_sys::pg_detoast_datum_copy(ptr);
@@ -206,8 +206,8 @@ macro_rules! pg_type_impl {
                 fn into_datum(self) -> Option<pgx::pg_sys::Datum> {
                     use $crate::type_builder::CachedDatum::*;
                     let datum = match self.1 {
-                        Flattened(bytes) => bytes.as_ptr() as pgx::pg_sys::Datum,
-                        FromInput(..) | None => self.0.to_pg_bytes().as_ptr() as pgx::pg_sys::Datum,
+                        Flattened(bytes) => pgx::Datum::from(bytes.as_ptr()),
+                        FromInput(..) | None => pgx::Datum::from(self.0.to_pg_bytes().as_ptr()),
                     };
                     Some(datum)
                 }
@@ -362,7 +362,7 @@ macro_rules! do_serialize {
                 let len = writer.position().try_into().expect("serialized size too large");
                 ::pgx::set_varsize(writer.get_mut().as_mut_ptr() as *mut _, len);
             }
-            $crate::raw::bytea::from(writer.into_inner().as_mut_ptr() as pg_sys::Datum)
+            $crate::raw::bytea::from(pgx::Datum::from(writer.into_inner().as_mut_ptr()))
         }
     };
 }
@@ -374,7 +374,7 @@ macro_rules! do_deserialize {
         let state: $t = unsafe {
             let input: $crate::raw::bytea = $bytes;
             let input: pgx::pg_sys::Datum = input.into();
-            let detoasted = pg_sys::pg_detoast_datum_packed(input as *mut _);
+            let detoasted = pg_sys::pg_detoast_datum_packed(input.cast_mut_ptr());
             let len = pgx::varsize_any_exhdr(detoasted);
             let data = pgx::vardata_any(detoasted);
             let bytes = std::slice::from_raw_parts(data as *mut u8, len);

@@ -112,9 +112,9 @@ pub mod toolkit_experimental {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline(
-    timevector: Timevector_TSTZ_F64,
-    pipeline: toolkit_experimental::UnstableTimevectorPipeline,
+pub fn arrow_run_pipeline<'a>(
+    timevector: Timevector_TSTZ_F64<'a>,
+    pipeline: toolkit_experimental::UnstableTimevectorPipeline<'a>,
 ) -> Timevector_TSTZ_F64<'static> {
     run_pipeline_elements(timevector, pipeline.elements.iter()).in_current_context()
 }
@@ -166,7 +166,8 @@ pub fn arrow_add_unstable_element<'p>(
 )]
 pub unsafe fn pipeline_support(input: Internal) -> Internal {
     pipeline_support_helper(input, |old_pipeline, new_element| {
-        let new_element = UnstableTimevectorPipeline::from_datum(new_element, false, 0).unwrap();
+        let new_element =
+            UnstableTimevectorPipeline::from_polymorphic_datum(new_element, false, 0).unwrap();
         arrow_add_unstable_element(old_pipeline, new_element)
             .into_datum()
             .unwrap()
@@ -180,7 +181,7 @@ pub(crate) unsafe fn pipeline_support_helper(
     use std::mem::{size_of, MaybeUninit};
 
     let input = input.unwrap().unwrap();
-    let input: *mut pg_sys::Node = input as _;
+    let input: *mut pg_sys::Node = input.cast_mut_ptr();
     if !pgx::is_a(input, pg_sys::NodeTag_T_SupportRequestSimplify) {
         return no_change();
     }
@@ -252,7 +253,8 @@ pub(crate) unsafe fn pipeline_support_helper(
     let new_element_const: *mut pg_sys::Const = arg2.cast();
 
     let old_pipeline =
-        UnstableTimevectorPipeline::from_datum((*old_const).constvalue, false, 0).unwrap();
+        UnstableTimevectorPipeline::from_polymorphic_datum((*old_const).constvalue, false, 0)
+            .unwrap();
     let new_pipeline = make_new_pipeline(old_pipeline, (*new_element_const).constvalue);
 
     let new_const = pg_sys::palloc(size_of::<pg_sys::Const>()).cast();
@@ -266,13 +268,13 @@ pub(crate) unsafe fn pipeline_support_helper(
     new_executor_args.push(new_const.cast());
     (*new_executor).args = new_executor_args.into_pg();
 
-    Internal::from(Some(new_executor as pg_sys::Datum))
+    Internal::from(Some(pgx::Datum::from(new_executor)))
 }
 
 // support functions are spec'd as returning NULL pointer if no simplification
 // can be made
 fn no_change() -> pgx::Internal {
-    Internal::from(Some(std::ptr::null_mut::<pg_sys::Expr>() as pg_sys::Datum))
+    Internal::from(Some(pgx::Datum::from(std::ptr::null_mut::<pg_sys::Expr>())))
 }
 
 // using this instead of pg_operator since the latter doesn't support schemas yet

@@ -355,25 +355,31 @@ extension_sql!(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_tdigest_approx_percentile(sketch: TDigest, accessor: AccessorApproxPercentile) -> f64 {
+pub fn arrow_tdigest_approx_percentile<'a>(
+    sketch: TDigest<'a>,
+    accessor: AccessorApproxPercentile<'a>,
+) -> f64 {
     tdigest_quantile(accessor.percentile, sketch)
 }
 
 // Approximate the value at the given quantile (0.0-1.0)
 #[pg_extern(immutable, parallel_safe, name = "approx_percentile")]
-pub fn tdigest_quantile(quantile: f64, digest: TDigest) -> f64 {
+pub fn tdigest_quantile<'a>(quantile: f64, digest: TDigest<'a>) -> f64 {
     digest.to_internal_tdigest().estimate_quantile(quantile)
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_tdigest_approx_rank(sketch: TDigest, accessor: AccessorApproxPercentileRank) -> f64 {
+pub fn arrow_tdigest_approx_rank<'a>(
+    sketch: TDigest<'a>,
+    accessor: AccessorApproxPercentileRank<'a>,
+) -> f64 {
     tdigest_quantile_at_value(accessor.value, sketch)
 }
 
 // Approximate the quantile at the given value
 #[pg_extern(immutable, parallel_safe, name = "approx_percentile_rank")]
-pub fn tdigest_quantile_at_value(value: f64, digest: TDigest) -> f64 {
+pub fn tdigest_quantile_at_value<'a>(value: f64, digest: TDigest<'a>) -> f64 {
     digest
         .to_internal_tdigest()
         .estimate_quantile_at_value(value)
@@ -381,50 +387,50 @@ pub fn tdigest_quantile_at_value(value: f64, digest: TDigest) -> f64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_tdigest_num_vals(sketch: TDigest, _accessor: AccessorNumVals) -> f64 {
+pub fn arrow_tdigest_num_vals<'a>(sketch: TDigest<'a>, _accessor: AccessorNumVals<'a>) -> f64 {
     tdigest_count(sketch)
 }
 
 // Number of elements from which the digest was built.
 #[pg_extern(immutable, parallel_safe, name = "num_vals")]
-pub fn tdigest_count(digest: TDigest) -> f64 {
+pub fn tdigest_count<'a>(digest: TDigest<'a>) -> f64 {
     digest.count as f64
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_tdigest_min(sketch: TDigest, _accessor: AccessorMinVal) -> f64 {
+pub fn arrow_tdigest_min<'a>(sketch: TDigest<'a>, _accessor: AccessorMinVal<'a>) -> f64 {
     tdigest_min(sketch)
 }
 
 // Minimum value entered in the digest.
 #[pg_extern(immutable, parallel_safe, name = "min_val")]
-pub fn tdigest_min(digest: TDigest) -> f64 {
+pub fn tdigest_min<'a>(digest: TDigest<'a>) -> f64 {
     digest.min
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_tdigest_max(sketch: TDigest, _accessor: AccessorMaxVal) -> f64 {
+pub fn arrow_tdigest_max<'a>(sketch: TDigest<'a>, _accessor: AccessorMaxVal<'a>) -> f64 {
     tdigest_max(sketch)
 }
 
 // Maximum value entered in the digest.
 #[pg_extern(immutable, parallel_safe, name = "max_val")]
-pub fn tdigest_max(digest: TDigest) -> f64 {
+pub fn tdigest_max<'a>(digest: TDigest<'a>) -> f64 {
     digest.max
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_tdigest_mean(sketch: TDigest, _accessor: AccessorMean) -> f64 {
+pub fn arrow_tdigest_mean<'a>(sketch: TDigest<'a>, _accessor: AccessorMean<'a>) -> f64 {
     tdigest_mean(sketch)
 }
 
 // Average of all the values entered in the digest.
 // Note that this is not an approximation, though there may be loss of precision.
 #[pg_extern(immutable, parallel_safe, name = "mean")]
-pub fn tdigest_mean(digest: TDigest) -> f64 {
+pub fn tdigest_mean<'a>(digest: TDigest<'a>) -> f64 {
     if digest.count > 0 {
         digest.sum / digest.count as f64
     } else {
@@ -636,7 +642,7 @@ mod tests {
 
             let mut control = state.unwrap();
             let buffer = tdigest_serialize(Inner::from(control.clone()).internal().unwrap());
-            let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
+            let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0.cast_mut_ptr());
 
             let expected = [
                 1, 1, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 69, 192, 1, 0, 0, 0, 0, 0, 0, 0,
@@ -649,8 +655,7 @@ mod tests {
             assert_eq!(buffer, expected);
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
-            let new_state =
-                tdigest_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
+            let new_state = tdigest_deserialize_inner(bytea(pgx::Datum::from(expected.as_ptr())));
 
             control.digest(); // Serialized form is always digested
             assert_eq!(&*new_state, &*control);

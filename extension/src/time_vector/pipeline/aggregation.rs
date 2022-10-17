@@ -103,9 +103,9 @@ pub mod toolkit_experimental {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline_then_stats_agg(
-    mut timevector: Timevector_TSTZ_F64,
-    pipeline: toolkit_experimental::PipelineThenStatsAgg,
+pub fn arrow_run_pipeline_then_stats_agg<'a>(
+    mut timevector: Timevector_TSTZ_F64<'a>,
+    pipeline: toolkit_experimental::PipelineThenStatsAgg<'a>,
 ) -> StatsSummary1D<'static> {
     if timevector.has_nulls() {
         panic!("Unable to compute stats aggregate over timevector containing nulls");
@@ -163,7 +163,8 @@ pub fn pipeline_stats_agg() -> toolkit_experimental::PipelineThenStatsAgg<'stati
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_stats_agg_support(input: Internal) -> Internal {
     pipeline_support_helper(input, |old_pipeline, new_element| {
-        let new_element = PipelineThenStatsAgg::from_datum(new_element, false, 0).unwrap();
+        let new_element =
+            PipelineThenStatsAgg::from_polymorphic_datum(new_element, false, 0).unwrap();
         finalize_with_stats_agg(old_pipeline, new_element)
             .into_datum()
             .unwrap()
@@ -187,7 +188,9 @@ ALTER FUNCTION "arrow_run_pipeline_then_stats_agg" SUPPORT toolkit_experimental.
     name = "sum_cast",
     schema = "toolkit_experimental"
 )]
-pub fn sum_pipeline_element(accessor: AccessorSum) -> toolkit_experimental::PipelineThenSum {
+pub fn sum_pipeline_element<'a>(
+    accessor: AccessorSum<'a>,
+) -> toolkit_experimental::PipelineThenSum {
     let _ = accessor;
     build! {
         PipelineThenSum {
@@ -209,9 +212,9 @@ extension_sql!(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_pipeline_then_sum(
-    timevector: Timevector_TSTZ_F64,
-    pipeline: toolkit_experimental::PipelineThenSum,
+pub fn arrow_pipeline_then_sum<'a>(
+    timevector: Timevector_TSTZ_F64<'a>,
+    pipeline: toolkit_experimental::PipelineThenSum<'a>,
 ) -> Option<f64> {
     let pipeline = pipeline.0;
     let pipeline = build! {
@@ -255,7 +258,7 @@ pub fn finalize_with_sum<'e>(
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_sum_support(input: Internal) -> Internal {
     pipeline_support_helper(input, |old_pipeline, new_element| {
-        let new_element = PipelineThenSum::from_datum(new_element, false, 0).unwrap();
+        let new_element = PipelineThenSum::from_polymorphic_datum(new_element, false, 0).unwrap();
         finalize_with_sum(old_pipeline, new_element)
             .into_datum()
             .unwrap()
@@ -271,8 +274,8 @@ ALTER FUNCTION "arrow_pipeline_then_sum" SUPPORT toolkit_experimental.pipeline_s
 );
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn average_pipeline_element(
-    accessor: AccessorAverage,
+pub fn average_pipeline_element<'a>(
+    accessor: AccessorAverage<'a>,
 ) -> toolkit_experimental::PipelineThenAverage {
     let _ = accessor;
     build! {
@@ -299,9 +302,9 @@ extension_sql!(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_pipeline_then_average(
-    timevector: Timevector_TSTZ_F64,
-    pipeline: toolkit_experimental::PipelineThenAverage,
+pub fn arrow_pipeline_then_average<'a>(
+    timevector: Timevector_TSTZ_F64<'a>,
+    pipeline: toolkit_experimental::PipelineThenAverage<'a>,
 ) -> Option<f64> {
     let pipeline = pipeline.0;
     let pipeline = build! {
@@ -345,7 +348,8 @@ pub fn finalize_with_average<'e>(
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_average_support(input: Internal) -> Internal {
     pipeline_support_helper(input, |old_pipeline, new_element| {
-        let new_element = PipelineThenAverage::from_datum(new_element, false, 0).unwrap();
+        let new_element =
+            PipelineThenAverage::from_polymorphic_datum(new_element, false, 0).unwrap();
         finalize_with_average(old_pipeline, new_element)
             .into_datum()
             .unwrap()
@@ -366,8 +370,8 @@ ALTER FUNCTION "arrow_pipeline_then_average" SUPPORT toolkit_experimental.pipeli
     name = "num_vals_cast",
     schema = "toolkit_experimental"
 )]
-pub fn num_vals_pipeline_element(
-    accessor: AccessorNumVals,
+pub fn num_vals_pipeline_element<'a>(
+    accessor: AccessorNumVals<'a>,
 ) -> toolkit_experimental::PipelineThenNumVals {
     let _ = accessor;
     build! {
@@ -394,9 +398,9 @@ extension_sql!(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_pipeline_then_num_vals(
-    timevector: Timevector_TSTZ_F64,
-    pipeline: toolkit_experimental::PipelineThenNumVals,
+pub fn arrow_pipeline_then_num_vals<'a>(
+    timevector: Timevector_TSTZ_F64<'a>,
+    pipeline: toolkit_experimental::PipelineThenNumVals<'a>,
 ) -> i64 {
     run_pipeline_elements(timevector, pipeline.elements.iter()).num_vals() as _
 }
@@ -432,7 +436,8 @@ pub fn finalize_with_num_vals<'e>(
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_num_vals_support(input: Internal) -> Internal {
     pipeline_support_helper(input, |old_pipeline, new_element| {
-        let new_element = PipelineThenNumVals::from_datum(new_element, false, 0).unwrap();
+        let new_element =
+            PipelineThenNumVals::from_polymorphic_datum(new_element, false, 0).unwrap();
         finalize_with_num_vals(old_pipeline, new_element)
             .into_datum()
             .unwrap()
@@ -450,9 +455,9 @@ ALTER FUNCTION "arrow_pipeline_then_num_vals" SUPPORT toolkit_experimental.pipel
 // TODO support gauge
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline_then_counter_agg(
-    mut timevector: Timevector_TSTZ_F64,
-    pipeline: toolkit_experimental::PipelineThenCounterAgg,
+pub fn arrow_run_pipeline_then_counter_agg<'a>(
+    mut timevector: Timevector_TSTZ_F64<'a>,
+    pipeline: toolkit_experimental::PipelineThenCounterAgg<'a>,
 ) -> Option<CounterSummary<'static>> {
     timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
     if timevector.num_points() == 0 {
@@ -515,7 +520,8 @@ pub fn pipeline_counter_agg() -> toolkit_experimental::PipelineThenCounterAgg<'s
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_counter_agg_support(input: Internal) -> Internal {
     pipeline_support_helper(input, |old_pipeline, new_element| {
-        let new_element = PipelineThenCounterAgg::from_datum(new_element, false, 0).unwrap();
+        let new_element =
+            PipelineThenCounterAgg::from_polymorphic_datum(new_element, false, 0).unwrap();
         finalize_with_counter_agg(old_pipeline, new_element)
             .into_datum()
             .unwrap()
@@ -535,9 +541,9 @@ ALTER FUNCTION "arrow_run_pipeline_then_counter_agg" SUPPORT toolkit_experimenta
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline_then_hyperloglog(
-    mut timevector: Timevector_TSTZ_F64,
-    pipeline: toolkit_experimental::PipelineThenHyperLogLog,
+pub fn arrow_run_pipeline_then_hyperloglog<'a>(
+    mut timevector: Timevector_TSTZ_F64<'a>,
+    pipeline: toolkit_experimental::PipelineThenHyperLogLog<'a>,
 ) -> HyperLogLog<'static> {
     timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
     HyperLogLog::build_from(
@@ -598,7 +604,8 @@ pub fn pipeline_hyperloglog(size: i32) -> toolkit_experimental::PipelineThenHype
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_hyperloglog_support(input: Internal) -> Internal {
     pipeline_support_helper(input, |old_pipeline, new_element| {
-        let new_element = PipelineThenHyperLogLog::from_datum(new_element, false, 0).unwrap();
+        let new_element =
+            PipelineThenHyperLogLog::from_polymorphic_datum(new_element, false, 0).unwrap();
         finalize_with_hyperloglog(old_pipeline, new_element)
             .into_datum()
             .unwrap()
@@ -618,9 +625,9 @@ ALTER FUNCTION "arrow_run_pipeline_then_hyperloglog" SUPPORT toolkit_experimenta
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_run_pipeline_then_percentile_agg(
-    mut timevector: Timevector_TSTZ_F64,
-    pipeline: toolkit_experimental::PipelineThenPercentileAgg,
+pub fn arrow_run_pipeline_then_percentile_agg<'a>(
+    mut timevector: Timevector_TSTZ_F64<'a>,
+    pipeline: toolkit_experimental::PipelineThenPercentileAgg<'a>,
 ) -> UddSketch<'static> {
     timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
     UddSketch::from_iter(timevector.into_iter().map(|p| p.val))
@@ -671,7 +678,8 @@ pub fn pipeline_percentile_agg() -> toolkit_experimental::PipelineThenPercentile
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_percentile_agg_support(input: Internal) -> Internal {
     pipeline_support_helper(input, |old_pipeline, new_element| {
-        let new_element = PipelineThenPercentileAgg::from_datum(new_element, false, 0).unwrap();
+        let new_element =
+            PipelineThenPercentileAgg::from_polymorphic_datum(new_element, false, 0).unwrap();
         finalize_with_percentile_agg(old_pipeline, new_element)
             .into_datum()
             .unwrap()

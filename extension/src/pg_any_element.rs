@@ -65,7 +65,7 @@ impl PartialEq for PgAnyElement {
                     value: other.datum,
                     isnull: false,
                 };
-                (*(*info).flinfo).fn_addr.unwrap()(info) != 0
+                (*(*info).flinfo).fn_addr.unwrap()(info) != Datum::from(0)
             }
         }
     }
@@ -75,7 +75,7 @@ impl Eq for PgAnyElement {}
 
 impl Hash for PgAnyElement {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        self.datum.hash(state);
+        self.datum.value().hash(state);
     }
 }
 

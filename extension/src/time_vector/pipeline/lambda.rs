@@ -1,6 +1,9 @@
 use std::borrow::Cow;
 
-use pgx::*;
+use pgx::{
+    iter::{SetOfIterator, TableIterator},
+    *,
+};
 
 use super::*;
 
@@ -70,8 +73,8 @@ impl<'a> LambdaData<'a> {
 //
 
 #[pg_extern(stable, parallel_safe, schema = "toolkit_experimental")]
-pub fn bool_lambda(
-    lambda: toolkit_experimental::Lambda,
+pub fn bool_lambda<'a>(
+    lambda: toolkit_experimental::Lambda<'a>,
     time: crate::raw::TimestampTz,
     value: f64,
 ) -> bool {
@@ -87,8 +90,8 @@ pub fn bool_lambda(
 }
 
 #[pg_extern(stable, parallel_safe, schema = "toolkit_experimental")]
-pub fn f64_lambda(
-    lambda: toolkit_experimental::Lambda,
+pub fn f64_lambda<'a>(
+    lambda: toolkit_experimental::Lambda<'a>,
     time: crate::raw::TimestampTz,
     value: f64,
 ) -> f64 {
@@ -101,8 +104,8 @@ pub fn f64_lambda(
 }
 
 #[pg_extern(stable, parallel_safe, schema = "toolkit_experimental")]
-pub fn ttz_lambda(
-    lambda: toolkit_experimental::Lambda,
+pub fn ttz_lambda<'a>(
+    lambda: toolkit_experimental::Lambda<'a>,
     time: crate::raw::TimestampTz,
     value: f64,
 ) -> crate::raw::TimestampTz {
@@ -116,8 +119,8 @@ pub fn ttz_lambda(
 
 use crate::raw::Interval;
 #[pg_extern(stable, parallel_safe, schema = "toolkit_experimental")]
-pub fn interval_lambda(
-    lambda: toolkit_experimental::Lambda,
+pub fn interval_lambda<'a>(
+    lambda: toolkit_experimental::Lambda<'a>,
     time: crate::raw::TimestampTz,
     value: f64,
 ) -> Interval {
@@ -126,15 +129,15 @@ pub fn interval_lambda(
         panic!("invalid return type, must return a INTERVAL")
     }
     let mut executor = ExpressionExecutor::new(&expression);
-    (executor.exec(value, time.into()).interval() as pg_sys::Datum).into()
+    pgx::Datum::from(executor.exec(value, time.into()).interval()).into()
 }
 
 #[pg_extern(stable, parallel_safe, schema = "toolkit_experimental")]
-pub fn point_lambda(
-    lambda: toolkit_experimental::Lambda,
+pub fn point_lambda<'a>(
+    lambda: toolkit_experimental::Lambda<'a>,
     time: crate::raw::TimestampTz,
     value: f64,
-) -> impl std::iter::Iterator<Item = (name!(time, crate::raw::TimestampTz), name!(value, f64))> {
+) -> TableIterator<'static, (name!(time, crate::raw::TimestampTz), name!(value, f64))> {
     let expression = lambda.parse();
     if !expression.expr.ty_is_ts_point() {
         panic!("invalid return type, must return a (TimestampTZ, DOUBLE PRECISION)")
@@ -145,15 +148,15 @@ pub fn point_lambda(
         Value::Tuple(columns) => columns,
         _ => unreachable!(),
     };
-    Some((columns[0].time().into(), columns[1].float())).into_iter()
+    TableIterator::new(Some((columns[0].time().into(), columns[1].float())).into_iter())
 }
 
 #[pg_extern(stable, parallel_safe, schema = "toolkit_experimental")]
-pub fn trace_lambda(
-    lambda: toolkit_experimental::Lambda,
+pub fn trace_lambda<'a>(
+    lambda: toolkit_experimental::Lambda<'a>,
     time: crate::raw::TimestampTz,
     value: f64,
-) -> impl std::iter::Iterator<Item = String> {
+) -> SetOfIterator<'static, String> {
     let expression = lambda.parse();
 
     let mut trace: Vec<_> = vec![];
@@ -164,9 +167,13 @@ pub fn trace_lambda(
     let _ = executor.exec(value, time.into());
     let col1_size = trace.iter().map(|(e, _)| e.len()).max().unwrap_or(0);
 
-    trace
-        .into_iter()
-        .map(move |(e, v)| format!("{:>width$}: {:?}", e, v, width = col1_size))
+    SetOfIterator::new(
+        trace
+            .into_iter()
+            .map(move |(e, v)| format!("{:>width$}: {:?}", e, v, width = col1_size))
+            .collect::<Vec<_>>()
+            .into_iter(),
+    )
 }
 
 //
@@ -371,9 +378,10 @@ impl PartialOrd for Value {
                 let res = pg_sys::DirectFunctionCall2Coll(
                     Some(interval_cmp),
                     pg_sys::InvalidOid,
-                    *l0 as _,
-                    *r0 as _,
-                ) as i32;
+                    pgx::Datum::from(*l0),
+                    pgx::Datum::from(*r0),
+                )
+                .value() as i32;
                 res.cmp(&0).into()
             },
             (_, _) => None,
@@ -401,10 +409,10 @@ impl PartialEq for Value {
                 let res = pg_sys::DirectFunctionCall2Coll(
                     Some(interval_eq),
                     pg_sys::InvalidOid,
-                    *l0 as _,
-                    *r0 as _,
+                    pgx::Datum::from(*l0),
+                    pgx::Datum::from(*r0),
                 );
-                res != 0
+                res.value() != 0
             },
             (_, _) => false,
         }

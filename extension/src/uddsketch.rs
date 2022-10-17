@@ -507,9 +507,9 @@ extension_sql!(
 );
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn uddsketch_compound_trans(
+pub fn uddsketch_compound_trans<'a>(
     state: Internal,
-    value: Option<UddSketch>,
+    value: Option<UddSketch<'a>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     unsafe { uddsketch_compound_trans_inner(state.to_inner(), value, fcinfo).internal() }
@@ -563,16 +563,16 @@ extension_sql!(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_uddsketch_approx_percentile(
-    sketch: UddSketch,
-    accessor: AccessorApproxPercentile,
+pub fn arrow_uddsketch_approx_percentile<'a>(
+    sketch: UddSketch<'a>,
+    accessor: AccessorApproxPercentile<'a>,
 ) -> f64 {
     uddsketch_approx_percentile(accessor.percentile, sketch)
 }
 
 // Approximate the value at the given approx_percentile (0.0-1.0)
 #[pg_extern(immutable, parallel_safe, name = "approx_percentile")]
-pub fn uddsketch_approx_percentile(percentile: f64, sketch: UddSketch) -> f64 {
+pub fn uddsketch_approx_percentile<'a>(percentile: f64, sketch: UddSketch<'a>) -> f64 {
     uddsketch::estimate_quantile(
         percentile,
         sketch.alpha,
@@ -584,16 +584,16 @@ pub fn uddsketch_approx_percentile(percentile: f64, sketch: UddSketch) -> f64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_uddsketch_approx_rank(
-    sketch: UddSketch,
-    accessor: AccessorApproxPercentileRank,
+pub fn arrow_uddsketch_approx_rank<'a>(
+    sketch: UddSketch<'a>,
+    accessor: AccessorApproxPercentileRank<'a>,
 ) -> f64 {
     uddsketch_approx_percentile_rank(accessor.value, sketch)
 }
 
 // Approximate the approx_percentile at the given value
 #[pg_extern(immutable, parallel_safe, name = "approx_percentile_rank")]
-pub fn uddsketch_approx_percentile_rank(value: f64, sketch: UddSketch) -> f64 {
+pub fn uddsketch_approx_percentile_rank<'a>(value: f64, sketch: UddSketch<'a>) -> f64 {
     uddsketch::estimate_quantile_at_value(
         value,
         uddsketch::gamma(sketch.alpha),
@@ -604,26 +604,26 @@ pub fn uddsketch_approx_percentile_rank(value: f64, sketch: UddSketch) -> f64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_uddsketch_num_vals(sketch: UddSketch, _accessor: AccessorNumVals) -> f64 {
+pub fn arrow_uddsketch_num_vals<'a>(sketch: UddSketch<'a>, _accessor: AccessorNumVals<'a>) -> f64 {
     uddsketch_num_vals(sketch)
 }
 
 // Number of elements from which the sketch was built.
 #[pg_extern(immutable, parallel_safe, name = "num_vals")]
-pub fn uddsketch_num_vals(sketch: UddSketch) -> f64 {
+pub fn uddsketch_num_vals<'a>(sketch: UddSketch<'a>) -> f64 {
     sketch.count as f64
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_uddsketch_mean(sketch: UddSketch, _accessor: AccessorMean) -> f64 {
+pub fn arrow_uddsketch_mean<'a>(sketch: UddSketch<'a>, _accessor: AccessorMean<'a>) -> f64 {
     uddsketch_mean(sketch)
 }
 
 // Average of all the values entered in the sketch.
 // Note that this is not an approximation, though there may be loss of precision.
 #[pg_extern(immutable, parallel_safe, name = "mean")]
-pub fn uddsketch_mean(sketch: UddSketch) -> f64 {
+pub fn uddsketch_mean<'a>(sketch: UddSketch<'a>) -> f64 {
     if sketch.count > 0 {
         sketch.sum / sketch.count as f64
     } else {
@@ -633,13 +633,13 @@ pub fn uddsketch_mean(sketch: UddSketch) -> f64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_uddsketch_error(sketch: UddSketch, _accessor: AccessorError) -> f64 {
+pub fn arrow_uddsketch_error<'a>(sketch: UddSketch<'a>, _accessor: AccessorError<'a>) -> f64 {
     uddsketch_error(sketch)
 }
 
 // The maximum error (relative to the true value) for any approx_percentile estimate.
 #[pg_extern(immutable, parallel_safe, name = "error")]
-pub fn uddsketch_error(sketch: UddSketch) -> f64 {
+pub fn uddsketch_error<'a>(sketch: UddSketch<'a>) -> f64 {
     sketch.alpha
 }
 
@@ -1009,7 +1009,7 @@ mod tests {
 
             let control = state.unwrap();
             let buffer = uddsketch_serialize(Inner::from(control.clone()).internal().unwrap());
-            let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0 as *mut pg_sys::varlena);
+            let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0.cast_mut_ptr());
 
             let expected = [
                 1, 1, 123, 20, 174, 71, 225, 122, 116, 63, 100, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5,
@@ -1020,8 +1020,7 @@ mod tests {
             assert_eq!(buffer, expected);
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
-            let new_state =
-                uddsketch_deserialize_inner(bytea(&*expected as *const pg_sys::varlena as _));
+            let new_state = uddsketch_deserialize_inner(bytea(pgx::Datum::from(expected.as_ptr())));
             assert_eq!(&*new_state, &*control);
         }
     }

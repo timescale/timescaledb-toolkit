@@ -11,6 +11,7 @@ This change log should be updated as part of a PR if the work is worth noting (m
 
 #### Bug fixes
 - [#568](https://github.com/timescale/timescaledb-toolkit/pull/568): Allow `approx_count` accessor function to take NULL inputs.
+- [#574](https://github.com/timescale/timescaledb-toolkit/pull/574): Add default unit to interpolated_integral.
 
 #### Other notable changes
 - [#547](https://github.com/timescale/timescaledb-toolkit/pull/547): Update pgx to 0.5.0. This is necessary for adding Postgres 15 support coming soon.

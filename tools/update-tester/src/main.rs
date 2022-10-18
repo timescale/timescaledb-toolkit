@@ -187,18 +187,15 @@ fn main() {
                 .expect("missing cargo_pgx_old");
 
             let mut num_errors = 0;
-            let stdout = io::stdout();
-            let mut out = stdout.lock();
             let on_error = |test: parser::Test, error: testrunner::TestError| {
                 num_errors += 1;
-                let _ = writeln!(
-                    &mut out,
+                eprintln!(
                     "{} {}\n",
                     test.location.bold().blue(),
                     test.header.bold().dimmed()
                 );
-                let _ = writeln!(&mut out, "{}", error.annotate_position(&test.text));
-                let _ = writeln!(&mut out, "{}\n", error);
+                eprintln!("{}", error.annotate_position(&test.text));
+                eprintln!("{}\n", error);
             };
 
             let res = try_main(
@@ -216,9 +213,14 @@ fn main() {
                 process::exit(1);
             }
             if num_errors > 0 {
+                eprintln!(
+                    "{} {}\n",
+                    num_errors.to_string().bold().red(),
+                    "Tests Failed".bold().red()
+                );
                 process::exit(1)
             }
-            let _ = writeln!(&mut out, "{}\n", "Tests Passed".bold().green());
+            eprintln!("{}\n", "Tests Passed".bold().green());
         }
         Some(("create-test-objects", create_test_object_matches)) => {
             let connection_config = ConnectionConfig {
@@ -230,34 +232,31 @@ fn main() {
             };
 
             let mut num_errors = 0;
-            let stdout = io::stdout();
-            let mut out = stdout.lock();
             let on_error = |test: parser::Test, error: testrunner::TestError| {
                 num_errors += 1;
-                let _ = writeln!(
-                    &mut out,
+                eprintln!(
                     "{} {}\n",
                     test.location.bold().blue(),
                     test.header.bold().dimmed()
                 );
-                let _ = writeln!(&mut out, "{}", error.annotate_position(&test.text));
-                let _ = writeln!(&mut out, "{}\n", error);
+                eprintln!("{}", error.annotate_position(&test.text));
+                eprintln!("{}\n", error);
             };
-
             let res = try_create_objects(&connection_config, on_error);
             if let Err(err) = res {
                 eprintln!("{}", err);
                 process::exit(1);
             }
             if num_errors > 0 {
-                let _ = writeln!(&mut out, "{}\n", "Object Creation Failed".bold().red());
+                eprintln!(
+                    "{} {} {}\n",
+                    "Object Creation Failed With".bold().red(),
+                    num_errors.to_string().bold().red(),
+                    "Errors".bold().red()
+                );
                 process::exit(1)
             }
-            let _ = writeln!(
-                &mut out,
-                "{}\n",
-                "Objects Created Successfully".bold().green()
-            );
+            eprintln!("{}\n", "Objects Created Successfully".bold().green());
         }
         Some(("validate-test-objects", validate_test_object_matches)) => {
             let connection_config = ConnectionConfig {
@@ -267,19 +266,17 @@ fn main() {
                 password: validate_test_object_matches.value_of("PASSWORD"),
                 database: validate_test_object_matches.value_of("DB"),
             };
+
             let mut num_errors = 0;
-            let stdout = io::stdout();
-            let mut out = stdout.lock();
             let on_error = |test: parser::Test, error: testrunner::TestError| {
                 num_errors += 1;
-                let _ = writeln!(
-                    &mut out,
+                eprintln!(
                     "{} {}\n",
                     test.location.bold().blue(),
                     test.header.bold().dimmed()
                 );
-                let _ = writeln!(&mut out, "{}", error.annotate_position(&test.text));
-                let _ = writeln!(&mut out, "{}\n", error);
+                eprintln!("{}", error.annotate_position(&test.text));
+                eprintln!("{}\n", error);
             };
 
             let root_dir = ".";
@@ -289,15 +286,12 @@ fn main() {
                 process::exit(1);
             }
             if num_errors > 0 {
-                let _ = writeln!(&mut out, "{}\n", "Validation Failed".bold().red());
+                eprintln!("{} {}\n", num_errors, "Tests Failed".bold().red());
+                eprintln!("{}\n", "Validation Failed".bold().red());
                 process::exit(1)
             }
 
-            let _ = writeln!(
-                &mut out,
-                "{}\n",
-                "Validations Completed Successfully".bold().green()
-            );
+            eprintln!("{}\n", "Validations Completed Successfully".bold().green());
         }
         _ => unreachable!(), // if all subcommands are defined, anything else is unreachable
     }

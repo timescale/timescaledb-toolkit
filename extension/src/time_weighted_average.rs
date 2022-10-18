@@ -517,7 +517,7 @@ pub fn time_weighted_average_interpolated_integral<'a>(
     interval: crate::raw::Interval,
     prev: Option<TimeWeightSummary<'a>>,
     next: Option<TimeWeightSummary<'a>>,
-    unit: String,
+    unit: default!(String, "'second'"),
 ) -> Option<f64> {
     let target = interpolate(tws, start, interval, prev, next);
     time_weighted_average_integral(target, unit)
@@ -857,6 +857,24 @@ mod tests {
                 ) FROM (
                     SELECT bucket, time_weight('LOCF', time, value) as agg 
                     FROM test 
+                    GROUP BY bucket
+                ) s
+                ORDER BY bucket"#,
+                None,
+                None,
+            );
+            // verify that default value works
+            client.select(
+                r#"SELECT
+                toolkit_experimental.interpolated_integral(
+                    agg,
+                    bucket,
+                    '1 day'::interval,
+                    LAG(agg) OVER (ORDER BY bucket),
+                    LEAD(agg) OVER (ORDER BY bucket)
+                ) FROM (
+                    SELECT bucket, time_weight('LOCF', time, value) as agg
+                    FROM test
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,

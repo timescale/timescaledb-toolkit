@@ -14,10 +14,10 @@ This change log should be updated as part of a PR if the work is worth noting (m
 
 #### Other notable changes
 - [#547](https://github.com/timescale/timescaledb-toolkit/pull/547): Update pgx to 0.5.0. This is necessary for adding Postgres 15 support coming soon.
-- [#571](https://github.com/timescale/timescaledb-toolkit/pull/571): Update CI docker image for pgx 0.5.0
+- [#571](https://github.com/timescale/timescaledb-toolkit/pull/571): Update CI docker image for pgx 0.5.0.
 
 #### Shout-outs
-- @zyro for reporting null handling issue on count_min_sketch
+- @zyro for reporting null handling issue on count_min_sketch.
 
 **Full Changelog**: 
 

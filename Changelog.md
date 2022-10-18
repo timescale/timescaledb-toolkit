@@ -19,6 +19,8 @@ This change log should be updated as part of a PR if the work is something that'
 #### Shout-outs
 - @zyro for reporting null handling issue on count_min_sketch
 
+**Full Changelog**: 
+
 ## [1.11.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.11.0) (2022-09-21)
 
 #### New experimental features

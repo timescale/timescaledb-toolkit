@@ -1,13 +1,13 @@
 # Toolkit Changelog
 
-## Process for updating this change log (Proposal)
-This change log should be updated as part of a PR if the work is worth noting (most of them should be). If unsure, always add an entery here for any PR targeted for the next release. It's easier to remove than add an entry at final review time for the next release.
+## Process for updating this changelog
+This changelog should be updated as part of a PR if the work is worth noting (most of them should be). If unsure, always add an entry here for any PR targeted for the next release. It's easier to remove than add an entry at final review time for the next release.
 
 ## Next Release (Date TBD)
 
 #### New experimental features
 
-#### Features stabilized
+#### Stabilized features
 
 #### Bug fixes
 - [#568](https://github.com/timescale/timescaledb-toolkit/pull/568): Allow `approx_count` accessor function to take NULL inputs.
@@ -20,7 +20,7 @@ This change log should be updated as part of a PR if the work is worth noting (m
 #### Shout-outs
 - @zyro for reporting null handling issue on count_min_sketch.
 
-**Full Changelog**: 
+**Full Changelog**: <TODO>
 
 ## [1.11.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.11.0) (2022-09-21)
 

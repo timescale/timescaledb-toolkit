@@ -3,7 +3,7 @@
 # This script automates binary upgrade testing.
 
 # Sample run:
-# OS_NAME=ubuntu OS_VERSION=20.04 tools/testbin -version 1.11.0 -bindir .. -dbroot /tmp/db -pgport 28800 deb
+# OS_NAME=ubuntu OS_VERSION=20.04 tools/testbin -version 1.11.0 -bindir .. -pgversions '13 14' deb
 
 # A released toolkit lists the versions it is upgradeable from in
 # extension/timescaledb_toolkit.control .  This script processes those entries
@@ -32,6 +32,10 @@ set -ex
 MIN_DEB_ARM=1.10.1
 # We added 1: epoch at 1.7.0.
 MIN_DEB_EPOCH=1.7.0
+# TODO Unfortunate that pgx allows neither specifying nor querying the port it
+#   starts postgres on, so we duplicate that knowledge.  Watch out for
+#   that changing!
+PGX_PORT_BASE=28800
 # TODO Drop default and require -pgversions after existing usage updated.
 PG_VERSIONS='12 13 14'
 CONTROL=extension/timescaledb_toolkit.control
@@ -53,7 +57,7 @@ die() {
 
 usage() {
     print 'testbin check-control' >&2
-    die 'testbin [-n] -bindir DIR -dbroot DIR -pgport N -version VERSION ( ci | deb | rpm )'
+    die 'testbin [-n] -bindir DIR -version VERSION -pgversions "[V1] [V2]..." ( ci | deb | rpm )'
 }
 
 # Run this before each merge so the control file doesn't get out of sync with this script.
@@ -65,56 +69,26 @@ check_control() {
 }
 
 # Requires:
-# - PG_PORT_BASE
+# - PGX_PORT_BASE
 # - PG_VERSION
 # Sets:
-# - DB
 # - PG_PORT
 select_pg() {
-    PG_PORT=$(( $PG_PORT_BASE + $PG_VERSION ))
-    DB=$DB_ROOT/$PG_VERSION
+    PG_PORT=$(( $PGX_PORT_BASE + $PG_VERSION ))
 }
 
-# Start postgres and create a database.
+# Start postgres and run the first half (old toolkit) of the test.
 # Must select_pg first.
-# Sets:
-# - PG14PID (or PG13PID etc.; depends on value of PG_VERSION)
-start_postgres() {
-    $nop initdb "$DB"
-    $nop mkdir "$DB/lock"
-    $nop postgres -D "$DB" -k "$DB/lock" -p "$PG_PORT" & eval PG${PG_VERSION}PID=$!
-    for i in 1 2 3 4 5; do
-        if $nop psql -h 127.1 -p $PG_PORT postgres < /dev/null; then
-            $nop createdb -h 127.1 -p $PG_PORT
-            return
-        fi
-        echo $i...
-        sleep 1
-    done
-    die "failed to start postgres $PGVERSION"
-}
-
-# Stop postgres and create a database.
-# Use select_pg to set which one to stop.
-stop_postgres() {
-    eval pid=\$PG${PG_VERSION}PID
-    [ -n "$pid" ] && $nop kill $pid
-    for i in 1 2 3 4 5; do
-        $nop rm -rf "$DB" && return
-        echo "try $i..."
-        sleep 1
-    done
-    die "failed to start postgres $PGVERSION"
-}
-
 start_test() {
-    start_postgres
+    $nop cargo pgx start pg$PG_VERSION
     $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- create-test-objects -u $LOGNAME -h 127.1 -p $PG_PORT
 }
 
+# Run the second half (new toolkit) of the test and stop postgres.
+# Must select_pg first.
 finish_test() {
     $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- validate-test-objects -u $LOGNAME -h 127.1 -p $PG_PORT
-    stop_postgres
+    $nop cargo pgx stop pg$PG_VERSION
 }
 
 deb_init() {
@@ -129,11 +103,17 @@ deb_init() {
 
 # Requires:
 # - FROM_VERSION
-deb_start_test() {
+skip_from_version() {
     # We released 1.10.0-dev by accident.  We have to support upgrades
-    # from it (and we tested that at the time), but we pulled the deb, so
+    # from it (and we tested that at the time), but we pulled the binaries, so
     # we can't test it here.
-    [ $FROM_VERSION = 1.10.0-dev ] && return 1
+    [ $FROM_VERSION = 1.10.0-dev ] && return
+}
+
+# Requires:
+# - FROM_VERSION
+deb_start_test() {
+    skip_from_version && return 1
     cmp_version=`cmp_version $FROM_VERSION`
     [ "$ARCH" = arm64 ] && [ $cmp_version -lt $MIN_DEB_ARM ] && return 1
 
@@ -180,10 +160,9 @@ test_ci() {
 }
 
 test_rpm() {
-    ARCH=x86_64
-    # TODO Support arm64 RPM?  TimescaleDB RPMs are amd64-only at time of writing.
-    #ARCH=`rpm -E '%{_arch}'`
-    for from_version; do
+    ARCH=`rpm -E '%{_arch}'`
+    for FROM_VERSION; do
+        skip_from_version && continue
         for PG_VERSION in $PG_VERSIONS; do
             select_pg $PG_VERSION
             rpm=timescaledb-toolkit-postgresql-$PG_VERSION
@@ -192,14 +171,14 @@ test_rpm() {
             # the install command below does nothing.
             # So, uninstall if installed.
             rpm -q $rpm > /dev/null && $nop sudo rpm -e $rpm
-            $nop sudo yum install $rpm-$from_version
+            $nop sudo yum -q -y install $rpm-$FROM_VERSION
 
             PATH=/usr/pgsql-$PG_VERSION/bin:$PATH start_test
         done
         for PG_VERSION in $PG_VERSIONS; do
             select_pg $PG_VERSION
-            rpm=timescaledb-toolkit-postgresql-$PG_VERSION-$TOOLKIT_VERSION.$ARCH.rpm
-            $nop sudo rpm -i "$BINDIR/$rpm"
+            rpm=timescaledb-toolkit-postgresql-$PG_VERSION-$TOOLKIT_VERSION-0.el$OS_VERSION.$ARCH.rpm
+            $nop sudo rpm -U "$BINDIR/$rpm"
 
             finish_test
 
@@ -227,18 +206,13 @@ cleanup() {
     set +e
     for PG_VERSION in $PG_VERSIONS; do
         select_pg $PG_VERSION
-        stop_postgres
+        $nop cargo pgx stop pg$PG_VERSION
     done
-    $nop rmdir "$DB_ROOT"
 }
 
 run() {
     [ -n "$LOGNAME" ] || die 'LOGNAME environment variable must be set to the login name'
-    [ -n "$DB_ROOT" ] || die '-dbroot required'
-    [ -e "$DB_ROOT" ] && die "cowardly refusing to clobber $DB_ROOT"
-    [ -n "$PG_PORT_BASE" ] || die '-pgport required'
     [ -n "$PG_VERSIONS" ] || die '-pgversions required'
-
     # TODO Requiring -bindir and -version when not all methods need them is awkward but eh.
     [ -d "$BINDIR" ] || die '-bindir required'
     [ -n "$TOOLKIT_VERSION" ] || die '-version required'
@@ -248,7 +222,6 @@ run() {
     trap - 0
 
     echo DONE
-    $nop rmdir "$DB_ROOT"
 }
 
 while [ $# -gt 0 ]; do
@@ -264,13 +237,8 @@ while [ $# -gt 0 ]; do
             shift
             ;;
 
-        -dbroot)
-            DB_ROOT=$1
-            shift
-            ;;
-
-        -pgport)
-            PG_PORT_BASE=$1
+        -dbroot | -pgport)
+            # TODO remove flags
             shift
             ;;
 

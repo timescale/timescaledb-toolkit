@@ -60,7 +60,7 @@ EOF
 
         # Install cargo pgx
         # Keep synchronized with `cargo install --version N.N.N cargo-pgx` in Readme.md and Cargo.toml
-        cargo install cargo-pgx --version =0.5.0
+        cargo install cargo-pgx --version =0.5.4
 
         # Initialize new PostgreSQL instances and update the configuration
         # files so that they can use TimescaleDB that we installed above.

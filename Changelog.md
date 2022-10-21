@@ -32,7 +32,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 - [#513](https://github.com/timescale/timescaledb-toolkit/pull/513): Add `first_val`, `last_val`, `first_time` and `last_time` to `time_weight` and `counter_agg` to access the first and the last data points within the aggregate data structures.
 - [#527](https://github.com/timescale/timescaledb-toolkit/pull/527): Rename `{open, high, low, close}_at` to `{open, high, low, close}_time` to be consistent with newly added `first_time` and `last_time` accessor functions.
 
-#### Features stabilized
+#### Stabilized features
 - [#498](https://github.com/timescale/timescaledb-toolkit/pull/498): Stabilize `asap_smooth` aggregate.
 
 #### Bug fixes
@@ -58,3 +58,29 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 - @stevedrip for a very detailed bug report on hyperloglog++ and suggestions for fixing it.
 
 **Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.10.1...1.11.0
+
+## [1.10.1](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.10.1) (2022-08-18)
+
+#### New experimental features
+- [#490](https://github.com/timescale/timescaledb-toolkit/pull/490): Month normalization function `month_normalize` and the helper function `days_in_month`, useful for normalizing data to a fixed month length for more meaningful month-to-month comparison.
+- [#496](https://github.com/timescale/timescaledb-toolkit/pull/496): `OHLC` aggregate, and the associated `rollup` and accessor functions `open`, `high`, `low`, `close`, `{open, high, low, close}_at` mainly for trading data.
+
+#### Stabilized features
+- [#495](https://github.com/timescale/timescaledb-toolkit/pull/495): `LTTB` downsampling function.
+- [#491](https://github.com/timescale/timescaledb-toolkit/pull/491), [#488](https://github.com/timescale/timescaledb-toolkit/pull/488): The arrow operators (->) of the accessor functions for `stats_agg`, `percentile_agg`, `counter_agg`, `gauge_agg` and `hyperloglog`. As an example, `average` accessor can now be used with `stats_agg` like this,
+    ```SQL
+    select location, 
+        stats_agg(temperature) -> average() AS avg_temperature
+    from conditions 
+    group by location
+    ```
+
+#### Bug fixes
+- [#465](https://github.com/timescale/timescaledb-toolkit/pull/465): Off by one error in state_agg interpolate.
+
+#### Other notable changes
+- Fix an issue where the 1.9.0 release unintentionally identified the toolkit extension version as 1.10.0-dev in the postgresql control file.
+- [#467](https://github.com/timescale/timescaledb-toolkit/pull/467): Document supported platforms in Readme.
+- [#463](https://github.com/timescale/timescaledb-toolkit/pull/463): Use pg14 as an example for instructions in  instead of pg13. Add reference to deb and rpm packages.
+
+**Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.8.0...1.10.1

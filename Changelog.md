@@ -74,7 +74,6 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
     from conditions 
     group by location
     ```
-
 #### Bug fixes
 - [#465](https://github.com/timescale/timescaledb-toolkit/pull/465): Off by one error in state_agg interpolate.
 
@@ -84,3 +83,39 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 - [#463](https://github.com/timescale/timescaledb-toolkit/pull/463): Use pg14 as an example for instructions in  instead of pg13. Add reference to deb and rpm packages.
 
 **Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.8.0...1.10.1
+
+## [1.9.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.9.0) (2022-08-16)
+An incorrect version (1.10.0-dev) was used. Should not be used.
+
+## [1.8.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.8.0) (2022-07-05)
+
+#### New experimental features
+- [#454](https://github.com/timescale/timescaledb-toolkit/pull/454): Saturating Math for i32/integers:
+    - `saturating_add`
+    - `saturating_add_pos`
+    - `saturating_sub`
+    - `saturating_sub_pos`
+    - `saturating_mul`
+- [#456](https://github.com/timescale/timescaledb-toolkit/pull/456): Adding interpolating accessors:
+    - `interpolated_duration_in` to `state_agg`, 
+    - `interpolated_average` to `time_weight`, `interpolated_delta`
+    - `interpolated_rate` to `counter_agg` and `gauge_agg`.
+- [#388](https://github.com/timescale/timescaledb-toolkit/pull/388): Create Count-Min Sketch crate.
+- [#459](https://github.com/timescale/timescaledb-toolkit/pull/459): Add a convenient `approx_count_distinct` function which internally uses hyperloglog with a default bucket size of 2^15.
+- [#458](https://github.com/timescale/timescaledb-toolkit/pull/458): Add `count_min_sketch` aggregate and `approx_count` accessor.
+- [#434](https://github.com/timescale/timescaledb-toolkit/pull/434): Initial changes to support aarch64-unknown-linux-gnu.
+
+#### Bug fixes
+- [#429](https://github.com/timescale/timescaledb-toolkit/pull/429): Support explicit NULL values in timevectors.
+- [#441](https://github.com/timescale/timescaledb-toolkit/pull/441): Relax tolerance in UDDSketch merge assertions.
+- [#444](https://github.com/timescale/timescaledb-toolkit/pull/444): Fix default collation deserialization.
+
+#### Other notable changes
+- [#451](https://github.com/timescale/timescaledb-toolkit/pull/451): Improve error message for HyperLogLog.
+
+#### Shout-outs
+- @tyhoff for reporting UDDSketch assertion error [#396](https://github.com/timescale/timescaledb-toolkit/issues/396).
+- @hardikm10 for reporting hyperloglog deserialization issue [#443](https://github.com/timescale/timescaledb-toolkit/issues/443).
+
+**Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.7.0...1.8.0
+

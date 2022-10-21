@@ -1987,6 +1987,7 @@ dependencies = [
  "flat_serialize_macro",
  "hyperloglogplusplus",
  "once_cell",
+ "ordered-float",
  "paste",
  "pest",
  "pest_derive",

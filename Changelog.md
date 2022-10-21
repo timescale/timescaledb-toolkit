@@ -8,6 +8,8 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 #### New experimental features
 
+- New min_n/max_n functions and related min_n_by/max_n_by.  The former is used to get the top N values from a column while the later will also track some additional data, such as another column or even the entire row.  These should give the same results as a normal select with an order by and limit, except they can be composed and combined like other toolkit aggregates.
+
 #### Stabilized features
 
 #### Bug fixes

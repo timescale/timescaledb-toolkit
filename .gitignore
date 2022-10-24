@@ -1,10 +1,9 @@
 .DS_Store
-.idea/
-.vscode/
-.vsls.json
+/.idea
+/.vscode
+/.vsls.json
+/old-versions
 /target
 *.iml
-sql/*.generated.sql
-extension/sql/timescaledb_toolkit-*.sql
 /target-analyzer
-.editorconfig
+/.editorconfig

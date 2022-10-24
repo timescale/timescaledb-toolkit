@@ -1,0 +1,11 @@
+**/*.iml
+**/*.o
+**/.DS_Store
+.editorconfig
+.idea
+.vscode
+.vsls.json
+.git
+old-versions
+target
+target-analyzer

@@ -73,7 +73,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
 
-        -pg1[234])
+        -pg1[0-9])         # If this script survives to postgresql 19, WE WIN!
             pg_version=${arg#-pg}
             pg=pg$pg_version
             [ -z "$pg_port" ] && pg_port=288$pg_version
@@ -87,8 +87,7 @@ while [ $# -gt 0 ]; do
         clippy)
             find_profile
             $nop cargo fetch
-            # We need to pick a postgres version to clippy the timescaledb_toolkit crate, but it doesn't matter which one.
-            $nop cargo clippy --profile $profile --workspace --features 'pg14 pg_test' -- -D warnings
+            $nop cargo clippy --profile $profile --workspace --features pg_test -- -D warnings
             ;;
 
         test-crates)

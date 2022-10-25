@@ -16,7 +16,7 @@ die() {
 }
 
 usage() {
-    die 'build [ -n -pg1[234] ] ( test-crates | test-extension | install | test-doc | test-updates | clippy)'
+    die 'build [ -n -pg1[234] -profile release ] ( test-crates | test-extension | install | test-doc | test-updates | clippy)'
 }
 
 require_pg_version() {
@@ -39,6 +39,9 @@ require_cargo_pgx_old() {
     [ -n "$cargo_pgx_old" ] || die 'specify path to cargo-pgx (0.2-0.3 series)'
 }
 
+find_profile() {
+    [ -n "$profile" ] || profile=dev
+}
 
 [ $# -ge 1 ] || usage
 
@@ -76,46 +79,57 @@ while [ $# -gt 0 ]; do
             [ -z "$pg_port" ] && pg_port=288$pg_version
             ;;
 
+        -profile)
+            profile="$1"
+            shift
+            ;;
+
         clippy)
+            find_profile
             $nop cargo fetch
             # We need to pick a postgres version to clippy the timescaledb_toolkit crate, but it doesn't matter which one.
-            $nop cargo clippy --workspace --features 'pg14 pg_test' -- -D warnings
+            $nop cargo clippy --profile $profile --workspace --features 'pg14 pg_test' -- -D warnings
             ;;
 
         test-crates)
             # Should find no dependency crates to fetch.  If it finds any, we need to update the cache key.
+            find_profile
             $nop cargo fetch
-            $nop cargo test --workspace --exclude timescaledb_toolkit
+            $nop cargo test --profile $profile --workspace --exclude timescaledb_toolkit
             ;;
 
         test-extension)
             cd extension
+            find_profile
             require_pg_version
             $nop cargo fetch
-            $nop cargo test --features "$pg pg_test" --no-default-features
+            $nop cargo test --profile $profile --features "$pg pg_test" --no-default-features
             ;;
 
         install)
+            find_profile
             require_pg_version
             find_pg_config
-            (cd extension && $nop cargo pgx install -c "$pg_config")
+            (cd extension && $nop cargo pgx install --profile $profile -c "$pg_config")
             $nop cargo run --manifest-path tools/post-install/Cargo.toml "$pg_config"
             ;;
 
         # Reruns the tests test-extension does if they're left installed.
         # TODO Remove this and testrunner.
         test-post-install)
+            find_profile
             require_pg_version
             find_pg_config
             $nop cargo pgx stop $pg
             $nop cargo pgx start $pg
-            $nop cargo run --manifest-path tools/testrunner/Cargo.toml -- -h localhost -p $pg_port
+            $nop cargo run --profile $profile --manifest-path tools/testrunner/Cargo.toml -- -h localhost -p $pg_port
             ;;
 
         test-doc)
+            find_profile
             require_pg_version
             $nop cargo pgx start $pg
-            $nop cargo run -p sql-doctester -- \
+            $nop cargo run --profile $profile -p sql-doctester -- \
                  -h localhost \
                  -p $pg_port \
                  -s "CREATE EXTENSION timescaledb; CREATE EXTENSION timescaledb_toolkit; SET SESSION TIMEZONE TO 'UTC'" \
@@ -124,12 +138,13 @@ while [ $# -gt 0 ]; do
             ;;
 
         test-updates)
+            find_profile
             require_pg_version
             find_pg_config
             require_cargo_pgx
             require_cargo_pgx_old
             $nop cargo pgx start $pg
-            $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- full-update-test-source \
+            $nop cargo run --profile $profile --manifest-path tools/update-tester/Cargo.toml -- full-update-test-source \
                  -h localhost \
                  -p $pg_port \
                  --cache old-versions \

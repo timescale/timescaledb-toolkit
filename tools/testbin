@@ -36,11 +36,12 @@ MIN_DEB_EPOCH=1.7.0
 #   starts postgres on, so we duplicate that knowledge.  Watch out for
 #   that changing!
 PGX_PORT_BASE=28800
-# TODO Drop default and require -pgversions after existing usage updated.
-PG_VERSIONS='12 13 14'
 CONTROL=extension/timescaledb_toolkit.control
 # Pattern we require in $CONTROL for finding versions to test upgrade from.
 UPGRADEABLE_RE="^# upgradeable_from = '[0-9][-dev0-9., ]*'$"
+
+# For PG_VERSIONS default.
+. tools/dependencies.sh
 
 print() {
     printf '%s\n' "$*"

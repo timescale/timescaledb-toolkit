@@ -20,7 +20,7 @@ jobs:
     name: Test Postgres
     runs-on: ubuntu-20.04
     container:
-      image: ${{ inputs.container-image || 'timescaledev/rust-pgx:latest' }}
+      image: ${{ inputs.container-image || 'timescaledev/toolkit-builder:debian-11-amd64' }}
     strategy:
       matrix:
         pgversion: [12, 13, 14]
@@ -38,8 +38,6 @@ jobs:
       #  https://doc.rust-lang.org/cargo/reference/environment-variables.html
       CI: 1
       RUST_BACKTRACE: short
-      # TODO We don't seem to run rustup, nor does it seem like we should.
-      RUSTUP_MAX_RETRIES: 10
 
     steps:
     - name: Checkout Repository
@@ -47,25 +45,18 @@ jobs:
       with:
         ref: ${{ github.event.pull_request.head.sha }}
 
-    # ~postgres/.pgx/config.toml comes in on the image.
-    # Setting HOME=~postgres (which is /home/postgres) in cargo's environment
-    # would work, but sticking with this approach for now.
+    # Github Actions provides a bind mounted working directory for us, where
+    # the above checkout happens, and where caches are read from and restored
+    # to, and it's all owned by 1001.  Our container image is `USER root` so
+    # we have no problem writing anywhere, but we run some things as user
+    # 'postgres', which used to be user 1000 but is now 1001.  Hoping in the
+    # future to make our container image `USER postgres` and further simplify
+    # this file and the packaging Actions file, but it's non-trivial.
     - name: chown Repository
       run: chown -R postgres .
 
-    # CARGO_HOME is /usr/local/cargo which looks like something we'd need to
-    # stay root to update, but the parts we need to update (.crates.toml,
-    # .crates2.json, .package-cache, git, registry) are already owned by
-    # `postgres` in the image.
-    - name: Cache cargo directories
-      uses: actions/cache@v2
-      with:
-        path: |
-          /usr/local/cargo/registry
-          /usr/local/cargo/git
-        key: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-cargo-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
-        restore-keys: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-cargo-
-
+    # TODO After the container image contains a primed target dir, is this still worth it?
+    #   Only possible advantage is this one is per-pg-version but what's the impact?
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
@@ -89,13 +80,12 @@ jobs:
     name: Test Crates
     runs-on: ubuntu-20.04
     container:
-      image: ${{ inputs.container-image || 'timescaledev/rust-pgx:latest' }}
+      image: ${{ inputs.container-image || 'timescaledev/toolkit-builder:debian-11-amd64' }}
       env:
         CARGO_INCREMENTAL: 0
         CARGO_NET_RETRY: 10
         CI: 1
         RUST_BACKTRACE: short
-        RUSTUP_MAX_RETRIES: 10
 
     steps:
     - name: Checkout Repository
@@ -105,15 +95,6 @@ jobs:
 
     - name: chown Repository
       run: chown -R postgres .
-
-    - name: Cache cargo directories
-      uses: actions/cache@v2
-      with:
-        path: |
-          /usr/local/cargo/registry
-          /usr/local/cargo/git
-        key: ${{ runner.os }}-test-crates-cargo-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
-        restore-keys: ${{ runner.os }}-test-crates-cargo-
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
@@ -129,7 +110,7 @@ jobs:
     name: Test Updates
     runs-on: ubuntu-20.04
     container:
-      image: ${{ inputs.container-image || 'timescaledev/rust-pgx:latest' }}
+      image: ${{ inputs.container-image || 'timescaledev/toolkit-builder:debian-11-amd64' }}
       env:
         PGVERSION: 14
 
@@ -137,7 +118,6 @@ jobs:
         CARGO_NET_RETRY: 10
         CI: 1
         RUST_BACKTRACE: short
-        RUSTUP_MAX_RETRIES: 10
 
     steps:
     - name: Checkout Repository
@@ -148,15 +128,6 @@ jobs:
     - name: chown Repository
       run: chown -R postgres .
 
-    - name: Cache cargo directories
-      uses: actions/cache@v2
-      with:
-        path: |
-          /usr/local/cargo/registry
-          /usr/local/cargo/git
-        key: ${{ runner.os }}-test-updates-cargo-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
-        restore-keys: ${{ runner.os }}-test-crates-cargo-
-
     - name: Cache cargo target dir
       uses: actions/cache@v2
       with:
@@ -164,6 +135,7 @@ jobs:
         key: ${{ runner.os }}-test-updates-target-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
         restore-keys: ${{ runner.os }}-test-crates-target-
 
+    # TODO Drop this.
     - name: Cache old versions dir
       uses: actions/cache@v2
       with:

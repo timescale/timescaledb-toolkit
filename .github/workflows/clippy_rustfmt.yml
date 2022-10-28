@@ -6,24 +6,25 @@ on:
     - main
     - staging
     - trying
-  schedule:
-    # we build at 8am UTC, 3am Eastern, midnight Pacific
-    - cron:  '0 8 * * 1-4'
   workflow_dispatch:
+    inputs:
+      container-image:
+        description: 'Container image to pull from DockerHub'
+        required: false
 
 jobs:
   clippy:
     name: Clippy/rustfmt Test
     runs-on: ubuntu-20.04
     container:
-      image: timescaledev/rust-pgx:latest
+      # Duplicated from ci.yml
+      image: ${{ inputs.container-image || 'timescaledev/toolkit-builder:debian-11-amd64' }}
       env:
         # TODO: See TODOs on duplicate block in ci.yml
         CARGO_INCREMENTAL: 0
         CARGO_NET_RETRY: 10
         CI: 1
         RUST_BACKTRACE: short
-        RUSTUP_MAX_RETRIES: 10
 
     steps:
     - name: Checkout Repository
@@ -33,15 +34,6 @@ jobs:
 
     - name: chown Repository
       run: chown -R postgres .
-
-    - name: Cache cargo directories
-      uses: actions/cache@v2
-      with:
-        path: |
-          /usr/local/cargo/registry
-          /usr/local/cargo/git
-        key: ${{ runner.os }}-clippy-cargo-${{ hashFiles('Cargo.lock', '.github/workflows/clippy_rustfmt.yml') }}
-        restore-keys: ${{ runner.os }}-clippy-cargo-
 
     - name: Cache cargo target dir
       uses: actions/cache@v2
@@ -57,5 +49,4 @@ jobs:
       run: su postgres -c 'sh tools/build clippy 2>&1'
 
     - name: Verify formatting
-      # TODO Stop adding rustfmt component when we fix our image?  Or not:  it's a harmless no-op.
-      run: rustup component add rustfmt && cargo fmt --check
+      run: su postgres -c 'cargo fmt --check 2>&1'

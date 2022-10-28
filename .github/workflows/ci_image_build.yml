@@ -28,10 +28,9 @@ jobs:
     steps:
       - name: Run release-build-scripts job
         # Repeating the default here for 'pull_request'.  Keep in sync with above.
-        # TODO Change default from 'eg/prebuilt-image' to 'main' after merge.
         run: |
           gh workflow run toolkit-image.yml \
                 -R timescale/release-build-scripts \
-                -r ${{ inputs.builder-commit || 'eg/prebuilt-image' }} \
+                -r ${{ inputs.builder-commit || 'main' }} \
                 -f tag-base=${{ inputs.tag-base || 'timescaledev/toolkit-builder-test' }} \
                 -f toolkit-commit=${{ inputs.toolkit-commit || github.event.pull_request.head.sha }}

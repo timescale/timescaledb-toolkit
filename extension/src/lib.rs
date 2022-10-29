@@ -17,6 +17,7 @@ pub mod frequency;
 pub mod gauge_agg;
 pub mod hyperloglog;
 pub mod lttb;
+pub mod nmost;
 pub mod ohlc;
 pub mod range;
 pub mod saturation;

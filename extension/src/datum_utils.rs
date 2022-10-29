@@ -31,6 +31,14 @@ pub(crate) unsafe fn deep_copy_datum(datum: Datum, typoid: Oid) -> Datum {
     }
 }
 
+// If datum is an alloced type, free the associated memory
+pub(crate) unsafe fn free_datum(datum: Datum, typoid: Oid) {
+    let tentry = pg_sys::lookup_type_cache(typoid, 0_i32);
+    if !(*tentry).typbyval {
+        pg_sys::pfree(datum.cast_mut_ptr())
+    }
+}
+
 // TODO: is there a better place for this?
 // Note that this requires an reference time to deal with variable length intervals (days or months)
 pub fn interval_to_ms(ref_time: &crate::raw::TimestampTz, interval: &crate::raw::Interval) -> i64 {
@@ -512,6 +520,12 @@ impl<'a> DatumStore<'a> {
                 }
             }
         }
+    }
+
+    pub fn into_anyelement_iter(self) -> impl Iterator<Item = AnyElement> + 'a {
+        let oid: pg_sys::Oid = self.type_oid.into();
+        self.into_iter()
+            .map(move |x| unsafe { AnyElement::from_polymorphic_datum(x, false, oid) }.unwrap())
     }
 }
 

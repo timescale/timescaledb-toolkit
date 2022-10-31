@@ -976,11 +976,11 @@ extension_sql!(
     name = "into_values",
     schema = "toolkit_experimental"
 )]
-pub fn freq_iter<'a, 'b>(
+pub fn freq_iter<'a>(
     agg: SpaceSavingAggregate<'a>,
     ty: AnyElement,
 ) -> TableIterator<
-    'b,
+    'a,
     (
         name!(value, AnyElement),
         name!(min_freq, f64),
@@ -992,22 +992,15 @@ pub fn freq_iter<'a, 'b>(
             pgx::error!("mischatched types")
         }
         let counts = agg.counts.slice().iter().zip(agg.overcounts.slice().iter());
-        TableIterator::new(
-            agg.datums
-                .clone()
-                .into_iter()
-                .zip(counts)
-                .map_while(move |(value, (&count, &overcount))| {
-                    let total = agg.values_seen as f64;
-                    let value =
-                        AnyElement::from_polymorphic_datum(value, false, agg.type_oid).unwrap();
-                    let min_freq = (count - overcount) as f64 / total;
-                    let max_freq = count as f64 / total;
-                    Some((value, min_freq, max_freq))
-                })
-                .collect::<Vec<_>>()
-                .into_iter(),
-        )
+        TableIterator::new(agg.datums.clone().into_iter().zip(counts).map_while(
+            move |(value, (&count, &overcount))| {
+                let total = agg.values_seen as f64;
+                let value = AnyElement::from_polymorphic_datum(value, false, agg.type_oid).unwrap();
+                let min_freq = (count - overcount) as f64 / total;
+                let max_freq = count as f64 / total;
+                Some((value, min_freq, max_freq))
+            },
+        ))
     }
 }
 
@@ -1017,10 +1010,10 @@ pub fn freq_iter<'a, 'b>(
     name = "into_values",
     schema = "toolkit_experimental"
 )]
-pub fn freq_bigint_iter<'a, 'b>(
+pub fn freq_bigint_iter<'a>(
     agg: SpaceSavingBigIntAggregate<'a>,
 ) -> TableIterator<
-    'b,
+    'a,
     (
         name!(value, i64),
         name!(min_freq, f64),
@@ -1028,20 +1021,14 @@ pub fn freq_bigint_iter<'a, 'b>(
     ),
 > {
     let counts = agg.counts.slice().iter().zip(agg.overcounts.slice().iter());
-    TableIterator::new(
-        agg.datums
-            .clone()
-            .into_iter()
-            .zip(counts)
-            .map_while(move |(value, (&count, &overcount))| {
-                let total = agg.values_seen as f64;
-                let min_freq = (count - overcount) as f64 / total;
-                let max_freq = count as f64 / total;
-                Some((value, min_freq, max_freq))
-            })
-            .collect::<Vec<_>>()
-            .into_iter(),
-    )
+    TableIterator::new(agg.datums.clone().into_iter().zip(counts).map_while(
+        move |(value, (&count, &overcount))| {
+            let total = agg.values_seen as f64;
+            let min_freq = (count - overcount) as f64 / total;
+            let max_freq = count as f64 / total;
+            Some((value, min_freq, max_freq))
+        },
+    ))
 }
 
 #[pg_extern(
@@ -1050,10 +1037,10 @@ pub fn freq_bigint_iter<'a, 'b>(
     name = "into_values",
     schema = "toolkit_experimental"
 )]
-pub fn freq_text_iter<'a, 'b>(
+pub fn freq_text_iter<'a>(
     agg: SpaceSavingTextAggregate<'a>,
 ) -> TableIterator<
-    'b,
+    'a,
     (
         name!(value, String),
         name!(min_freq, f64),
@@ -1061,21 +1048,15 @@ pub fn freq_text_iter<'a, 'b>(
     ),
 > {
     let counts = agg.counts.slice().iter().zip(agg.overcounts.slice().iter());
-    TableIterator::new(
-        agg.datums
-            .clone()
-            .into_iter()
-            .zip(counts)
-            .map_while(move |(value, (&count, &overcount))| {
-                let total = agg.values_seen as f64;
-                let data = unsafe { varlena_to_string(value.cast_mut_ptr()) };
-                let min_freq = (count - overcount) as f64 / total;
-                let max_freq = count as f64 / total;
-                Some((data, min_freq, max_freq))
-            })
-            .collect::<Vec<_>>()
-            .into_iter(),
-    )
+    TableIterator::new(agg.datums.clone().into_iter().zip(counts).map_while(
+        move |(value, (&count, &overcount))| {
+            let total = agg.values_seen as f64;
+            let data = unsafe { varlena_to_string(value.cast_mut_ptr()) };
+            let min_freq = (count - overcount) as f64 / total;
+            let max_freq = count as f64 / total;
+            Some((data, min_freq, max_freq))
+        },
+    ))
 }
 
 fn validate_topn_for_topn_agg(
@@ -1134,9 +1115,7 @@ pub fn topn(agg: SpaceSavingAggregate<'_>, n: i32, ty: AnyElement) -> SetOfItera
         // TODO Shouldn't failure to convert to AnyElement cause error, not early stop?
         .map_while(move |value| unsafe {
             AnyElement::from_polymorphic_datum(value, false, type_oid)
-        })
-        .collect::<Vec<_>>()
-        .into_iter(),
+        }),
     )
 }
 
@@ -1170,17 +1149,13 @@ pub fn topn_bigint(agg: SpaceSavingBigIntAggregate<'_>, n: i32) -> SetOfIterator
     );
     let min_freq = if agg.topn == 0 { agg.freq_param } else { 0. };
 
-    SetOfIterator::new(
-        TopNIterator::new(
-            agg.datums.clone().into_iter(),
-            agg.counts.clone().into_vec(),
-            agg.values_seen as f64,
-            n,
-            min_freq,
-        )
-        .collect::<Vec<_>>()
-        .into_iter(),
-    )
+    SetOfIterator::new(TopNIterator::new(
+        agg.datums.clone().into_iter(),
+        agg.counts.clone().into_vec(),
+        agg.values_seen as f64,
+        n,
+        min_freq,
+    ))
 }
 
 #[pg_extern(
@@ -1221,9 +1196,7 @@ pub fn topn_text(agg: SpaceSavingTextAggregate<'_>, n: i32) -> SetOfIterator<Str
             n,
             min_freq,
         )
-        .map(|value| unsafe { varlena_to_string(value.cast_mut_ptr()) })
-        .collect::<Vec<_>>()
-        .into_iter(),
+        .map(|value| unsafe { varlena_to_string(value.cast_mut_ptr()) }),
     )
 }
 

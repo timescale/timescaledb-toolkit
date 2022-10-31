@@ -83,9 +83,7 @@ pub fn generate_periodic_normal_series(
                         * periodic_magnitude;
                 let error = distribution.sample(&mut rng);
                 (time.into(), base + error)
-            })
-            .collect::<Vec<_>>()
-            .into_iter(),
+            }),
     )
 }
 

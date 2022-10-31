@@ -374,22 +374,15 @@ pub fn interpolated_duration_in<'a>(
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn into_values<'a, 'b>(
+pub fn into_values<'a>(
     agg: StateAgg<'a>,
-) -> TableIterator<'b, (pgx::name!(state, String), pgx::name!(duration, i64))> {
+) -> TableIterator<'a, (pgx::name!(state, String), pgx::name!(duration, i64))> {
     let states: String = agg.states_as_str().to_owned();
-    TableIterator::new(
-        agg.durations
-            .clone()
-            .into_iter()
-            .map(move |record| {
-                let beg = record.state_beg as usize;
-                let end = record.state_end as usize;
-                (states[beg..end].to_owned(), record.duration)
-            })
-            .collect::<Vec<_>>()
-            .into_iter(),
-    )
+    TableIterator::new(agg.durations.clone().into_iter().map(move |record| {
+        let beg = record.state_beg as usize;
+        let end = record.state_end as usize;
+        (states[beg..end].to_owned(), record.duration)
+    }))
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, FlatSerializable, PartialEq, Serialize)]

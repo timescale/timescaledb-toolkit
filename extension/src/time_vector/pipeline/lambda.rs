@@ -170,9 +170,7 @@ pub fn trace_lambda<'a>(
     SetOfIterator::new(
         trace
             .into_iter()
-            .map(move |(e, v)| format!("{:>width$}: {:?}", e, v, width = col1_size))
-            .collect::<Vec<_>>()
-            .into_iter(),
+            .map(move |(e, v)| format!("{:>width$}: {:?}", e, v, width = col1_size)),
     )
 }
 

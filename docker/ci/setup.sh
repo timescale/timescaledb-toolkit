@@ -193,6 +193,16 @@ EOF
             chown $BUILDER_USERNAME $PG_BASE$pg/lib /usr/share/postgresql/$pg/extension
         done
 
+        # Install gh.  We only use this for GitHub Actions automation, and we
+        # run all that on our Debian-11 image, so it's fine to do this
+        # only here.
+        gh=`basename $GH_DEB_URL`
+        curl -LO $GH_DEB_URL
+        sha256sum -c - <<EOF
+$GH_DEB_SHA256  $gh
+EOF
+        dpkg -i $gh
+
         # Ubuntu is the only system we want an image for that sticks an extra
         # copy of the default PATH into PAM's /etc/environment and we su or sudo
         # to $BUILDER_USERNAME thereby picking up that PATH and clobbering the
@@ -223,8 +233,9 @@ fi
 curl -s https://sh.rustup.rs |
     sh -s -- -q -y --no-modify-path --default-toolchain $RUST_TOOLCHAIN --profile $RUST_PROFILE -c $RUST_COMPONENTS
 
-# Install pgx
+# Install pgx and edit commands.
 cargo install cargo-pgx --version =$PGX_VERSION
+cargo install cargo-edit --version =$CARGO_EDIT
 
 # Configure pgx
 ## `cargo pgx init` is not additive; must specify all versions in one command.

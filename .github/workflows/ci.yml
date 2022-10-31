@@ -41,7 +41,7 @@ jobs:
 
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         ref: ${{ github.event.pull_request.head.sha }}
 
@@ -58,7 +58,7 @@ jobs:
     # TODO After the container image contains a primed target dir, is this still worth it?
     #   Only possible advantage is this one is per-pg-version but what's the impact?
     - name: Cache cargo target dir
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: target
         key: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
@@ -89,7 +89,7 @@ jobs:
 
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         ref: ${{ github.event.pull_request.head.sha }}
 
@@ -97,7 +97,7 @@ jobs:
       run: chown -R postgres .
 
     - name: Cache cargo target dir
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: target
         key: ${{ runner.os }}-test-crates-target-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
@@ -121,7 +121,7 @@ jobs:
 
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         ref: ${{ github.event.pull_request.head.sha }}
 
@@ -129,7 +129,7 @@ jobs:
       run: chown -R postgres .
 
     - name: Cache cargo target dir
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: target
         key: ${{ runner.os }}-test-updates-target-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
@@ -137,7 +137,7 @@ jobs:
 
     # TODO Drop this.
     - name: Cache old versions dir
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: old-versions
         key: ${{ runner.os }}-test-old-versions-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}

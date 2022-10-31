@@ -28,7 +28,7 @@ jobs:
 
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
       with:
         ref: ${{ github.event.pull_request.head.sha }}
 
@@ -36,7 +36,7 @@ jobs:
       run: chown -R postgres .
 
     - name: Cache cargo target dir
-      uses: actions/cache@v2
+      uses: actions/cache@v3
       with:
         path: target
         key: ${{ runner.os }}-clippy-target-${{ hashFiles('Cargo.lock', '.github/workflows/clippy_rustfmt.yml') }}

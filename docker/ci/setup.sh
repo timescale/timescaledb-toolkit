@@ -54,11 +54,6 @@ if $privileged; then
         centos | rockylinux)
             case $OS_VERSION in
                 7)
-                    # TODO There's actually more to it than just the pgx bug:  it's unclear how to
-                    # even build because it can't find libclang.so without
-                    #   scl enable llvm-toolset-7 'tools/build -pg14 test-extension'
-                    # We may have to just add a centos7 check to the packaging script, too.
-
                     # Postgresql packages require both
                     # - llvm-toolset-7-clang from centos-release-scl-rh
                     # - llvm5.0-devel from epel-release
@@ -182,7 +177,6 @@ EOF
             #   of bothering with apt-key...
             curl -Ls https://packagecloud.io/timescale/timescaledb/gpgkey | apt-key add -
             mkdir -p /etc/apt/sources.list.d
-            # TODO Don't duplicate os name and version here.  Deduplicate with packaging scripts.
             cat > /etc/apt/sources.list.d/timescaledb.list <<EOF
 deb https://packagecloud.io/timescale/timescaledb/$OS_NAME/ $OS_CODE_NAME main
 EOF

@@ -1,0 +1,23 @@
+#!/bin/sh
+
+# Workarounds for running scripts under Github Actions.
+
+. tools/dependencies.sh
+
+# 1. Docker sets neither LOGNAME (portable) nor USER (required by pgx).
+# TODO I think this is the only one we can fix in the image.
+LOGNAME=$BUILDER_USERNAME
+USER=$BUILDER_USERNAME
+export LOGNAME USER
+
+# 2. Docker captures stdout and stderr separately and then intermingles them in
+#    the wrong order.  We don't actually need to distinguish these in our Github
+#    Actions logs, so redirect stderr to stdout so we get the proper order.
+exec 2>&1
+
+# 3. Github Actions clobbers HOME in a way we can't prevent, but we need pgx to
+#    find our configuration in $HOME/.pgx in the container image.
+HOME=$BUILDER_HOME
+export HOME
+
+exec "$@"

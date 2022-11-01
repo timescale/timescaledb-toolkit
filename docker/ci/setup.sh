@@ -16,8 +16,8 @@ else
     privileged=true
 fi
 
-if [ $# -ne 6 ]; then
-    echo >&2 'usage: setup.sh ARCH OS_NAME OS_VERSION OS_CODE_NAME BUILDER_USERNAME BUILDER_HOME'
+if [ $# -ne 4 ]; then
+    echo >&2 'usage: setup.sh ARCH OS_NAME OS_VERSION OS_CODE_NAME'
     exit 2
 fi
 
@@ -25,8 +25,6 @@ ARCH=$1
 OS_NAME=$2
 OS_VERSION=$3
 OS_CODE_NAME=$4
-BUILDER_USERNAME=$5
-BUILDER_HOME=$6
 
 . /dependencies.sh
 
@@ -193,6 +191,7 @@ EOF
             chown $BUILDER_USERNAME $PG_BASE$pg/lib /usr/share/postgresql/$pg/extension
         done
 
+        # TODO Remove after The Unprivileging is complete and we no longer use su.
         # Ubuntu is the only system we want an image for that sticks an extra
         # copy of the default PATH into PAM's /etc/environment and we su or sudo
         # to $BUILDER_USERNAME thereby picking up that PATH and clobbering the
@@ -234,7 +233,7 @@ done
 cargo pgx init $init_flags
 ## Initialize pgx-managed databases so we can add the timescaledb load.
 for pg in $PG_VERSIONS; do
-    echo "shared_preload_libraries = 'timescaledb'" >> ~/.pgx/data-$pg/postgresql.conf
+    echo "shared_preload_libraries = 'timescaledb'" >> $BUILDER_HOME/.pgx/data-$pg/postgresql.conf
 done
 
 # Clone and fetch dependencies so we builds have less work to do.

@@ -19,3 +19,8 @@ RUST_COMPONENTS=clippy,rustfmt
 # We use fpm 1.14.2 to build RPMs.
 # TODO Use rpmbuild directly.
 FPM_VERSION=1.14.2
+
+# Builder username and home directory, for cooperation between our image builder
+# and our Github Actions configurations which must ALSO know these things.
+BUILDER_USERNAME=postgres
+BUILDER_HOME=/home/$BUILDER_USERNAME

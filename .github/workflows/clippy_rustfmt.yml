@@ -25,6 +25,8 @@ jobs:
         CARGO_NET_RETRY: 10
         CI: 1
         RUST_BACKTRACE: short
+      # TODO move to image
+      options: -u postgres
 
     steps:
     - name: Checkout Repository
@@ -32,21 +34,8 @@ jobs:
       with:
         ref: ${{ github.event.pull_request.head.sha }}
 
-    - name: chown Repository
-      run: chown -R postgres .
-
-    - name: Cache cargo target dir
-      uses: actions/cache@v3
-      with:
-        path: target
-        key: ${{ runner.os }}-clippy-target-${{ hashFiles('Cargo.lock', '.github/workflows/clippy_rustfmt.yml') }}
-        restore-keys: ${{ runner.os }}-clippy-target-
-
     - name: Run Clippy
-      # Github captures stdout and stderr separately and then intermingles them
-      # in the wrong order.  We don't actually care to distinguish, so redirect
-      # stderr to stdout so we get the proper order.
-      run: su postgres -c 'sh tools/build clippy 2>&1'
+      run: tools/gharun tools/build clippy
 
     - name: Verify formatting
-      run: su postgres -c 'cargo fmt --check 2>&1'
+      run: tools/gharun cargo fmt --check

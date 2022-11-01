@@ -12,8 +12,6 @@ ARG OS_CODE_NAME
 ARG OS_NAME
 ARG OS_VERSION
 
-ENV HOME /home/postgres
-
 # Docker fails to set LOGNAME :(
 ENV LOGNAME root
 ENV CARGO_HOME /usr/local/cargo
@@ -23,10 +21,9 @@ ENV PATH "${CARGO_HOME}/bin:/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/bin"
 COPY docker/ci/setup.sh /
 COPY tools/dependencies.sh /
 # TODO simple option processing a la build and testbin would make this less error-prone
-RUN /setup.sh ${ARCH} ${OS_NAME} ${OS_VERSION} "${OS_CODE_NAME}" postgres ${HOME}
+RUN /setup.sh ${ARCH} ${OS_NAME} ${OS_VERSION} "${OS_CODE_NAME}"
 
 # TODO What does this 'AS' do?  It doesn't seem to name it.  We need -t for that.
 FROM toolkit-base AS toolkit-builder
 
-WORKDIR ${HOME}
 # Leave USER root for Github Actions.

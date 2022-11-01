@@ -21,6 +21,8 @@ jobs:
     runs-on: ubuntu-20.04
     container:
       image: ${{ inputs.container-image || 'timescaledev/toolkit-builder:debian-11-amd64' }}
+      # TODO move to image
+      options: -u postgres
     strategy:
       matrix:
         pgversion: [12, 13, 14]
@@ -45,16 +47,6 @@ jobs:
       with:
         ref: ${{ github.event.pull_request.head.sha }}
 
-    # Github Actions provides a bind mounted working directory for us, where
-    # the above checkout happens, and where caches are read from and restored
-    # to, and it's all owned by 1001.  Our container image is `USER root` so
-    # we have no problem writing anywhere, but we run some things as user
-    # 'postgres', which used to be user 1000 but is now 1001.  Hoping in the
-    # future to make our container image `USER postgres` and further simplify
-    # this file and the packaging Actions file, but it's non-trivial.
-    - name: chown Repository
-      run: chown -R postgres .
-
     # TODO After the container image contains a primed target dir, is this still worth it?
     #   Only possible advantage is this one is per-pg-version but what's the impact?
     - name: Cache cargo target dir
@@ -65,16 +57,16 @@ jobs:
         restore-keys: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-
 
     - name: Run pgx tests
-      run: su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-extension 2>&1'
+      run: tools/gharun tools/build -pg${{ matrix.pgversion }} test-extension
 
     # TODO post-install + doc test adds a good 90s.  We could probably put
     # them together run serially in a separate job to shave that 90s off the
     # long pole.
     - name: Run post-install tests
-      run: su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-post-install 2>&1'
+      run: tools/gharun tools/build -pg${{ matrix.pgversion }} test-post-install
 
     - name: Run doc tests
-      run: su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-doc 2>&1'
+      run: tools/gharun tools/build -pg${{ matrix.pgversion }} test-doc
 
   testcrates:
     name: Test Crates
@@ -86,15 +78,13 @@ jobs:
         CARGO_NET_RETRY: 10
         CI: 1
         RUST_BACKTRACE: short
+      options: -u postgres
 
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v3
       with:
         ref: ${{ github.event.pull_request.head.sha }}
-
-    - name: chown Repository
-      run: chown -R postgres .
 
     - name: Cache cargo target dir
       uses: actions/cache@v3
@@ -104,7 +94,7 @@ jobs:
         restore-keys: ${{ runner.os }}-test-crates-target-
 
     - name: Run Crates Tests
-      run: su postgres -c 'sh tools/build test-crates 2>&1'
+      run: tools/gharun tools/build test-crates
 
   testupdates:
     name: Test Updates
@@ -118,15 +108,13 @@ jobs:
         CARGO_NET_RETRY: 10
         CI: 1
         RUST_BACKTRACE: short
+      options: -u postgres
 
     steps:
     - name: Checkout Repository
       uses: actions/checkout@v3
       with:
         ref: ${{ github.event.pull_request.head.sha }}
-
-    - name: chown Repository
-      run: chown -R postgres .
 
     - name: Cache cargo target dir
       uses: actions/cache@v3
@@ -146,8 +134,7 @@ jobs:
     - name: Run binary update tests
       # TODO We've always tested only one postgres version here.  We test them all at release
       #  time anyway.  If we want to test them here, too, let's make it less slow first.
-      run: |
-        su postgres -c 'OS_NAME=debian OS_VERSION=11 tools/testbin -version no -bindir / -dbroot /tmp/db -pgport 28800 -pgversions 14 ci 2>&1'
+      run: OS_NAME=debian OS_VERSION=11 tools/gharun tools/testbin -version no -bindir / -dbroot /tmp/db -pgport 28800 -pgversions 14 ci
 
     - name: Check tools/testbin
       run: sh tools/testbin check-control

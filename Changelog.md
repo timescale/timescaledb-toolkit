@@ -21,6 +21,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 - [#547](https://github.com/timescale/timescaledb-toolkit/pull/547): Update pgx to 0.5.0. This is necessary for adding Postgres 15 support coming soon.
 - [#571](https://github.com/timescale/timescaledb-toolkit/pull/571): Update CI docker image for pgx 0.5.0.
+- [#599](https://github.com/timescale/timescaledb-toolkit/pull/599): Reduce floating point error when using `stats_agg` in moving aggregate mode
 
 #### Shout-outs
 

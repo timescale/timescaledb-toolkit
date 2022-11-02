@@ -673,6 +673,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "hexf"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6618f4550dcd7d9ddb5126ab18d48dfa31aa952159cb832390bda464d3bc827e"
+dependencies = [
+ "hexf-parse",
+ "syn",
+]
+
+[[package]]
+name = "hexf-parse"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dfa686283ad6dd069f105e5ab091b04c62850d3e4cf5d67debad1933f55023df"
+
+[[package]]
 name = "hmac"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1823,7 +1839,9 @@ dependencies = [
  "approx 0.4.0",
  "flat_serialize",
  "flat_serialize_macro",
+ "num-traits",
  "serde",
+ "twofloat",
 ]
 
 [[package]]
@@ -1986,6 +2004,7 @@ dependencies = [
  "flat_serialize",
  "flat_serialize_macro",
  "hyperloglogplusplus",
+ "num-traits",
  "once_cell",
  "ordered-float",
  "paste",
@@ -2005,6 +2024,7 @@ dependencies = [
  "tdigest",
  "time_weighted_average",
  "tspoint",
+ "twofloat",
  "uddsketch",
 ]
 
@@ -2176,6 +2196,17 @@ version = "0.1.0"
 dependencies = [
  "flat_serialize",
  "flat_serialize_macro",
+ "serde",
+]
+
+[[package]]
+name = "twofloat"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0eda3d5fa47bbd7c7fa3d2caae7a5ba1a58b1c3fc1c00ac4b1cce05eae85ef93"
+dependencies = [
+ "hexf",
+ "num-traits",
  "serde",
 ]
 

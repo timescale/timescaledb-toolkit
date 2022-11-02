@@ -39,7 +39,7 @@ pub struct MetricSummary {
     // TODO Protect from deserialization?  Is there any risk other than giving
     //  nonsensical results?  If so, maybe it's fine to just accept garbage
     //  out upon garbage in.
-    pub stats: StatsSummary2D,
+    pub stats: StatsSummary2D<f64>,
     // TODO See TODOs in I64Range about protecting from deserialization.
     pub bounds: Option<range::I64Range>,
 }
@@ -49,7 +49,7 @@ pub struct MetricSummary {
 // you can always subtract a common near value from all your times, then add it back in, the regression analysis will be unchanged.
 // Note that convert the timestamp into seconds rather than microseconds here so that the slope and any other regression analysis, is done on a per-second basis.
 // For instance, the slope will be the per-second slope, not the per-microsecond slope. The x intercept value will need to be converted back to microseconds so you get a timestamp out.
-fn ts_to_xy(pt: TSPoint) -> XYPair {
+fn ts_to_xy(pt: TSPoint) -> XYPair<f64> {
     XYPair {
         x: to_seconds(pt.ts as f64),
         y: pt.val,

@@ -1709,17 +1709,18 @@ mod tests {
         pg_cmd: &str,
         tk_cmd: &str,
         allowed_diff: f64,
+        do_moving_agg: bool,
     ) {
-        let pg_result = client
+        let (pg_result, pg_moving_agg_result) = client
             .select(pg_cmd, None, None)
             .first()
-            .get_one::<f64>()
-            .unwrap();
+            .get_two::<f64, f64>();
+        let pg_result = pg_result.unwrap();
 
-        let (tk_result, arrow_result) = client
+        let (tk_result, arrow_result, tk_moving_agg_result) = client
             .select(tk_cmd, None, None)
             .first()
-            .get_two::<f64, f64>();
+            .get_three::<f64, f64, f64>();
         let (tk_result, arrow_result) = (tk_result.unwrap(), arrow_result.unwrap());
         assert_eq!(tk_result, arrow_result, "Arrow didn't match in {}", tk_cmd);
 
@@ -1749,25 +1750,34 @@ mod tests {
                 state.failed_msg(PRINT_VALS)
             );
         }
+
+        if do_moving_agg {
+            approx::assert_relative_eq!(
+                pg_moving_agg_result.unwrap(),
+                tk_moving_agg_result.unwrap(),
+                max_relative = 1e-9,
+            )
+        }
     }
 
     fn pg1d_aggx(agg: &str) -> String {
-        format!("SELECT {}(test_x) FROM test_table", agg)
+        format!("SELECT {agg}(test_x), (SELECT {agg}(test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3) FROM test_table", agg = agg)
     }
 
     fn pg1d_aggy(agg: &str) -> String {
-        format!("SELECT {}(test_y) FROM test_table", agg)
+        format!("SELECT {agg}(test_y), (SELECT {agg}(test_y) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3) FROM test_table", agg = agg)
     }
 
     fn pg2d_agg(agg: &str) -> String {
-        format!("SELECT {}(test_y, test_x) FROM test_table", agg)
+        format!("SELECT {agg}(test_y, test_x), (SELECT {agg}(test_y, test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3) FROM test_table", agg = agg)
     }
 
     fn tk1d_agg(agg: &str) -> String {
         format!(
             "SELECT \
             {agg}(stats_agg(test_x)), \
-            stats_agg(test_x)->{agg}() \
+            stats_agg(test_x)->{agg}(), \
+            {agg}((SELECT stats_agg(test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3)) \
         FROM test_table",
             agg = agg
         )
@@ -1777,7 +1787,8 @@ mod tests {
         format!(
             "SELECT \
             {agg}(stats_agg(test_x), '{arg}'), \
-            stats_agg(test_x)->{agg}('{arg}') \
+            stats_agg(test_x)->{agg}('{arg}'), \
+            {agg}((SELECT stats_agg(test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3), '{arg}') \
         FROM test_table",
             agg = agg,
             arg = arg
@@ -1788,7 +1799,8 @@ mod tests {
         format!(
             "SELECT \
             {agg}(stats_agg(test_y, test_x)), \
-            stats_agg(test_y, test_x)->{agg}() \
+            stats_agg(test_y, test_x)->{agg}(), \
+            {agg}((SELECT stats_agg(test_y, test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3)) \
         FROM test_table",
             agg = agg
         )
@@ -1798,7 +1810,8 @@ mod tests {
         format!(
             "SELECT \
             {agg}(stats_agg(test_y, test_x), '{arg}'), \
-            stats_agg(test_y, test_x)->{agg}('{arg}') \
+            stats_agg(test_y, test_x)->{agg}('{arg}'), \
+            {agg}((SELECT stats_agg(test_y, test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3), '{arg}') \
         FROM test_table",
             agg = agg,
             arg = arg
@@ -1854,14 +1867,23 @@ mod tests {
                 &pg1d_aggx("avg"),
                 &tk1d_agg("average"),
                 NONE,
+                true,
             );
-            check_agg_equivalence(state, &client, &pg1d_aggx("sum"), &tk1d_agg("sum"), NONE);
+            check_agg_equivalence(
+                state,
+                &client,
+                &pg1d_aggx("sum"),
+                &tk1d_agg("sum"),
+                NONE,
+                true,
+            );
             check_agg_equivalence(
                 state,
                 &client,
                 &pg1d_aggx("count"),
                 &tk1d_agg("num_vals"),
                 NONE,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1869,6 +1891,7 @@ mod tests {
                 &pg1d_aggx("stddev"),
                 &tk1d_agg("stddev"),
                 EPS2,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1876,6 +1899,7 @@ mod tests {
                 &pg1d_aggx("stddev_pop"),
                 &tk1d_agg_arg("stddev", "population"),
                 EPS2,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1883,6 +1907,7 @@ mod tests {
                 &pg1d_aggx("stddev_samp"),
                 &tk1d_agg_arg("stddev", "sample"),
                 EPS2,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1890,6 +1915,7 @@ mod tests {
                 &pg1d_aggx("variance"),
                 &tk1d_agg("variance"),
                 EPS3,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1897,6 +1923,7 @@ mod tests {
                 &pg1d_aggx("var_pop"),
                 &tk1d_agg_arg("variance", "population"),
                 EPS3,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1904,6 +1931,7 @@ mod tests {
                 &pg1d_aggx("var_samp"),
                 &tk1d_agg_arg("variance", "sample"),
                 EPS3,
+                true,
             );
 
             check_agg_equivalence(
@@ -1912,6 +1940,7 @@ mod tests {
                 &pg2d_agg("regr_avgx"),
                 &tk2d_agg("average_x"),
                 NONE,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1919,15 +1948,31 @@ mod tests {
                 &pg2d_agg("regr_avgy"),
                 &tk2d_agg("average_y"),
                 NONE,
+                true,
             );
-            check_agg_equivalence(state, &client, &pg1d_aggx("sum"), &tk2d_agg("sum_x"), NONE);
-            check_agg_equivalence(state, &client, &pg1d_aggy("sum"), &tk2d_agg("sum_y"), NONE);
+            check_agg_equivalence(
+                state,
+                &client,
+                &pg1d_aggx("sum"),
+                &tk2d_agg("sum_x"),
+                NONE,
+                true,
+            );
+            check_agg_equivalence(
+                state,
+                &client,
+                &pg1d_aggy("sum"),
+                &tk2d_agg("sum_y"),
+                NONE,
+                true,
+            );
             check_agg_equivalence(
                 state,
                 &client,
                 &pg1d_aggx("stddev"),
                 &tk2d_agg("stddev_x"),
                 EPS2,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1935,6 +1980,7 @@ mod tests {
                 &pg1d_aggy("stddev"),
                 &tk2d_agg("stddev_y"),
                 EPS2,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1942,6 +1988,7 @@ mod tests {
                 &pg1d_aggx("stddev_pop"),
                 &tk2d_agg_arg("stddev_x", "population"),
                 EPS2,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1949,6 +1996,7 @@ mod tests {
                 &pg1d_aggy("stddev_pop"),
                 &tk2d_agg_arg("stddev_y", "population"),
                 EPS2,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1956,6 +2004,7 @@ mod tests {
                 &pg1d_aggx("stddev_samp"),
                 &tk2d_agg_arg("stddev_x", "sample"),
                 EPS2,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1963,6 +2012,7 @@ mod tests {
                 &pg1d_aggy("stddev_samp"),
                 &tk2d_agg_arg("stddev_y", "sample"),
                 EPS2,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1970,6 +2020,7 @@ mod tests {
                 &pg1d_aggx("variance"),
                 &tk2d_agg("variance_x"),
                 EPS3,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1977,6 +2028,7 @@ mod tests {
                 &pg1d_aggy("variance"),
                 &tk2d_agg("variance_y"),
                 EPS3,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1984,6 +2036,7 @@ mod tests {
                 &pg1d_aggx("var_pop"),
                 &tk2d_agg_arg("variance_x", "population"),
                 EPS3,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1991,6 +2044,7 @@ mod tests {
                 &pg1d_aggy("var_pop"),
                 &tk2d_agg_arg("variance_y", "population"),
                 EPS3,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1998,6 +2052,7 @@ mod tests {
                 &pg1d_aggx("var_samp"),
                 &tk2d_agg_arg("variance_x", "sample"),
                 EPS3,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -2005,6 +2060,7 @@ mod tests {
                 &pg1d_aggy("var_samp"),
                 &tk2d_agg_arg("variance_y", "sample"),
                 EPS3,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -2012,6 +2068,7 @@ mod tests {
                 &pg2d_agg("regr_count"),
                 &tk2d_agg("num_vals"),
                 NONE,
+                true,
             );
 
             check_agg_equivalence(
@@ -2020,14 +2077,23 @@ mod tests {
                 &pg2d_agg("regr_slope"),
                 &tk2d_agg("slope"),
                 EPS1,
+                true,
             );
-            check_agg_equivalence(state, &client, &pg2d_agg("corr"), &tk2d_agg("corr"), EPS1);
+            check_agg_equivalence(
+                state,
+                &client,
+                &pg2d_agg("corr"),
+                &tk2d_agg("corr"),
+                EPS1,
+                true,
+            );
             check_agg_equivalence(
                 state,
                 &client,
                 &pg2d_agg("regr_intercept"),
                 &tk2d_agg("intercept"),
                 EPS1,
+                true,
             );
 
             // No postgres equivalent for x_intercept, so we only test function vs. arrow operator.
@@ -2046,6 +2112,7 @@ mod tests {
                 &pg2d_agg("regr_r2"),
                 &tk2d_agg("determination_coeff"),
                 EPS1,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -2053,6 +2120,7 @@ mod tests {
                 &pg2d_agg("covar_pop"),
                 &tk2d_agg_arg("covariance", "population"),
                 BILLIONTH,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -2060,6 +2128,7 @@ mod tests {
                 &pg2d_agg("covar_samp"),
                 &tk2d_agg_arg("covariance", "sample"),
                 BILLIONTH,
+                true,
             );
 
             // Skewness and kurtosis don't have aggregate functions in postgres, but we can compute them
@@ -2069,6 +2138,7 @@ mod tests {
                 &pg_moment_pop_query(3, "test_x"),
                 &tk1d_agg_arg("skewness", "population"),
                 BILLIONTH,
+                false,
             );
             check_agg_equivalence(
                 state,
@@ -2076,6 +2146,7 @@ mod tests {
                 &pg_moment_pop_query(3, "test_x"),
                 &tk2d_agg_arg("skewness_x", "population"),
                 BILLIONTH,
+                false,
             );
             check_agg_equivalence(
                 state,
@@ -2083,6 +2154,7 @@ mod tests {
                 &pg_moment_pop_query(3, "test_y"),
                 &tk2d_agg_arg("skewness_y", "population"),
                 BILLIONTH,
+                false,
             );
             check_agg_equivalence(
                 state,
@@ -2090,6 +2162,7 @@ mod tests {
                 &pg_moment_pop_query(4, "test_x"),
                 &tk1d_agg_arg("kurtosis", "population"),
                 BILLIONTH,
+                false,
             );
             check_agg_equivalence(
                 state,
@@ -2097,6 +2170,7 @@ mod tests {
                 &pg_moment_pop_query(4, "test_x"),
                 &tk2d_agg_arg("kurtosis_x", "population"),
                 BILLIONTH,
+                false,
             );
             check_agg_equivalence(
                 state,
@@ -2104,6 +2178,7 @@ mod tests {
                 &pg_moment_pop_query(4, "test_y"),
                 &tk2d_agg_arg("kurtosis_y", "population"),
                 BILLIONTH,
+                false,
             );
 
             check_agg_equivalence(
@@ -2112,6 +2187,7 @@ mod tests {
                 &pg_moment_samp_query(3, "test_x"),
                 &tk1d_agg_arg("skewness", "sample"),
                 BILLIONTH,
+                false,
             );
             check_agg_equivalence(
                 state,
@@ -2119,6 +2195,7 @@ mod tests {
                 &pg_moment_samp_query(3, "test_x"),
                 &tk2d_agg_arg("skewness_x", "sample"),
                 BILLIONTH,
+                false,
             );
             check_agg_equivalence(
                 state,
@@ -2126,6 +2203,7 @@ mod tests {
                 &pg_moment_samp_query(3, "test_y"),
                 &tk2d_agg_arg("skewness_y", "sample"),
                 BILLIONTH,
+                false,
             );
             check_agg_equivalence(
                 state,
@@ -2133,6 +2211,7 @@ mod tests {
                 &pg_moment_samp_query(4, "test_x"),
                 &tk1d_agg_arg("kurtosis", "sample"),
                 BILLIONTH,
+                false,
             );
             check_agg_equivalence(
                 state,
@@ -2140,6 +2219,7 @@ mod tests {
                 &pg_moment_samp_query(4, "test_x"),
                 &tk2d_agg_arg("kurtosis_x", "sample"),
                 BILLIONTH,
+                false,
             );
             check_agg_equivalence(
                 state,
@@ -2147,6 +2227,7 @@ mod tests {
                 &pg_moment_samp_query(4, "test_y"),
                 &tk2d_agg_arg("kurtosis_y", "sample"),
                 BILLIONTH,
+                false,
             );
 
             client.select("DROP TABLE test_table", None, None);

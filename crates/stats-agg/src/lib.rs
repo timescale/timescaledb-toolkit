@@ -190,3 +190,15 @@ impl M4 {
                 + T::lit(4.) * (new_na * sx3b - nb * new_sx3a) * delta / nx)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use twofloat::TwoFloat;
+
+    #[test]
+    fn floatlike_lit() {
+        assert_eq!(f64::lit(3.), 3.);
+        assert_eq!(TwoFloat::lit(3.), TwoFloat::new_add(3., 0.));
+    }
+}

@@ -854,25 +854,24 @@ mod tests {
                 assert_eq!(output, None);
             }
 
-            // TODO: This fails with invalid utf-8 sequence of 1 bytes from index 274
-            // client.select("SET timezone TO 'UTC'", None, None);
-            //
-            // let expected = "(\
-            //                 version:1,\
-            //                 open:(ts:\"2022-08-01 00:00:00+00\",val:1),\
-            //                 high:(ts:\"2022-08-01 00:00:00+00\",val:1),\
-            //                 low:(ts:\"2022-08-01 00:00:00+00\",val:1),\
-            //                 close:(ts:\"2022-08-01 00:00:00+00\",val:1),\
-            //                 volume:Missing()\
-            //                 )";
-            //
-            // let output = select_one!(
-            //     client,
-            //     "SELECT toolkit_experimental.candlestick_agg(ts, price, vol)
-            //        FROM (VALUES('2022-08-01 00:00:00+00'::timestamptz, 1.0, NULL::double precision)) AS v(ts, price, vol)",
-            //     String
-            // );
-            // assert_eq!(expected, output.unwrap());
+            client.select("SET timezone TO 'UTC'", None, None);
+
+            let expected = "(\
+                            version:1,\
+                            open:(ts:\"2022-08-01 00:00:00+00\",val:1),\
+                            high:(ts:\"2022-08-01 00:00:00+00\",val:1),\
+                            low:(ts:\"2022-08-01 00:00:00+00\",val:1),\
+                            close:(ts:\"2022-08-01 00:00:00+00\",val:1),\
+                            volume:Missing()\
+                            )";
+
+            let output = select_one!(
+                client,
+                "SELECT toolkit_experimental.candlestick_agg(ts, price, vol)::TEXT
+                   FROM (VALUES('2022-08-01 00:00:00+00'::timestamptz, 1.0, NULL::double precision)) AS v(ts, price, vol)",
+                String
+            ).unwrap();
+            assert_eq!(expected, output);
         });
     }
 

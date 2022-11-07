@@ -59,8 +59,9 @@ pub mod stats2d;
 
 // This will wrap the logic for incrementing the sum for the third moment of a series of floats (i.e. Sum (i=1..N) of (i-avg)^3)
 // Math is sourced from https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Higher-order_statistics
-pub(crate) struct M3 {}
-impl M3 {
+mod m3 {
+    use super::*;
+
     // Add a value x to the set.  n, sx, sxx, sx3 are the values from prior to including x.
     pub(crate) fn accum<T: FloatLike>(n: T, sx: T, sxx: T, sx3: T, x: T) -> T {
         let delta = x - (sx / n);
@@ -119,8 +120,9 @@ impl M3 {
 
 // This will wrap the logic for incrementing the sum for the fourth moment of a series of floats (i.e. Sum (i=1..N) of (i-avg)^4)
 // Math is sourced from https://en.wikipedia.org/wiki/Algorithms_for_calculating_variance#Higher-order_statistics
-pub(crate) struct M4 {}
-impl M4 {
+mod m4 {
+    use super::*;
+
     // Add a value x to the set.  n, sx, sxx, sx3, sx4 are the values from prior to including x.
     pub(crate) fn accum<T: FloatLike>(n: T, sx: T, sxx: T, sx3: T, sx4: T, x: T) -> T {
         let delta = x - (sx / n);

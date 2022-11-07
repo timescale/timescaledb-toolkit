@@ -29,11 +29,13 @@ use crate::raw::tstzrange;
 
 use crate::raw::bytea;
 
+// pg_type! can't handle generics so use a type alias to specify the type for `stats`
+type PgTypeHackStatsSummary2D = StatsSummary2D<f64>;
 // TODO wrap FlatSummary a la GaugeSummary - requires serialization version bump
 pg_type! {
     #[derive(Debug, PartialEq)]
     struct CounterSummary {
-        stats: StatsSummary2D,
+        stats: PgTypeHackStatsSummary2D,
         first: TSPoint,
         second: TSPoint,
         penultimate:TSPoint,

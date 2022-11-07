@@ -1,4 +1,5 @@
 use pgx::*;
+use twofloat::TwoFloat;
 
 use crate::{
     accessors::{
@@ -21,6 +22,9 @@ use stats_agg::XYPair;
 use self::Method::*;
 
 use crate::raw::bytea;
+
+type StatsSummary1DTF = InternalStatsSummary1D<TwoFloat>;
+type StatsSummary2DTF = InternalStatsSummary2D<TwoFloat>;
 
 pg_type! {
     #[derive(Debug, PartialEq)]
@@ -53,7 +57,7 @@ ron_inout_funcs!(StatsSummary1D);
 ron_inout_funcs!(StatsSummary2D);
 
 impl<'input> StatsSummary1D<'input> {
-    fn to_internal(&self) -> InternalStatsSummary1D {
+    fn to_internal(&self) -> InternalStatsSummary1D<f64> {
         InternalStatsSummary1D {
             n: self.n,
             sx: self.sx,
@@ -62,7 +66,7 @@ impl<'input> StatsSummary1D<'input> {
             sx4: self.sx4,
         }
     }
-    pub fn from_internal(st: InternalStatsSummary1D) -> Self {
+    pub fn from_internal(st: InternalStatsSummary1D<f64>) -> Self {
         build!(StatsSummary1D {
             n: st.n,
             sx: st.sx,
@@ -74,7 +78,7 @@ impl<'input> StatsSummary1D<'input> {
 }
 
 impl<'input> StatsSummary2D<'input> {
-    fn to_internal(&self) -> InternalStatsSummary2D {
+    fn to_internal(&self) -> InternalStatsSummary2D<f64> {
         InternalStatsSummary2D {
             n: self.n,
             sx: self.sx,
@@ -88,7 +92,7 @@ impl<'input> StatsSummary2D<'input> {
             sxy: self.sxy,
         }
     }
-    fn from_internal(st: InternalStatsSummary2D) -> Self {
+    fn from_internal(st: InternalStatsSummary2D<f64>) -> Self {
         build!(StatsSummary2D {
             n: st.n,
             sx: st.sx,
@@ -142,6 +146,14 @@ pub fn stats1d_trans<'s>(
 ) -> Option<Internal> {
     stats1d_trans_inner(unsafe { state.to_inner() }, val, fcinfo).internal()
 }
+#[pg_extern(immutable, parallel_safe)]
+pub fn stats1d_tf_trans<'s>(
+    state: Internal,
+    val: Option<f64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal> {
+    stats1d_tf_trans_inner(unsafe { state.to_inner() }, val, fcinfo).internal()
+}
 pub fn stats1d_trans_inner(
     state: Option<Inner<StatsSummary1D>>,
     val: Option<f64>,
@@ -160,7 +172,7 @@ pub fn stats1d_trans_inner(
                     Some(StatsSummary1D::from_internal(s).into())
                 }
                 (Some(mut state), Some(val)) => {
-                    let mut s: InternalStatsSummary1D = state.to_internal();
+                    let mut s: InternalStatsSummary1D<f64> = state.to_internal();
                     s.accum(val).unwrap();
                     *state = StatsSummary1D::from_internal(s);
                     Some(state)
@@ -169,6 +181,32 @@ pub fn stats1d_trans_inner(
         })
     }
 }
+pub fn stats1d_tf_trans_inner(
+    state: Option<Inner<StatsSummary1DTF>>,
+    val: Option<f64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<StatsSummary1DTF>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            match (state, val) {
+                (None, None) => Some(InternalStatsSummary1D::new().into()), // return an empty one from the trans function because otherwise it breaks in the window context
+                (Some(state), None) => Some(state),
+                (None, Some(val)) => {
+                    let val = TwoFloat::from(val);
+                    let mut s = InternalStatsSummary1D::new();
+                    s.accum(val).unwrap();
+                    Some(s.into())
+                }
+                (Some(mut state), Some(val)) => {
+                    let val = TwoFloat::from(val);
+                    state.accum(val).unwrap();
+                    Some(state)
+                }
+            }
+        })
+    }
+}
+
 // Note that in general, for all stats2d cases, if either the y or x value is missing, we disregard the entire point as the n is shared between them
 // if the user wants us to treat nulls as a particular value (ie zero), they can use COALESCE to do so
 #[pg_extern(immutable, parallel_safe)]
@@ -188,7 +226,7 @@ pub fn stats2d_trans_inner(
 ) -> Option<Inner<StatsSummary2D>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
-            let val: Option<XYPair> = match (y, x) {
+            let val: Option<XYPair<f64>> = match (y, x) {
                 (None, _) => None,
                 (_, None) => None,
                 (Some(y), Some(x)) => Some(XYPair { y, x }),
@@ -205,9 +243,56 @@ pub fn stats2d_trans_inner(
                     Some(StatsSummary2D::from_internal(s).into())
                 }
                 (Some(mut state), Some(val)) => {
-                    let mut s: InternalStatsSummary2D = state.to_internal();
+                    let mut s: InternalStatsSummary2D<f64> = state.to_internal();
                     s.accum(val).unwrap();
                     *state = StatsSummary2D::from_internal(s);
+                    Some(state)
+                }
+            }
+        })
+    }
+}
+
+#[pg_extern(immutable, parallel_safe)]
+pub fn stats2d_tf_trans(
+    state: Internal,
+    y: Option<f64>,
+    x: Option<f64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal> {
+    stats2d_tf_trans_inner(unsafe { state.to_inner() }, y, x, fcinfo).internal()
+}
+pub fn stats2d_tf_trans_inner(
+    state: Option<Inner<StatsSummary2DTF>>,
+    y: Option<f64>,
+    x: Option<f64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<StatsSummary2DTF>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            let val: Option<XYPair<TwoFloat>> = match (y, x) {
+                (None, _) => None,
+                (_, None) => None,
+                (Some(y), Some(x)) => Some(XYPair {
+                    y: y.into(),
+                    x: x.into(),
+                }),
+            };
+            match (state, val) {
+                (None, None) => {
+                    // return an empty one from the trans function because otherwise it breaks in the window context
+                    Some(StatsSummary2DTF::new().into())
+                }
+                (Some(state), None) => Some(state),
+                (None, Some(val)) => {
+                    let mut s = InternalStatsSummary2D::new();
+                    s.accum(val).unwrap();
+                    Some(s.into())
+                }
+                (Some(mut state), Some(val)) => {
+                    let mut s: StatsSummary2DTF = *state;
+                    s.accum(val).unwrap();
+                    *state = s;
                     Some(state)
                 }
             }
@@ -233,9 +318,35 @@ pub fn stats1d_inv_trans_inner(
             (None, _) => panic!("Inverse function should never be called with NULL state"),
             (Some(state), None) => Some(state),
             (Some(state), Some(val)) => {
-                let s: InternalStatsSummary1D = state.to_internal();
+                let s: InternalStatsSummary1D<f64> = state.to_internal();
                 let s = s.remove(val);
                 s.map(|s| StatsSummary1D::from_internal(s).into())
+            }
+        })
+    }
+}
+
+#[pg_extern(immutable)]
+pub fn stats1d_tf_inv_trans(
+    state: Internal,
+    val: Option<f64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal> {
+    stats1d_tf_inv_trans_inner(unsafe { state.to_inner() }, val, fcinfo).internal()
+}
+pub fn stats1d_tf_inv_trans_inner(
+    state: Option<Inner<StatsSummary1DTF>>,
+    val: Option<f64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<StatsSummary1DTF>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || match (state, val) {
+            (None, _) => panic!("Inverse function should never be called with NULL state"),
+            (Some(state), None) => Some(state),
+            (Some(state), Some(val)) => {
+                let val = TwoFloat::new_add(val, 0.0);
+                let state = state.remove(val);
+                state.map(|s| s.into())
             }
         })
     }
@@ -258,7 +369,7 @@ pub fn stats2d_inv_trans_inner(
 ) -> Option<Inner<StatsSummary2D>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
-            let val: Option<XYPair> = match (y, x) {
+            let val: Option<XYPair<f64>> = match (y, x) {
                 (None, _) => None,
                 (_, None) => None,
                 (Some(y), Some(x)) => Some(XYPair { y, x }),
@@ -267,9 +378,47 @@ pub fn stats2d_inv_trans_inner(
                 (None, _) => panic!("Inverse function should never be called with NULL state"),
                 (Some(state), None) => Some(state),
                 (Some(state), Some(val)) => {
-                    let s: InternalStatsSummary2D = state.to_internal();
+                    let s: InternalStatsSummary2D<f64> = state.to_internal();
                     let s = s.remove(val);
                     s.map(|s| StatsSummary2D::from_internal(s).into())
+                }
+            }
+        })
+    }
+}
+
+#[pg_extern(immutable)]
+pub fn stats2d_tf_inv_trans(
+    state: Internal,
+    y: Option<f64>,
+    x: Option<f64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal> {
+    stats2d_tf_inv_trans_inner(unsafe { state.to_inner() }, y, x, fcinfo).internal()
+}
+pub fn stats2d_tf_inv_trans_inner(
+    state: Option<Inner<StatsSummary2DTF>>,
+    y: Option<f64>,
+    x: Option<f64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Inner<StatsSummary2DTF>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            let val: Option<XYPair<TwoFloat>> = match (y, x) {
+                (None, _) => None,
+                (_, None) => None,
+                (Some(y), Some(x)) => Some(XYPair {
+                    y: y.into(),
+                    x: x.into(),
+                }),
+            };
+            match (state, val) {
+                (None, _) => panic!("Inverse function should never be called with NULL state"),
+                (Some(state), None) => Some(state),
+                (Some(state), Some(val)) => {
+                    let s: InternalStatsSummary2D<TwoFloat> = *state;
+                    let s = s.remove(val);
+                    s.map(|s| s.into())
                 }
             }
         })
@@ -471,6 +620,26 @@ fn stats1d_final<'s>(
 }
 
 #[pg_extern(immutable, parallel_safe)]
+fn stats1d_tf_final<'s>(
+    state: Internal,
+    fcinfo: pg_sys::FunctionCallInfo,
+    // return a normal stats summary here
+) -> Option<StatsSummary1D<'s>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || match state.get() {
+            None => None,
+            Some(state) => {
+                let state: &StatsSummary1DTF = state;
+                let state: InternalStatsSummary1D<TwoFloat> = *state;
+                let state: InternalStatsSummary1D<f64> = state.into();
+                let state: StatsSummary1D = StatsSummary1D::from_internal(state);
+                Some(state.in_current_context())
+            }
+        })
+    }
+}
+
+#[pg_extern(immutable, parallel_safe)]
 fn stats2d_final<'s>(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
@@ -486,6 +655,25 @@ fn stats2d_final<'s>(
     }
 }
 
+#[pg_extern(immutable, parallel_safe)]
+fn stats2d_tf_final<'s>(
+    state: Internal,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<StatsSummary2D<'s>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || match state.get() {
+            None => None,
+            Some(state) => {
+                let state: StatsSummary2DTF = *state;
+                let state: InternalStatsSummary2D<f64> = state.into();
+                let state: StatsSummary2D = StatsSummary2D::from_internal(state);
+                Some(state.in_current_context())
+            }
+        })
+    }
+}
+
+// no serial/unserial/combine function for TwoFloats since moving aggregate mode and partial aggregate mode are mutually exclusiveca f
 extension_sql!(
     "\n\
     CREATE AGGREGATE stats_agg( value DOUBLE PRECISION )\n\
@@ -496,10 +684,10 @@ extension_sql!(
         combinefunc = stats1d_combine,\n\
         serialfunc = stats1d_trans_serialize,\n\
         deserialfunc = stats1d_trans_deserialize,\n\
-        msfunc = stats1d_trans,\n\
-        minvfunc = stats1d_inv_trans,\n\
+        msfunc = stats1d_tf_trans,\n\
+        minvfunc = stats1d_tf_inv_trans,\n\
         mstype = internal,\n\
-        mfinalfunc = stats1d_final,\n\
+        mfinalfunc = stats1d_tf_final,\n\
         parallel = safe\n\
     );\n\
 ",
@@ -513,6 +701,28 @@ extension_sql!(
         stats1d_trans,
         stats1d_inv_trans,
         stats1d_final
+    ],
+);
+
+extension_sql!(
+    "CREATE AGGREGATE toolkit_experimental.stats_agg_tf( value DOUBLE PRECISION )\n\
+    (\n\
+        sfunc = stats1d_tf_trans,\n\
+        stype = internal,\n\
+        finalfunc = stats1d_tf_final,\n\
+        msfunc = stats1d_tf_trans,\n\
+        minvfunc = stats1d_tf_inv_trans,\n\
+        mstype = internal,\n\
+        mfinalfunc = stats1d_tf_final,\n\
+        parallel = safe\n\
+    );",
+    name = "stats_agg_tf_1d",
+    requires = [
+        stats1d_tf_trans,
+        stats1d_tf_final,
+        stats1d_tf_trans,
+        stats1d_tf_inv_trans,
+        stats1d_tf_final
     ],
 );
 
@@ -545,10 +755,10 @@ extension_sql!(
         combinefunc = stats2d_combine,\n\
         serialfunc = stats2d_trans_serialize,\n\
         deserialfunc = stats2d_trans_deserialize,\n\
-        msfunc = stats2d_trans,\n\
-        minvfunc = stats2d_inv_trans,\n\
+        msfunc = stats2d_tf_trans,\n\
+        minvfunc = stats2d_tf_inv_trans,\n\
         mstype = internal,\n\
-        mfinalfunc = stats2d_final,\n\
+        mfinalfunc = stats2d_tf_final,\n\
         parallel = safe\n\
     );\n\
 ",
@@ -563,6 +773,24 @@ extension_sql!(
         stats2d_inv_trans,
         stats2d_final
     ],
+);
+
+extension_sql!(
+    "\n\
+    CREATE AGGREGATE toolkit_experimental.stats_agg_tf( y DOUBLE PRECISION, x DOUBLE PRECISION )\n\
+    (\n\
+        sfunc = stats2d_tf_trans,\n\
+        stype = internal,\n\
+        finalfunc = stats2d_tf_final,\n\
+        msfunc = stats2d_tf_trans,\n\
+        minvfunc = stats2d_tf_inv_trans,\n\
+        mstype = internal,\n\
+        mfinalfunc = stats2d_tf_final,\n\
+        parallel = safe\n\
+    );\n\
+",
+    name = "stats_agg_2d_tf",
+    requires = [stats2d_tf_trans, stats2d_tf_inv_trans, stats2d_tf_final],
 );
 
 // mostly for testing/debugging, in case we want one without the inverse functions defined.
@@ -1481,17 +1709,18 @@ mod tests {
         pg_cmd: &str,
         tk_cmd: &str,
         allowed_diff: f64,
+        do_moving_agg: bool,
     ) {
-        let pg_result = client
+        let (pg_result, pg_moving_agg_result) = client
             .select(pg_cmd, None, None)
             .first()
-            .get_one::<f64>()
-            .unwrap();
+            .get_two::<f64, f64>();
+        let pg_result = pg_result.unwrap();
 
-        let (tk_result, arrow_result) = client
+        let (tk_result, arrow_result, tk_moving_agg_result) = client
             .select(tk_cmd, None, None)
             .first()
-            .get_two::<f64, f64>();
+            .get_three::<f64, f64, f64>();
         let (tk_result, arrow_result) = (tk_result.unwrap(), arrow_result.unwrap());
         assert_eq!(tk_result, arrow_result, "Arrow didn't match in {}", tk_cmd);
 
@@ -1521,25 +1750,34 @@ mod tests {
                 state.failed_msg(PRINT_VALS)
             );
         }
+
+        if do_moving_agg {
+            approx::assert_relative_eq!(
+                pg_moving_agg_result.unwrap(),
+                tk_moving_agg_result.unwrap(),
+                max_relative = 1e-9,
+            )
+        }
     }
 
     fn pg1d_aggx(agg: &str) -> String {
-        format!("SELECT {}(test_x) FROM test_table", agg)
+        format!("SELECT {agg}(test_x), (SELECT {agg}(test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3) FROM test_table", agg = agg)
     }
 
     fn pg1d_aggy(agg: &str) -> String {
-        format!("SELECT {}(test_y) FROM test_table", agg)
+        format!("SELECT {agg}(test_y), (SELECT {agg}(test_y) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3) FROM test_table", agg = agg)
     }
 
     fn pg2d_agg(agg: &str) -> String {
-        format!("SELECT {}(test_y, test_x) FROM test_table", agg)
+        format!("SELECT {agg}(test_y, test_x), (SELECT {agg}(test_y, test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3) FROM test_table", agg = agg)
     }
 
     fn tk1d_agg(agg: &str) -> String {
         format!(
             "SELECT \
             {agg}(stats_agg(test_x)), \
-            stats_agg(test_x)->{agg}() \
+            stats_agg(test_x)->{agg}(), \
+            {agg}((SELECT stats_agg(test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3)) \
         FROM test_table",
             agg = agg
         )
@@ -1549,7 +1787,8 @@ mod tests {
         format!(
             "SELECT \
             {agg}(stats_agg(test_x), '{arg}'), \
-            stats_agg(test_x)->{agg}('{arg}') \
+            stats_agg(test_x)->{agg}('{arg}'), \
+            {agg}((SELECT stats_agg(test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3), '{arg}') \
         FROM test_table",
             agg = agg,
             arg = arg
@@ -1560,7 +1799,8 @@ mod tests {
         format!(
             "SELECT \
             {agg}(stats_agg(test_y, test_x)), \
-            stats_agg(test_y, test_x)->{agg}() \
+            stats_agg(test_y, test_x)->{agg}(), \
+            {agg}((SELECT stats_agg(test_y, test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3)) \
         FROM test_table",
             agg = agg
         )
@@ -1570,7 +1810,8 @@ mod tests {
         format!(
             "SELECT \
             {agg}(stats_agg(test_y, test_x), '{arg}'), \
-            stats_agg(test_y, test_x)->{agg}('{arg}') \
+            stats_agg(test_y, test_x)->{agg}('{arg}'), \
+            {agg}((SELECT stats_agg(test_y, test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3), '{arg}') \
         FROM test_table",
             agg = agg,
             arg = arg
@@ -1626,14 +1867,23 @@ mod tests {
                 &pg1d_aggx("avg"),
                 &tk1d_agg("average"),
                 NONE,
+                true,
             );
-            check_agg_equivalence(state, &client, &pg1d_aggx("sum"), &tk1d_agg("sum"), NONE);
+            check_agg_equivalence(
+                state,
+                &client,
+                &pg1d_aggx("sum"),
+                &tk1d_agg("sum"),
+                NONE,
+                true,
+            );
             check_agg_equivalence(
                 state,
                 &client,
                 &pg1d_aggx("count"),
                 &tk1d_agg("num_vals"),
                 NONE,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1641,6 +1891,7 @@ mod tests {
                 &pg1d_aggx("stddev"),
                 &tk1d_agg("stddev"),
                 EPS2,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1648,6 +1899,7 @@ mod tests {
                 &pg1d_aggx("stddev_pop"),
                 &tk1d_agg_arg("stddev", "population"),
                 EPS2,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1655,6 +1907,7 @@ mod tests {
                 &pg1d_aggx("stddev_samp"),
                 &tk1d_agg_arg("stddev", "sample"),
                 EPS2,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1662,6 +1915,7 @@ mod tests {
                 &pg1d_aggx("variance"),
                 &tk1d_agg("variance"),
                 EPS3,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1669,6 +1923,7 @@ mod tests {
                 &pg1d_aggx("var_pop"),
                 &tk1d_agg_arg("variance", "population"),
                 EPS3,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1676,6 +1931,7 @@ mod tests {
                 &pg1d_aggx("var_samp"),
                 &tk1d_agg_arg("variance", "sample"),
                 EPS3,
+                true,
             );
 
             check_agg_equivalence(
@@ -1684,6 +1940,7 @@ mod tests {
                 &pg2d_agg("regr_avgx"),
                 &tk2d_agg("average_x"),
                 NONE,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1691,15 +1948,31 @@ mod tests {
                 &pg2d_agg("regr_avgy"),
                 &tk2d_agg("average_y"),
                 NONE,
+                true,
             );
-            check_agg_equivalence(state, &client, &pg1d_aggx("sum"), &tk2d_agg("sum_x"), NONE);
-            check_agg_equivalence(state, &client, &pg1d_aggy("sum"), &tk2d_agg("sum_y"), NONE);
+            check_agg_equivalence(
+                state,
+                &client,
+                &pg1d_aggx("sum"),
+                &tk2d_agg("sum_x"),
+                NONE,
+                true,
+            );
+            check_agg_equivalence(
+                state,
+                &client,
+                &pg1d_aggy("sum"),
+                &tk2d_agg("sum_y"),
+                NONE,
+                true,
+            );
             check_agg_equivalence(
                 state,
                 &client,
                 &pg1d_aggx("stddev"),
                 &tk2d_agg("stddev_x"),
                 EPS2,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1707,6 +1980,7 @@ mod tests {
                 &pg1d_aggy("stddev"),
                 &tk2d_agg("stddev_y"),
                 EPS2,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1714,6 +1988,7 @@ mod tests {
                 &pg1d_aggx("stddev_pop"),
                 &tk2d_agg_arg("stddev_x", "population"),
                 EPS2,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1721,6 +1996,7 @@ mod tests {
                 &pg1d_aggy("stddev_pop"),
                 &tk2d_agg_arg("stddev_y", "population"),
                 EPS2,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1728,6 +2004,7 @@ mod tests {
                 &pg1d_aggx("stddev_samp"),
                 &tk2d_agg_arg("stddev_x", "sample"),
                 EPS2,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1735,6 +2012,7 @@ mod tests {
                 &pg1d_aggy("stddev_samp"),
                 &tk2d_agg_arg("stddev_y", "sample"),
                 EPS2,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1742,6 +2020,7 @@ mod tests {
                 &pg1d_aggx("variance"),
                 &tk2d_agg("variance_x"),
                 EPS3,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1749,6 +2028,7 @@ mod tests {
                 &pg1d_aggy("variance"),
                 &tk2d_agg("variance_y"),
                 EPS3,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1756,6 +2036,7 @@ mod tests {
                 &pg1d_aggx("var_pop"),
                 &tk2d_agg_arg("variance_x", "population"),
                 EPS3,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1763,6 +2044,7 @@ mod tests {
                 &pg1d_aggy("var_pop"),
                 &tk2d_agg_arg("variance_y", "population"),
                 EPS3,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1770,6 +2052,7 @@ mod tests {
                 &pg1d_aggx("var_samp"),
                 &tk2d_agg_arg("variance_x", "sample"),
                 EPS3,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1777,6 +2060,7 @@ mod tests {
                 &pg1d_aggy("var_samp"),
                 &tk2d_agg_arg("variance_y", "sample"),
                 EPS3,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1784,6 +2068,7 @@ mod tests {
                 &pg2d_agg("regr_count"),
                 &tk2d_agg("num_vals"),
                 NONE,
+                true,
             );
 
             check_agg_equivalence(
@@ -1792,14 +2077,23 @@ mod tests {
                 &pg2d_agg("regr_slope"),
                 &tk2d_agg("slope"),
                 EPS1,
+                true,
             );
-            check_agg_equivalence(state, &client, &pg2d_agg("corr"), &tk2d_agg("corr"), EPS1);
+            check_agg_equivalence(
+                state,
+                &client,
+                &pg2d_agg("corr"),
+                &tk2d_agg("corr"),
+                EPS1,
+                true,
+            );
             check_agg_equivalence(
                 state,
                 &client,
                 &pg2d_agg("regr_intercept"),
                 &tk2d_agg("intercept"),
                 EPS1,
+                true,
             );
 
             // No postgres equivalent for x_intercept, so we only test function vs. arrow operator.
@@ -1818,6 +2112,7 @@ mod tests {
                 &pg2d_agg("regr_r2"),
                 &tk2d_agg("determination_coeff"),
                 EPS1,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1825,6 +2120,7 @@ mod tests {
                 &pg2d_agg("covar_pop"),
                 &tk2d_agg_arg("covariance", "population"),
                 BILLIONTH,
+                true,
             );
             check_agg_equivalence(
                 state,
@@ -1832,6 +2128,7 @@ mod tests {
                 &pg2d_agg("covar_samp"),
                 &tk2d_agg_arg("covariance", "sample"),
                 BILLIONTH,
+                true,
             );
 
             // Skewness and kurtosis don't have aggregate functions in postgres, but we can compute them
@@ -1841,6 +2138,7 @@ mod tests {
                 &pg_moment_pop_query(3, "test_x"),
                 &tk1d_agg_arg("skewness", "population"),
                 BILLIONTH,
+                false,
             );
             check_agg_equivalence(
                 state,
@@ -1848,6 +2146,7 @@ mod tests {
                 &pg_moment_pop_query(3, "test_x"),
                 &tk2d_agg_arg("skewness_x", "population"),
                 BILLIONTH,
+                false,
             );
             check_agg_equivalence(
                 state,
@@ -1855,6 +2154,7 @@ mod tests {
                 &pg_moment_pop_query(3, "test_y"),
                 &tk2d_agg_arg("skewness_y", "population"),
                 BILLIONTH,
+                false,
             );
             check_agg_equivalence(
                 state,
@@ -1862,6 +2162,7 @@ mod tests {
                 &pg_moment_pop_query(4, "test_x"),
                 &tk1d_agg_arg("kurtosis", "population"),
                 BILLIONTH,
+                false,
             );
             check_agg_equivalence(
                 state,
@@ -1869,6 +2170,7 @@ mod tests {
                 &pg_moment_pop_query(4, "test_x"),
                 &tk2d_agg_arg("kurtosis_x", "population"),
                 BILLIONTH,
+                false,
             );
             check_agg_equivalence(
                 state,
@@ -1876,6 +2178,7 @@ mod tests {
                 &pg_moment_pop_query(4, "test_y"),
                 &tk2d_agg_arg("kurtosis_y", "population"),
                 BILLIONTH,
+                false,
             );
 
             check_agg_equivalence(
@@ -1884,6 +2187,7 @@ mod tests {
                 &pg_moment_samp_query(3, "test_x"),
                 &tk1d_agg_arg("skewness", "sample"),
                 BILLIONTH,
+                false,
             );
             check_agg_equivalence(
                 state,
@@ -1891,6 +2195,7 @@ mod tests {
                 &pg_moment_samp_query(3, "test_x"),
                 &tk2d_agg_arg("skewness_x", "sample"),
                 BILLIONTH,
+                false,
             );
             check_agg_equivalence(
                 state,
@@ -1898,6 +2203,7 @@ mod tests {
                 &pg_moment_samp_query(3, "test_y"),
                 &tk2d_agg_arg("skewness_y", "sample"),
                 BILLIONTH,
+                false,
             );
             check_agg_equivalence(
                 state,
@@ -1905,6 +2211,7 @@ mod tests {
                 &pg_moment_samp_query(4, "test_x"),
                 &tk1d_agg_arg("kurtosis", "sample"),
                 BILLIONTH,
+                false,
             );
             check_agg_equivalence(
                 state,
@@ -1912,6 +2219,7 @@ mod tests {
                 &pg_moment_samp_query(4, "test_x"),
                 &tk2d_agg_arg("kurtosis_x", "sample"),
                 BILLIONTH,
+                false,
             );
             check_agg_equivalence(
                 state,
@@ -1919,9 +2227,52 @@ mod tests {
                 &pg_moment_samp_query(4, "test_y"),
                 &tk2d_agg_arg("kurtosis_y", "sample"),
                 BILLIONTH,
+                false,
             );
 
             client.select("DROP TABLE test_table", None, None);
+        });
+    }
+
+    #[pg_test]
+    fn stats_agg_rolling() {
+        Spi::execute(|client| {
+            client.select(
+                "
+SET timezone TO 'UTC';
+CREATE TABLE prices(ts TIMESTAMPTZ, price FLOAT);
+INSERT INTO prices (
+    WITH dates AS
+        (SELECT
+            *
+        FROM
+            generate_series('2020-01-01 00:00'::timestamp, '2020-02-01 12:00', '10 minutes') time)
+    SELECT
+        dates.time,
+        (select (random()+EXTRACT(seconds FROM dates.time))*100 ) price
+    FROM
+        dates
+);
+",
+                None,
+                None,
+            );
+
+            let mut vals = client.select(
+                "SELECT stddev(data.stats_agg) FROM (SELECT stats_agg(price) OVER (ORDER BY ts RANGE '50 minutes' PRECEDING) FROM prices) data",
+                None, None
+            );
+            assert!(vals.next().unwrap()[1].value::<f64>().unwrap().is_nan());
+            assert!(vals.next().unwrap()[1].value::<f64>().is_some());
+            assert!(vals.next().unwrap()[1].value::<f64>().is_some());
+
+            let mut vals = client.select(
+                "SELECT slope(data.stats_agg) FROM (SELECT stats_agg((EXTRACT(minutes FROM ts)), price) OVER (ORDER BY ts RANGE '50 minutes' PRECEDING) FROM prices) data;",
+                None, None
+            );
+            assert!(vals.next().unwrap()[1].value::<f64>().is_none()); // trendline is zero initially
+            assert!(vals.next().unwrap()[1].value::<f64>().is_some());
+            assert!(vals.next().unwrap()[1].value::<f64>().is_some());
         });
     }
 }

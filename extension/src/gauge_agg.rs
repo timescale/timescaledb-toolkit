@@ -27,7 +27,7 @@ use crate::{
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, FlatSerializable)]
 #[repr(C)]
 pub struct FlatSummary {
-    stats: StatsSummary2D,
+    stats: StatsSummary2D<f64>,
     first: TSPoint,
     second: TSPoint,
     penultimate: TSPoint,

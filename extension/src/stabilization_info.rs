@@ -11,6 +11,14 @@
 
 crate::functions_stabilized_at! {
     STABLE_FUNCTIONS
+    "1.12.0" => {
+        stats1d_tf_inv_trans(internal,double precision),
+        stats1d_tf_final(internal),
+        stats1d_tf_trans(internal,double precision),
+        stats2d_tf_final(internal),
+        stats2d_tf_trans(internal,double precision,double precision),
+        stats2d_tf_inv_trans(internal,double precision,double precision),
+    }
     "1.11.0" => {
         accessorfirsttime_in(cstring),
         accessorfirsttime_out(accessorfirsttime),

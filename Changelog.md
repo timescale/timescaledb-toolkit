@@ -12,6 +12,8 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
   Both the aggregate form and the function form of `Candlestick` support the following (experimental) accessors (in addition to being re-aggregated via rollup):
   `open`, `high`, `low`, `close`, `open_time`, `high_time`, `low_time`, `close_time`, `volume`, `vwap` (Volume Weighted Average Price)
 
+  NOTE: This functionality improves upon and replaces the need for `toolkit_experimental.ohlc` which will be removed in the next release.
+
 #### Stabilized features
 
 #### Bug fixes

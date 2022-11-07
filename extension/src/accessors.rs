@@ -545,4 +545,26 @@ pub mod toolkit_experimental {
             }
         }
     }
+
+    pg_type! {
+        #[derive(Debug)]
+        struct AccessorPercentileArray<'input> {
+            len: u64,
+            percentile: [f64; self.len],
+        }
+    }
+
+    ron_inout_funcs!(AccessorPercentileArray);
+
+    #[pg_extern(immutable, name = "approx_percentiles")]
+    pub fn accessor_percentiles(unit: Vec<f64>) -> AccessorPercentileArray<'static> {
+        unsafe {
+            flatten! {
+                AccessorPercentileArray{
+                    len: unit.len().try_into().unwrap(),
+                    percentile: unit.into(),
+                }
+            }
+        }
+    }
 }

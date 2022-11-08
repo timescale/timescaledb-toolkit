@@ -154,9 +154,6 @@ branch="$BRANCH_BASENAME"$VERSION
 $nop git checkout -b $branch $COMMIT
 
 # Set default_version in control file.
-# TODO delete if we're not going this direction.
-# $nop sed --in-place -e "/^default_version = / { s/'[^']*'\$/'$VERSION'/ }" $CONTROL
-# assert_dirty || die "failed to set default_version = '$VERSION' in $CONTROL"
 
 # 2. Set toolkit version.
 cargo set-version $dry_run_flag -p timescaledb_toolkit $VERSION
@@ -176,23 +173,20 @@ done
 assert_clean || die 'tools/build should not dirty the working directory'
 
 # 4. Push the branch so release-build-scripts repository
-echo TODO skipped unconditionally during development
-: $nop git push origin $branch
+$nop git push origin $branch
 
 # 5. Trigger toolkit packaging actions in release-build-scripts repository.
 branch_commit=`git log -1 --pretty=format:%h`
-# TODO upload-artifacts hard-coded false below so we don't publish while developing this script
 $nop gh workflow run toolkit-package.yml \
         -R timescale/release-build-scripts \
         -r main \
         -f version=$VERSION \
         -f commit-id=$branch_commit \
-        -f upload-artifacts=false
+        -f upload-artifacts=true
 
 # 6. Tag the release.
 $nop git tag $VERSION
-echo TODO skipped unconditionally during development
-: $nop git push origin $VERSION
+$nop git push origin $VERSION
 
 # 7. Prepare the main branch for the next release cycle.
 # Github action gives us a shallow checkout which we must deepen before we can push changes.
@@ -209,10 +203,8 @@ assert_dirty || die "failed to set toolkit version to $VERSION-dev in Cargo.lock
 commit Cargo.lock
 
 # 7b. Bump github action cache keys.
-# TODO update cache keys
 
 finish_commit "start $VERSION-dev"
 $nop git show
 
-echo TODO skipped unconditionally during development
-: $nop git push
+$nop git push

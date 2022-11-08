@@ -4,6 +4,18 @@
 
 This changelog should be updated as part of a PR if the work is worth noting (most of them should be). If unsure, always add an entry here for any PR targeted for the next release. It's easier to remove than add an entry at final review time for the next release.
 
+## Next Release (Date TBD)
+
+#### New experimental features
+
+#### Bug fixes
+
+#### Other notable changes
+
+#### Shout-outs
+
+**Full Changelog**: [TODO]
+
 ## [1.12.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.12.0) (2022-11-08)
 
 #### New experimental features

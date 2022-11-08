@@ -256,7 +256,10 @@ impl TestClient {
                 db_creation_client
                     .simple_query(&drop)
                     .unwrap_or_else(|e| panic!("could not drop db {} due to {}", test_db_name, e));
-                let create = format!(r#"CREATE DATABASE "{}" LOCALE 'C'"#, test_db_name);
+                let create = format!(
+                    r#"CREATE DATABASE "{}" LC_COLLATE 'C' LC_CTYPE 'C'"#,
+                    test_db_name
+                );
                 db_creation_client
                     .simple_query(&create)
                     .unwrap_or_else(|e| {

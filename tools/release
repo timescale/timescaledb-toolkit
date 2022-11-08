@@ -1,0 +1,218 @@
+#!/bin/sh
+
+# This script automates release creation:
+# 1. Create release branch.
+# 2. Set toolkit version on branch.
+# 3. Run tests.
+# 4. Push the branch so release-build-scripts repository [1] can see the commit from #2.
+# 5. Trigger toolkit packaging actions in release-build-scripts repository.
+# 6. Tag the release. [2]
+# 7. Prepare the main branch for the next release cycle.
+# 7a. Set toolkit version to released version with '-dev' appended.
+# 7b. Bump github action cache keys.
+
+# [1] We need a self-hosted runner for arm64 build, which we can only get with
+#     a private repository, so we must delegate packaging to that.
+
+# [2] This means we publish a tag before testing binaries.  We'd rather test first.
+#     TODO How?
+#     - Can we have release-build-scripts gh back to an action over here?
+#     - Can we have a trigger that watches for release-build-scripts action to finish?
+
+# Sample run:
+# tools/release -n -version 1.11.0 9c2b04d
+
+# git commit records these on commits (yes, all three).
+# TODO What should we use?  I pulled this from the deb package metadata
+EMAIL=hello@timescale.com
+GIT_AUTHOR_NAME=tools/release
+GIT_COMMITTER_NAME=$GIT_AUTHOR_NAME
+export EMAIL GIT_AUTHOR_NAME GIT_COMMITTER_NAME
+
+BRANCH_BASENAME=forge-stable-
+CONTROL=extension/timescaledb_toolkit.control
+TOML=extension/Cargo.toml
+
+. tools/dependencies.sh
+
+set -ex
+
+# TODO Install these into timescaledev/toolkit-builder image and delete this block.
+if [ "$1" = setup ]; then
+    # Install cargo set-version (and cargo install is not idempotent).
+    if ! cargo help set-version > /dev/null; then
+        cargo install --version =$CARGO_EDIT cargo-edit
+    fi
+    # Install gh
+    gh=`basename $GH_DEB_URL`
+    curl -LO $GH_DEB_URL
+    sha256sum -c - <<EOF
+$GH_DEB_SHA256  $gh
+EOF
+    sudo dpkg -i $gh
+    exit
+fi
+
+print() {
+    printf '%s\n' "$*"
+}
+
+die() {
+    st=${?:-0}
+    if [ $st -eq 0 ]; then
+        st=2
+    fi
+    print "$*" >&2
+    exit $st
+}
+
+usage() {
+    die 'release [-n] -version VERSION COMMIT'
+}
+
+# Return 0 iff working directory is clean.
+# Also prints any diff.
+assert_clean() {
+    $nop git diff --exit-code
+}
+
+# Return 0 iff working directory is dirty.
+# Also prints any diff.
+assert_dirty() {
+    [ -n "$nop" ] && return
+    ! assert_clean
+}
+
+# Use start_commit, commit, and finish_commit to safely build a commit from
+# multiple automated edits.
+# - start_commit [file names]
+#   Start a commit with the named changed files.
+#   Any other edited file (dirty directory after commit) is an error.
+# - commit [file names]
+#   Amend the commit after each automated edit.
+#   Any other edited file (dirty directory after commit) is an error.
+# - finish_commit MESSAGE
+#   Finalize the commit with the commit message MESSAGE.
+#   Any edited files is an error.
+start_commit() {
+    [ -z "$_PENDING_COMMIT" ] || die 'BUG: start_commit called twice'
+    _PENDING_COMMIT=1
+    $nop git add "$@"
+    $nop git commit -m pending
+    assert_clean || die "working directory should be clean after commit $@"
+}
+
+commit() {
+    [ -n "$_PENDING_COMMIT" ] || die 'BUG: commit called without start_commit'
+    $nop git add "$@"
+    $nop git commit --no-edit --amend
+    assert_clean || die "working directory should be clean after commit $@"
+}
+
+finish_commit() {
+    [ -n "$_PENDING_COMMIT" ] || die 'BUG: finish_commit called without start_commit'
+    assert_clean || die "working directory should be clean to finish commit '$1'"
+    _PENDING_COMMIT=
+    (export GIT_COMMITTER_DATE="`date`" && $nop git commit --no-edit --amend "--date=$GIT_COMMITTER_DATE" -m "$1")
+}
+
+# Super simple option processing.
+while [ $# -gt 0 ]; do
+    arg=$1
+    shift
+    case "$arg" in
+        -n)
+            dry_run_flag=--dry-run
+            nop=:
+            ;;
+
+        -y)
+            # Ignored - gives us something to pass in the Github Action where default is no-op.
+            ;;
+
+        -version)
+            VERSION=$1
+            shift
+            COMMIT=$1
+            shift
+            ;;
+
+        *)
+            usage
+            ;;
+    esac
+done
+
+# And away we go!
+
+# 0. Sanity-check the surroundings.
+# working directory clean?
+assert_clean || die 'cowardly refusing to operate on dirty working directory'
+
+# 1. Create release branch.
+branch="$BRANCH_BASENAME"$VERSION
+$nop git checkout -b $branch $COMMIT
+
+# Set default_version in control file.
+# TODO delete if we're not going this direction.
+# $nop sed --in-place -e "/^default_version = / { s/'[^']*'\$/'$VERSION'/ }" $CONTROL
+# assert_dirty || die "failed to set default_version = '$VERSION' in $CONTROL"
+
+# 2. Set toolkit version.
+cargo set-version $dry_run_flag -p timescaledb_toolkit $VERSION
+assert_dirty || die "failed to set toolkit version to $VERSION in $TOML"
+start_commit $TOML
+# Update cargo.lock - this form of cargo update doesn't update dependency versions.
+$nop cargo update -p timescaledb_toolkit
+assert_dirty || die "failed to set toolkit version to $VERSION in Cargo.lock"
+commit Cargo.lock
+finish_commit "release $VERSION"
+$nop git show
+
+# 3. Run tests.
+for pg in $PG_VERSIONS; do
+    $nop tools/build -pg$pg test-extension
+done
+assert_clean || die 'tools/build should not dirty the working directory'
+
+# 4. Push the branch so release-build-scripts repository
+echo TODO skipped unconditionally during development
+: $nop git push origin $branch
+
+# 5. Trigger toolkit packaging actions in release-build-scripts repository.
+branch_commit=`git log -1 --pretty=format:%h`
+# TODO upload-artifacts hard-coded false below so we don't publish while developing this script
+$nop gh workflow run toolkit-package.yml \
+        -R timescale/release-build-scripts \
+        -r main \
+        -f version=$VERSION \
+        -f commit-id=$branch_commit \
+        -f upload-artifacts=false
+
+# 6. Tag the release.
+$nop git tag $VERSION
+echo TODO skipped unconditionally during development
+: $nop git push origin $VERSION
+
+# 7. Prepare the main branch for the next release cycle.
+# Github action gives us a shallow checkout which we must deepen before we can push changes.
+$nop git fetch --deepen=2147483647 origin main
+$nop git checkout main
+
+# 7a. Set toolkit version to released version with '-dev' appended.
+cargo set-version $dry_run_flag -p timescaledb_toolkit $VERSION-dev
+assert_dirty || die "failed to set toolkit version to $VERSION-dev in $TOML"
+start_commit $TOML
+# Update cargo.lock - this form of cargo update doesn't update dependency versions.
+$nop cargo update -p timescaledb_toolkit
+assert_dirty || die "failed to set toolkit version to $VERSION-dev in Cargo.lock"
+commit Cargo.lock
+
+# 7b. Bump github action cache keys.
+# TODO update cache keys
+
+finish_commit "start $VERSION-dev"
+$nop git show
+
+echo TODO skipped unconditionally during development
+: $nop git push

@@ -4,12 +4,13 @@
 # 1. Create release branch.
 # 2. Set toolkit version on branch.
 # 3. Run tests.
-# 4. Push the branch so release-build-scripts repository [1] can see the commit from #2.
-# 5. Trigger toolkit packaging actions in release-build-scripts repository.
-# 6. Tag the release. [2]
+# 4. Push (if -push) the branch so release-build-scripts repository [1] can see the commit from #2.
+# 5. Trigger (if -push) toolkit packaging actions in release-build-scripts repository.
+# 6. Tag the release (and push, if -push). [2]
 # 7. Prepare the main branch for the next release cycle.
 # 7a. Set toolkit version to released version with '-dev' appended.
 # 7b. Update Changelog.md .
+# 7c. Push to main (if -push).
 
 # [1] We need a self-hosted runner for arm64 build, which we can only get with
 #     a private repository, so we must delegate packaging to that.
@@ -20,7 +21,7 @@
 #     - Can we have a trigger that watches for release-build-scripts action to finish?
 
 # Sample run:
-# tools/release -n -version 1.11.0 9c2b04d
+# tools/release -n -push -version 1.11.0 9c2b04d
 
 # git commit records these on commits (yes, all three).
 # TODO What should we use?  I pulled this from the deb package metadata
@@ -66,7 +67,7 @@ die() {
 }
 
 usage() {
-    die 'release [-n] -version VERSION COMMIT'
+    die 'release [-n] [-push] -version VERSION COMMIT'
 }
 
 # Return 0 iff working directory is clean.
@@ -116,6 +117,7 @@ finish_commit() {
 }
 
 # Super simple option processing.
+push=false
 while [ $# -gt 0 ]; do
     arg=$1
     shift
@@ -125,8 +127,9 @@ while [ $# -gt 0 ]; do
             nop=:
             ;;
 
-        -y)
-            # Ignored - gives us something to pass in the Github Action where default is no-op.
+        # TODO Remove -y alias for -push .
+        -push | -y)
+            push=true
             ;;
 
         -version)
@@ -182,20 +185,26 @@ done
 assert_clean || die 'tools/build should not dirty the working directory'
 
 # 4. Push the branch so release-build-scripts repository
-$nop git push origin $branch
+if $push; then
+    $nop git push origin $branch
+fi
 
 # 5. Trigger toolkit packaging actions in release-build-scripts repository.
 branch_commit=`git log -1 --pretty=format:%h`
-$nop gh workflow run toolkit-package.yml \
+if $push; then
+    $nop gh workflow run toolkit-package.yml \
         -R timescale/release-build-scripts \
         -r main \
         -f version=$VERSION \
         -f commit-id=$branch_commit \
         -f upload-artifacts=true
+fi
 
 # 6. Tag the release.
 $nop git tag $VERSION
-$nop git push origin $VERSION
+if $push; then
+    $nop git push origin $VERSION
+fi
 
 # 7. Prepare the main branch for the next release cycle.
 # Github action gives us a shallow checkout which we must deepen before we can push changes.
@@ -237,4 +246,6 @@ finish_commit "start $VERSION-dev"
 $nop git show
 
 # TODO Create a pull request instead?
-$nop git push origin main
+if $push; then
+    $nop git push origin main
+fi

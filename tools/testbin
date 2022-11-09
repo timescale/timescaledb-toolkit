@@ -109,7 +109,7 @@ deb_start_test() {
         deb=timescaledb-toolkit-postgresql-${PG_VERSION}=${EPOCH}${FROM_VERSION}~${OS_NAME}${OS_VERSION}
         $nop sudo apt-get -qq install $deb || die
 
-        PATH=/usr/lib/postgresql/$PG_VERSION/bin:$PATH start_test || die
+        start_test || die
     done
 }
 
@@ -159,7 +159,7 @@ test_rpm() {
             rpm -q $rpm > /dev/null && $nop sudo rpm -e $rpm
             $nop sudo yum -q -y install $rpm-$FROM_VERSION
 
-            PATH=/usr/pgsql-$PG_VERSION/bin:$PATH start_test
+            start_test
         done
         for PG_VERSION in $PG_VERSIONS; do
             select_pg $PG_VERSION

@@ -212,12 +212,16 @@ $nop git fetch --deepen=2147483647 origin main
 $nop git checkout main
 
 # 7a. Set toolkit version to released version with '-dev' appended.
-cargo set-version $dry_run_flag -p timescaledb_toolkit $VERSION-dev
-assert_dirty || die "failed to set toolkit version to $VERSION-dev in $TOML"
+major=${VERSION%%.*}
+minpat=${VERSION#*.}
+minor=${minpat%.*}
+DEV_VERSION=$major.$(( minor + 1 )).0-dev
+cargo set-version $dry_run_flag -p timescaledb_toolkit $DEV_VERSION
+assert_dirty || die "failed to set toolkit version to $DEV_VERSION in $TOML"
 start_commit $TOML
 # Update cargo.lock - this form of cargo update doesn't update dependency versions.
 $nop cargo update -p timescaledb_toolkit
-assert_dirty || die "failed to set toolkit version to $VERSION-dev in Cargo.lock"
+assert_dirty || die "failed to set toolkit version to $DEV_VERSION in Cargo.lock"
 commit Cargo.lock
 
 # 7b. Update Changelog.md .
@@ -242,7 +246,7 @@ wq
 EOF
 assert_dirty || die 'failed to update Changelog.md for next release'
 commit Changelog.md
-finish_commit "start $VERSION-dev"
+finish_commit "start $DEV_VERSION"
 $nop git show
 
 # TODO Create a pull request instead?

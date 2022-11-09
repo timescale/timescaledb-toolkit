@@ -29,7 +29,6 @@ GIT_COMMITTER_NAME=$GIT_AUTHOR_NAME
 export EMAIL GIT_AUTHOR_NAME GIT_COMMITTER_NAME
 
 BRANCH_BASENAME=forge-stable-
-CONTROL=extension/timescaledb_toolkit.control
 TOML=extension/Cargo.toml
 
 . tools/dependencies.sh
@@ -152,8 +151,6 @@ assert_clean || die 'cowardly refusing to operate on dirty working directory'
 branch="$BRANCH_BASENAME"$VERSION
 $nop git checkout -b $branch $COMMIT
 
-# Set default_version in control file.
-
 # 2. Set toolkit version.
 cargo set-version $dry_run_flag -p timescaledb_toolkit $VERSION
 assert_dirty || die "failed to set toolkit version to $VERSION in $TOML"
@@ -203,4 +200,5 @@ commit Cargo.lock
 finish_commit "start $VERSION-dev"
 $nop git show
 
-$nop git push
+# TODO Create a pull request instead?
+$nop git push origin main

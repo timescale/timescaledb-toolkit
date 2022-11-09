@@ -1,6 +1,6 @@
 // 2D stats are based on the Youngs-Cramer implementation in PG here:
 // https://github.com/postgres/postgres/blob/472e518a44eacd9caac7d618f1b6451672ca4481/src/backend/utils/adt/float.c#L3260
-use crate::{FloatLike, StatsError, XYPair, INV_FLOATING_ERROR_THRESHOLD, M3, M4};
+use crate::{m3, m4, FloatLike, StatsError, XYPair, INV_FLOATING_ERROR_THRESHOLD};
 use serde::{Deserialize, Serialize};
 use twofloat::TwoFloat;
 
@@ -88,11 +88,11 @@ impl<T: FloatLike> StatsSummary2D<T> {
             let tmpy = p.y * self.n64() - self.sy;
             let scale = (self.n64() * old.n64()).recip();
             self.sx2 += tmpx * tmpx * scale;
-            self.sx3 = M3::accum(old.n64(), old.sx, old.sx2, old.sx3, p.x);
-            self.sx4 = M4::accum(old.n64(), old.sx, old.sx2, old.sx3, old.sx4, p.x);
+            self.sx3 = m3::accum(old.n64(), old.sx, old.sx2, old.sx3, p.x);
+            self.sx4 = m4::accum(old.n64(), old.sx, old.sx2, old.sx3, old.sx4, p.x);
             self.sy2 += tmpy * tmpy * scale;
-            self.sy3 = M3::accum(old.n64(), old.sy, old.sy2, old.sy3, p.y);
-            self.sy4 = M4::accum(old.n64(), old.sy, old.sy2, old.sy3, old.sy4, p.y);
+            self.sy3 = m3::accum(old.n64(), old.sy, old.sy2, old.sy3, p.y);
+            self.sy4 = m4::accum(old.n64(), old.sy, old.sy2, old.sy3, old.sy4, p.y);
             self.sxy += tmpx * tmpy * scale;
             if self.has_infinite() {
                 if self.check_overflow(&old, p) {
@@ -230,11 +230,11 @@ impl<T: FloatLike> StatsSummary2D<T> {
         let tmpy = p.y * self.n64() - self.sy;
         let scale = (self.n64() * new.n64()).recip();
         new.sx2 = self.sx2 - tmpx * tmpx * scale;
-        new.sx3 = M3::remove(new.n64(), new.sx, new.sx2, self.sx3, p.x);
-        new.sx4 = M4::remove(new.n64(), new.sx, new.sx2, new.sx3, self.sx4, p.x);
+        new.sx3 = m3::remove(new.n64(), new.sx, new.sx2, self.sx3, p.x);
+        new.sx4 = m4::remove(new.n64(), new.sx, new.sx2, new.sx3, self.sx4, p.x);
         new.sy2 = self.sy2 - tmpy * tmpy * scale;
-        new.sy3 = M3::remove(new.n64(), new.sy, new.sy2, self.sy3, p.y);
-        new.sy4 = M4::remove(new.n64(), new.sy, new.sy2, new.sy3, self.sy4, p.y);
+        new.sy3 = m3::remove(new.n64(), new.sy, new.sy2, self.sy3, p.y);
+        new.sy4 = m4::remove(new.n64(), new.sy, new.sy2, new.sy3, self.sy4, p.y);
         new.sxy = self.sxy - tmpx * tmpy * scale;
         Some(new)
     }
@@ -293,7 +293,7 @@ impl<T: FloatLike> StatsSummary2D<T> {
             n,
             sx: self.sx + other.sx,
             sx2: self.sx2 + other.sx2 + self.n64() * other.n64() * tmpx * tmpx / T::from_u64(n),
-            sx3: M3::combine(
+            sx3: m3::combine(
                 self.n64(),
                 other.n64(),
                 self.sx,
@@ -303,7 +303,7 @@ impl<T: FloatLike> StatsSummary2D<T> {
                 self.sx3,
                 other.sx3,
             ),
-            sx4: M4::combine(
+            sx4: m4::combine(
                 self.n64(),
                 other.n64(),
                 self.sx,
@@ -317,7 +317,7 @@ impl<T: FloatLike> StatsSummary2D<T> {
             ),
             sy: self.sy + other.sy,
             sy2: self.sy2 + other.sy2 + self.n64() * other.n64() * tmpy * tmpy / T::from_u64(n),
-            sy3: M3::combine(
+            sy3: m3::combine(
                 self.n64(),
                 other.n64(),
                 self.sy,
@@ -327,7 +327,7 @@ impl<T: FloatLike> StatsSummary2D<T> {
                 self.sy3,
                 other.sy3,
             ),
-            sy4: M4::combine(
+            sy4: m4::combine(
                 self.n64(),
                 other.n64(),
                 self.sy,
@@ -382,7 +382,7 @@ impl<T: FloatLike> StatsSummary2D<T> {
         let tmpy = part.sy / part.n64() - remove.sy / remove.n64();
         part.sx2 =
             combined.sx2 - remove.sx2 - part.n64() * remove.n64() * tmpx * tmpx / combined.n64();
-        part.sx3 = M3::remove_combined(
+        part.sx3 = m3::remove_combined(
             part.n64(),
             remove.n64(),
             part.sx,
@@ -392,7 +392,7 @@ impl<T: FloatLike> StatsSummary2D<T> {
             self.sx3,
             remove.sx3,
         );
-        part.sx4 = M4::remove_combined(
+        part.sx4 = m4::remove_combined(
             part.n64(),
             remove.n64(),
             part.sx,
@@ -406,7 +406,7 @@ impl<T: FloatLike> StatsSummary2D<T> {
         );
         part.sy2 =
             combined.sy2 - remove.sy2 - part.n64() * remove.n64() * tmpy * tmpy / combined.n64();
-        part.sy3 = M3::remove_combined(
+        part.sy3 = m3::remove_combined(
             part.n64(),
             remove.n64(),
             part.sy,
@@ -416,7 +416,7 @@ impl<T: FloatLike> StatsSummary2D<T> {
             self.sy3,
             remove.sy3,
         );
-        part.sy4 = M4::remove_combined(
+        part.sy4 = m4::remove_combined(
             part.n64(),
             remove.n64(),
             part.sy,

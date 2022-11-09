@@ -1,4 +1,4 @@
-use crate::{FloatLike, StatsError, INV_FLOATING_ERROR_THRESHOLD, M3, M4};
+use crate::{m3, m4, FloatLike, StatsError, INV_FLOATING_ERROR_THRESHOLD};
 use serde::{Deserialize, Serialize};
 use twofloat::TwoFloat;
 
@@ -77,8 +77,8 @@ where
             let tmpx = p * self.n64() - self.sx;
             let scale = T::one() / (self.n64() * old.n64());
             self.sx2 += tmpx * tmpx * scale;
-            self.sx3 = M3::accum(old.n64(), old.sx, old.sx2, old.sx3, p);
-            self.sx4 = M4::accum(old.n64(), old.sx, old.sx2, old.sx3, old.sx4, p);
+            self.sx3 = m3::accum(old.n64(), old.sx, old.sx2, old.sx3, p);
+            self.sx4 = m4::accum(old.n64(), old.sx, old.sx2, old.sx3, old.sx4, p);
 
             if self.has_infinite() {
                 if self.check_overflow(&old, p) {
@@ -170,8 +170,8 @@ where
         let tmpx = p * self.n64() - self.sx;
         let scale = (self.n64() * new.n64()).recip();
         new.sx2 = self.sx2 - tmpx * tmpx * scale;
-        new.sx3 = M3::remove(new.n64(), new.sx, new.sx2, self.sx3, p);
-        new.sx4 = M4::remove(new.n64(), new.sx, new.sx2, new.sx3, self.sx4, p);
+        new.sx3 = m3::remove(new.n64(), new.sx, new.sx2, self.sx3, p);
+        new.sx4 = m4::remove(new.n64(), new.sx, new.sx2, new.sx3, self.sx4, p);
 
         Some(new)
     }
@@ -207,7 +207,7 @@ where
                 + other.sx2
                 + self.n64() * other.n64() * tmp * tmp
                     / <T as num_traits::cast::NumCast>::from(n).unwrap(),
-            sx3: M3::combine(
+            sx3: m3::combine(
                 self.n64(),
                 other.n64(),
                 self.sx,
@@ -217,7 +217,7 @@ where
                 self.sx3,
                 other.sx3,
             ),
-            sx4: M4::combine(
+            sx4: m4::combine(
                 self.n64(),
                 other.n64(),
                 self.sx,
@@ -264,7 +264,7 @@ where
         let tmp = part.sx / part.n64() - remove.sx / remove.n64(); //gets squared so order doesn't matter
         part.sx2 =
             combined.sx2 - remove.sx2 - part.n64() * remove.n64() * tmp * tmp / combined.n64();
-        part.sx3 = M3::remove_combined(
+        part.sx3 = m3::remove_combined(
             part.n64(),
             remove.n64(),
             part.sx,
@@ -274,7 +274,7 @@ where
             self.sx3,
             remove.sx3,
         );
-        part.sx4 = M4::remove_combined(
+        part.sx4 = m4::remove_combined(
             part.n64(),
             remove.n64(),
             part.sx,

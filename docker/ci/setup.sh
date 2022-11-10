@@ -85,8 +85,12 @@ if $privileged; then
                     dnf -qy install ruby-devel rubygems
                     ;;
 
+                9)
+                    dnf -qy install ruby-devel rubygems
+                    ;;
+
                 *)
-                    echo >&2 'only 7 or 8 supported'
+                    echo >&2 'only 7 - 9 supported'
                     exit 5
                     ;;
             esac

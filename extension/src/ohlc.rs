@@ -366,13 +366,18 @@ extension_sql!(
         sfunc = toolkit_experimental.tick_data_no_vol_transition,\n\
         stype = internal,\n\
         finalfunc = toolkit_experimental.candlestick_final,\n\
-        combinefunc = toolkit_experimental.candlestick_combine\n\
+        combinefunc = toolkit_experimental.candlestick_combine,\n\
+        serialfunc = toolkit_experimental.candlestick_serialize,\n\
+        deserialfunc = toolkit_experimental.candlestick_deserialize,\n\
+        parallel = safe\n\
     );\n",
     name = "ohlc",
     requires = [
         tick_data_no_vol_transition,
         candlestick_final,
         candlestick_combine,
+        candlestick_serialize,
+        candlestick_deserialize
     ],
 );
 

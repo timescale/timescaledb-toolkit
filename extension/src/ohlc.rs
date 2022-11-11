@@ -510,6 +510,17 @@ mod tests {
         Spi::execute(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             client.select(
+                r#"
+SET parallel_setup_cost = 0;
+SET parallel_tuple_cost = 0;
+SET min_parallel_table_scan_size = 0;
+SET max_parallel_workers_per_gather = 4;
+SET parallel_leader_participation = off;
+SET enable_indexonlyscan = off;"#,
+                None,
+                None,
+            );
+            client.select(
                 "CREATE TABLE test(ts TIMESTAMPTZ, price DOUBLE PRECISION)",
                 None,
                 None,
@@ -590,6 +601,17 @@ mod tests {
     fn ohlc_accessors() {
         Spi::execute(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
+            client.select(
+                r#"
+SET parallel_setup_cost = 0;
+SET parallel_tuple_cost = 0;
+SET min_parallel_table_scan_size = 0;
+SET max_parallel_workers_per_gather = 4;
+SET parallel_leader_participation = off;
+SET enable_indexonlyscan = off;"#,
+                None,
+                None,
+            );
             client.select("CREATE TABLE test(ts TIMESTAMPTZ, price FLOAT)", None, None);
             client.select(
                 r#"INSERT INTO test VALUES

@@ -146,6 +146,11 @@ test_deb() {
 
 test_ci() {
     deb_init
+
+    # When run under CI after a recent release, the Packages file in the
+    # container image don't know about the latest version.
+    $nop sudo apt-get update
+
     for FROM_VERSION; do
         deb_start_test || continue
         for PG_VERSION in $PG_VERSIONS; do

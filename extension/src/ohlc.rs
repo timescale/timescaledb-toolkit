@@ -523,7 +523,7 @@ SET enable_indexonlyscan = off;"#,
                             high:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             close:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            volume:Missing()\
+                            vol_kind:0,vol:0,vwap:0\
                             )";
             assert_eq!(expected, output.unwrap());
         });
@@ -547,7 +547,7 @@ SET enable_indexonlyscan = off;"#,
                             high:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             close:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            volume:Transaction(vol:1,vwap:0)\
+                            vol_kind:1,vol:1,vwap:0\
                             )";
             assert_eq!(expected, output.unwrap());
         });
@@ -571,7 +571,7 @@ SET enable_indexonlyscan = off;"#,
                             high:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             close:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            volume:Transaction(vol:1,vwap:0)\
+                            vol_kind:1,vol:1,vwap:0\
                             )";
             assert_eq!(expected, output.unwrap());
         });
@@ -722,7 +722,7 @@ SET enable_indexonlyscan = off;"#,
                             high:(ts:\"{}\",val:1),\
                             low:(ts:\"{}\",val:1),\
                             close:(ts:\"{}\",val:1),\
-                            volume:Missing()\
+                            vol_kind:0,vol:0,vwap:0\
                             )",
                     extreme_time, extreme_time, extreme_time, extreme_time
                 );
@@ -741,7 +741,7 @@ SET enable_indexonlyscan = off;"#,
                             high:(ts:\"2022-08-01 00:00:00+00\",val:{}),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:{}),\
                             close:(ts:\"2022-08-01 00:00:00+00\",val:{}),\
-                            volume:Missing()\
+                            vol_kind:0,vol:0,vwap:0\
                             )",
                     extreme_price, extreme_price, extreme_price, extreme_price
                 );
@@ -772,7 +772,7 @@ SET enable_indexonlyscan = off;"#,
                             high:(ts:\"{}\",val:1),\
                             low:(ts:\"{}\",val:1),\
                             close:(ts:\"{}\",val:1),\
-                            volume:Transaction(vol:1,vwap:1)\
+                            vol_kind:1,vol:1,vwap:1\
                             )",
                     extreme_time, extreme_time, extreme_time, extreme_time
                 );
@@ -795,7 +795,7 @@ SET enable_indexonlyscan = off;"#,
                  high:(ts:\"2022-08-01 00:00:00+00\",val:{}),\
                  low:(ts:\"2022-08-01 00:00:00+00\",val:{}),\
                  close:(ts:\"2022-08-01 00:00:00+00\",val:{}),\
-                 volume:Transaction(vol:1,vwap:{})\
+                 vol_kind:1,vol:1,vwap:{}\
                  )",
                     extreme_price,
                     extreme_price,
@@ -864,7 +864,7 @@ SET enable_indexonlyscan = off;"#,
                             high:(ts:\"2022-08-01 00:00:00+00\",val:1),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:1),\
                             close:(ts:\"2022-08-01 00:00:00+00\",val:1),\
-                            volume:Missing()\
+                            vol_kind:0,vol:0,vwap:0\
                             )";
 
             let output = select_one!(
@@ -897,7 +897,7 @@ SET enable_indexonlyscan = off;"#,
                             high:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             close:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            volume:Transaction(vol:1,vwap:0)\
+                            vol_kind:1,vol:1,vwap:0\
                             )";
 
             assert_eq!(Some(expected), candlesticks.next().unwrap()[1].value());
@@ -908,7 +908,7 @@ SET enable_indexonlyscan = off;"#,
                             high:(ts:\"2022-08-02 00:00:00+00\",val:12),\
                             low:(ts:\"2022-08-02 00:00:00+00\",val:3),\
                             close:(ts:\"2022-08-02 00:00:00+00\",val:6),\
-                            volume:Transaction(vol:1,vwap:7)\
+                            vol_kind:1,vol:1,vwap:7\
                             )";
 
             assert_eq!(Some(expected), candlesticks.next().unwrap()[1].value());
@@ -943,7 +943,7 @@ SET enable_indexonlyscan = off;"#,
                             high:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             close:(ts:\"2022-08-01 23:59:59+00\",val:0),\
-                            volume:Missing()\
+                            vol_kind:0,vol:0,vwap:0\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -973,7 +973,7 @@ SET enable_indexonlyscan = off;"#,
                             high:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             close:(ts:\"2022-08-01 23:59:59+00\",val:0),\
-                            volume:Transaction(vol:5,vwap:0)\
+                            vol_kind:1,vol:5,vwap:0\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -1008,7 +1008,7 @@ SET enable_indexonlyscan = off;"#,
                             high:(ts:\"2022-08-01 23:59:59+00\",val:5),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:1),\
                             close:(ts:\"2022-08-01 23:59:59+00\",val:5),\
-                            volume:Missing()\
+                            vol_kind:0,vol:0,vwap:0\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -1038,7 +1038,7 @@ SET enable_indexonlyscan = off;"#,
                             high:(ts:\"2022-08-01 23:59:59+00\",val:5),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:1),\
                             close:(ts:\"2022-08-01 23:59:59+00\",val:5),\
-                            volume:Transaction(vol:5,vwap:15)\
+                            vol_kind:1,vol:5,vwap:15\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -1073,7 +1073,7 @@ SET enable_indexonlyscan = off;"#,
                             high:(ts:\"2022-08-01 00:00:00+00\",val:5),\
                             low:(ts:\"2022-08-01 23:59:59+00\",val:1),\
                             close:(ts:\"2022-08-01 23:59:59+00\",val:1),\
-                            volume:Missing()\
+                            vol_kind:0,vol:0,vwap:0\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -1103,7 +1103,7 @@ SET enable_indexonlyscan = off;"#,
                             high:(ts:\"2022-08-01 00:00:00+00\",val:5),\
                             low:(ts:\"2022-08-01 23:59:59+00\",val:1),\
                             close:(ts:\"2022-08-01 23:59:59+00\",val:1),\
-                            volume:Transaction(vol:5,vwap:15)\
+                            vol_kind:1,vol:5,vwap:15\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -1144,7 +1144,7 @@ SET enable_indexonlyscan = off;"#,
                             high:(ts:\"2022-08-01 12:00:00+00\",val:12),\
                             low:(ts:\"2022-08-01 10:00:00+00\",val:1),\
                             close:(ts:\"2022-08-01 22:00:00+00\",val:8),\
-                            volume:Missing()\
+                            vol_kind:0,vol:0,vwap:0\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -1181,7 +1181,7 @@ SET enable_indexonlyscan = off;"#,
                             high:(ts:\"2022-08-01 12:00:00+00\",val:12),\
                             low:(ts:\"2022-08-01 10:00:00+00\",val:1),\
                             close:(ts:\"2022-08-01 22:00:00+00\",val:8),\
-                            volume:Transaction(vol:12,vwap:78)\
+                            vol_kind:1,vol:12,vwap:78\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -1226,7 +1226,7 @@ SET enable_indexonlyscan = off;"#,
                             high:(ts:\"2022-08-02 23:59:59+00\",val:8),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             close:(ts:\"2022-08-02 23:59:59+00\",val:8),\
-                            volume:Missing()\
+                            vol_kind:0,vol:0,vwap:0\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -1256,7 +1256,7 @@ SET enable_indexonlyscan = off;"#,
                             high:(ts:\"2022-08-02 00:00:00+00\",val:8),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             close:(ts:\"2022-08-02 00:00:00+00\",val:8),\
-                            volume:Transaction(vol:9,vwap:41.33333333333333)\
+                            vol_kind:1,vol:9,vwap:41.33333333333333\
                             )";
 
             let output = select_one!(client, stmt, &str);
@@ -1298,7 +1298,7 @@ SET enable_indexonlyscan = off;"#,
                             high:(ts:\"2022-08-02 23:59:59+00\",val:8),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             close:(ts:\"2022-08-02 23:59:59+00\",val:8),\
-                            volume:Transaction(vol:9,vwap:36)\
+                            vol_kind:1,vol:9,vwap:36\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());

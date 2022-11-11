@@ -15,15 +15,6 @@ use tspoint::TSPoint;
 pub mod toolkit_experimental {
     use super::*;
 
-    flat_serialize_macro::flat_serialize! {
-        #[derive(Serialize, Deserialize, Debug, Copy)]
-        enum VolKind {
-            unused_but_required_by_flat_serialize: u64,
-            Missing: 1 {},
-            Transaction: 2 { vol: f64, vwap: f64 },
-        }
-    }
-
     pg_type! {
         #[derive(Debug, Copy)]
         struct Candlestick {
@@ -31,8 +22,9 @@ pub mod toolkit_experimental {
             high: TSPoint,
             low: TSPoint,
             close: TSPoint,
-            #[flat_serialize::flatten]
-            volume: VolKind,
+            vol_kind: u64,      // 0 (Missing) or 1 (Transaction)
+            vol: f64,
+            vwap: f64,
         }
     }
 
@@ -45,14 +37,11 @@ pub mod toolkit_experimental {
             close: f64,
             volume: Option<f64>,
         ) -> Self {
-            let volume = match volume {
-                None => VolKind::Missing {},
+            let (vol_kind, vol, vwap) = match volume {
+                None => (0, 0.0, 0.0),
                 Some(volume) => {
                     let typical = (high + low + close) / 3.0;
-                    VolKind::Transaction {
-                        vol: volume,
-                        vwap: volume * typical,
-                    }
+                    (1, volume, volume * typical)
                 }
             };
 
@@ -62,7 +51,9 @@ pub mod toolkit_experimental {
                     high: TSPoint { ts, val: high },
                     low: TSPoint { ts, val: low },
                     close: TSPoint { ts, val: close },
-                    volume,
+                    vol_kind,
+                    vol,
+                    vwap,
                 })
             }
         }
@@ -88,13 +79,14 @@ pub mod toolkit_experimental {
                 self.close = TSPoint { ts, val: price };
             }
 
-            if let (VolKind::Transaction { vol, vwap }, Some(volume)) = (self.volume, volume) {
-                self.volume = VolKind::Transaction {
-                    vol: vol + volume,
-                    vwap: vwap + volume * price,
-                };
-            } else {
-                self.volume = VolKind::Missing {};
+            match volume {
+                Some(volume) if self.vol_kind == 1 => {
+                    self.vol += volume;
+                    self.vwap += volume * price;
+                }
+                _ => {
+                    self.vol_kind = 0;
+                }
             };
         }
 
@@ -115,24 +107,12 @@ pub mod toolkit_experimental {
                 self.close = candlestick.close;
             }
 
-            if let (
-                VolKind::Transaction {
-                    vol: vol1,
-                    vwap: vwap1,
-                },
-                VolKind::Transaction {
-                    vol: vol2,
-                    vwap: vwap2,
-                },
-            ) = (self.volume, candlestick.volume)
-            {
-                self.volume = VolKind::Transaction {
-                    vol: vol1 + vol2,
-                    vwap: vwap1 + vwap2,
-                };
+            if self.vol_kind == 1 && candlestick.vol_kind == 1 {
+                self.vol += candlestick.vol;
+                self.vwap += candlestick.vwap;
             } else {
-                self.volume = VolKind::Missing {};
-            };
+                self.vol_kind = 0;
+            }
         }
 
         pub fn open(&self) -> f64 {
@@ -168,22 +148,22 @@ pub mod toolkit_experimental {
         }
 
         pub fn volume(&self) -> Option<f64> {
-            match self.volume {
-                VolKind::Transaction { vol, .. } => Some(vol),
-                VolKind::Missing {} => None,
+            if self.vol_kind == 1 {
+                Some(self.vol)
+            } else {
+                None
             }
         }
 
         pub fn vwap(&self) -> Option<f64> {
-            match self.volume {
-                VolKind::Transaction { vol, vwap } => {
-                    if vol > 0.0 && vwap.is_finite() {
-                        Some(vwap / vol)
-                    } else {
-                        None
-                    }
+            if self.vol_kind == 1 {
+                if self.vol > 0.0 && self.vwap.is_finite() {
+                    Some(self.vwap / self.vol)
+                } else {
+                    None
                 }
-                VolKind::Missing {} => None,
+            } else {
+                None
             }
         }
     }

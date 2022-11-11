@@ -67,12 +67,6 @@ jobs:
     - name: Run pgx tests
       run: su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-extension 2>&1'
 
-    # TODO post-install + doc test adds a good 90s.  We could probably put
-    # them together run serially in a separate job to shave that 90s off the
-    # long pole.
-    - name: Run post-install tests
-      run: su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-post-install 2>&1'
-
     - name: Run doc tests
       run: su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-doc 2>&1'
 

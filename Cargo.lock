@@ -1915,16 +1915,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "testrunner"
-version = "0.1.0"
-dependencies = [
- "clap",
- "colored",
- "postgres",
- "rayon",
-]
-
-[[package]]
 name = "textwrap"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"

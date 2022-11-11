@@ -113,17 +113,6 @@ while [ $# -gt 0 ]; do
             $nop cargo run --manifest-path tools/post-install/Cargo.toml "$pg_config"
             ;;
 
-        # Reruns the tests test-extension does if they're left installed.
-        # TODO Remove this and testrunner.
-        test-post-install)
-            find_profile
-            require_pg_version
-            find_pg_config
-            $nop cargo pgx stop $pg
-            $nop cargo pgx start $pg
-            $nop cargo run --profile $profile --manifest-path tools/testrunner/Cargo.toml -- -h localhost -p $pg_port
-            ;;
-
         test-doc)
             find_profile
             require_pg_version

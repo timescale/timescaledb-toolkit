@@ -74,6 +74,8 @@ pub mod toolkit_experimental {
         pub fn add_tick_data(&mut self, ts: i64, price: f64, volume: Option<f64>) {
             if ts < self.open.ts {
                 self.open = TSPoint { ts, val: price };
+            } else if ts == self.open.ts && price < self.open.val {
+                self.open = TSPoint { ts, val: price };
             }
 
             if price > self.high.val {
@@ -85,6 +87,8 @@ pub mod toolkit_experimental {
             }
 
             if ts > self.close.ts {
+                self.close = TSPoint { ts, val: price };
+            } else if ts == self.close.ts && price < self.close.val {
                 self.close = TSPoint { ts, val: price };
             }
 
@@ -101,6 +105,8 @@ pub mod toolkit_experimental {
         pub fn combine(&mut self, candlestick: &Candlestick) {
             if candlestick.open.ts < self.open.ts {
                 self.open = candlestick.open;
+            } else if candlestick.open.ts == self.open.ts && candlestick.open.val < self.open.val {
+                self.open = candlestick.open;
             }
 
             if candlestick.high.val > self.high.val {
@@ -112,6 +118,10 @@ pub mod toolkit_experimental {
             }
 
             if candlestick.close.ts > self.close.ts {
+                self.close = candlestick.close;
+            } else if candlestick.close.ts == self.close.ts
+                && candlestick.close.val < self.close.val
+            {
                 self.close = candlestick.close;
             }
 

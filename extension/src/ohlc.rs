@@ -1,5 +1,4 @@
 use pgx::*;
-use serde::{Deserialize, Serialize};
 
 use crate::{
     aggregate_utils::in_aggregate_context,
@@ -15,15 +14,6 @@ use tspoint::TSPoint;
 pub mod toolkit_experimental {
     use super::*;
 
-    flat_serialize_macro::flat_serialize! {
-        #[derive(Serialize, Deserialize, Debug, Copy)]
-        enum VolKind {
-            unused_but_required_by_flat_serialize: u64,
-            Missing: 1 {},
-            Transaction: 2 { vol: f64, vwap: f64 },
-        }
-    }
-
     pg_type! {
         #[derive(Debug, Copy)]
         struct Candlestick {
@@ -31,8 +21,9 @@ pub mod toolkit_experimental {
             high: TSPoint,
             low: TSPoint,
             close: TSPoint,
-            #[flat_serialize::flatten]
-            volume: VolKind,
+            vol_kind: u64,      // 0 (Missing) or 1 (Transaction)
+            vol: f64,
+            vwap: f64,
         }
     }
 
@@ -45,14 +36,11 @@ pub mod toolkit_experimental {
             close: f64,
             volume: Option<f64>,
         ) -> Self {
-            let volume = match volume {
-                None => VolKind::Missing {},
+            let (vol_kind, vol, vwap) = match volume {
+                None => (0, 0.0, 0.0),
                 Some(volume) => {
                     let typical = (high + low + close) / 3.0;
-                    VolKind::Transaction {
-                        vol: volume,
-                        vwap: volume * typical,
-                    }
+                    (1, volume, volume * typical)
                 }
             };
 
@@ -62,7 +50,9 @@ pub mod toolkit_experimental {
                     high: TSPoint { ts, val: high },
                     low: TSPoint { ts, val: low },
                     close: TSPoint { ts, val: close },
-                    volume,
+                    vol_kind,
+                    vol,
+                    vwap,
                 })
             }
         }
@@ -92,13 +82,14 @@ pub mod toolkit_experimental {
                 self.close = TSPoint { ts, val: price };
             }
 
-            if let (VolKind::Transaction { vol, vwap }, Some(volume)) = (self.volume, volume) {
-                self.volume = VolKind::Transaction {
-                    vol: vol + volume,
-                    vwap: vwap + volume * price,
-                };
-            } else {
-                self.volume = VolKind::Missing {};
+            match volume {
+                Some(volume) if self.vol_kind == 1 => {
+                    self.vol += volume;
+                    self.vwap += volume * price;
+                }
+                _ => {
+                    self.vol_kind = 0;
+                }
             };
         }
 
@@ -125,24 +116,12 @@ pub mod toolkit_experimental {
                 self.close = candlestick.close;
             }
 
-            if let (
-                VolKind::Transaction {
-                    vol: vol1,
-                    vwap: vwap1,
-                },
-                VolKind::Transaction {
-                    vol: vol2,
-                    vwap: vwap2,
-                },
-            ) = (self.volume, candlestick.volume)
-            {
-                self.volume = VolKind::Transaction {
-                    vol: vol1 + vol2,
-                    vwap: vwap1 + vwap2,
-                };
+            if self.vol_kind == 1 && candlestick.vol_kind == 1 {
+                self.vol += candlestick.vol;
+                self.vwap += candlestick.vwap;
             } else {
-                self.volume = VolKind::Missing {};
-            };
+                self.vol_kind = 0;
+            }
         }
 
         pub fn open(&self) -> f64 {
@@ -178,22 +157,22 @@ pub mod toolkit_experimental {
         }
 
         pub fn volume(&self) -> Option<f64> {
-            match self.volume {
-                VolKind::Transaction { vol, .. } => Some(vol),
-                VolKind::Missing {} => None,
+            if self.vol_kind == 1 {
+                Some(self.vol)
+            } else {
+                None
             }
         }
 
         pub fn vwap(&self) -> Option<f64> {
-            match self.volume {
-                VolKind::Transaction { vol, vwap } => {
-                    if vol > 0.0 && vwap.is_finite() {
-                        Some(vwap / vol)
-                    } else {
-                        None
-                    }
+            if self.vol_kind == 1 {
+                if self.vol > 0.0 && self.vwap.is_finite() {
+                    Some(self.vwap / self.vol)
+                } else {
+                    None
                 }
-                VolKind::Missing {} => None,
+            } else {
+                None
             }
         }
     }
@@ -542,7 +521,7 @@ mod tests {
                             high:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             close:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            volume:Missing()\
+                            vol_kind:0,vol:0,vwap:0\
                             )";
             assert_eq!(expected, output.unwrap());
         });
@@ -566,7 +545,7 @@ mod tests {
                             high:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             close:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            volume:Transaction(vol:1,vwap:0)\
+                            vol_kind:1,vol:1,vwap:0\
                             )";
             assert_eq!(expected, output.unwrap());
         });
@@ -590,7 +569,7 @@ mod tests {
                             high:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             close:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            volume:Transaction(vol:1,vwap:0)\
+                            vol_kind:1,vol:1,vwap:0\
                             )";
             assert_eq!(expected, output.unwrap());
         });
@@ -730,7 +709,7 @@ mod tests {
                             high:(ts:\"{}\",val:1),\
                             low:(ts:\"{}\",val:1),\
                             close:(ts:\"{}\",val:1),\
-                            volume:Missing()\
+                            vol_kind:0,vol:0,vwap:0\
                             )",
                     extreme_time, extreme_time, extreme_time, extreme_time
                 );
@@ -749,7 +728,7 @@ mod tests {
                             high:(ts:\"2022-08-01 00:00:00+00\",val:{}),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:{}),\
                             close:(ts:\"2022-08-01 00:00:00+00\",val:{}),\
-                            volume:Missing()\
+                            vol_kind:0,vol:0,vwap:0\
                             )",
                     extreme_price, extreme_price, extreme_price, extreme_price
                 );
@@ -780,7 +759,7 @@ mod tests {
                             high:(ts:\"{}\",val:1),\
                             low:(ts:\"{}\",val:1),\
                             close:(ts:\"{}\",val:1),\
-                            volume:Transaction(vol:1,vwap:1)\
+                            vol_kind:1,vol:1,vwap:1\
                             )",
                     extreme_time, extreme_time, extreme_time, extreme_time
                 );
@@ -803,7 +782,7 @@ mod tests {
                  high:(ts:\"2022-08-01 00:00:00+00\",val:{}),\
                  low:(ts:\"2022-08-01 00:00:00+00\",val:{}),\
                  close:(ts:\"2022-08-01 00:00:00+00\",val:{}),\
-                 volume:Transaction(vol:1,vwap:{})\
+                 vol_kind:1,vol:1,vwap:{}\
                  )",
                     extreme_price,
                     extreme_price,
@@ -872,7 +851,7 @@ mod tests {
                             high:(ts:\"2022-08-01 00:00:00+00\",val:1),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:1),\
                             close:(ts:\"2022-08-01 00:00:00+00\",val:1),\
-                            volume:Missing()\
+                            vol_kind:0,vol:0,vwap:0\
                             )";
 
             let output = select_one!(
@@ -905,7 +884,7 @@ mod tests {
                             high:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             close:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            volume:Transaction(vol:1,vwap:0)\
+                            vol_kind:1,vol:1,vwap:0\
                             )";
 
             assert_eq!(Some(expected), candlesticks.next().unwrap()[1].value());
@@ -916,7 +895,7 @@ mod tests {
                             high:(ts:\"2022-08-02 00:00:00+00\",val:12),\
                             low:(ts:\"2022-08-02 00:00:00+00\",val:3),\
                             close:(ts:\"2022-08-02 00:00:00+00\",val:6),\
-                            volume:Transaction(vol:1,vwap:7)\
+                            vol_kind:1,vol:1,vwap:7\
                             )";
 
             assert_eq!(Some(expected), candlesticks.next().unwrap()[1].value());
@@ -951,7 +930,7 @@ mod tests {
                             high:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             close:(ts:\"2022-08-01 23:59:59+00\",val:0),\
-                            volume:Missing()\
+                            vol_kind:0,vol:0,vwap:0\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -981,7 +960,7 @@ mod tests {
                             high:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             close:(ts:\"2022-08-01 23:59:59+00\",val:0),\
-                            volume:Transaction(vol:5,vwap:0)\
+                            vol_kind:1,vol:5,vwap:0\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -1016,7 +995,7 @@ mod tests {
                             high:(ts:\"2022-08-01 23:59:59+00\",val:5),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:1),\
                             close:(ts:\"2022-08-01 23:59:59+00\",val:5),\
-                            volume:Missing()\
+                            vol_kind:0,vol:0,vwap:0\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -1046,7 +1025,7 @@ mod tests {
                             high:(ts:\"2022-08-01 23:59:59+00\",val:5),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:1),\
                             close:(ts:\"2022-08-01 23:59:59+00\",val:5),\
-                            volume:Transaction(vol:5,vwap:15)\
+                            vol_kind:1,vol:5,vwap:15\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -1081,7 +1060,7 @@ mod tests {
                             high:(ts:\"2022-08-01 00:00:00+00\",val:5),\
                             low:(ts:\"2022-08-01 23:59:59+00\",val:1),\
                             close:(ts:\"2022-08-01 23:59:59+00\",val:1),\
-                            volume:Missing()\
+                            vol_kind:0,vol:0,vwap:0\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -1111,7 +1090,7 @@ mod tests {
                             high:(ts:\"2022-08-01 00:00:00+00\",val:5),\
                             low:(ts:\"2022-08-01 23:59:59+00\",val:1),\
                             close:(ts:\"2022-08-01 23:59:59+00\",val:1),\
-                            volume:Transaction(vol:5,vwap:15)\
+                            vol_kind:1,vol:5,vwap:15\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -1152,7 +1131,7 @@ mod tests {
                             high:(ts:\"2022-08-01 12:00:00+00\",val:12),\
                             low:(ts:\"2022-08-01 10:00:00+00\",val:1),\
                             close:(ts:\"2022-08-01 22:00:00+00\",val:8),\
-                            volume:Missing()\
+                            vol_kind:0,vol:0,vwap:0\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -1189,7 +1168,7 @@ mod tests {
                             high:(ts:\"2022-08-01 12:00:00+00\",val:12),\
                             low:(ts:\"2022-08-01 10:00:00+00\",val:1),\
                             close:(ts:\"2022-08-01 22:00:00+00\",val:8),\
-                            volume:Transaction(vol:12,vwap:78)\
+                            vol_kind:1,vol:12,vwap:78\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -1234,7 +1213,7 @@ mod tests {
                             high:(ts:\"2022-08-02 23:59:59+00\",val:8),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             close:(ts:\"2022-08-02 23:59:59+00\",val:8),\
-                            volume:Missing()\
+                            vol_kind:0,vol:0,vwap:0\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -1264,7 +1243,7 @@ mod tests {
                             high:(ts:\"2022-08-02 00:00:00+00\",val:8),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             close:(ts:\"2022-08-02 00:00:00+00\",val:8),\
-                            volume:Transaction(vol:9,vwap:41.33333333333333)\
+                            vol_kind:1,vol:9,vwap:41.33333333333333\
                             )";
 
             let output = select_one!(client, stmt, &str);
@@ -1306,7 +1285,7 @@ mod tests {
                             high:(ts:\"2022-08-02 23:59:59+00\",val:8),\
                             low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
                             close:(ts:\"2022-08-02 23:59:59+00\",val:8),\
-                            volume:Transaction(vol:9,vwap:36)\
+                            vol_kind:1,vol:9,vwap:36\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -1371,7 +1350,7 @@ mod tests {
 
         if let Some(combined) = big_stick.unwrap() {
             let cs = *combined;
-            let expected = "Candlestick(CandlestickData { header: 320, version: 1, padding: [0, 0, 0], open: TSPoint { ts: 721299600000000, val: 139.93 }, high: TSPoint { ts: 721299600000000, val: 139.98 }, low: TSPoint { ts: 721342800000000, val: 133.8779 }, close: TSPoint { ts: 721353600000000, val: 135.27 }, volume: Missing }, None)";
+            let expected = "Candlestick(CandlestickData { header: 384, version: 1, padding: [0, 0, 0], open: TSPoint { ts: 721299600000000, val: 139.93 }, high: TSPoint { ts: 721299600000000, val: 139.98 }, low: TSPoint { ts: 721342800000000, val: 133.8779 }, close: TSPoint { ts: 721353600000000, val: 135.27 }, vol_kind: 0, vol: 0.0, vwap: 0.0 }, None)";
             let observed = format!("{:?}", cs);
             assert_eq!(expected, observed);
         }

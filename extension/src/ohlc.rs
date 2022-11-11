@@ -1312,4 +1312,68 @@ mod tests {
             assert_eq!(expected, output.unwrap());
         });
     }
+
+    #[pg_test]
+    fn candlestick_combine_test() {
+        let mut sticks: Vec<Option<Inner<Candlestick>>> = vec![];
+        sticks.push(Some(
+            Candlestick::new(721299600000000, 139.93, 139.98, 138.38, 138.51, None).into(),
+        ));
+        sticks.push(Some(
+            Candlestick::new(721303200000000, 138.52, 139.08, 138.47, 139.07, None).into(),
+        ));
+        sticks.push(Some(
+            Candlestick::new(721306800000000, 139.07, 139.42, 139.0, 139.07, None).into(),
+        ));
+        sticks.push(Some(
+            Candlestick::new(721310400000000, 139.17, 139.5, 138.7, 139.44, None).into(),
+        ));
+        sticks.push(Some(
+            Candlestick::new(721314000000000, 138.73, 139.8285, 138.28, 138.5315, None).into(),
+        ));
+        sticks.push(Some(
+            Candlestick::new(721317600000000, 138.55, 139.07, 137.0, 137.26, None).into(),
+        ));
+        sticks.push(Some(
+            Candlestick::new(721321200000000, 137.26, 137.95, 136.18, 136.5, None).into(),
+        ));
+        sticks.push(Some(
+            Candlestick::new(721324800000000, 136.4914, 137.4, 136.4101, 136.615, None).into(),
+        ));
+        sticks.push(Some(
+            Candlestick::new(721328400000000, 136.605, 136.7057, 136.13, 136.335, None).into(),
+        ));
+        sticks.push(Some(
+            Candlestick::new(721332000000000, 136.355, 136.565, 135.01, 135.22, None).into(),
+        ));
+        sticks.push(Some(
+            Candlestick::new(721335600000000, 135.23, 135.5391, 134.7, 134.77, None).into(),
+        ));
+        sticks.push(Some(
+            Candlestick::new(721339200000000, 134.74, 135.4738, 134.5985, 134.91, None).into(),
+        ));
+        sticks.push(Some(
+            Candlestick::new(721342800000000, 134.87, 135.17, 133.8779, 134.9, None).into(),
+        ));
+        sticks.push(Some(
+            Candlestick::new(721346400000000, 134.91, 134.94, 134.73, 134.82, None).into(),
+        ));
+        sticks.push(Some(
+            Candlestick::new(721350000000000, 134.83, 136.6601, 134.83, 135.05, None).into(),
+        ));
+        sticks.push(Some(
+            Candlestick::new(721353600000000, 135.06, 135.5, 134.91, 135.27, None).into(),
+        ));
+
+        let big_stick = sticks
+            .into_iter()
+            .reduce(|a, b| candlestick_combine_inner(a, b, std::ptr::null_mut()));
+
+        if let Some(combined) = big_stick.unwrap() {
+            let cs = *combined;
+            let expected = "Candlestick(CandlestickData { header: 320, version: 1, padding: [0, 0, 0], open: TSPoint { ts: 721299600000000, val: 139.93 }, high: TSPoint { ts: 721299600000000, val: 139.98 }, low: TSPoint { ts: 721342800000000, val: 133.8779 }, close: TSPoint { ts: 721353600000000, val: 135.27 }, volume: Missing }, None)";
+            let observed = format!("{:?}", cs);
+            assert_eq!(expected, observed);
+        }
+    }
 }

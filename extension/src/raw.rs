@@ -122,6 +122,21 @@ pub struct Interval(pub pg_sys::Datum);
 
 raw_type!(Interval, pg_sys::INTERVALOID, pg_sys::INTERVALARRAYOID);
 
+impl From<i64> for Interval {
+    fn from(interval: i64) -> Self {
+        let interval = pg_sys::Interval {
+            time: interval,
+            ..Default::default()
+        };
+        unsafe {
+            let ptr =
+                pg_sys::palloc(std::mem::size_of::<pg_sys::Interval>()) as *mut pg_sys::Interval;
+            *ptr = interval;
+            Interval(pg_sys::Datum::from(ptr))
+        }
+    }
+}
+
 pub struct regproc(pub pg_sys::Datum);
 
 raw_type!(regproc, pg_sys::REGPROCOID, pg_sys::REGPROCARRAYOID);

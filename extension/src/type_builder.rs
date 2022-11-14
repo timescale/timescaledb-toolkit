@@ -128,7 +128,7 @@ macro_rules! pg_type_impl {
                             *self = self.0.flatten();
                             self.cached_datum_or_flatten()
                         },
-                        FromInput(bytes) | Flattened(bytes) => pgx::Datum::from(bytes.as_ptr()),
+                        FromInput(bytes) | Flattened(bytes) => pg_sys::Datum::from(bytes.as_ptr()),
                     }
                 }
             }
@@ -206,8 +206,8 @@ macro_rules! pg_type_impl {
                 fn into_datum(self) -> Option<pgx::pg_sys::Datum> {
                     use $crate::type_builder::CachedDatum::*;
                     let datum = match self.1 {
-                        Flattened(bytes) => pgx::Datum::from(bytes.as_ptr()),
-                        FromInput(..) | None => pgx::Datum::from(self.0.to_pg_bytes().as_ptr()),
+                        Flattened(bytes) => pg_sys::Datum::from(bytes.as_ptr()),
+                        FromInput(..) | None => pg_sys::Datum::from(self.0.to_pg_bytes().as_ptr()),
                     };
                     Some(datum)
                 }
@@ -362,7 +362,7 @@ macro_rules! do_serialize {
                 let len = writer.position().try_into().expect("serialized size too large");
                 ::pgx::set_varsize(writer.get_mut().as_mut_ptr() as *mut _, len);
             }
-            $crate::raw::bytea::from(pgx::Datum::from(writer.into_inner().as_mut_ptr()))
+            $crate::raw::bytea::from(pg_sys::Datum::from(writer.into_inner().as_mut_ptr()))
         }
     };
 }

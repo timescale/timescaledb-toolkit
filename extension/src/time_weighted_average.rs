@@ -798,7 +798,7 @@ mod tests {
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
             let new_state =
-                time_weight_trans_deserialize_inner(bytea(pgx::Datum::from(expected.as_ptr())));
+                time_weight_trans_deserialize_inner(bytea(pg_sys::Datum::from(expected.as_ptr())));
 
             control.combine_summaries(); // Serialized form is always combined
             assert_eq!(&*new_state, &*control);

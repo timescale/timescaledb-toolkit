@@ -268,13 +268,15 @@ pub(crate) unsafe fn pipeline_support_helper(
     new_executor_args.push(new_const.cast());
     (*new_executor).args = new_executor_args.into_pg();
 
-    Internal::from(Some(pgx::Datum::from(new_executor)))
+    Internal::from(Some(pg_sys::Datum::from(new_executor)))
 }
 
 // support functions are spec'd as returning NULL pointer if no simplification
 // can be made
 fn no_change() -> pgx::Internal {
-    Internal::from(Some(pgx::Datum::from(std::ptr::null_mut::<pg_sys::Expr>())))
+    Internal::from(Some(pg_sys::Datum::from(
+        std::ptr::null_mut::<pg_sys::Expr>(),
+    )))
 }
 
 // using this instead of pg_operator since the latter doesn't support schemas yet

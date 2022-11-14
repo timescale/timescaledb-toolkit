@@ -140,7 +140,7 @@ fn nmost_trans_combine<T: Clone + Ord + Copy>(
 #[derive(Clone, Debug)]
 pub struct NMostByTransState<T: Ord> {
     values: NMostTransState<(T, usize)>,
-    data: Vec<Datum>,
+    data: Vec<pg_sys::Datum>,
     oid: pg_sys::Oid,
 }
 

@@ -79,7 +79,7 @@ type Form_pg_database = *mut FormData_pg_database;
 static DEFAULT_COLLATION_NAME: Lazy<CString> = Lazy::new(|| unsafe {
     let tuple = pg_sys::SearchSysCache1(
         pg_sys::SysCacheIdentifier_DATABASEOID as _,
-        pgx::Datum::from(pg_sys::MyDatabaseId),
+        pg_sys::Datum::from(pg_sys::MyDatabaseId),
     );
     if tuple.is_null() {
         pgx::error!("no database info");
@@ -111,7 +111,7 @@ impl Serialize for PgCollationId {
 
             let tuple = pg_sys::SearchSysCache1(
                 pg_sys::SysCacheIdentifier_COLLOID as _,
-                pgx::Datum::from(self.0),
+                pg_sys::Datum::from(self.0),
             );
             if tuple.is_null() {
                 pgx::error!("no collation info for oid {}", self.0);
@@ -208,20 +208,20 @@ impl<'de> Deserialize<'de> for PgCollationId {
             let mut collation_id = pg_sys::GetSysCacheOid(
                 pg_sys::SysCacheIdentifier_COLLNAMEENCNSP as _,
                 Anum_pg_collation_oid as _,
-                pgx::Datum::from(name.as_ptr()),
-                pgx::Datum::from(pg_sys::GetDatabaseEncoding()),
-                pgx::Datum::from(namespace_id),
-                Datum::from(0), //unused
+                pg_sys::Datum::from(name.as_ptr()),
+                pg_sys::Datum::from(pg_sys::GetDatabaseEncoding()),
+                pg_sys::Datum::from(namespace_id),
+                pg_sys::Datum::from(0), //unused
             );
 
             if collation_id == pg_sys::InvalidOid {
                 collation_id = pg_sys::GetSysCacheOid(
                     pg_sys::SysCacheIdentifier_COLLNAMEENCNSP as _,
                     Anum_pg_collation_oid as _,
-                    pgx::Datum::from(name.as_ptr()),
-                    Datum::from((-1isize) as usize),
-                    pgx::Datum::from(namespace_id),
-                    Datum::from(0), //unused
+                    pg_sys::Datum::from(name.as_ptr()),
+                    pg_sys::Datum::from((-1isize) as usize),
+                    pg_sys::Datum::from(namespace_id),
+                    pg_sys::Datum::from(0), //unused
                 );
             }
 

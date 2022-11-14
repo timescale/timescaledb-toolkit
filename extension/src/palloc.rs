@@ -72,13 +72,13 @@ impl<T> DerefMut for Inner<T> {
 
 unsafe impl<T> ToInternal for Option<Inner<T>> {
     fn internal(self) -> Option<Internal> {
-        self.map(|p| Internal::from(Some(pgx::Datum::from(p.0.as_ptr()))))
+        self.map(|p| Internal::from(Some(pg_sys::Datum::from(p.0.as_ptr()))))
     }
 }
 
 unsafe impl<T> ToInternal for Inner<T> {
     fn internal(self) -> Option<Internal> {
-        Some(Internal::from(Some(pgx::Datum::from(self.0.as_ptr()))))
+        Some(Internal::from(Some(pg_sys::Datum::from(self.0.as_ptr()))))
     }
 }
 
@@ -91,13 +91,13 @@ impl<T> From<T> for Inner<T> {
 // TODO these last two should probably be `unsafe`
 unsafe impl<T> ToInternal for *mut T {
     fn internal(self) -> Option<Internal> {
-        Some(Internal::from(Some(pgx::Datum::from(self))))
+        Some(Internal::from(Some(pg_sys::Datum::from(self))))
     }
 }
 
 unsafe impl<T> ToInternal for *const T {
     fn internal(self) -> Option<Internal> {
-        Some(Internal::from(Some(pgx::Datum::from(self))))
+        Some(Internal::from(Some(pg_sys::Datum::from(self))))
     }
 }
 

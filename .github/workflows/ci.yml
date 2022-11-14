@@ -78,7 +78,7 @@ jobs:
 
     - name: Run binary update tests
       run: |
-        su postgres -c 'OS_NAME=debian OS_VERSION=11 tools/testbin -version no -bindir / -dbroot /tmp/db -pgport 28800 -pgversions ${{ matrix.pgversion }} ci 2>&1'
+        su postgres -c 'OS_NAME=debian OS_VERSION=11 tools/testbin -version no -bindir / -pgversions ${{ matrix.pgversion }} ci 2>&1'
 
   testcrates:
     name: Test Crates

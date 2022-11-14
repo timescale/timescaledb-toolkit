@@ -223,11 +223,6 @@ while [ $# -gt 0 ]; do
             shift
             ;;
 
-        -dbroot | -pgport)
-            # TODO remove flags
-            shift
-            ;;
-
         -pgversions)
             PG_VERSIONS=$1
             shift

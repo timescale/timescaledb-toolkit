@@ -729,7 +729,7 @@ insert into test select '2020-01-02 UTC'::timestamptz + make_interval(days=>v), 
                 None,
             );
             assert_eq!(
-                "48:00:00",
+                "2 days",
                 select_one!(
                     client,
                     r#"

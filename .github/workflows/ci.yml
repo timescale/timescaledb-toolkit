@@ -70,6 +70,10 @@ jobs:
     - name: Run doc tests
       run: su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-doc 2>&1'
 
+    - name: Run binary update tests
+      run: |
+        su postgres -c 'OS_NAME=debian OS_VERSION=11 tools/testbin -version no -bindir / -dbroot /tmp/db -pgport 28800 -pgversions ${{ matrix.pgversion }} ci 2>&1'
+
   testcrates:
     name: Test Crates
     runs-on: ubuntu-20.04
@@ -99,49 +103,3 @@ jobs:
 
     - name: Run Crates Tests
       run: su postgres -c 'sh tools/build test-crates 2>&1'
-
-  testupdates:
-    name: Test Updates
-    runs-on: ubuntu-20.04
-    container:
-      image: ${{ inputs.container-image || 'timescaledev/toolkit-builder:debian-11-amd64' }}
-      env:
-        PGVERSION: 14
-
-        CARGO_INCREMENTAL: 0
-        CARGO_NET_RETRY: 10
-        CI: 1
-        RUST_BACKTRACE: short
-
-    steps:
-    - name: Checkout Repository
-      uses: actions/checkout@v3
-      with:
-        ref: ${{ github.event.pull_request.head.sha }}
-
-    - name: chown Repository
-      run: chown -R postgres .
-
-    - name: Cache cargo target dir
-      uses: actions/cache@v3
-      with:
-        path: target
-        key: ${{ runner.os }}-test-updates-target-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
-        restore-keys: ${{ runner.os }}-test-crates-target-
-
-    # TODO Drop this.
-    - name: Cache old versions dir
-      uses: actions/cache@v3
-      with:
-        path: old-versions
-        key: ${{ runner.os }}-test-old-versions-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
-        restore-keys: ${{ runner.os }}-test-old-versions-
-
-    - name: Run binary update tests
-      # TODO We've always tested only one postgres version here.  We test them all at release
-      #  time anyway.  If we want to test them here, too, let's make it less slow first.
-      run: |
-        su postgres -c 'OS_NAME=debian OS_VERSION=11 tools/testbin -version no -bindir / -dbroot /tmp/db -pgport 28800 -pgversions 14 ci 2>&1'
-
-    - name: Check tools/testbin
-      run: sh tools/testbin check-control

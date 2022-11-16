@@ -13,10 +13,6 @@
 # 3. Install the binary for the version under test
 # 4. Run the 2nd half of the upgrade tests
 
-# To ensure this script's assumptions about the control file and the control
-# file itself are in agreement, run `tools/testbin check-control` for each
-# pull request.
-
 # The distinction between environment variables and command-line options is
 # possibly inconsistent.  The approach now is for general parameters to come
 # from the command line, and system-specific parameters to come from the
@@ -37,8 +33,6 @@ MIN_DEB_EPOCH=1.7.0
 #   that changing!
 PGX_PORT_BASE=28800
 CONTROL=extension/timescaledb_toolkit.control
-# Pattern we require in $CONTROL for finding versions to test upgrade from.
-UPGRADEABLE_RE="^# upgradeable_from = '[0-9][-dev0-9., ]*'$"
 
 # For PG_VERSIONS default.
 . tools/dependencies.sh
@@ -57,16 +51,7 @@ die() {
 }
 
 usage() {
-    print 'testbin check-control' >&2
     die 'testbin [-n] -bindir DIR -version VERSION -pgversions "[V1] [V2]..." ( ci | deb | rpm )'
-}
-
-# Run this before each merge so the control file doesn't get out of sync with this script.
-check_control() {
-    count=`grep -c "$UPGRADEABLE_RE" $CONTROL || :`
-    if [ "$count" -ne 1 ]; then
-        die "$CONTROL must contain exactly one line matching /$UPGRADEABLE_RE/"
-    fi
 }
 
 # Requires:
@@ -256,10 +241,6 @@ while [ $# -gt 0 ]; do
         -version)
             TOOLKIT_VERSION=$1
             shift
-            ;;
-
-        check-control)
-            check_control
             ;;
 
         ci|deb|rpm)

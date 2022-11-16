@@ -1376,4 +1376,33 @@ mod tests {
             assert_eq!(expected, observed);
         }
     }
+
+    #[pg_test]
+    fn candlestick_serde_roundtrip_test() {
+        use std::ptr;
+        let state =
+            tick_data_transition_inner(None, Some(1.into()), Some(1.0), Some(1.0), ptr::null_mut());
+        let state = tick_data_transition_inner(
+            state,
+            Some(2.into()),
+            Some(2.0),
+            Some(1.0),
+            ptr::null_mut(),
+        );
+        let state = tick_data_transition_inner(
+            state,
+            Some(3.into()),
+            Some(3.0),
+            Some(1.0),
+            ptr::null_mut(),
+        );
+
+        let control = state.unwrap();
+        let buffer = candlestick_serialize(Inner::from(control.clone()).internal().unwrap());
+        let new_state = candlestick_deserialize_inner(bytea(pgx::Datum::from(buffer)));
+
+        let control = format!("{:?}", &*control);
+        let new_state = format!("{:?}", &*new_state);
+        assert_eq!(control, new_state);
+    }
 }

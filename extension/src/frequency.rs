@@ -1733,30 +1733,52 @@ mod tests {
         });
     }
 
-    // TODO:  Tests that expect failures will not currently run correctly in CI.  Uncomment the following tests once this is fixed.
-    // #[pg_test(error = "data is not skewed enough to find top 5 parameters with a skew of 1.5, try reducing the skew factor")]
-    // fn topn_on_underskewed_topn_agg() {
-    //     Spi::execute(|client| {
-    //         setup_with_test_table(&client);
-    //         client.select("SELECT topn(agg, 0::int) FROM aggs WHERE name = 'topn_1.5'", None, None).count();
-    //     });
-    // }
+    #[pg_test(
+        error = "data is not skewed enough to find top 0 parameters with a skew of 1.5, try reducing the skew factor"
+    )]
+    fn topn_on_underskewed_topn_agg() {
+        Spi::execute(|client| {
+            setup_with_test_table(&client);
+            client
+                .select(
+                    "SELECT topn(agg, 0::int) FROM aggs WHERE name = 'topn_1.5'",
+                    None,
+                    None,
+                )
+                .count();
+        });
+    }
 
-    // #[pg_test(error = "requested N (8) exceeds creation parameter of topn aggregate (5)")]
-    // fn topn_high_n_on_topn_agg() {
-    //     Spi::execute(|client| {
-    //         setup_with_test_table(&client);
-    //         client.select("SELECT topn(agg, 8, 0::int) FROM aggs WHERE name = 'topn_default'", None, None).count();
-    //     });
-    // }
+    #[pg_test(error = "requested N (8) exceeds creation parameter of topn aggregate (5)")]
+    fn topn_high_n_on_topn_agg() {
+        Spi::execute(|client| {
+            setup_with_test_table(&client);
+            client
+                .select(
+                    "SELECT topn(agg, 8) FROM aggs WHERE name = 'topn_default'",
+                    None,
+                    None,
+                )
+                .count();
+        });
+    }
 
-    // #[pg_test(error = "frequency aggregates require a N parameter to topn")]
-    // fn topn_requires_n_for_freq_agg() {
-    //     Spi::execute(|client| {
-    //         setup_with_test_table(&client);
-    //         client.select("SELECT topn(agg, 0::int) FROM aggs WHERE name = 'freq_2'", None, None).count();
-    //     });
-    // }
+    #[pg_test(error = "frequency aggregates require a N parameter to topn")]
+    fn topn_requires_n_for_freq_agg() {
+        Spi::execute(|client| {
+            setup_with_test_table(&client);
+            assert_eq!(
+                0,
+                client
+                    .select(
+                        "SELECT topn(agg) FROM aggs WHERE name = 'freq_2'",
+                        None,
+                        None
+                    )
+                    .count(),
+            );
+        });
+    }
 
     #[pg_test]
     fn test_into_values() {

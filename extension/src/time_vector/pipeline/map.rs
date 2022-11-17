@@ -567,6 +567,105 @@ mod tests {
     }
 
     #[pg_test]
+    #[should_panic = "division by zero"]
+    fn test_pipeline_map_series_failure() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            // using the search path trick for this test b/c the operator is
+            // difficult to spot otherwise.
+            let sp = client
+                .select(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select(
+                "CREATE TABLE series(time timestamptz, value double precision)",
+                None,
+                None,
+            );
+            client.select(
+                "INSERT INTO series \
+                    VALUES \
+                    ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)",
+                None,
+                None,
+            );
+            client.select(
+                "CREATE FUNCTION always_fail(timevector_tstz_f64) RETURNS timevector_tstz_f64 AS
+                $$
+                    SELECT 0/0;
+                    SELECT $1;
+                $$ LANGUAGE SQL",
+                None,
+                None,
+            );
+
+            client
+                .select(
+                    "SELECT (timevector(time, value) -> map_series('always_fail'))::TEXT FROM series",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>();
+        });
+    }
+
+    #[pg_test]
+    #[should_panic = " returned NULL"]
+    fn test_pipeline_map_series_null() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            // using the search path trick for this test b/c the operator is
+            // difficult to spot otherwise.
+            let sp = client
+                .select(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
+            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.select(
+                "CREATE TABLE series(time timestamptz, value double precision)",
+                None,
+                None,
+            );
+            client.select(
+                "INSERT INTO series \
+                    VALUES \
+                    ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)",
+                None,
+                None,
+            );
+            client.select(
+                "CREATE FUNCTION always_null(timevector_tstz_f64) RETURNS timevector_tstz_f64 AS
+                $$
+                    SELECT NULL::timevector_tstz_f64;
+                $$ LANGUAGE SQL",
+                None,
+                None,
+            );
+
+            client
+                .select(
+                    "SELECT (timevector(time, value) -> map_series('always_null'))::TEXT FROM series",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>();
+        });
+    }
+
+    #[pg_test]
     fn test_map_io() {
         Spi::execute(|client| {
             client.select("SET timezone TO 'UTC'", None, None);

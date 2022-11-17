@@ -9,6 +9,9 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 #### New experimental features
 
 #### Bug fixes
+- [#624](https://github.com/timescale/timescaledb-toolkit/pull/624): Remove partial aggregation for Candlestick aggregates.
+  We've determined that the cause for the bad results lives somewhere in the functions that are used to support partial aggregation.
+  We can at least prevent folks from running the candlestick aggregates in parallel mode and hitting this bug by dropping support for partial aggregation until we've resolved the issue.
 
 #### Other notable changes
 

@@ -4,6 +4,13 @@
 
 This changelog should be updated as part of a PR if the work is worth noting (most of them should be). If unsure, always add an entry here for any PR targeted for the next release. It's easier to remove than add an entry at final review time for the next release.
 
+## [1.12.1](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.12.1) (2022-11-17)
+
+#### Bug fixes
+- [#624](https://github.com/timescale/timescaledb-toolkit/pull/624): Remove partial aggregation for Candlestick aggregates.
+  We've determined that the cause for the bad results lives somewhere in the functions that are used to support partial aggregation.
+  We can at least prevent folks from running the candlestick aggregates in parallel mode and hitting this bug by dropping support for partial aggregation until we've resolved the issue.
+
 ## [1.12.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.12.0) (2022-11-08)
 
 #### New experimental features

@@ -249,7 +249,37 @@ commit Changelog.md
 finish_commit "start $DEV_VERSION"
 $nop git show
 
-# TODO Create a pull request instead?
 if $push; then
+    # TODO Create a pull request instead?
     $nop git push origin main
+
+    # File issue for release tasks that are not yet automated.
+    $nop gh issue create -R timescale/timescaledb-toolkit -F- -t "Release $VERSION" <<EOF
+- [ ] Docker HA image
+
+[Sample pull request](https://github.com/timescale/timescaledb-docker-ha/pull/298)
+
+Add new version to `TIMESCALEDB_TOOLKIT_EXTENSIONS` in:
+- `.github/workflows/build_image.yaml`
+- `.github/workflows/publish_image.yaml`
+- `Makefile`
+
+- [ ] hot-forge
+
+[Sample pull request](https://github.com/timescale/hot-forge/pull/67)
+
+Add two new lines to `bundles.yaml` containing the new version tag:
+```
+- repository: https://github.com/timescale/timescaledb-toolkit
+  tag: $VERSION
+```
+
+- [ ] Copy Changelog.md entries for this release into
+  [github release](https://github.com/timescale/timescaledb-toolkit/releases/tag/$VERSION)
+
+- [ ] Update Homebrew
+
+Build binaries on multiple Mac versions/architectures and submit a pull request like
+[this example](https://github.com/timescale/homebrew-tap/pull/29/files)
+EOF
 fi

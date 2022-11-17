@@ -215,7 +215,7 @@ impl Serialize for PgTypId {
         unsafe {
             let tuple = pg_sys::SearchSysCache1(
                 pg_sys::SysCacheIdentifier_TYPEOID as _,
-                pgx::Datum::from(self.0),
+                pg_sys::Datum::from(self.0),
             );
             if tuple.is_null() {
                 pgx::error!("no type info for oid {}", self.0);
@@ -291,10 +291,10 @@ impl<'de> Deserialize<'de> for PgTypId {
             let type_id = pg_sys::GetSysCacheOid(
                 pg_sys::SysCacheIdentifier_TYPENAMENSP as _,
                 pg_sys::Anum_pg_type_oid as _,
-                pgx::Datum::from(name.as_ptr()),
-                pgx::Datum::from(namespace_id),
-                Datum::from(0), //unused
-                Datum::from(0), //unused
+                pg_sys::Datum::from(name.as_ptr()),
+                pg_sys::Datum::from(namespace_id),
+                pg_sys::Datum::from(0), //unused
+                pg_sys::Datum::from(0), //unused
             );
             if type_id == pg_sys::InvalidOid {
                 return Err(D::Error::custom(format!(

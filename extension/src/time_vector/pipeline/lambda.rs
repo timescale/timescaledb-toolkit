@@ -129,7 +129,7 @@ pub fn interval_lambda<'a>(
         panic!("invalid return type, must return a INTERVAL")
     }
     let mut executor = ExpressionExecutor::new(&expression);
-    pgx::Datum::from(executor.exec(value, time.into()).interval()).into()
+    pg_sys::Datum::from(executor.exec(value, time.into()).interval()).into()
 }
 
 #[pg_extern(stable, parallel_safe, schema = "toolkit_experimental")]
@@ -376,8 +376,8 @@ impl PartialOrd for Value {
                 let res = pg_sys::DirectFunctionCall2Coll(
                     Some(interval_cmp),
                     pg_sys::InvalidOid,
-                    pgx::Datum::from(*l0),
-                    pgx::Datum::from(*r0),
+                    pg_sys::Datum::from(*l0),
+                    pg_sys::Datum::from(*r0),
                 )
                 .value() as i32;
                 res.cmp(&0).into()
@@ -407,8 +407,8 @@ impl PartialEq for Value {
                 let res = pg_sys::DirectFunctionCall2Coll(
                     Some(interval_eq),
                     pg_sys::InvalidOid,
-                    pgx::Datum::from(*l0),
-                    pgx::Datum::from(*r0),
+                    pg_sys::Datum::from(*l0),
+                    pg_sys::Datum::from(*r0),
                 );
                 res.value() != 0
             },

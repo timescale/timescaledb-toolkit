@@ -377,9 +377,9 @@ fn parse_timestamptz(val: &str) -> i64 {
         pg_sys::DirectFunctionCall3Coll(
             Some(timestamptz_in),
             pg_sys::InvalidOid as _,
-            pgx::Datum::from(cstr.as_ptr()),
-            pgx::Datum::from(pg_sys::InvalidOid),
-            pgx::Datum::from(-1i32),
+            pg_sys::Datum::from(cstr.as_ptr()),
+            pg_sys::Datum::from(pg_sys::InvalidOid),
+            pg_sys::Datum::from(-1i32),
         )
     };
     parsed_time.value() as _
@@ -398,9 +398,9 @@ fn parse_interval(val: &str) -> *mut pg_sys::Interval {
         pg_sys::DirectFunctionCall3Coll(
             Some(interval_in),
             pg_sys::InvalidOid as _,
-            pgx::Datum::from(cstr.as_ptr()),
-            pgx::Datum::from(pg_sys::InvalidOid),
-            pgx::Datum::from(-1i32),
+            pg_sys::Datum::from(cstr.as_ptr()),
+            pg_sys::Datum::from(pg_sys::InvalidOid),
+            pg_sys::Datum::from(-1i32),
         )
     };
     parsed_interval.cast_mut_ptr()

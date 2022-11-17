@@ -186,7 +186,7 @@ pub fn apply_to(
 ) -> Timevector_TSTZ_F64<'_> {
     let mut flinfo: pg_sys::FmgrInfo = unsafe { MaybeUninit::zeroed().assume_init() };
 
-    let fn_addr: unsafe extern "C" fn(*mut pg_sys::FunctionCallInfoBaseData) -> Datum;
+    let fn_addr: unsafe extern "C" fn(*mut pg_sys::FunctionCallInfoBaseData) -> pg_sys::Datum;
     let mut fc_info = unsafe {
         pg_sys::fmgr_info(func, &mut flinfo);
         fn_addr = flinfo.fn_addr.expect("null function in timevector map");
@@ -231,7 +231,7 @@ pub fn map_series(series: &mut Timevector_TSTZ_F64<'_>, mut func: impl FnMut(f64
     // call it
     // NOTE need to be careful that there's not allocation within the
     //      loop body so it cannot leak
-    pgx::guard(AssertUnwindSafe(|| {
+    pg_sys::guard(AssertUnwindSafe(|| {
         for point in points {
             *point = TSPoint {
                 ts: point.ts,

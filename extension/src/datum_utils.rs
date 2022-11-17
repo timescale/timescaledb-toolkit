@@ -25,9 +25,9 @@ pub(crate) unsafe fn deep_copy_datum(datum: Datum, typoid: Oid) -> Datum {
         let size = (*tentry).typlen as usize;
         let copy = pg_sys::palloc0(size);
         std::ptr::copy(datum.cast_mut_ptr(), copy as *mut u8, size);
-        pgx::Datum::from(copy)
+        pg_sys::Datum::from(copy)
     } else {
-        pgx::Datum::from(pg_sys::pg_detoast_datum_copy(datum.cast_mut_ptr()))
+        pg_sys::Datum::from(pg_sys::pg_detoast_datum_copy(datum.cast_mut_ptr()))
     }
 }
 
@@ -464,7 +464,7 @@ impl<'a, 'b> Iterator for DatumStoreIterator<'a, 'b> {
                     unsafe {
                         let va = store.data.slice().as_ptr().offset(*next_offset as _);
                         *next_offset += padded_va_len(va as *const _) as u32;
-                        Some(pgx::Datum::from(va))
+                        Some(pg_sys::Datum::from(va))
                     }
                 }
             }
@@ -478,7 +478,7 @@ impl<'a, 'b> Iterator for DatumStoreIterator<'a, 'b> {
                     None
                 } else {
                     *next_index += 1;
-                    Some(pgx::Datum::from(unsafe {
+                    Some(pg_sys::Datum::from(unsafe {
                         store.data.slice().as_ptr().offset(idx as _)
                     }))
                 }
@@ -578,7 +578,7 @@ impl<'a> Iterator for DatumStoreIntoIterator<'a> {
                     unsafe {
                         let va = store.data.slice().as_ptr().offset(*next_offset as _);
                         *next_offset += padded_va_len(va as *const _) as u32;
-                        Some(pgx::Datum::from(va))
+                        Some(pg_sys::Datum::from(va))
                     }
                 }
             }
@@ -592,7 +592,7 @@ impl<'a> Iterator for DatumStoreIntoIterator<'a> {
                     None
                 } else {
                     *next_index += 1;
-                    Some(pgx::Datum::from(unsafe {
+                    Some(pg_sys::Datum::from(unsafe {
                         store.data.slice().as_ptr().offset(idx as _)
                     }))
                 }

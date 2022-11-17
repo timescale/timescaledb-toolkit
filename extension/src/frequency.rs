@@ -563,7 +563,7 @@ pub fn topn_agg_with_skew_bigint_trans(
     let value = match value {
         None => None,
         Some(val) => unsafe {
-            AnyElement::from_polymorphic_datum(pgx::Datum::from(val), false, pg_sys::INT8OID)
+            AnyElement::from_polymorphic_datum(pg_sys::Datum::from(val), false, pg_sys::INT8OID)
         },
     };
 
@@ -590,7 +590,7 @@ pub fn topn_agg_with_skew_text_trans(
     let value = match txt {
         None => None,
         Some(val) => unsafe {
-            AnyElement::from_polymorphic_datum(pgx::Datum::from(val), false, pg_sys::TEXTOID)
+            AnyElement::from_polymorphic_datum(pg_sys::Datum::from(val), false, pg_sys::TEXTOID)
         },
     };
 
@@ -635,7 +635,7 @@ pub fn freq_agg_bigint_trans(
     let value = match value {
         None => None,
         Some(val) => unsafe {
-            AnyElement::from_polymorphic_datum(pgx::Datum::from(val), false, pg_sys::INT8OID)
+            AnyElement::from_polymorphic_datum(pg_sys::Datum::from(val), false, pg_sys::INT8OID)
         },
     };
     freq_agg_trans(state, freq, value, fcinfo)
@@ -652,7 +652,7 @@ pub fn freq_agg_text_trans(
     let value = match txt {
         None => None,
         Some(val) => unsafe {
-            AnyElement::from_polymorphic_datum(pgx::Datum::from(val), false, pg_sys::TEXTOID)
+            AnyElement::from_polymorphic_datum(pg_sys::Datum::from(val), false, pg_sys::TEXTOID)
         },
     };
     freq_agg_trans(state, freq, value, fcinfo)
@@ -1453,7 +1453,11 @@ mod tests {
         for i in 11..=20 {
             for j in i..=20 {
                 let value = unsafe {
-                    AnyElement::from_polymorphic_datum(pgx::Datum::from(j), false, pg_sys::INT4OID)
+                    AnyElement::from_polymorphic_datum(
+                        pg_sys::Datum::from(j),
+                        false,
+                        pg_sys::INT4OID,
+                    )
                 };
                 state = super::freq_agg_trans(state, freq, value, fcinfo).unwrap();
             }
@@ -1513,7 +1517,11 @@ mod tests {
             // reverse here introduces less error in the aggregate
             for j in i..=20 {
                 let value = unsafe {
-                    AnyElement::from_polymorphic_datum(pgx::Datum::from(j), false, pg_sys::INT4OID)
+                    AnyElement::from_polymorphic_datum(
+                        pg_sys::Datum::from(j),
+                        false,
+                        pg_sys::INT4OID,
+                    )
                 };
                 state = super::freq_agg_trans(state, freq, value, fcinfo).unwrap();
             }
@@ -1848,7 +1856,7 @@ mod tests {
         for _ in 0..200 {
             let v = rand100.sample(&mut rng);
             let value = unsafe {
-                AnyElement::from_polymorphic_datum(pgx::Datum::from(v), false, pg_sys::INT4OID)
+                AnyElement::from_polymorphic_datum(pg_sys::Datum::from(v), false, pg_sys::INT4OID)
             };
             state = super::freq_agg_trans(state, freq, value, fcinfo).unwrap();
             counts[v] += 1;
@@ -1892,7 +1900,7 @@ mod tests {
                 continue; // These tail values can start to add up at low skew values
             }
             let value = unsafe {
-                AnyElement::from_polymorphic_datum(pgx::Datum::from(v), false, pg_sys::INT4OID)
+                AnyElement::from_polymorphic_datum(pg_sys::Datum::from(v), false, pg_sys::INT4OID)
             };
             state = super::topn_agg_with_skew_trans(state, n as i32, skew, value, fcinfo).unwrap();
             if v < 100 {

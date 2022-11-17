@@ -345,7 +345,7 @@ pub fn duration_in<'a>(state: String, aggregate: Option<StateAgg<'a>>) -> crate:
     //  result = DatumGetIntervalP(DirectFunctionCall1(interval_justify_hours,
     //                                                 IntervalPGetDatum(result)));
     // So if we want the same behavior, we need to call interval_justify_hours too:
-    let function_args = vec![Some(pgx::Datum::from(interval))];
+    let function_args = vec![Some(pg_sys::Datum::from(interval))];
     unsafe { pgx::direct_function_call(pg_sys::interval_justify_hours, function_args) }
         .expect("interval_justify_hours does not return None")
 }

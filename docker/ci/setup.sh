@@ -154,6 +154,7 @@ EOF
                     build-essential \
                     curl \
                     debhelper \
+                    ed \
                     fakeroot \
                     gcc \
                     git \

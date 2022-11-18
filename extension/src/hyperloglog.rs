@@ -855,21 +855,18 @@ mod tests {
         })
     }
 
-    // FIXME these tests don't run on CI
-    // #[pg_test(error = "Invalid value for size 2. Size must be between 16 and 262144, though less than 1024 not recommended")]
-    // fn test_hll_error_too_small() {
-    //     Spi::execute(|client| {
-    //         let output = client
-    //             .select(
-    //                 "SELECT hyperloglog(2, 'foo'::text)::TEXT",
-    //                 None,
-    //                 None,
-    //             )
-    //             .first()
-    //             .get_one::<String>();
-    //         assert_eq!(output, None)
-    //     })
-    // }
+    #[pg_test(
+        error = "Invalid value for size 2. Size must be between 16 and 262144, though less than 1024 not recommended"
+    )]
+    fn test_hll_error_too_small() {
+        Spi::execute(|client| {
+            let output = client
+                .select("SELECT hyperloglog(2, 'foo'::text)::TEXT", None, None)
+                .first()
+                .get_one::<String>();
+            assert_eq!(output, None)
+        })
+    }
 
     #[pg_test]
     fn test_hll_size_min() {
@@ -946,21 +943,18 @@ mod tests {
         });
     }
 
-    // FIXME these tests don't run on CI
-    // #[pg_test(error = "Invalid value for size 262145. Size must be between 16 and 262144, though less than 1024 not recommended")]
-    // fn test_hll_error_too_large() {
-    //     Spi::execute(|client| {
-    //         let output = client
-    //             .select(
-    //                 "SELECT hyperloglog(262145, 'foo'::text)::TEXT",
-    //                 None,
-    //                 None,
-    //             )
-    //             .first()
-    //             .get_one::<String>();
-    //         assert_eq!(output, None)
-    //     })
-    // }
+    #[pg_test(
+        error = "Invalid value for size 262145. Size must be between 16 and 262144, though less than 1024 not recommended"
+    )]
+    fn test_hll_error_too_large() {
+        Spi::execute(|client| {
+            let output = client
+                .select("SELECT hyperloglog(262145, 'foo'::text)::TEXT", None, None)
+                .first()
+                .get_one::<String>();
+            assert_eq!(output, None)
+        })
+    }
 
     //TODO test continuous aggregates
 }

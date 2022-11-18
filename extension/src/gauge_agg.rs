@@ -1066,10 +1066,8 @@ mod tests {
         });
     }
 
-    // TODO https://github.com/timescale/timescaledb-toolkit/issues/362
-    // TODO why doesn't this catch the error under github actions?
-    // #[pg_test(error = "returned Datum was NULL")]
-    #[allow(dead_code)]
+    // TODO This is a terrible error message to show a human being.  We need to be a lot less cavalier about unwrap...
+    #[pg_test(error = "called `Option::unwrap()` on a `None` value")]
     fn nulls() {
         Spi::execute(|client| {
             client.select(

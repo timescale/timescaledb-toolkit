@@ -837,15 +837,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
         });
     }
 
-    // TODO why doesn't this catch the error under github actions?
-    //  https://github.com/timescale/timescaledb-toolkit/runs/4943786692?check_suite_focus=true
-    // Retrieving Tests
-    // Running 98 tests
-    // test `two_states_at_one_time` failed with
-    // db error: ERROR: state cannot be both ERROR and START at 631152000000000
-    // test combine_using_muchos_data ... ok
-    //#[pg_test(error = "state cannot be both ERROR and START at 631152000000000")]
-    #[allow(dead_code)]
+    #[pg_test(error = "state cannot be both ERROR and START at 631152000000000")]
     fn two_states_at_one_time() {
         Spi::execute(|client| {
             client.select("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);

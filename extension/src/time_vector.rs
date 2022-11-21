@@ -1,6 +1,10 @@
 #![allow(clippy::identity_op)] // clippy gets confused by pg_type! enums
 
+use crate::pg_sys::timestamptz_to_str;
+use core::str::Utf8Error;
 use pgx::{iter::TableIterator, *};
+use std::ffi::CStr;
+use tera::{Context, Tera};
 
 use crate::{
     aggregate_utils::in_aggregate_context,
@@ -113,6 +117,65 @@ pub fn unnest<'a>(
             .into_iter()
             .map(|points| (points.ts.into(), points.val)),
     )
+}
+
+/// Util function to convert from *const ::std::os::raw::c_char to String
+/// TimestampTz -> *const c_char -> &CStr -> &str -> String
+pub fn timestamptz_to_string(time: pg_sys::TimestampTz) -> Result<String, Utf8Error> {
+    let char_ptr = unsafe { timestamptz_to_str(time) };
+    let c_str = unsafe { CStr::from_ptr(char_ptr) };
+    c_str.to_str().map(|s| s.to_owned())
+}
+
+#[pg_extern(immutable, schema = "toolkit_experimental", parallel_safe)]
+pub fn to_plotly<'a>(series: Timevector_TSTZ_F64<'a>) -> String {
+    format_timevector(series,"{\"times\": {{ TIMES | json_encode() | safe  }}, \"vals\": {{ VALUES | json_encode() | safe }}}".to_string())
+}
+
+#[pg_extern(immutable, schema = "toolkit_experimental", parallel_safe)]
+pub fn to_text<'a>(series: Timevector_TSTZ_F64<'a>, format_string: String) -> String {
+    format_timevector(series, format_string)
+}
+
+pub fn format_timevector<'a>(series: Timevector_TSTZ_F64<'a>, format_string: String) -> String {
+    let mut context = Context::new();
+    let mut times: Vec<String> = Vec::new();
+    let mut values: Vec<String> = Vec::new();
+    if series.has_nulls() {
+        for (i, point) in series.iter().enumerate() {
+            times.push(timestamptz_to_string(point.ts).unwrap());
+            if series.is_null_val(i) {
+                values.push("null".to_string())
+            } else {
+                match point.val.to_string().as_ref() {
+                    "NaN" | "inf" | "-inf" | "Infinity" | "-Infinity" => {
+                        panic!("All values in the series must be finite")
+                    }
+                    x => values.push(x.to_string()),
+                }
+            }
+        }
+    } else {
+        // optimized path if series does not have any nulls, but might have some NaNs/infinities
+        for point in series {
+            times.push(timestamptz_to_string(point.ts).unwrap());
+            match point.val.to_string().as_ref() {
+                "NaN" | "inf" | "-inf" | "Infinity" | "-Infinity" => {
+                    panic!("All values in the series must be finite")
+                }
+                x => values.push(x.to_string()),
+            }
+        }
+    }
+
+    context.insert("TIMES", &times);
+    context.insert("VALUES", &values);
+
+    // paired timevals in the following format: [{\"time\": \"2020-01-01 00:00:00+00\", \"val\": 1}, {\"time\": \"2020-01-02 00:00:00+00\", \"val\": 2}, ... ]
+    let timevals = Tera::one_off("[{% for x in TIMES %}{\"time\": \"{{ x }}\", \"val\": {{ VALUES[loop.index0] }}}{% if not loop.last %},{% endif %} {% endfor %}]", &context,false).expect("Failed to create paired template");
+    context.insert("TIMEVALS", &timevals);
+    Tera::one_off(format_string.as_ref(), &context, false)
+        .expect("Failed to create template with Tera")
 }
 
 #[pg_operator(immutable, parallel_safe)]
@@ -510,6 +573,115 @@ mod tests {
                 Some("(\"2020-01-05 00:00:00+00\",10)")
             );
             assert!(unnest.next().is_none());
+        })
+    }
+
+    #[pg_test]
+    pub fn test_format_timevector() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            client.select(
+                "CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION)",
+                None,
+                None,
+            );
+            client.select(
+                r#"INSERT INTO data VALUES
+                    ('2020-1-1', 30.0),
+                    ('2020-1-2', 45.0),
+                    ('2020-1-3', NULL),
+                    ('2020-1-4', 55.5),
+                    ('2020-1-5', 10.0)"#,
+                None,
+                None,
+            );
+
+            let test_plotly_template = client
+                .select(
+                    "SELECT toolkit_experimental.to_plotly(timevector(time, value)) FROM data",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
+
+            assert_eq!(test_plotly_template,
+"{\"times\": [\"2020-01-01 00:00:00+00\",\"2020-01-02 00:00:00+00\",\"2020-01-03 00:00:00+00\",\"2020-01-04 00:00:00+00\",\"2020-01-05 00:00:00+00\"], \"vals\": [\"30\",\"45\",\"null\",\"55.5\",\"10\"]}"
+		     );
+            let test_paired_timevals_template = client.select(
+                "SELECT toolkit_experimental.to_text(timevector(time, value),'{{TIMEVALS}}') FROM data",
+                None,
+                None,
+            ).first()
+                .get_one::<String>()
+                .unwrap();
+
+            assert_eq!(
+                test_paired_timevals_template,"[{\"time\": \"2020-01-01 00:00:00+00\", \"val\": 30}, {\"time\": \"2020-01-02 00:00:00+00\", \"val\": 45}, {\"time\": \"2020-01-03 00:00:00+00\", \"val\": null}, {\"time\": \"2020-01-04 00:00:00+00\", \"val\": 55.5}, {\"time\": \"2020-01-05 00:00:00+00\", \"val\": 10} ]"
+            );
+
+            let test_user_supplied_template = client
+                .select(
+                    "SELECT toolkit_experimental.to_text(timevector(time,value), '{\"times\": {{ TIMES }}, \"vals\": {{ VALUES }}}') FROM data",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
+            assert_eq!(
+                test_user_supplied_template,"{\"times\": [2020-01-01 00:00:00+00, 2020-01-02 00:00:00+00, 2020-01-03 00:00:00+00, 2020-01-04 00:00:00+00, 2020-01-05 00:00:00+00], \"vals\": [30, 45, null, 55.5, 10]}"
+            );
+            let test_user_supplied_json_template = client.select(
+                "SELECT toolkit_experimental.to_text(timevector(time, value),'{\"times\": {{ TIMES | json_encode() | safe  }}, \"vals\": {{ VALUES | json_encode() | safe }}}') FROM data",
+                None,
+                None,
+            ).first()
+                .get_one::<String>()
+                .unwrap();
+
+            assert_eq!(
+                test_user_supplied_json_template,
+"{\"times\": [\"2020-01-01 00:00:00+00\",\"2020-01-02 00:00:00+00\",\"2020-01-03 00:00:00+00\",\"2020-01-04 00:00:00+00\",\"2020-01-05 00:00:00+00\"], \"vals\": [\"30\",\"45\",\"null\",\"55.5\",\"10\"]}"
+            );
+        })
+    }
+
+    #[should_panic = "All values in the series must be finite"]
+    #[pg_test]
+    pub fn test_format_timevector_panics_on_infinities() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+            client.select(
+                "CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION)",
+                None,
+                None,
+            );
+            client.select(
+                r#"INSERT INTO data VALUES
+                    ('2020-1-1', 30.0),
+                    ('2020-1-2', 45.0),
+                    ('2020-1-3', NULL),
+                    ('2020-1-4', 55.5),
+                    ('2020-1-6', 'Infinity'),
+                    ('2020-1-5', 10.0)"#,
+                None,
+                None,
+            );
+
+            let test_plotly_template = client
+                .select(
+                    "SELECT toolkit_experimental.to_plotly(timevector(time, value)) FROM data",
+                    None,
+                    None,
+                )
+                .first()
+                .get_one::<String>()
+                .unwrap();
+
+            assert_eq!(test_plotly_template,"{\"times\": [\n  \"2020-01-01 00:00:00+00\",\n  \"2020-01-02 00:00:00+00\",\n  \"2020-01-03 00:00:00+00\",\n  \"2020-01-04 00:00:00+00\",\n  \"2020-01-05 00:00:00+00\"\n], \"vals\": [\n  \"30\",\n  \"45\",\n  \"null\",\n  \"55.5\",\n  \"10\"\n]}"
+		     );
         })
     }
 

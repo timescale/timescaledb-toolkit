@@ -131,7 +131,7 @@ EOF
                 yum -q -y install \
                     postgresql$pg-devel \
                     postgresql$pg-server \
-                    timescaledb-2-postgresql-$pg
+                    # timescaledb-2-postgresql-$pg
                 # We install as user postgres, so that needs write access to these.
                 chown $BUILDER_USERNAME $PG_BASE$pg/lib $PG_BASE$pg/share/extension
             done
@@ -193,7 +193,7 @@ EOF
                     postgresql-$pg \
                     postgresql-server-dev-$pg
             # timescaledb packages Recommend toolkit, which we don't want here.
-            apt-get -qq install --no-install-recommends timescaledb-2-postgresql-$pg
+            # apt-get -qq install --no-install-recommends timescaledb-2-postgresql-$pg
             # We install as user postgres, so that needs write access to these.
             chown $BUILDER_USERNAME $PG_BASE$pg/lib /usr/share/postgresql/$pg/extension
         done

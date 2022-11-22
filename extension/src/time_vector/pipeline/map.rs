@@ -231,7 +231,7 @@ pub fn map_series(series: &mut Timevector_TSTZ_F64<'_>, mut func: impl FnMut(f64
     // call it
     // NOTE need to be careful that there's not allocation within the
     //      loop body so it cannot leak
-    pg_sys::guard(AssertUnwindSafe(|| {
+    pg_sys::PgTryBuilder::new(AssertUnwindSafe(|| {
         for point in points {
             *point = TSPoint {
                 ts: point.ts,
@@ -239,6 +239,7 @@ pub fn map_series(series: &mut Timevector_TSTZ_F64<'_>, mut func: impl FnMut(f64
             }
         }
     }))
+    .execute()
 }
 
 #[cfg(any(test, feature = "pg_test"))]

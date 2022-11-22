@@ -51,7 +51,7 @@ sudo apt-get install make gcc pkg-config clang postgresql-server-dev-14 libssl-d
 
 Next you need [cargo-pgx](https://github.com/tcdi/pgx), which can be installed with
 ```bash
-cargo install --version '=0.5.4' --force cargo-pgx
+cargo install --version '=0.6.0' --force cargo-pgx
 ```
 
 You must reinstall cargo-pgx whenver you update your Rust compiler, since cargo-pgx needs to be built with the same compiler as Toolkit.
@@ -96,7 +96,7 @@ hop on the [Discussions forum](https://github.com/timescale/timescaledb-toolkit/
 
 See above for prerequisites and installation instructions.
 
-You can run tests against a postgres version `pg12`, `pg13`, or `pg14` using
+You can run tests against a postgres version `pg12`, `pg13`, `pg14`, or `pg15` using
 
 ```
 cargo pgx test ${postgres_version}

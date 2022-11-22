@@ -20,7 +20,7 @@ usage() {
 }
 
 require_pg_version() {
-    [ -n "$pg_version" ] || die 'specify one of -pg12 | -pg13 | -pg14'
+    [ -n "$pg_version" ] || die 'specify one of -pg12 | -pg13 | -pg14 | -pg15'
 }
 
 find_pg_config() {

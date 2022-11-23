@@ -21,7 +21,7 @@ use crate::{
     ron_inout_funcs,
 };
 
-use toolkit_experimental::StateAgg;
+use toolkit_experimental::{StateAgg, TimelineAgg};
 
 #[pg_schema]
 pub mod toolkit_experimental {
@@ -33,11 +33,21 @@ pub mod toolkit_experimental {
             states_len: u64, // TODO JOSH this and durations_len can be 32
             durations_len: u64,
             durations: [DurationInState; self.durations_len],
+            combined_durations_len: u64,
+            combined_durations: [TimeInState; self.combined_durations_len],
             first_time: i64,
             last_time: i64,
             first_state: u32,
             last_state: u32,  // first/last state are idx into durations, keep together for alignment
             states: [u8; self.states_len],
+            from_timeline_agg: bool,
+        }
+    }
+
+    pg_type! {
+        #[derive(Debug)]
+        struct TimelineAgg<'input> {
+            state_agg: StateAggData<'input>,
         }
     }
 
@@ -47,9 +57,16 @@ pub mod toolkit_experimental {
             durations: Vec<DurationInState>,
             first: Option<Record>,
             last: Option<Record>,
+            combined_durations: Option<Vec<TimeInState>>,
         ) -> Self {
+            let from_timeline_agg = combined_durations.is_some();
             if durations.is_empty() {
-                assert!(first.is_none() && last.is_none() && states.is_empty());
+                assert!(
+                    first.is_none()
+                        && last.is_none()
+                        && states.is_empty()
+                        && combined_durations.map(|v| v.is_empty()).unwrap_or(true)
+                );
 
                 return unsafe {
                     flatten!(StateAgg {
@@ -57,10 +74,13 @@ pub mod toolkit_experimental {
                         states: Slice::Slice(&[]),
                         durations_len: 0,
                         durations: Slice::Slice(&[]),
+                        combined_durations: Slice::Slice(&[]),
+                        combined_durations_len: 0,
                         first_time: 0,
                         last_time: 0,
                         first_state: 0,
                         last_state: 0,
+                        from_timeline_agg,
                     })
                 };
             }
@@ -91,16 +111,21 @@ pub mod toolkit_experimental {
             }
             assert!(first_state < durations.len() && last_state < durations.len());
 
+            let combined_durations = combined_durations.unwrap_or_default();
+
             unsafe {
                 flatten!(StateAgg {
                     states_len,
                     states: states.into_bytes().into(),
                     durations_len,
                     durations: (&*durations).into(),
+                    combined_durations: (&*combined_durations).into(),
+                    combined_durations_len: combined_durations.len() as u64,
                     first_time: first.time,
                     last_time: last.time,
                     first_state: first_state as u32,
                     last_state: last_state as u32,
+                    from_timeline_agg,
                 })
             }
         }
@@ -142,24 +167,61 @@ pub mod toolkit_experimental {
                 .to_string();
             let mut durations: Vec<DurationInState> = self.durations.iter().collect();
 
+            let mut combined_durations = if self.from_timeline_agg {
+                Some(self.combined_durations.iter().collect::<Vec<_>>())
+            } else {
+                None
+            };
+
             let first = match prev {
                 Some(prev) if interval_start < self.first_time => {
                     if prev.last_state < prev.durations.len() as u32 {
                         let start_interval = self.first_time - interval_start;
                         let start_state =
                             prev.state_str(&prev.durations.as_slice()[prev.last_state as usize]);
-                        match durations.iter_mut().find(|x| {
+
+                        // update durations
+                        let (state_beg, state_end) = match durations.iter_mut().find(|x| {
                             states[x.state_beg as usize..x.state_end as usize].eq(start_state)
                         }) {
-                            Some(dis) => dis.duration += start_interval,
+                            Some(dis) => {
+                                dis.duration += start_interval;
+                                (dis.state_beg, dis.state_end)
+                            }
                             None => {
+                                let state_beg = states.len() as u32;
+                                let state_end = (states.len() + start_state.len()) as u32;
                                 durations.push(DurationInState {
                                     duration: start_interval,
-                                    state_beg: states.len() as u32,
-                                    state_end: (states.len() + start_state.len()) as u32,
+                                    state_beg,
+                                    state_end,
                                 });
                                 states += start_state;
+                                (state_beg, state_end)
                             }
+                        };
+
+                        // update combined_durations
+                        if let Some(combined_durations) = combined_durations.as_mut() {
+                            // extend last duration
+                            let first_cd = combined_durations
+                                .first_mut()
+                                .expect("poorly formed TimelineAgg, length mismatch");
+                            let first_cd_state =
+                                &states[first_cd.state_beg as usize..first_cd.state_end as usize];
+                            if first_cd_state == start_state {
+                                first_cd.start_time -= start_interval;
+                            } else {
+                                combined_durations.insert(
+                                    0,
+                                    TimeInState {
+                                        start_time: interval_start,
+                                        end_time: self.first_time,
+                                        state_beg,
+                                        state_end,
+                                    },
+                                );
+                            };
                         };
 
                         Record {
@@ -184,6 +246,13 @@ pub mod toolkit_experimental {
                     None => pgx::error!("poorly formed StateAgg, last_state out of starts"),
                     Some(dis) => {
                         dis.duration += last_interval;
+                        if let Some(combined_durations) = combined_durations.as_mut() {
+                            // extend last duration
+                            combined_durations
+                                .last_mut()
+                                .expect("poorly formed TimelineAgg, length mismatch")
+                                .end_time += last_interval;
+                        };
                         Record {
                             state: states[dis.state_beg as usize..dis.state_end as usize]
                                 .to_string(),
@@ -200,11 +269,32 @@ pub mod toolkit_experimental {
                 }
             };
 
-            StateAgg::new(states, durations, Some(first), Some(last))
+            StateAgg::new(
+                states,
+                durations,
+                Some(first),
+                Some(last),
+                combined_durations,
+            )
+        }
+    }
+
+    impl<'input> TimelineAgg<'input> {
+        pub fn new(state_agg: StateAgg) -> Self {
+            unsafe {
+                flatten!(TimelineAgg {
+                    state_agg: state_agg.0,
+                })
+            }
+        }
+
+        pub fn as_state_agg(self) -> StateAgg<'input> {
+            unsafe { self.0.state_agg.flatten() }
         }
     }
 
     ron_inout_funcs!(StateAgg);
+    ron_inout_funcs!(TimelineAgg);
 }
 
 #[aggregate]
@@ -251,7 +341,7 @@ impl toolkit_experimental::state_agg {
         state.map(|s| {
             let mut states = String::new();
             let mut durations: Vec<DurationInState> = vec![];
-            let (map, first, last) = s.drain_to_duration_map_and_bounds();
+            let (map, first, last) = s.make_duration_map_and_bounds();
             for (state, duration) in map {
                 let state_beg = states.len() as u32;
                 let state_end = state_beg + state.len() as u32;
@@ -262,7 +352,89 @@ impl toolkit_experimental::state_agg {
                     state_end,
                 });
             }
-            StateAgg::new(states, durations, first, last)
+            StateAgg::new(states, durations, first, last, None)
+        })
+    }
+}
+
+#[aggregate]
+impl toolkit_experimental::timeline_agg {
+    type State = StateAggTransState;
+
+    const PARALLEL_SAFE: bool = true;
+
+    fn transition(
+        state: Option<State>,
+        #[sql_type("timestamptz")] ts: TimestampTz,
+        #[sql_type("text")] value: Option<String>,
+    ) -> Option<State> {
+        state_agg::transition(state, ts, value)
+    }
+
+    fn combine(a: Option<&State>, b: Option<&State>) -> Option<State> {
+        state_agg::combine(a, b)
+    }
+
+    fn serialize(state: &mut State) -> bytea {
+        state_agg::serialize(state)
+    }
+
+    fn deserialize(bytes: bytea) -> State {
+        state_agg::deserialize(bytes)
+    }
+
+    fn finally(state: Option<&mut State>) -> Option<TimelineAgg<'static>> {
+        state.map(|s| {
+            let mut states = String::new();
+            let mut durations: Vec<DurationInState> = vec![];
+            let (map, first, last) = s.make_duration_map_and_bounds();
+            for (state, duration) in map {
+                let state_beg = states.len() as u32;
+                let state_end = state_beg + state.len() as u32;
+                states.push_str(&state);
+                durations.push(DurationInState {
+                    duration,
+                    state_beg,
+                    state_end,
+                });
+            }
+
+            let mut merged_durations: Vec<TimeInState> = Vec::new();
+            let mut last_record_state = None;
+            for record in s.records.drain(..) {
+                let state_beg = states
+                    .find(&record.state)
+                    .expect("records has state not in state list")
+                    as u32;
+                // TODO: merge these
+                if last_record_state
+                    .as_deref()
+                    .map(|last| last != record.state)
+                    .unwrap_or(true)
+                {
+                    if let Some(prev) = merged_durations.last_mut() {
+                        prev.end_time = record.time;
+                    }
+                    merged_durations.push(TimeInState {
+                        start_time: record.time,
+                        end_time: 0,
+                        state_beg,
+                        state_end: state_beg + record.state.len() as u32,
+                    });
+                    last_record_state = Some(record.state);
+                }
+            }
+            if let Some(last_time_in_state) = merged_durations.last_mut() {
+                last_time_in_state.end_time = last.as_ref().unwrap().time;
+            }
+
+            TimelineAgg::new(StateAgg::new(
+                states,
+                durations,
+                first,
+                last,
+                Some(merged_durations),
+            ))
         })
     }
 }
@@ -286,14 +458,7 @@ impl StateAggTransState {
         self.records.append(&mut other.records)
     }
 
-    /// Drain accumulated state, sort, and return tuple of map of states to durations along with first and last record.
-    fn drain_to_duration_map_and_bounds(
-        &mut self,
-    ) -> (
-        std::collections::HashMap<String, i64>,
-        Option<Record>,
-        Option<Record>,
-    ) {
+    fn sort_records(&mut self) {
         self.records.sort_by(|a, b| {
             if a.time == b.time {
                 // TODO JOSH do we care about instantaneous state changes?
@@ -310,12 +475,23 @@ impl StateAggTransState {
                 a.time.cmp(&b.time)
             }
         });
+    }
+
+    /// Use accumulated state, sort, and return tuple of map of states to durations along with first and last record.
+    fn make_duration_map_and_bounds(
+        &mut self,
+    ) -> (
+        std::collections::HashMap<String, i64>,
+        Option<Record>,
+        Option<Record>,
+    ) {
+        self.sort_records();
         let (first, last) = (self.records.first(), self.records.last());
         let first = first.cloned();
         let last = last.cloned();
         let mut duration_state = DurationState::new();
-        for record in self.records.drain(..) {
-            duration_state.handle_record(record.state, record.time);
+        for record in &self.records {
+            duration_state.handle_record(record.state.clone(), record.time);
         }
         duration_state.finalize();
         // TODO BRIAN sort this by decreasing duration will make it easier to implement a TopN states
@@ -350,6 +526,19 @@ pub fn duration_in<'a>(state: String, aggregate: Option<StateAgg<'a>>) -> crate:
         .expect("interval_justify_hours does not return None")
 }
 
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "duration_in",
+    schema = "toolkit_experimental"
+)]
+pub fn duration_in_tl<'a>(
+    state: String,
+    aggregate: Option<TimelineAgg<'a>>,
+) -> crate::raw::Interval {
+    duration_in(state, aggregate.map(TimelineAgg::as_state_agg))
+}
+
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn interpolated_duration_in<'a>(
     state: String,
@@ -373,6 +562,30 @@ pub fn interpolated_duration_in<'a>(
     }
 }
 
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "interpolated_duration_in",
+    schema = "toolkit_experimental"
+)]
+pub fn interpolated_duration_in_tl<'a>(
+    state: String,
+    aggregate: Option<TimelineAgg<'a>>,
+    start: TimestampTz,
+    interval: crate::raw::Interval,
+    prev: Option<TimelineAgg<'a>>,
+    next: Option<TimelineAgg<'a>>,
+) -> crate::raw::Interval {
+    interpolated_duration_in(
+        state,
+        aggregate.map(TimelineAgg::as_state_agg),
+        start,
+        interval,
+        prev.map(TimelineAgg::as_state_agg),
+        next.map(TimelineAgg::as_state_agg),
+    )
+}
+
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn into_values<'a>(
     agg: StateAgg<'a>,
@@ -384,11 +597,197 @@ pub fn into_values<'a>(
         (states[beg..end].to_owned(), record.duration)
     }))
 }
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "into_values",
+    schema = "toolkit_experimental"
+)]
+pub fn into_values_tl<'a>(
+    aggregate: TimelineAgg<'a>,
+) -> TableIterator<'a, (pgx::name!(state, String), pgx::name!(duration, i64))> {
+    into_values(aggregate.as_state_agg())
+}
+
+fn state_timeline_inner<'a>(
+    agg: StateAgg<'a>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(state, String),
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    assert!(
+        agg.from_timeline_agg,
+        "state_timeline can only be called on a state_agg built from timeline_agg"
+    );
+    let states: String = agg.states_as_str().to_owned();
+    TableIterator::new(
+        agg.combined_durations
+            .clone()
+            .into_iter()
+            .map(move |record| {
+                let beg = record.state_beg as usize;
+                let end = record.state_end as usize;
+                (
+                    states[beg..end].to_owned(),
+                    TimestampTz::from(record.start_time),
+                    TimestampTz::from(record.end_time),
+                )
+            }),
+    )
+}
+
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub fn state_timeline<'a>(
+    agg: TimelineAgg<'a>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(state, String),
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    state_timeline_inner(agg.as_state_agg())
+}
+
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub fn interpolated_state_timeline<'a>(
+    aggregate: Option<TimelineAgg<'a>>,
+    start: TimestampTz,
+    interval: crate::raw::Interval,
+    prev: Option<TimelineAgg<'a>>,
+    next: Option<TimelineAgg<'a>>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(state, String),
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    match aggregate {
+        None => pgx::error!(
+            "when interpolating data between grouped data, all groups must contain some data"
+        ),
+        Some(aggregate) => {
+            let interval = crate::datum_utils::interval_to_ms(&start, &interval);
+            TableIterator::new(
+                state_timeline_inner(aggregate.as_state_agg().interpolate(
+                    start.into(),
+                    interval,
+                    prev.map(TimelineAgg::as_state_agg),
+                    next.is_some(),
+                ))
+                .collect::<Vec<_>>()
+                .into_iter(),
+            )
+        }
+    }
+}
+
+fn state_periods_inner<'a>(
+    state: String,
+    agg: StateAgg<'a>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    assert!(
+        agg.from_timeline_agg,
+        "state_periods can only be called on a state_agg built from timeline_agg"
+    );
+    let states: String = agg.states_as_str().to_owned();
+    TableIterator::new(
+        agg.combined_durations
+            .clone()
+            .into_iter()
+            .filter_map(move |record| {
+                let beg = record.state_beg as usize;
+                let end = record.state_end as usize;
+                if states[beg..end] == *state {
+                    Some((
+                        TimestampTz::from(record.start_time),
+                        TimestampTz::from(record.end_time),
+                    ))
+                } else {
+                    None
+                }
+            }),
+    )
+}
+
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub fn state_periods<'a>(
+    state: String,
+    agg: TimelineAgg<'a>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    state_periods_inner(state, agg.as_state_agg())
+}
+
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub fn interpolated_state_periods<'a>(
+    state: String,
+    aggregate: Option<TimelineAgg<'a>>,
+    start: TimestampTz,
+    interval: crate::raw::Interval,
+    prev: Option<TimelineAgg<'a>>,
+    next: Option<TimelineAgg<'a>>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    match aggregate {
+        None => pgx::error!(
+            "when interpolating data between grouped data, all groups must contain some data"
+        ),
+        Some(aggregate) => {
+            let interval = crate::datum_utils::interval_to_ms(&start, &interval);
+            TableIterator::new(
+                state_periods_inner(
+                    state,
+                    aggregate.as_state_agg().interpolate(
+                        start.into(),
+                        interval,
+                        prev.map(TimelineAgg::as_state_agg),
+                        next.is_some(),
+                    ),
+                )
+                .collect::<Vec<_>>()
+                .into_iter(),
+            )
+        }
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, Eq, FlatSerializable, PartialEq, Serialize)]
 #[repr(C)]
 pub struct DurationInState {
     duration: i64, // TODO BRIAN is i64 or u64 the right type
+    state_beg: u32,
+    state_end: u32,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, FlatSerializable, PartialEq, Serialize)]
+#[repr(C)]
+pub struct TimeInState {
+    start_time: i64, // TODO BRIAN is i64 or u64 the right type
+    end_time: i64,   // TODO BRIAN is i64 or u64 the right type
     state_beg: u32,
     state_end: u32,
 }
@@ -486,6 +885,14 @@ mod tests {
                     &str
                 )
             );
+            assert_eq!(
+                "365 days 00:02:00",
+                select_one!(
+                    client,
+                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.timeline_agg(ts, state))::TEXT FROM test",
+                    &str
+                )
+            );
         });
     }
 
@@ -550,6 +957,23 @@ mod tests {
                 select_one!(
                     client,
                     "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.state_agg(ts, state))::TEXT FROM test",
+                    &str
+                )
+            );
+
+            assert_eq!(
+                "365 days 00:01:00",
+                select_one!(
+                    client,
+                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.timeline_agg(ts, state))::TEXT FROM test",
+                    &str
+                )
+            );
+            assert_eq!(
+                "00:01:00",
+                select_one!(
+                    client,
+                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.timeline_agg(ts, state))::TEXT FROM test",
                     &str
                 )
             );
@@ -782,6 +1206,20 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
                     .get_three::<&str, &str, &str>(),
                 (Some("00:01:00"), Some("00:01:00"), Some("00:00:00"))
             );
+            assert_eq!(
+                client
+                    .select(
+                        r#"SELECT toolkit_experimental.duration_in('ERROR', states)::TEXT as error,
+                                  toolkit_experimental.duration_in('START', states)::TEXT as start,
+                                  toolkit_experimental.duration_in('STOPPED', states)::TEXT as stopped
+                             FROM (SELECT toolkit_experimental.timeline_agg(ts, state) as states FROM test) as foo"#,
+                        None,
+                        None,
+                    )
+                    .first()
+                    .get_three::<&str, &str, &str>(),
+                (Some("00:01:00"), Some("00:01:00"), Some("00:00:00"))
+            );
         })
     }
 
@@ -789,7 +1227,8 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
     fn interpolated_duration() {
         Spi::execute(|client| {
             client.select(
-                "CREATE TABLE inttest(time TIMESTAMPTZ, state TEXT, bucket INT)",
+                "SET TIME ZONE 'UTC';
+                CREATE TABLE inttest(time TIMESTAMPTZ, state TEXT, bucket INT);",
                 None,
                 None,
             );
@@ -834,6 +1273,32 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
             // Day 3, in "three" from start of day to "10:00"; end in that state, but no following point
             assert_eq!(durations.next().unwrap()[1].value(), Some("10:00:00"));
             assert!(durations.next().is_none());
+
+            let mut durations = client.select(
+                r#"SELECT
+                toolkit_experimental.interpolated_duration_in(
+                    'three', 
+                    agg, 
+                    '2019-12-31 0:00'::timestamptz + (bucket * '1 day'::interval), '1 day'::interval, 
+                    LAG(agg) OVER (ORDER BY bucket), 
+                    LEAD(agg) OVER (ORDER BY bucket)
+                )::TEXT FROM (
+                    SELECT bucket, toolkit_experimental.timeline_agg(time, state) as agg 
+                    FROM inttest 
+                    GROUP BY bucket
+                ) s
+                ORDER BY bucket"#,
+                None,
+                None,
+            );
+
+            // Day 1, in "three" from "16:00" to end of day
+            assert_eq!(durations.next().unwrap()[1].value(), Some("08:00:00"));
+            // Day 2, in "three" from start of day to "2:00" and "20:00" to end of day
+            assert_eq!(durations.next().unwrap()[1].value(), Some("06:00:00"));
+            // Day 3, in "three" from start of day to "10:00"; end in that state, but no following point
+            assert_eq!(durations.next().unwrap()[1].value(), Some("10:00:00"));
+            assert!(durations.next().is_none());
         });
     }
 
@@ -850,6 +1315,11 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
             );
             client.select(
                 "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts, state)) FROM test",
+                None,
+                None,
+            );
+            client.select(
+                "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.timeline_agg(ts, state)) FROM test",
                 None,
                 None,
             );
@@ -886,6 +1356,29 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
                   LEAD(agg) OVER (ORDER BY bucket)
                 )::TEXT FROM (
                     SELECT bucket, toolkit_experimental.state_agg(time, state) as agg
+                    FROM states
+                    GROUP BY bucket
+                ) s
+                ORDER BY bucket"#,
+                None,
+                None,
+            );
+
+            assert_eq!(durations.next().unwrap()[1].value(), Some("13:30:00"));
+            assert_eq!(durations.next().unwrap()[1].value(), Some("16:00:00"));
+            assert_eq!(durations.next().unwrap()[1].value(), Some("04:30:00"));
+            assert_eq!(durations.next().unwrap()[1].value(), Some("12:00:00"));
+
+            let mut durations = client.select(
+                r#"SELECT 
+                toolkit_experimental.interpolated_duration_in(
+                  'running',
+                  agg,
+                  '2019-12-31 0:00'::timestamptz + (bucket * '1 day'::interval), '1 day'::interval,
+                  LAG(agg) OVER (ORDER BY bucket),
+                  LEAD(agg) OVER (ORDER BY bucket)
+                )::TEXT FROM (
+                    SELECT bucket, toolkit_experimental.timeline_agg(time, state) as agg
                     FROM states
                     GROUP BY bucket
                 ) s

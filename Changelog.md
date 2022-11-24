@@ -7,8 +7,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 ## Next Release (Date TBD)
 
 #### New experimental features
-- [#615](https://github.com/timescale/timescaledb-toolkit/pull/615): Heartbeat aggregate
-
+- [#615](https://github.com/timescale/timescaledb-toolkit/pull/615): Heatbeat aggregate
   Users can use the new `heartbeat_agg(timestamp, start_time, agg_interval, heartbeat_interval)` to track the liveness of a system in the range (`start_time`, `start_time` + `agg_interval`). Each timestamp seen in that range is assumed to indicate system liveness for the following `heartbeat_interval`.
 
   Once constructed, users can query heartbeat aggregates for `uptime` and `downtime`, as well as query for `live_ranges` or `dead_ranges`. Users can also check for `live_at(timestamp)`.
@@ -22,6 +21,10 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
   This is a lightly tested prototype; try it out at your own risk!
 
   [Examples](docs/examples/)
+
+- [#635](https://github.com/timescale/timescaledb-toolkit/pull/635): AsOf joins for timevectors
+
+  This allows users to join two timevectors with the following semantics `timevectorA -> asof(timevectorB)`. This will return records with the LOCF value from timevectorA at the timestamps from timevectorB. Specifically the returned records contain, for each value in timevectorB, {the LOCF value from timevectorA, the value from timevectorB, the timestamp from timevectorB}.
 
 #### Bug fixes
 

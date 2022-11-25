@@ -280,3 +280,44 @@ start_time             | end_time
 2019-12-31 00:00:00+00 | 2020-01-01 00:00:00+00
 2020-01-01 00:02:00+00 | 2020-01-05 00:00:00+00
 ```
+
+## rolllup
+
+```SQL
+WITH buckets AS (SELECT
+    date_trunc('minute', ts) as dt,
+    toolkit_experimental.state_agg(ts, state) AS sa
+FROM states_test
+GROUP BY date_trunc('minute', ts))
+SELECT toolkit_experimental.duration_in(
+    'START',
+    toolkit_experimental.rollup(buckets.sa)
+)
+FROM buckets;
+```
+```output
+ interval
+----------
+ 00:00:11
+```
+
+```SQL
+WITH buckets AS (SELECT
+    date_trunc('minute', ts) as dt,
+    toolkit_experimental.timeline_agg(ts, state) AS sa
+FROM states_test
+GROUP BY date_trunc('minute', ts))
+SELECT toolkit_experimental.state_timeline(
+    toolkit_experimental.rollup(buckets.sa)
+)
+FROM buckets;
+```
+```output
+                      state_timeline
+-----------------------------------------------------------
+(START,"2020-01-01 00:00:00+00","2020-01-01 00:00:11+00")
+   (OK,"2020-01-01 00:00:11+00","2020-01-01 00:00:11+00")
+(ERROR,"2020-01-01 00:01:00+00","2020-01-01 00:01:03+00")
+   (OK,"2020-01-01 00:01:03+00","2020-01-01 00:01:03+00")
+ (STOP,"2020-01-01 00:02:00+00","2020-01-01 00:02:00+00")
+```

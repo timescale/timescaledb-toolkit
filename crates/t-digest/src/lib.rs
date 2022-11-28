@@ -205,6 +205,35 @@ impl TDigest {
     pub fn num_buckets(&self) -> usize {
         self.centroids.len()
     }
+
+    pub fn format_for_postgres(&self) -> String {
+        /// Mimicks the version-1 serialization format the extension uses.  TODO don't!
+        #[derive(Serialize)]
+        struct Hack {
+            version: u32,
+            buckets: usize,
+            max_buckets: usize,
+            count: u64,
+            sum: f64,
+            min: f64,
+            max: f64,
+            centroids: Vec<Centroid>,
+        }
+
+        let max_buckets = self.max_size();
+        let centroids = self.raw_centroids();
+        ron::to_string(&Hack {
+            version: 1,
+            max_buckets,
+            buckets: centroids.len(),
+            count: self.count(),
+            sum: self.sum(),
+            min: self.min(),
+            max: self.max(),
+            centroids: centroids.to_vec(),
+        })
+        .unwrap()
+    }
 }
 
 impl Default for TDigest {
@@ -646,6 +675,65 @@ impl TDigest {
                 _ => p1 + (p2 - p1) * weight
             }
         }
+    }
+}
+
+// This is a tdigest object paired
+// with a vector of values that still need to be inserted.
+#[derive(Clone, Debug, Default, Deserialize, Serialize)]
+pub struct Builder {
+    #[serde(skip)]
+    buffer: Vec<f64>,
+    digested: TDigest,
+}
+
+impl From<TDigest> for Builder {
+    fn from(digested: TDigest) -> Self {
+        Self {
+            digested,
+            ..Default::default()
+        }
+    }
+}
+
+impl Builder {
+    pub fn with_size(size: usize) -> Self {
+        Self::from(TDigest::new_with_size(size))
+    }
+
+    // Add a new value, recalculate the digest if we've crossed a threshold.
+    // TODO threshold is currently set to number of digest buckets, should this be adjusted
+    pub fn push(&mut self, value: f64) {
+        self.buffer.push(value);
+        if self.buffer.len() >= self.digested.max_size() {
+            self.digest()
+        }
+    }
+
+    // Update the digest with all accumulated values.
+    fn digest(&mut self) {
+        if self.buffer.is_empty() {
+            return;
+        }
+        let new = std::mem::take(&mut self.buffer);
+        self.digested = self.digested.merge_unsorted(new)
+    }
+
+    pub fn build(&mut self) -> TDigest {
+        self.digest();
+        std::mem::take(&mut self.digested)
+    }
+
+    pub fn merge(&mut self, other: Self) {
+        assert_eq!(self.digested.max_size(), other.digested.max_size());
+        let digvec = vec![std::mem::take(&mut self.digested), other.digested];
+        if !self.buffer.is_empty() {
+            digvec[0].merge_unsorted(std::mem::take(&mut self.buffer));
+        }
+        if !other.buffer.is_empty() {
+            digvec[1].merge_unsorted(other.buffer);
+        }
+        self.digested = TDigest::merge_digests(digvec);
     }
 }
 

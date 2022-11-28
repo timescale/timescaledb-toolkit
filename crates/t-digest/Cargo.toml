@@ -8,6 +8,7 @@ edition = "2021"
 flat_serialize = {path="../flat_serialize/flat_serialize"}
 flat_serialize_macro = {path="../flat_serialize/flat_serialize_macro"}
 ordered-float = {version = "1.0", features = ["serde"] }
+ron = "0.6.0"
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]

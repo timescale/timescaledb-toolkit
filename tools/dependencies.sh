@@ -22,5 +22,5 @@ RUST_COMPONENTS=clippy,rustfmt
 # TODO Use rpmbuild directly.
 FPM_VERSION=1.14.2
 
-GH_DEB_URL=https://cli.github.com/packages/pool/main/g/gh/gh_2.16.1_amd64.deb
+GH_DEB_URL=https://github.com/cli/cli/releases/download/v2.16.1/gh_2.16.1_linux_amd64.deb
 GH_DEB_SHA256=d0ba8693b6e4c1bde6683ccfa971a15c00b9fe92865074d48609959d04399dc7

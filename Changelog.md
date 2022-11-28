@@ -30,6 +30,8 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
   Users can use the new `toolkit_experimental.approx_percentile_array(percentiles)` to generate an array of percentile results instead of having to call and rebuild the aggregate multiple times.
   
+- [#636](https://github.com/timescale/timescaledb-toolkit/pull/636): New `timeline_agg` aggregate, which is similar to `state_agg` but tracks the entire state timeline instead of just the duration in each state.
+
 - [#638](https://github.com/timescale/timescaledb-toolkit/pull/638): Introducing Time Vector Templates.
 
 #### Bug fixes

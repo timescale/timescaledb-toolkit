@@ -2,24 +2,11 @@
 resolver = "2"
 
 members = [
+    "crates/t-digest-lib",
     "extension",
-    "crates/encodings",
-    "crates/flat_serialize/flat_serialize_macro",
-    "crates/flat_serialize/flat_serialize",
-    "crates/t-digest",
-    "crates/hyperloglogplusplus",
-    "crates/udd-sketch",
-    "crates/time-weighted-average",
     "tools/post-install",
     "tools/sql-doctester",
     "tools/update-tester",
-    "crates/asap",
-    "crates/counter-agg",
-    "crates/tspoint",
-    "crates/stats-agg",
-    "crates/aggregate_builder",
-    "crates/scripting-utilities/*",
-    "crates/count-min-sketch",
 ]
 
 [profile.release]

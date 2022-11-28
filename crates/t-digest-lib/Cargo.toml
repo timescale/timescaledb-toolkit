@@ -1,0 +1,13 @@
+[package]
+name = "tdigest-lib"
+version = "0.0.0"
+edition = "2021"
+
+[lib]
+name = "timescaledb_toolkit_tdigest"
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+libc = "0.2.135"
+
+tdigest = { path="../t-digest" }

@@ -1892,7 +1892,16 @@ dependencies = [
  "ordered-float",
  "quickcheck",
  "quickcheck_macros",
+ "ron",
  "serde",
+]
+
+[[package]]
+name = "tdigest-lib"
+version = "0.0.0"
+dependencies = [
+ "libc",
+ "tdigest",
 ]
 
 [[package]]

@@ -44,7 +44,7 @@ if [ "$1" = setup ]; then
     fi
     # Install gh
     gh=`basename $GH_DEB_URL`
-    curl -LO $GH_DEB_URL
+    curl --fail -LO $GH_DEB_URL
     sha256sum -c - <<EOF
 $GH_DEB_SHA256  $gh
 EOF

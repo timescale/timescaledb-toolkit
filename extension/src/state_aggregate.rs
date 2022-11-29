@@ -2076,4 +2076,32 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
             assert_eq!(durations.next().unwrap()[1].value(), Some("12:00:00"));
         })
     }
+
+    #[pg_test]
+    #[should_panic = "can't merge overlapping aggregates"]
+    fn merge_range_full_overlap() {
+        let mut outer = StateAgg::empty(false);
+        outer.first_time = 10;
+        outer.last_time = 50;
+
+        let mut inner = StateAgg::empty(false);
+        inner.first_time = 20;
+        inner.last_time = 30;
+
+        inner.merge(&outer);
+    }
+
+    #[pg_test]
+    #[should_panic = "can't merge overlapping aggregates"]
+    fn merge_range_partial_overlap() {
+        let mut r1 = StateAgg::empty(false);
+        r1.first_time = 10;
+        r1.last_time = 50;
+
+        let mut r2 = StateAgg::empty(false);
+        r2.first_time = 20;
+        r2.last_time = 50;
+
+        r2.merge(&r1);
+    }
 }

@@ -1066,9 +1066,8 @@ mod tests {
         });
     }
 
-    // TODO This is a terrible error message to show a human being.  We need to be a lot less cavalier about unwrap...
-    #[pg_test(error = "called `Option::unwrap()` on a `None` value")]
-    fn nulls() {
+    #[pg_test]
+    fn no_results_on_null_input() {
         Spi::execute(|client| {
             client.select(
                 "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
@@ -1080,7 +1079,11 @@ mod tests {
             client.select(stmt, None, None);
 
             let stmt = "SELECT toolkit_experimental.gauge_agg(ts, val) FROM test";
-            let _ = select_one!(client, stmt, GaugeSummary);
+            assert!(client
+                .select(stmt, None, None)
+                .first()
+                .get_one::<GaugeSummary>()
+                .is_none());
         });
     }
 }

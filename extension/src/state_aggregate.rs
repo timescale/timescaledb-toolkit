@@ -24,7 +24,7 @@ use crate::{
 
 use toolkit_experimental::{StateAgg, TimelineAgg};
 
-mod rollup;
+pub mod rollup;
 
 /// The data of a state.
 #[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
@@ -395,100 +395,6 @@ pub mod toolkit_experimental {
                 !self.0.integer_states,
                 "Expected string state, found integer state"
             );
-        }
-    }
-    impl<'a> StateAggData<'a> {
-        /// Merges two non-overlapping aggregates.
-        pub fn merge(&self, other: &Self) -> Self {
-            assert_eq!(
-                self.from_timeline_agg, other.from_timeline_agg,
-                "can't merge state_agg and timeline_agg"
-            );
-            assert_eq!(
-                self.integer_states, other.integer_states,
-                "can't merge aggs with different state types"
-            );
-
-            let (earlier, later) = match self.first_time.cmp(&other.first_time) {
-                Ordering::Less => (self, other),
-                Ordering::Greater => (other, self),
-                Ordering::Equal => panic!("can't merge overlapping aggregates (same start time)"),
-            };
-            assert!(
-                earlier.last_time < later.first_time,
-                "can't merge overlapping aggregates"
-            );
-
-            let later_states = String::from_utf8(later.states.iter().collect::<Vec<u8>>())
-                .expect("invalid later UTF-8 states");
-            let mut merged_states = String::from_utf8(earlier.states.iter().collect::<Vec<u8>>())
-                .expect("invalid earlier UTF-8 states");
-            let mut merged_durations = earlier.durations.iter().collect::<Vec<_>>();
-
-            for dis in later.durations.iter() {
-                let merged_duration_to_update = merged_durations.iter_mut().find(|merged_dis| {
-                    merged_dis.state.materialize(&merged_states)
-                        == dis.state.materialize(&later_states)
-                });
-                if let Some(merged_duration_to_update) = merged_duration_to_update {
-                    merged_duration_to_update.duration += dis.duration;
-                } else {
-                    let state = dis
-                        .state
-                        .materialize(&later_states)
-                        .entry(&mut merged_states);
-                    merged_durations.push(DurationInState {
-                        state,
-                        duration: dis.duration,
-                    });
-                };
-            }
-
-            let mut combined_durations = earlier
-                .combined_durations
-                .iter()
-                .chain(later.combined_durations.iter().map(|tis| {
-                    let state = tis
-                        .state
-                        .materialize(&later_states)
-                        .existing_entry(&merged_states);
-                    TimeInState { state, ..tis }
-                }))
-                .collect::<Vec<_>>();
-            if let (Some(TimeInState { end_time, .. }), Some(TimeInState { start_time, .. })) = (
-                earlier.combined_durations.iter().last(),
-                later.combined_durations.iter().next(),
-            ) {
-                // possibly merge adjacent durations
-                if end_time == start_time {
-                    combined_durations[earlier.combined_durations.len() - 1].end_time =
-                        combined_durations
-                            .remove(earlier.combined_durations.len())
-                            .end_time;
-                }
-            };
-
-            let merged_states = merged_states.into_bytes();
-            unsafe {
-                flatten!(StateAgg {
-                    states_len: merged_states.len() as u64,
-                    states: (&*merged_states).into(),
-                    durations_len: merged_durations.len() as u64,
-                    durations: (&*merged_durations).into(),
-                    combined_durations_len: combined_durations.len() as u64,
-                    combined_durations: (&*combined_durations).into(),
-
-                    first_time: earlier.first_time,
-                    last_time: later.last_time,
-                    first_state: earlier.first_state,
-                    last_state: later.last_state,
-
-                    // these values are always the same for both
-                    from_timeline_agg: earlier.from_timeline_agg,
-                    integer_states: earlier.integer_states,
-                })
-                .0
-            }
         }
     }
 
@@ -2075,33 +1981,5 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
             assert_eq!(durations.next().unwrap()[1].value(), Some("04:30:00"));
             assert_eq!(durations.next().unwrap()[1].value(), Some("12:00:00"));
         })
-    }
-
-    #[pg_test]
-    #[should_panic = "can't merge overlapping aggregates"]
-    fn merge_range_full_overlap() {
-        let mut outer = StateAgg::empty(false);
-        outer.first_time = 10;
-        outer.last_time = 50;
-
-        let mut inner = StateAgg::empty(false);
-        inner.first_time = 20;
-        inner.last_time = 30;
-
-        inner.merge(&outer);
-    }
-
-    #[pg_test]
-    #[should_panic = "can't merge overlapping aggregates"]
-    fn merge_range_partial_overlap() {
-        let mut r1 = StateAgg::empty(false);
-        r1.first_time = 10;
-        r1.last_time = 50;
-
-        let mut r2 = StateAgg::empty(false);
-        r2.first_time = 20;
-        r2.last_time = 50;
-
-        r2.merge(&r1);
     }
 }

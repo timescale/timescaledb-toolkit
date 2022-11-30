@@ -363,6 +363,24 @@ FROM buckets;
 ```SQL
 WITH buckets AS (SELECT
     date_trunc('minute', ts) as dt,
+    toolkit_experimental.state_agg(ts, state) AS sa
+FROM states_test
+GROUP BY date_trunc('minute', ts))
+SELECT toolkit_experimental.duration_in(
+    'OK',
+    toolkit_experimental.rollup(buckets.sa)
+)
+FROM buckets;
+```
+```output
+ interval
+----------
+ 00:01:46
+```
+
+```SQL
+WITH buckets AS (SELECT
+    date_trunc('minute', ts) as dt,
     toolkit_experimental.timeline_agg(ts, state) AS sa
 FROM states_test
 GROUP BY date_trunc('minute', ts))
@@ -375,8 +393,8 @@ FROM buckets;
                       state_timeline
 -----------------------------------------------------------
 (START,"2020-01-01 00:00:00+00","2020-01-01 00:00:11+00")
-   (OK,"2020-01-01 00:00:11+00","2020-01-01 00:00:11+00")
+   (OK,"2020-01-01 00:00:11+00","2020-01-01 00:01:00+00")
 (ERROR,"2020-01-01 00:01:00+00","2020-01-01 00:01:03+00")
-   (OK,"2020-01-01 00:01:03+00","2020-01-01 00:01:03+00")
+   (OK,"2020-01-01 00:01:03+00","2020-01-01 00:02:00+00")
  (STOP,"2020-01-01 00:02:00+00","2020-01-01 00:02:00+00")
 ```

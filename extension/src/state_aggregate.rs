@@ -26,6 +26,103 @@ use toolkit_experimental::{StateAgg, TimelineAgg};
 
 mod rollup;
 
+/// The data of a state.
+#[derive(Debug, Clone, PartialEq, Eq, Ord, PartialOrd, Hash, Serialize, Deserialize)]
+#[repr(C)]
+enum MaterializedState {
+    String(String),
+    Integer(i64),
+}
+impl MaterializedState {
+    fn entry(&self, states: &mut String) -> StateEntry {
+        match self {
+            Self::Integer(i) => StateEntry { a: i64::MAX, b: *i },
+            Self::String(s) => StateEntry::from_str(states, s),
+        }
+    }
+    fn existing_entry(&self, states: &str) -> StateEntry {
+        match self {
+            Self::Integer(i) => StateEntry { a: i64::MAX, b: *i },
+            Self::String(s) => StateEntry::from_existing_str(states, s),
+        }
+    }
+    fn try_existing_entry(&self, states: &str) -> Option<StateEntry> {
+        Some(match self {
+            Self::Integer(i) => StateEntry { a: i64::MAX, b: *i },
+            Self::String(s) => StateEntry::try_from_existing_str(states, s)?,
+        })
+    }
+}
+
+/// A stored state entry. Needs a `states` string to be interpreted.
+#[derive(
+    Debug, Copy, Clone, PartialEq, Eq, Ord, PartialOrd, FlatSerializable, Serialize, Deserialize,
+)]
+#[repr(C)]
+pub struct StateEntry {
+    a: i64,
+    b: i64,
+}
+impl StateEntry {
+    fn from_integer(int: i64) -> Self {
+        Self {
+            a: i64::MAX,
+            b: int,
+        }
+    }
+    fn from_str(states: &mut String, new_state: &str) -> Self {
+        let (a, b) = if let Some(bounds) = states
+            .find(&new_state)
+            .map(|idx| (idx as i64, (idx + new_state.len()) as i64))
+        {
+            bounds
+        } else {
+            let bounds = (states.len() as i64, (states.len() + new_state.len()) as i64);
+            states.push_str(&new_state);
+            bounds
+        };
+        Self { a, b }
+    }
+    fn from_existing_str(states: &str, state: &str) -> Self {
+        if let Some(val) = Self::try_from_existing_str(states, state) {
+            val
+        } else {
+            panic!("Tried to get state that doesn't exist: {}", state)
+        }
+    }
+    fn try_from_existing_str(states: &str, state: &str) -> Option<Self> {
+        if let Some(bounds) = states
+            .find(&state)
+            .map(|idx| (idx as i64, (idx + state.len()) as i64))
+        {
+            Some(Self {
+                a: bounds.0,
+                b: bounds.1,
+            })
+        } else {
+            None
+        }
+    }
+
+    fn materialize(&self, states: &str) -> MaterializedState {
+        if self.a == i64::MAX {
+            MaterializedState::Integer(self.b)
+        } else {
+            MaterializedState::String(states[self.a as usize..self.b as usize].to_string())
+        }
+    }
+
+    fn as_str(self, states: &str) -> &str {
+        assert!(self.a != i64::MAX, "Tried to get non-string state");
+        &states[self.a as usize..self.b as usize]
+    }
+
+    fn as_integer(self) -> i64 {
+        assert!(self.a == i64::MAX, "Tried to get non-integer state");
+        self.b
+    }
+}
+
 #[pg_schema]
 pub mod toolkit_experimental {
     use super::*;
@@ -44,6 +141,7 @@ pub mod toolkit_experimental {
             last_state: u32,  // first/last state are idx into durations, keep together for alignment
             states: [u8; self.states_len],
             from_timeline_agg: bool,
+            integer_states: bool,
         }
     }
 
@@ -55,7 +153,7 @@ pub mod toolkit_experimental {
     }
 
     impl StateAgg<'_> {
-        pub(super) fn empty(from_timeline_agg: bool) -> Self {
+        pub(super) fn empty(from_timeline_agg: bool, integer_states: bool) -> Self {
             unsafe {
                 flatten!(StateAgg {
                     states_len: 0,
@@ -69,6 +167,7 @@ pub mod toolkit_experimental {
                     first_state: 0,
                     last_state: 0,
                     from_timeline_agg,
+                    integer_states,
                 })
             }
         }
@@ -79,6 +178,7 @@ pub mod toolkit_experimental {
             first: Option<Record>,
             last: Option<Record>,
             combined_durations: Option<Vec<TimeInState>>,
+            integer_states: bool,
         ) -> Self {
             let from_timeline_agg = combined_durations.is_some();
             if durations.is_empty() {
@@ -89,7 +189,7 @@ pub mod toolkit_experimental {
                         && combined_durations.map(|v| v.is_empty()).unwrap_or(true)
                 );
 
-                return Self::empty(from_timeline_agg);
+                return Self::empty(from_timeline_agg, integer_states);
             }
 
             assert!(first.is_some() && last.is_some());
@@ -102,7 +202,7 @@ pub mod toolkit_experimental {
 
             // Find first and last state
             for (i, d) in durations.iter().enumerate() {
-                let s = &states[d.state_beg as usize..d.state_end as usize];
+                let s = d.state.materialize(&states);
                 if s == first.state {
                     first_state = i;
                     if last_state < durations.len() {
@@ -133,13 +233,15 @@ pub mod toolkit_experimental {
                     first_state: first_state as u32,
                     last_state: last_state as u32,
                     from_timeline_agg,
+                    integer_states,
                 })
             }
         }
 
-        pub fn get(&self, state: &str) -> Option<i64> {
+        pub fn get(&self, state: StateEntry) -> Option<i64> {
+            let materialized = state.materialize(self.states_as_str());
             for record in self.durations.iter() {
-                if self.state_str(&record) == state {
+                if record.state.materialize(self.states_as_str()) == materialized {
                     return Some(record.duration);
                 }
             }
@@ -152,12 +254,6 @@ pub mod toolkit_experimental {
             unsafe { std::str::from_utf8_unchecked(states) }
         }
 
-        fn state_str(&self, record: &DurationInState) -> &str {
-            let beg = record.state_beg as usize;
-            let end = record.state_end as usize;
-            &self.states_as_str()[beg..end]
-        }
-
         pub(super) fn interpolate(
             &self,
             interval_start: i64,
@@ -167,6 +263,12 @@ pub mod toolkit_experimental {
         ) -> StateAgg {
             if self.durations.is_empty() {
                 pgx::error!("unable to interpolate interval on state aggregate with no data");
+            }
+            if let Some(ref prev) = prev {
+                assert_eq!(
+                    prev.integer_states, self.integer_states,
+                    "can't interpolate between aggs with different state types"
+                );
             }
 
             let mut states = std::str::from_utf8(self.states.as_slice())
@@ -184,27 +286,26 @@ pub mod toolkit_experimental {
                 Some(prev) if interval_start < self.first_time => {
                     if prev.last_state < prev.durations.len() as u32 {
                         let start_interval = self.first_time - interval_start;
-                        let start_state =
-                            prev.state_str(&prev.durations.as_slice()[prev.last_state as usize]);
+                        let start_state = &prev.durations.as_slice()[prev.last_state as usize]
+                            .state
+                            .materialize(&prev.states_as_str());
 
                         // update durations
-                        let (state_beg, state_end) = match durations.iter_mut().find(|x| {
-                            states[x.state_beg as usize..x.state_end as usize].eq(start_state)
-                        }) {
+                        let state = match durations
+                            .iter_mut()
+                            .find(|x| x.state.materialize(&states) == *start_state)
+                        {
                             Some(dis) => {
                                 dis.duration += start_interval;
-                                (dis.state_beg, dis.state_end)
+                                dis.state
                             }
                             None => {
-                                let state_beg = states.len() as u32;
-                                let state_end = (states.len() + start_state.len()) as u32;
+                                let state = start_state.entry(&mut states);
                                 durations.push(DurationInState {
                                     duration: start_interval,
-                                    state_beg,
-                                    state_end,
+                                    state,
                                 });
-                                states += start_state;
-                                (state_beg, state_end)
+                                state
                             }
                         };
 
@@ -214,9 +315,8 @@ pub mod toolkit_experimental {
                             let first_cd = combined_durations
                                 .first_mut()
                                 .expect("poorly formed TimelineAgg, length mismatch");
-                            let first_cd_state =
-                                &states[first_cd.state_beg as usize..first_cd.state_end as usize];
-                            if first_cd_state == start_state {
+                            let first_cd_state = first_cd.state.materialize(&states);
+                            if first_cd_state == *start_state {
                                 first_cd.start_time -= start_interval;
                             } else {
                                 combined_durations.insert(
@@ -224,15 +324,14 @@ pub mod toolkit_experimental {
                                     TimeInState {
                                         start_time: interval_start,
                                         end_time: self.first_time,
-                                        state_beg,
-                                        state_end,
+                                        state,
                                     },
                                 );
                             };
                         };
 
                         Record {
-                            state: start_state.to_string(),
+                            state: start_state.clone(),
                             time: interval_start,
                         }
                     } else {
@@ -240,9 +339,9 @@ pub mod toolkit_experimental {
                     }
                 }
                 _ => Record {
-                    state: self
-                        .state_str(&self.durations.as_slice()[self.first_state as usize])
-                        .to_string(),
+                    state: self.durations.as_slice()[self.first_state as usize]
+                        .state
+                        .materialize(&states),
                     time: self.first_time,
                 },
             };
@@ -261,17 +360,16 @@ pub mod toolkit_experimental {
                                 .end_time += last_interval;
                         };
                         Record {
-                            state: states[dis.state_beg as usize..dis.state_end as usize]
-                                .to_string(),
+                            state: dis.state.materialize(&states),
                             time: interval_start + interval_len,
                         }
                     }
                 }
             } else {
                 Record {
-                    state: self
-                        .state_str(&self.durations.as_slice()[self.last_state as usize])
-                        .to_string(),
+                    state: self.durations.as_slice()[self.last_state as usize]
+                        .state
+                        .materialize(&states),
                     time: self.last_time,
                 }
             };
@@ -282,15 +380,35 @@ pub mod toolkit_experimental {
                 Some(first),
                 Some(last),
                 combined_durations,
+                self.integer_states,
             )
         }
 
+        pub fn assert_int<'a>(&self) {
+            assert!(
+                self.0.integer_states,
+                "Expected integer state, found string state"
+            );
+        }
+        pub fn assert_str<'a>(&self) {
+            assert!(
+                !self.0.integer_states,
+                "Expected string state, found integer state"
+            );
+        }
+    }
+    impl<'a> StateAggData<'a> {
         /// Merges two non-overlapping aggregates.
         pub fn merge(&self, other: &Self) -> Self {
             assert_eq!(
                 self.from_timeline_agg, other.from_timeline_agg,
                 "can't merge state_agg and timeline_agg"
             );
+            assert_eq!(
+                self.integer_states, other.integer_states,
+                "can't merge aggs with different state types"
+            );
+
             let (earlier, later) = match self.first_time.cmp(&other.first_time) {
                 Ordering::Less => (self, other),
                 Ordering::Greater => (other, self),
@@ -308,32 +426,19 @@ pub mod toolkit_experimental {
             let mut merged_durations = earlier.durations.iter().collect::<Vec<_>>();
 
             for dis in later.durations.iter() {
-                let dis_state =
-                    later_states[dis.state_beg as usize..dis.state_end as usize].to_string();
-
                 let merged_duration_to_update = merged_durations.iter_mut().find(|merged_dis| {
-                    merged_states[merged_dis.state_beg as usize..merged_dis.state_end as usize]
-                        == dis_state
+                    merged_dis.state.materialize(&merged_states)
+                        == dis.state.materialize(&later_states)
                 });
                 if let Some(merged_duration_to_update) = merged_duration_to_update {
                     merged_duration_to_update.duration += dis.duration;
                 } else {
-                    let (state_beg, state_end) = if let Some(bounds) = merged_states
-                        .find(&dis_state)
-                        .map(|idx| (idx as u32, (idx + dis_state.len()) as u32))
-                    {
-                        bounds
-                    } else {
-                        let bounds = (
-                            merged_states.len() as u32,
-                            (merged_states.len() + dis_state.len()) as u32,
-                        );
-                        merged_states.push_str(&dis_state);
-                        bounds
-                    };
+                    let state = dis
+                        .state
+                        .materialize(&later_states)
+                        .entry(&mut merged_states);
                     merged_durations.push(DurationInState {
-                        state_beg,
-                        state_end,
+                        state,
                         duration: dis.duration,
                     });
                 };
@@ -343,13 +448,11 @@ pub mod toolkit_experimental {
                 .combined_durations
                 .iter()
                 .chain(later.combined_durations.iter().map(|tis| {
-                    let state = &later_states[tis.state_beg as usize..tis.state_end as usize];
-                    let idx = merged_states.find(state).unwrap() as u32;
-                    TimeInState {
-                        state_beg: idx,
-                        state_end: idx + state.len() as u32,
-                        ..tis
-                    }
+                    let state = tis
+                        .state
+                        .materialize(&later_states)
+                        .existing_entry(&merged_states);
+                    TimeInState { state, ..tis }
                 }))
                 .collect::<Vec<_>>();
             if let (Some(TimeInState { end_time, .. }), Some(TimeInState { start_time, .. })) = (
@@ -374,12 +477,17 @@ pub mod toolkit_experimental {
                     durations: (&*merged_durations).into(),
                     combined_durations_len: combined_durations.len() as u64,
                     combined_durations: (&*combined_durations).into(),
+
                     first_time: earlier.first_time,
                     last_time: later.last_time,
                     first_state: earlier.first_state,
                     last_state: later.last_state,
+
+                    // these values are always the same for both
                     from_timeline_agg: earlier.from_timeline_agg,
+                    integer_states: earlier.integer_states,
                 })
+                .0
             }
         }
     }
@@ -396,12 +504,39 @@ pub mod toolkit_experimental {
         pub fn as_state_agg(self) -> StateAgg<'input> {
             unsafe { self.0.state_agg.flatten() }
         }
+
+        pub fn assert_int<'a>(&self) {
+            assert!(
+                self.0.state_agg.integer_states,
+                "State must have integer values for this function"
+            );
+        }
+        pub fn assert_str<'a>(&self) {
+            assert!(
+                !self.0.state_agg.integer_states,
+                "State must have string values for this function"
+            );
+        }
     }
 
     ron_inout_funcs!(StateAgg);
     ron_inout_funcs!(TimelineAgg);
 }
 
+fn state_trans_inner(
+    state: Option<StateAggTransState>,
+    ts: TimestampTz,
+    value: Option<MaterializedState>,
+    integer_states: bool,
+) -> Option<StateAggTransState> {
+    let value = match value {
+        None => return state,
+        Some(value) => value,
+    };
+    let mut state = state.unwrap_or_else(|| StateAggTransState::new(integer_states));
+    state.record(value, ts.into());
+    Some(state)
+}
 #[aggregate]
 impl toolkit_experimental::state_agg {
     type State = StateAggTransState;
@@ -413,13 +548,7 @@ impl toolkit_experimental::state_agg {
         #[sql_type("timestamptz")] ts: TimestampTz,
         #[sql_type("text")] value: Option<String>,
     ) -> Option<State> {
-        let value = match value {
-            None => return state,
-            Some(value) => value,
-        };
-        let mut state = state.unwrap_or_else(StateAggTransState::new);
-        state.record(value, ts.into());
-        Some(state)
+        state_trans_inner(state, ts, value.map(MaterializedState::String), false)
     }
 
     fn combine(a: Option<&State>, b: Option<&State>) -> Option<State> {
@@ -448,16 +577,67 @@ impl toolkit_experimental::state_agg {
             let mut durations: Vec<DurationInState> = vec![];
             let (map, first, last) = s.make_duration_map_and_bounds();
             for (state, duration) in map {
-                let state_beg = states.len() as u32;
-                let state_end = state_beg + state.len() as u32;
-                states.push_str(&state);
                 durations.push(DurationInState {
                     duration,
-                    state_beg,
-                    state_end,
+                    state: state.entry(&mut states),
                 });
             }
-            StateAgg::new(states, durations, first, last, None)
+            StateAgg::new(states, durations, first, last, None, s.integer_states)
+        })
+    }
+}
+
+extension_sql!(
+    "CREATE AGGREGATE toolkit_experimental.state_agg(
+        ts timestamptz,
+        value bigint
+    ) (
+        stype = internal,
+        sfunc = toolkit_experimental.state_agg_int_trans,
+        finalfunc = toolkit_experimental.state_agg_finally_fn_outer,
+        parallel = safe,
+        serialfunc = toolkit_experimental.state_agg_serialize_fn_outer,
+        deserialfunc = toolkit_experimental.state_agg_deserialize_fn_outer,
+        combinefunc = toolkit_experimental.state_agg_combine_fn_outer
+    );",
+    name = "state_agg_bigint",
+    requires = [
+        state_agg_int_trans,
+        state_agg_finally_fn_outer,
+        state_agg_serialize_fn_outer,
+        state_agg_deserialize_fn_outer,
+        state_agg_combine_fn_outer
+    ],
+);
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+fn state_agg_int_trans(
+    __inner: pgx::Internal,
+    ts: TimestampTz,
+    value: Option<i64>,
+    __fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<pgx::Internal> {
+    // expanded from #[aggregate] transition function
+    use crate::palloc::{Inner, InternalAsValue, ToInternal};
+    type State = StateAggTransState;
+    unsafe {
+        let mut __inner: Option<Inner<Option<State>>> = __inner.to_inner();
+        let inner: Option<State> = match &mut __inner {
+            None => None,
+            Some(inner) => Option::take(&mut **inner),
+        };
+        let state: Option<State> = inner;
+        crate::aggregate_utils::in_aggregate_context(__fcinfo, || {
+            let result = state_trans_inner(state, ts, value.map(MaterializedState::Integer), true);
+            let state: Option<State> = result;
+            __inner = match (__inner, state) {
+                (None, None) => None,
+                (None, state @ Some(..)) => Some(state.into()),
+                (Some(mut inner), state) => {
+                    *inner = state;
+                    Some(inner)
+                }
+            };
+            __inner.internal()
         })
     }
 }
@@ -494,26 +674,15 @@ impl toolkit_experimental::timeline_agg {
             let mut durations: Vec<DurationInState> = vec![];
             let (map, first, last) = s.make_duration_map_and_bounds();
             for (state, duration) in map {
-                let state_beg = states.len() as u32;
-                let state_end = state_beg + state.len() as u32;
-                states.push_str(&state);
-                durations.push(DurationInState {
-                    duration,
-                    state_beg,
-                    state_end,
-                });
+                let state = state.entry(&mut states);
+                durations.push(DurationInState { duration, state });
             }
 
             let mut merged_durations: Vec<TimeInState> = Vec::new();
             let mut last_record_state = None;
             for record in s.records.drain(..) {
-                let state_beg = states
-                    .find(&record.state)
-                    .expect("records has state not in state list")
-                    as u32;
-                // TODO: merge these
                 if last_record_state
-                    .as_deref()
+                    .clone()
                     .map(|last| last != record.state)
                     .unwrap_or(true)
                 {
@@ -523,8 +692,7 @@ impl toolkit_experimental::timeline_agg {
                     merged_durations.push(TimeInState {
                         start_time: record.time,
                         end_time: 0,
-                        state_beg,
-                        state_end: state_beg + record.state.len() as u32,
+                        state: record.state.entry(&mut states),
                     });
                     last_record_state = Some(record.state);
                 }
@@ -539,7 +707,63 @@ impl toolkit_experimental::timeline_agg {
                 first,
                 last,
                 Some(merged_durations),
+                s.integer_states,
             ))
+        })
+    }
+}
+
+extension_sql!(
+    "CREATE AGGREGATE toolkit_experimental.timeline_agg(
+        ts timestamptz,
+        value bigint
+    ) (
+        stype = internal,
+        sfunc = toolkit_experimental.timeline_agg_int_trans,
+        finalfunc = toolkit_experimental.timeline_agg_finally_fn_outer,
+        parallel = safe,
+        serialfunc = toolkit_experimental.timeline_agg_serialize_fn_outer,
+        deserialfunc = toolkit_experimental.timeline_agg_deserialize_fn_outer,
+        combinefunc = toolkit_experimental.timeline_agg_combine_fn_outer
+    );",
+    name = "timeline_agg_bigint",
+    requires = [
+        timeline_agg_int_trans,
+        timeline_agg_finally_fn_outer,
+        timeline_agg_serialize_fn_outer,
+        timeline_agg_deserialize_fn_outer,
+        timeline_agg_combine_fn_outer
+    ],
+);
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+fn timeline_agg_int_trans(
+    __inner: pgx::Internal,
+    ts: TimestampTz,
+    value: Option<i64>,
+    __fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<pgx::Internal> {
+    // expanded from #[aggregate] transition function
+    use crate::palloc::{Inner, InternalAsValue, ToInternal};
+    type State = StateAggTransState;
+    unsafe {
+        let mut __inner: Option<Inner<Option<State>>> = __inner.to_inner();
+        let inner: Option<State> = match &mut __inner {
+            None => None,
+            Some(inner) => Option::take(&mut **inner),
+        };
+        let state: Option<State> = inner;
+        crate::aggregate_utils::in_aggregate_context(__fcinfo, || {
+            let result = state_trans_inner(state, ts, value.map(MaterializedState::Integer), true);
+            let state: Option<State> = result;
+            __inner = match (__inner, state) {
+                (None, None) => None,
+                (None, state @ Some(..)) => Some(state.into()),
+                (Some(mut inner), state) => {
+                    *inner = state;
+                    Some(inner)
+                }
+            };
+            __inner.internal()
         })
     }
 }
@@ -548,14 +772,18 @@ impl toolkit_experimental::timeline_agg {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct StateAggTransState {
     records: Vec<Record>,
+    integer_states: bool,
 }
 
 impl StateAggTransState {
-    fn new() -> Self {
-        Self { records: vec![] }
+    fn new(integer_states: bool) -> Self {
+        Self {
+            records: vec![],
+            integer_states,
+        }
     }
 
-    fn record(&mut self, state: String, time: i64) {
+    fn record(&mut self, state: MaterializedState, time: i64) {
         self.records.push(Record { state, time });
     }
 
@@ -571,7 +799,7 @@ impl StateAggTransState {
                 if a.state != b.state {
                     // TODO use human-readable timestamp
                     panic!(
-                        "state cannot be both {} and {} at {}",
+                        "state cannot be both {:?} and {:?} at {}",
                         a.state, b.state, a.time
                     )
                 }
@@ -586,7 +814,7 @@ impl StateAggTransState {
     fn make_duration_map_and_bounds(
         &mut self,
     ) -> (
-        std::collections::HashMap<String, i64>,
+        std::collections::HashMap<MaterializedState, i64>,
         Option<Record>,
         Option<Record>,
     ) {
@@ -604,11 +832,11 @@ impl StateAggTransState {
     }
 }
 
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn duration_in<'a>(state: String, aggregate: Option<StateAgg<'a>>) -> crate::raw::Interval {
-    let time: i64 = aggregate
-        .and_then(|aggregate| aggregate.get(&state))
-        .unwrap_or(0);
+fn duration_in_inner<'a>(
+    state: Option<StateEntry>,
+    aggregate: Option<StateAgg<'a>>,
+) -> crate::raw::Interval {
+    let time: i64 = state.and_then(|state| aggregate?.get(state)).unwrap_or(0);
     let interval = pg_sys::Interval {
         time,
         ..Default::default()
@@ -631,6 +859,32 @@ pub fn duration_in<'a>(state: String, aggregate: Option<StateAgg<'a>>) -> crate:
         .expect("interval_justify_hours does not return None")
 }
 
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub fn duration_in<'a>(state: String, aggregate: Option<StateAgg<'a>>) -> crate::raw::Interval {
+    if let Some(ref aggregate) = aggregate {
+        aggregate.assert_str()
+    };
+    duration_in_inner(
+        aggregate.as_ref().and_then(|aggregate| {
+            StateEntry::try_from_existing_str(&aggregate.states_as_str(), &state)
+        }),
+        aggregate,
+    )
+}
+
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "duration_in",
+    schema = "toolkit_experimental"
+)]
+pub fn duration_in_int<'a>(state: i64, aggregate: Option<StateAgg<'a>>) -> crate::raw::Interval {
+    if let Some(ref aggregate) = aggregate {
+        aggregate.assert_int()
+    };
+    duration_in_inner(Some(StateEntry::from_integer(state)), aggregate)
+}
+
 #[pg_extern(
     immutable,
     parallel_safe,
@@ -641,12 +895,33 @@ pub fn duration_in_tl<'a>(
     state: String,
     aggregate: Option<TimelineAgg<'a>>,
 ) -> crate::raw::Interval {
+    if let Some(ref aggregate) = aggregate {
+        aggregate.assert_str()
+    };
     duration_in(state, aggregate.map(TimelineAgg::as_state_agg))
 }
 
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn interpolated_duration_in<'a>(
-    state: String,
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "duration_in",
+    schema = "toolkit_experimental"
+)]
+pub fn duration_in_tl_int<'a>(
+    state: i64,
+    aggregate: Option<TimelineAgg<'a>>,
+) -> crate::raw::Interval {
+    if let Some(ref aggregate) = aggregate {
+        aggregate.assert_int()
+    };
+    duration_in_inner(
+        Some(StateEntry::from_integer(state)),
+        aggregate.map(TimelineAgg::as_state_agg),
+    )
+}
+
+fn interpolated_duration_in_inner<'a>(
+    state: Option<MaterializedState>,
     aggregate: Option<StateAgg<'a>>,
     start: TimestampTz,
     interval: crate::raw::Interval,
@@ -659,12 +934,33 @@ pub fn interpolated_duration_in<'a>(
         ),
         Some(aggregate) => {
             let interval = crate::datum_utils::interval_to_ms(&start, &interval);
-            duration_in(
-                state,
-                Some(aggregate.interpolate(start.into(), interval, prev, next.is_some())),
-            )
+            let new_agg = aggregate.interpolate(start.into(), interval, prev, next.is_some());
+            let state_entry =
+                state.and_then(|state| state.try_existing_entry(new_agg.states_as_str()));
+            duration_in_inner(state_entry, Some(new_agg))
         }
     }
+}
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub fn interpolated_duration_in<'a>(
+    state: String,
+    aggregate: Option<StateAgg<'a>>,
+    start: TimestampTz,
+    interval: crate::raw::Interval,
+    prev: Option<StateAgg<'a>>,
+    next: Option<StateAgg<'a>>,
+) -> crate::raw::Interval {
+    if let Some(ref aggregate) = aggregate {
+        aggregate.assert_str()
+    };
+    interpolated_duration_in_inner(
+        Some(MaterializedState::String(state)),
+        aggregate,
+        start,
+        interval,
+        prev,
+        next,
+    )
 }
 
 #[pg_extern(
@@ -681,7 +977,64 @@ pub fn interpolated_duration_in_tl<'a>(
     prev: Option<TimelineAgg<'a>>,
     next: Option<TimelineAgg<'a>>,
 ) -> crate::raw::Interval {
+    if let Some(ref aggregate) = aggregate {
+        aggregate.assert_str()
+    };
     interpolated_duration_in(
+        state,
+        aggregate.map(TimelineAgg::as_state_agg),
+        start,
+        interval,
+        prev.map(TimelineAgg::as_state_agg),
+        next.map(TimelineAgg::as_state_agg),
+    )
+}
+
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    schema = "toolkit_experimental",
+    name = "interpolated_duration_in"
+)]
+pub fn interpolated_duration_in_int<'a>(
+    state: i64,
+    aggregate: Option<StateAgg<'a>>,
+    start: TimestampTz,
+    interval: crate::raw::Interval,
+    prev: Option<StateAgg<'a>>,
+    next: Option<StateAgg<'a>>,
+) -> crate::raw::Interval {
+    if let Some(ref aggregate) = aggregate {
+        aggregate.assert_int()
+    };
+    interpolated_duration_in_inner(
+        Some(MaterializedState::Integer(state)),
+        aggregate,
+        start,
+        interval,
+        prev,
+        next,
+    )
+}
+
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "interpolated_duration_in",
+    schema = "toolkit_experimental"
+)]
+pub fn interpolated_duration_in_tl_int<'a>(
+    state: i64,
+    aggregate: Option<TimelineAgg<'a>>,
+    start: TimestampTz,
+    interval: crate::raw::Interval,
+    prev: Option<TimelineAgg<'a>>,
+    next: Option<TimelineAgg<'a>>,
+) -> crate::raw::Interval {
+    if let Some(ref aggregate) = aggregate {
+        aggregate.assert_int()
+    };
+    interpolated_duration_in_int(
         state,
         aggregate.map(TimelineAgg::as_state_agg),
         start,
@@ -695,12 +1048,28 @@ pub fn interpolated_duration_in_tl<'a>(
 pub fn into_values<'a>(
     agg: StateAgg<'a>,
 ) -> TableIterator<'a, (pgx::name!(state, String), pgx::name!(duration, i64))> {
+    agg.assert_str();
     let states: String = agg.states_as_str().to_owned();
-    TableIterator::new(agg.durations.clone().into_iter().map(move |record| {
-        let beg = record.state_beg as usize;
-        let end = record.state_end as usize;
-        (states[beg..end].to_owned(), record.duration)
-    }))
+    TableIterator::new(
+        agg.durations
+            .clone()
+            .into_iter()
+            .map(move |record| (record.state.as_str(&states).to_string(), record.duration)),
+    )
+}
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub fn into_int_values<'a>(
+    agg: StateAgg<'a>,
+) -> TableIterator<'a, (pgx::name!(state, i64), pgx::name!(duration, i64))> {
+    agg.assert_int();
+    TableIterator::new(
+        agg.durations
+            .clone()
+            .into_iter()
+            .map(move |record| (record.state.as_integer(), record.duration))
+            .collect::<Vec<_>>()
+            .into_iter(), // make map panic now instead of at iteration time
+    )
 }
 #[pg_extern(
     immutable,
@@ -711,7 +1080,20 @@ pub fn into_values<'a>(
 pub fn into_values_tl<'a>(
     aggregate: TimelineAgg<'a>,
 ) -> TableIterator<'a, (pgx::name!(state, String), pgx::name!(duration, i64))> {
+    aggregate.assert_str();
     into_values(aggregate.as_state_agg())
+}
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "into_int_values",
+    schema = "toolkit_experimental"
+)]
+pub fn into_values_tl_int<'a>(
+    aggregate: TimelineAgg<'a>,
+) -> TableIterator<'a, (pgx::name!(state, i64), pgx::name!(duration, i64))> {
+    aggregate.assert_int();
+    into_int_values(aggregate.as_state_agg())
 }
 
 fn state_timeline_inner<'a>(
@@ -734,14 +1116,41 @@ fn state_timeline_inner<'a>(
             .clone()
             .into_iter()
             .map(move |record| {
-                let beg = record.state_beg as usize;
-                let end = record.state_end as usize;
                 (
-                    states[beg..end].to_owned(),
+                    record.state.as_str(&states).to_string(),
                     TimestampTz::from(record.start_time),
                     TimestampTz::from(record.end_time),
                 )
             }),
+    )
+}
+fn state_int_timeline_inner<'a>(
+    agg: StateAgg<'a>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(state, i64),
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    assert!(
+        agg.from_timeline_agg,
+        "state_timeline can only be called on a state_agg built from timeline_agg"
+    );
+    TableIterator::new(
+        agg.combined_durations
+            .clone()
+            .into_iter()
+            .map(move |record| {
+                (
+                    record.state.as_integer(),
+                    TimestampTz::from(record.start_time),
+                    TimestampTz::from(record.end_time),
+                )
+            })
+            .collect::<Vec<_>>()
+            .into_iter(), // make map panic now instead of at iteration time
     )
 }
 
@@ -756,7 +1165,22 @@ pub fn state_timeline<'a>(
         pgx::name!(end_time, TimestampTz),
     ),
 > {
+    agg.assert_str();
     state_timeline_inner(agg.as_state_agg())
+}
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub fn state_int_timeline<'a>(
+    agg: TimelineAgg<'a>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(state, i64),
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    agg.assert_int();
+    state_int_timeline_inner(agg.as_state_agg())
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
@@ -774,6 +1198,9 @@ pub fn interpolated_state_timeline<'a>(
         pgx::name!(end_time, TimestampTz),
     ),
 > {
+    if let Some(ref aggregate) = aggregate {
+        aggregate.assert_str()
+    };
     match aggregate {
         None => pgx::error!(
             "when interpolating data between grouped data, all groups must contain some data"
@@ -793,9 +1220,46 @@ pub fn interpolated_state_timeline<'a>(
         }
     }
 }
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub fn interpolated_int_state_timeline<'a>(
+    aggregate: Option<TimelineAgg<'a>>,
+    start: TimestampTz,
+    interval: crate::raw::Interval,
+    prev: Option<TimelineAgg<'a>>,
+    next: Option<TimelineAgg<'a>>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(state, i64),
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    if let Some(ref aggregate) = aggregate {
+        aggregate.assert_int()
+    };
+    match aggregate {
+        None => pgx::error!(
+            "when interpolating data between grouped data, all groups must contain some data"
+        ),
+        Some(aggregate) => {
+            let interval = crate::datum_utils::interval_to_ms(&start, &interval);
+            TableIterator::new(
+                state_int_timeline_inner(aggregate.as_state_agg().interpolate(
+                    start.into(),
+                    interval,
+                    prev.map(TimelineAgg::as_state_agg),
+                    next.is_some(),
+                ))
+                .collect::<Vec<_>>()
+                .into_iter(),
+            )
+        }
+    }
+}
 
 fn state_periods_inner<'a>(
-    state: String,
+    state: MaterializedState,
     agg: StateAgg<'a>,
 ) -> TableIterator<
     'a,
@@ -814,9 +1278,7 @@ fn state_periods_inner<'a>(
             .clone()
             .into_iter()
             .filter_map(move |record| {
-                let beg = record.state_beg as usize;
-                let end = record.state_end as usize;
-                if states[beg..end] == *state {
+                if record.state.materialize(&states) == state {
                     Some((
                         TimestampTz::from(record.start_time),
                         TimestampTz::from(record.end_time),
@@ -839,12 +1301,32 @@ pub fn state_periods<'a>(
         pgx::name!(end_time, TimestampTz),
     ),
 > {
-    state_periods_inner(state, agg.as_state_agg())
+    agg.assert_str();
+    let agg = agg.as_state_agg();
+    state_periods_inner(MaterializedState::String(state), agg)
+}
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    schema = "toolkit_experimental",
+    name = "state_periods"
+)]
+pub fn state_int_periods<'a>(
+    state: i64,
+    agg: TimelineAgg<'a>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    agg.assert_int();
+    state_periods_inner(MaterializedState::Integer(state), agg.as_state_agg())
 }
 
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn interpolated_state_periods<'a>(
-    state: String,
+fn interpolated_state_periods_inner<'a>(
+    state: MaterializedState,
     aggregate: Option<TimelineAgg<'a>>,
     start: TimestampTz,
     interval: crate::raw::Interval,
@@ -879,13 +1361,71 @@ pub fn interpolated_state_periods<'a>(
         }
     }
 }
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+pub fn interpolated_state_periods<'a>(
+    state: String,
+    aggregate: Option<TimelineAgg<'a>>,
+    start: TimestampTz,
+    interval: crate::raw::Interval,
+    prev: Option<TimelineAgg<'a>>,
+    next: Option<TimelineAgg<'a>>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    if let Some(ref aggregate) = aggregate {
+        aggregate.assert_str()
+    };
+    interpolated_state_periods_inner(
+        MaterializedState::String(state),
+        aggregate,
+        start,
+        interval,
+        prev,
+        next,
+    )
+}
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    schema = "toolkit_experimental",
+    name = "interpolated_state_periods"
+)]
+pub fn interpolated_state_periods_int<'a>(
+    state: i64,
+    aggregate: Option<TimelineAgg<'a>>,
+    start: TimestampTz,
+    interval: crate::raw::Interval,
+    prev: Option<TimelineAgg<'a>>,
+    next: Option<TimelineAgg<'a>>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    if let Some(ref aggregate) = aggregate {
+        aggregate.assert_int()
+    };
+    interpolated_state_periods_inner(
+        MaterializedState::Integer(state),
+        aggregate,
+        start,
+        interval,
+        prev,
+        next,
+    )
+}
 
 #[derive(Clone, Debug, Deserialize, Eq, FlatSerializable, PartialEq, Serialize)]
 #[repr(C)]
 pub struct DurationInState {
     duration: i64,
-    state_beg: u32,
-    state_end: u32,
+    state: StateEntry,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, FlatSerializable, PartialEq, Serialize)]
@@ -893,13 +1433,12 @@ pub struct DurationInState {
 pub struct TimeInState {
     start_time: i64,
     end_time: i64,
-    state_beg: u32,
-    state_end: u32,
+    state: StateEntry,
 }
 
 struct DurationState {
-    last_state: Option<(String, i64)>,
-    durations: std::collections::HashMap<String, i64>,
+    last_state: Option<(MaterializedState, i64)>,
+    durations: std::collections::HashMap<MaterializedState, i64>,
 }
 impl DurationState {
     fn new() -> Self {
@@ -909,7 +1448,7 @@ impl DurationState {
         }
     }
 
-    fn handle_record(&mut self, state: String, time: i64) {
+    fn handle_record(&mut self, state: MaterializedState, time: i64) {
         match self.last_state.take() {
             None => self.last_state = Some((state, time)),
             Some((last_state, last_time)) => {
@@ -940,7 +1479,7 @@ impl DurationState {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 struct Record {
-    state: String,
+    state: MaterializedState,
     time: i64,
 }
 
@@ -1333,7 +1872,8 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
         Spi::execute(|client| {
             client.select(
                 "SET TIME ZONE 'UTC';
-                CREATE TABLE inttest(time TIMESTAMPTZ, state TEXT, bucket INT);",
+                CREATE TABLE inttest(time TIMESTAMPTZ, state TEXT, bucket INT);
+                CREATE TABLE inttest2(time TIMESTAMPTZ, state BIGINT, bucket INT);",
                 None,
                 None,
             );
@@ -1347,7 +1887,17 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
                 ('2020-1-2 20:00'::timestamptz, 'three', 2), 
                 ('2020-1-3 10:00'::timestamptz, 'one', 3), 
                 ('2020-1-3 12:00'::timestamptz, 'two', 3), 
-                ('2020-1-3 16:00'::timestamptz, 'three', 3)"#,
+                ('2020-1-3 16:00'::timestamptz, 'three', 3);
+                INSERT INTO inttest2 VALUES
+                ('2020-1-1 10:00'::timestamptz, 10001, 1),
+                ('2020-1-1 12:00'::timestamptz, 10002, 1), 
+                ('2020-1-1 16:00'::timestamptz, 10003, 1), 
+                ('2020-1-2 2:00'::timestamptz, 10001, 2), 
+                ('2020-1-2 12:00'::timestamptz, 10002, 2), 
+                ('2020-1-2 20:00'::timestamptz, 10003, 2), 
+                ('2020-1-3 10:00'::timestamptz, 10001, 3), 
+                ('2020-1-3 12:00'::timestamptz, 10002, 3), 
+                ('2020-1-3 16:00'::timestamptz, 10003, 3);"#,
                 None,
                 None,
             );
@@ -1404,10 +1954,38 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
             // Day 3, in "three" from start of day to "10:00"; end in that state, but no following point
             assert_eq!(durations.next().unwrap()[1].value(), Some("10:00:00"));
             assert!(durations.next().is_none());
+
+            let mut durations = client.select(
+                r#"SELECT
+                toolkit_experimental.interpolated_duration_in(
+                    10003,
+                    agg, 
+                    '2019-12-31 0:00'::timestamptz + (bucket * '1 day'::interval), '1 day'::interval, 
+                    LAG(agg) OVER (ORDER BY bucket), 
+                    LEAD(agg) OVER (ORDER BY bucket)
+                )::TEXT FROM (
+                    SELECT bucket, toolkit_experimental.state_agg(time, state) as agg 
+                    FROM inttest2
+                    GROUP BY bucket ORDER BY bucket
+                ) s
+                ORDER BY bucket"#,
+                None,
+                None,
+            );
+
+            // Day 1, in "three" from "16:00" to end of day
+            assert_eq!(durations.next().unwrap()[1].value(), Some("08:00:00"));
+            // Day 2, in "three" from start of day to "2:00" and "20:00" to end of day
+            assert_eq!(durations.next().unwrap()[1].value(), Some("06:00:00"));
+            // Day 3, in "three" from start of day to "10:00"; end in that state, but no following point
+            assert_eq!(durations.next().unwrap()[1].value(), Some("10:00:00"));
+            assert!(durations.next().is_none());
         });
     }
 
-    #[pg_test(error = "state cannot be both ERROR and START at 631152000000000")]
+    #[pg_test(
+        error = "state cannot be both String(\"ERROR\") and String(\"START\") at 631152000000000"
+    )]
     fn two_states_at_one_time() {
         Spi::execute(|client| {
             client.select("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);

@@ -4,7 +4,7 @@ use pgx::{iter::TableIterator, *};
 
 use crate::{
     aggregate_utils::in_aggregate_context,
-    build,
+    build, flatten,
     palloc::{Inner, Internal, InternalAsValue, ToInternal},
     pg_type, ron_inout_funcs,
 };
@@ -368,6 +368,95 @@ CREATE AGGREGATE rollup(\n\
     ],
 );
 
+#[pg_schema]
+pub mod toolkit_experimental {
+    use super::*;
+
+    // Only making this available through the arrow operator right now, as the semantics are cleaner that way
+    pub fn asof_join<'a, 'b>(
+        from: Timevector_TSTZ_F64<'a>,
+        into: Timevector_TSTZ_F64<'b>,
+    ) -> TableIterator<
+        'a,
+        (
+            name!(value1, Option<f64>),
+            name!(value2, f64),
+            name!(time, crate::raw::TimestampTz),
+        ),
+    > {
+        assert!(
+            from.num_points > 0 && into.num_points > 0,
+            "both timevectors must be populated for an asof join"
+        );
+        let mut from = from
+            .into_iter()
+            .map(|points| (points.ts.into(), points.val))
+            .peekable();
+        let into = into.into_iter().map(|points| (points.ts, points.val));
+        let (mut from_time, mut from_val) = from.next().unwrap();
+
+        let mut results = vec![];
+        for (into_time, into_val) in into {
+            // Handle case where into starts before from
+            if into_time < from_time {
+                results.push((None, into_val, crate::raw::TimestampTz::from(into_time)));
+                continue;
+            }
+
+            while let Some((peek_time, _)) = from.peek() {
+                if *peek_time > into_time {
+                    break;
+                }
+                (from_time, from_val) = from.next().unwrap();
+            }
+
+            results.push((
+                Some(from_val),
+                into_val,
+                crate::raw::TimestampTz::from(into_time),
+            ));
+        }
+
+        TableIterator::new(results.into_iter())
+    }
+
+    pg_type! {
+        #[derive(Debug)]
+        struct AccessorAsof<'input> {
+            into: Timevector_TSTZ_F64Data<'input>,
+        }
+    }
+
+    ron_inout_funcs!(AccessorAsof);
+
+    #[pg_extern(immutable, parallel_safe, name = "asof")]
+    pub fn accessor_asof<'a>(tv: Timevector_TSTZ_F64<'a>) -> AccessorAsof<'static> {
+        unsafe {
+            flatten! {
+                AccessorAsof {
+                    into: tv.0
+                }
+            }
+        }
+    }
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_timevector_asof<'a>(
+    series: Timevector_TSTZ_F64<'a>,
+    accessor: toolkit_experimental::AccessorAsof<'a>,
+) -> TableIterator<
+    'a,
+    (
+        name!(value1, Option<f64>),
+        name!(value2, f64),
+        name!(time, crate::raw::TimestampTz),
+    ),
+> {
+    toolkit_experimental::asof_join(series, accessor.into.clone().into())
+}
+
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
@@ -642,6 +731,88 @@ mod tests {
                 .unwrap();
             let expected = r#"(version:1,num_points:4,flags:2,internal_padding:(0,0,0),points:[(ts:"2020-01-01 00:00:00+00",val:20),(ts:"2020-01-02 00:00:00+00",val:30),(ts:"2020-01-03 00:00:00+00",val:15),(ts:"2019-01-04 00:00:00+00",val:NaN)],null_val:[8])"#;
             assert_eq!(tvec, expected);
+        })
+    }
+
+    #[pg_test]
+    fn test_asof_join() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+
+            let mut result = client.select(
+                "WITH s as (
+                    SELECT timevector(time, value) AS v1 FROM
+                    (VALUES 
+                        ('2022-10-1 1:00 UTC'::TIMESTAMPTZ, 20.0),
+                        ('2022-10-1 2:00 UTC'::TIMESTAMPTZ, 30.0),
+                        ('2022-10-1 3:00 UTC'::TIMESTAMPTZ, 40.0)
+                    ) as v(time, value)),
+                t as (
+                    SELECT timevector(time, value) AS v2 FROM
+                    (VALUES 
+                        ('2022-10-1 0:30 UTC'::TIMESTAMPTZ, 15.0),
+                        ('2022-10-1 2:00 UTC'::TIMESTAMPTZ, 45.0),
+                        ('2022-10-1 3:30 UTC'::TIMESTAMPTZ, 60.0)
+                    ) as v(time, value))
+                SELECT (v1 -> toolkit_experimental.asof(v2))::TEXT
+                FROM s, t;",
+                None,
+                None,
+            );
+
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(,15,\"2022-10-01 00:30:00+00\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(30,45,\"2022-10-01 02:00:00+00\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value(),
+                Some("(40,60,\"2022-10-01 03:30:00+00\")")
+            );
+            assert!(result.next().is_none());
+        })
+    }
+
+    #[pg_test(error = "both timevectors must be populated for an asof join")]
+    fn test_asof_none() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+
+            client.select(
+                "WITH s as (
+                    SELECT timevector(now(), 0) -> toolkit_experimental.filter($$ $value != 0 $$) AS empty),
+                    t as (
+                        SELECT timevector(time, value) AS valid FROM
+                        (VALUES 
+                            ('2022-10-1 0:30 UTC'::TIMESTAMPTZ, 15.0),
+                            ('2022-10-1 2:00 UTC'::TIMESTAMPTZ, 45.0),
+                            ('2022-10-1 3:30 UTC'::TIMESTAMPTZ, 60.0)
+                        ) as v(time, value))
+                    SELECT (valid -> toolkit_experimental.asof(empty))
+                    FROM s, t;", None, None);
+        })
+    }
+
+    #[pg_test(error = "both timevectors must be populated for an asof join")]
+    fn test_none_asof() {
+        Spi::execute(|client| {
+            client.select("SET timezone TO 'UTC'", None, None);
+
+            client.select(
+                "WITH s as (
+                    SELECT timevector(now(), 0) -> toolkit_experimental.filter($$ $value != 0 $$) AS empty),
+                    t as (
+                        SELECT timevector(time, value) AS valid FROM
+                        (VALUES 
+                            ('2022-10-1 0:30 UTC'::TIMESTAMPTZ, 15.0),
+                            ('2022-10-1 2:00 UTC'::TIMESTAMPTZ, 45.0),
+                            ('2022-10-1 3:30 UTC'::TIMESTAMPTZ, 60.0)
+                        ) as v(time, value))
+                    SELECT (empty -> toolkit_experimental.asof(valid))
+                    FROM s, t;", None, None);
         })
     }
 }

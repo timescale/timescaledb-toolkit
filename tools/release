@@ -1,16 +1,19 @@
 #!/bin/sh
 
 # This script automates release creation:
-# 1. Create release branch.
+# 1. Create release branch from target commit.
+# 1a. Validate contents of target commit (just upgradeable_from currently).
 # 2. Set toolkit version on branch.
 # 3. Run tests.
 # 4. Push (if -push) the branch so release-build-scripts repository [1] can see the commit from #2.
 # 5. Trigger (if -push) toolkit packaging actions in release-build-scripts repository.
 # 6. Tag the release (and push, if -push). [2]
 # 7. Prepare the main branch for the next release cycle.
-# 7a. Set toolkit version to released version with '-dev' appended.
-# 7b. Update Changelog.md .
-# 7c. Push to main (if -push).
+# 7a. Update upgradeable_form in control file.
+# 7b. Set toolkit version to released version with '-dev' appended.
+# 7c. Update Changelog.md .
+# 7d. Push to main (if -push).
+# 8. File issue for release tasks that are not yet automated (if -push).
 
 # [1] We need a self-hosted runner for arm64 build, which we can only get with
 #     a private repository, so we must delegate packaging to that.
@@ -31,7 +34,9 @@ GIT_COMMITTER_NAME=$GIT_AUTHOR_NAME
 export EMAIL GIT_AUTHOR_NAME GIT_COMMITTER_NAME
 
 BRANCH_BASENAME=forge-stable-
+CONTROL=extension/timescaledb_toolkit.control
 TOML=extension/Cargo.toml
+UPGRADEABLE_FROM_RE="^# upgradeable_from = '[^']*'\$"
 
 . tools/dependencies.sh
 
@@ -116,6 +121,11 @@ finish_commit() {
     (export GIT_COMMITTER_DATE="`date`" && $nop git commit --no-edit --amend "--date=$GIT_COMMITTER_DATE" -m "$1")
 }
 
+# Return 0 if this is a minor release (i.e. $PATCH is greater than zero).
+release_is_minor() {
+    [ $PATCH -eq 0 ]
+}
+
 # Super simple option processing.
 push=false
 while [ $# -gt 0 ]; do
@@ -145,15 +155,41 @@ while [ $# -gt 0 ]; do
     esac
 done
 
+[ -n "$VERSION" ] && [ -n "$COMMIT" ] || usage
+
 # And away we go!
+
+MAJOR=${VERSION%%.*}
+minpat=${VERSION#*.}
+MINOR=${minpat%.*}
+PATCH=${minpat#*.}
 
 # 0. Sanity-check the surroundings.
 # working directory clean?
 assert_clean || die 'cowardly refusing to operate on dirty working directory'
+# control file matches expectations?
+count=`grep -c "$UPGRADEABLE_FROM_RE" $CONTROL` || die "upgradeable_from line malformed"
+if [ "$count" -ne 1 ]; then
+    print >&2 "too many upgradeable_from lines matched:"
+    grep >&2 "$UPGRADEABLE_FROM_RE" $CONTROL
+    die
+fi
 
-# 1. Create release branch.
+# 1. Create release branch from target commit.
 branch="$BRANCH_BASENAME"$VERSION
 $nop git checkout -b $branch $COMMIT
+
+# 1a. Validate contents of target commit (just upgradeable_from currently).
+if ! release_is_minor; then
+    # Releasing e.g. 1.13.2 - this one might be a cherry-pick, so we need to ensure upgradeable from 1.13.1 .
+    # It is conceivable that we could intend to release 1.17.1 without
+    # allowing upgrade from 1.17.0, but we can cross that bridge if we come
+    # to it.
+    prev=$MAJOR.$MINOR.$(( PATCH - 1 ))
+    # The set of lines matching this pattern is a subset of the set required in preflight above.
+    grep -Eqs "^# upgradeable_from = '[^']*,?$prev[,']" $CONTROL || die "$prev missing from upgradeable_from "
+fi
+# Else releasing e.g. 1.13.0 - these are never cherrypicks and we automatically set upgradeable_from on main.
 
 # 2. Set toolkit version.
 cargo set-version $dry_run_flag -p timescaledb_toolkit $VERSION
@@ -211,22 +247,34 @@ fi
 $nop git fetch --deepen=2147483647 origin main
 $nop git checkout main
 
-# 7a. Set toolkit version to released version with '-dev' appended.
-major=${VERSION%%.*}
-minpat=${VERSION#*.}
-minor=${minpat%.*}
-DEV_VERSION=$major.$(( minor + 1 )).0-dev
-cargo set-version $dry_run_flag -p timescaledb_toolkit $DEV_VERSION
-assert_dirty || die "failed to set toolkit version to $DEV_VERSION in $TOML"
-start_commit $TOML
-# Update cargo.lock - this form of cargo update doesn't update dependency versions.
-$nop cargo update -p timescaledb_toolkit
-assert_dirty || die "failed to set toolkit version to $DEV_VERSION in Cargo.lock"
-commit Cargo.lock
+# 7a. Update upgradeable_form in control file.
+$nop sed --in-place "/$UPGRADEABLE_FROM_RE/ { s/'\$/, $VERSION'/ }" $CONTROL
+assert_dirty || die "failed to update $CONTROL for next release"
+start_commit $CONTROL
 
-# 7b. Update Changelog.md .
-branch_commit_date=`git log -1 --pretty=format:%as $branch_commit`
-$nop ed Changelog.md <<EOF
+if release_is_minor; then
+    # 7b. Set toolkit version to released version with '-dev' appended.
+    # Skip for patch releases:  we've already started the next minor version in that case.
+    DEV_VERSION=$MAJOR.$(( MINOR + 1 )).0-dev
+    cargo set-version $dry_run_flag -p timescaledb_toolkit $DEV_VERSION
+    assert_dirty || die "failed to set toolkit version to $DEV_VERSION in $TOML"
+    commit $TOML
+    # Update cargo.lock - this form of cargo update doesn't update dependency versions.
+    $nop cargo update -p timescaledb_toolkit
+    assert_dirty || die "failed to set toolkit version to $DEV_VERSION in Cargo.lock"
+    commit Cargo.lock
+
+    # 7c. Update Changelog.md .
+    # Skip for patch releases as it's not clear how to automate the cherry-pick case.
+    # For now, we just have to add patch releases to the main Changelog manually.
+    # The edit we apply here for minor releases would be wrong in the
+    # cherry-pick case, as it would erroneously list the skipped changes on
+    # main as part of the patch release.  This script has no way to
+    # distinguish blocks of text belonging to one release from another, so
+    # automating that case is probably not feasible.
+    # TODO Or is it?
+    branch_commit_date=`git log -1 --pretty=format:%as $branch_commit`
+    $nop ed Changelog.md <<EOF
 /^## Next Release (Date TBD)/
 a
 
@@ -244,16 +292,21 @@ a
 .
 wq
 EOF
-assert_dirty || die 'failed to update Changelog.md for next release'
-commit Changelog.md
-finish_commit "start $DEV_VERSION"
+    assert_dirty || die 'failed to update Changelog.md for next release'
+    commit Changelog.md
+
+    finish_commit "start $DEV_VERSION"
+else
+    finish_commit "add $VERSION to upgradeable_from"
+fi
 $nop git show
 
 if $push; then
+    # 7d. Push to main.
     # TODO Create a pull request instead?
     $nop git push origin main
 
-    # File issue for release tasks that are not yet automated.
+    # 8. File issue for release tasks that are not yet automated.
     $nop gh issue create -R timescale/timescaledb-toolkit -F- -t "Release $VERSION" <<EOF
 - [ ] Docker HA image
 

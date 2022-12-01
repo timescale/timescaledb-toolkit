@@ -8,6 +8,8 @@
 # information across all those.
 
 PG_VERSIONS='12 13 14 15'
+# TODO: remove this once TimescaleDB supports PostgreSQL 15: issue #648
+TSDB_PG_VERSIONS='12 13 14'
 
 CARGO_EDIT=0.11.2
 

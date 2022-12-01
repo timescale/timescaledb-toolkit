@@ -68,9 +68,13 @@ jobs:
       run: su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-extension 2>&1'
 
     - name: Run doc tests
+      # TODO: remove this once TimescaleDB supports PostgreSQL 15: issue #648
+      if: ${{ matrix.pgversion != 15 }}
       run: su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-doc 2>&1'
 
     - name: Run binary update tests
+      # TODO: remove this once TimescaleDB supports PostgreSQL 15: issue #648
+      if: ${{ matrix.pgversion != 15 }}
       run: |
         su postgres -c 'OS_NAME=debian OS_VERSION=11 tools/testbin -version no -bindir / -pgversions ${{ matrix.pgversion }} ci 2>&1'
 

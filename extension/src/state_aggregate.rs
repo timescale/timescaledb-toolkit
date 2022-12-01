@@ -72,13 +72,13 @@ impl StateEntry {
     }
     fn from_str(states: &mut String, new_state: &str) -> Self {
         let (a, b) = if let Some(bounds) = states
-            .find(&new_state)
+            .find(new_state)
             .map(|idx| (idx as i64, (idx + new_state.len()) as i64))
         {
             bounds
         } else {
             let bounds = (states.len() as i64, (states.len() + new_state.len()) as i64);
-            states.push_str(&new_state);
+            states.push_str(new_state);
             bounds
         };
         Self { a, b }
@@ -91,17 +91,13 @@ impl StateEntry {
         }
     }
     fn try_from_existing_str(states: &str, state: &str) -> Option<Self> {
-        if let Some(bounds) = states
-            .find(&state)
+        states
+            .find(state)
             .map(|idx| (idx as i64, (idx + state.len()) as i64))
-        {
-            Some(Self {
+            .map(|bounds| Self {
                 a: bounds.0,
                 b: bounds.1,
             })
-        } else {
-            None
-        }
     }
 
     fn materialize(&self, states: &str) -> MaterializedState {
@@ -288,7 +284,7 @@ pub mod toolkit_experimental {
                         let start_interval = self.first_time - interval_start;
                         let start_state = &prev.durations.as_slice()[prev.last_state as usize]
                             .state
-                            .materialize(&prev.states_as_str());
+                            .materialize(prev.states_as_str());
 
                         // update durations
                         let state = match durations
@@ -772,7 +768,7 @@ pub fn duration_in<'a>(state: String, aggregate: Option<StateAgg<'a>>) -> crate:
     };
     duration_in_inner(
         aggregate.as_ref().and_then(|aggregate| {
-            StateEntry::try_from_existing_str(&aggregate.states_as_str(), &state)
+            StateEntry::try_from_existing_str(aggregate.states_as_str(), &state)
         }),
         aggregate,
     )

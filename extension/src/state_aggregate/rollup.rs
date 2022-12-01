@@ -100,11 +100,10 @@ impl OwnedStateAgg {
             "later aggregate must be non-empty"
         );
 
-        let later_states = String::from_utf8(later.states.iter().map(|x| *x).collect::<Vec<u8>>())
-            .expect("invalid later UTF-8 states");
+        let later_states =
+            String::from_utf8(later.states.to_vec()).expect("invalid later UTF-8 states");
         let mut merged_states =
-            String::from_utf8(earlier.states.iter().map(|x| *x).collect::<Vec<u8>>())
-                .expect("invalid earlier UTF-8 states");
+            String::from_utf8(earlier.states.to_vec()).expect("invalid earlier UTF-8 states");
         let mut merged_durations = earlier.durations.into_iter().collect::<Vec<_>>();
 
         let earlier_len = earlier.combined_durations.len();
@@ -166,7 +165,7 @@ impl OwnedStateAgg {
         OwnedStateAgg {
             states: merged_states,
             durations: merged_durations,
-            combined_durations: combined_durations,
+            combined_durations,
 
             first_time: earlier.first_time,
             last_time: later.last_time,

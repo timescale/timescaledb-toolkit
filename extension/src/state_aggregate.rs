@@ -778,7 +778,7 @@ pub fn interpolated_state_periods<'a>(
 #[derive(Clone, Debug, Deserialize, Eq, FlatSerializable, PartialEq, Serialize)]
 #[repr(C)]
 pub struct DurationInState {
-    duration: i64, // TODO BRIAN is i64 or u64 the right type
+    duration: i64,
     state_beg: u32,
     state_end: u32,
 }
@@ -786,8 +786,8 @@ pub struct DurationInState {
 #[derive(Clone, Debug, Deserialize, Eq, FlatSerializable, PartialEq, Serialize)]
 #[repr(C)]
 pub struct TimeInState {
-    start_time: i64, // TODO BRIAN is i64 or u64 the right type
-    end_time: i64,   // TODO BRIAN is i64 or u64 the right type
+    start_time: i64,
+    end_time: i64,
     state_beg: u32,
     state_end: u32,
 }

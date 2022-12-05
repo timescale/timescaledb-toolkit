@@ -26,6 +26,10 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
   This allows users to join two timevectors with the following semantics `timevectorA -> asof(timevectorB)`. This will return records with the LOCF value from timevectorA at the timestamps from timevectorB. Specifically the returned records contain, for each value in timevectorB, {the LOCF value from timevectorA, the value from timevectorB, the timestamp from timevectorB}.
 
+- [#609](https://github.com/timescale/timescaledb-toolkit/pull/609): New `approx_percentile_array()` function
+
+  Users can use the new `toolkit_experimental.approx_percentile_array(percentiles)` to generate an array of percentile results instead of having to call and rebuild the aggregate multiple times.
+  
 #### Bug fixes
 - [#644](https://github.com/timescale/timescaledb-toolkit/pull/644): Fix bug in Candlestick aggregate and reenable partial aggregation.
 

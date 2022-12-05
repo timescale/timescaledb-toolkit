@@ -6,8 +6,8 @@ use uddsketch::{SketchHashKey, UDDSketch as UddSketchInternal};
 
 use crate::{
     accessors::{
-        AccessorApproxPercentile, AccessorApproxPercentileRank, AccessorError, AccessorMean,
-        AccessorNumVals,
+        toolkit_experimental, AccessorApproxPercentile, AccessorApproxPercentileRank,
+        AccessorError, AccessorMean, AccessorNumVals,
     },
     aggregate_utils::in_aggregate_context,
     flatten,
@@ -74,7 +74,6 @@ pub fn percentile_agg_trans_inner(
     let default_max_error = PERCENTILE_AGG_DEFAULT_ERROR;
     uddsketch_trans_inner(state, default_size as _, default_max_error, value, fcinfo)
 }
-
 // PG function for merging sketches.
 #[pg_extern(immutable, parallel_safe)]
 pub fn uddsketch_combine(
@@ -582,6 +581,45 @@ pub fn uddsketch_approx_percentile<'a>(percentile: f64, sketch: UddSketch<'a>) -
     )
 }
 
+#[pg_operator(immutable)]
+#[opname(->)]
+pub fn arrow_uddsketch_approx_percentile_array<'a>(
+    sketch: UddSketch<'a>,
+    percentiles: toolkit_experimental::AccessorPercentileArray<'a>,
+) -> Vec<f64> {
+    approx_percentile_slice(percentiles.percentile.as_slice(), sketch)
+}
+
+// Approximate the value at the given approx_percentile (0.0-1.0) for each entry in an array
+#[pg_extern(
+    immutable,
+    schema = "toolkit_experimental",
+    name = "approx_percentile_array"
+)]
+pub fn uddsketch_approx_percentile_array<'a>(
+    percentiles: Vec<f64>,
+    sketch: UddSketch<'a>,
+) -> Vec<f64> {
+    approx_percentile_slice(&percentiles, sketch)
+}
+
+fn approx_percentile_slice<'a, 'b>(
+    percentiles: impl IntoIterator<Item = &'b f64>,
+    sketch: UddSketch<'a>,
+) -> Vec<f64> {
+    let mut results = Vec::new();
+    for percentile in percentiles {
+        results.push(uddsketch::estimate_quantile(
+            *percentile,
+            sketch.alpha,
+            uddsketch::gamma(sketch.alpha),
+            sketch.count,
+            sketch.keys().zip(sketch.counts()),
+        ))
+    }
+    results
+}
+
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_uddsketch_approx_rank<'a>(
@@ -918,6 +956,155 @@ mod tests {
             apx_eql(test_value.unwrap(), value.unwrap(), 0.0001);
             apx_eql(test_error.unwrap(), error.unwrap(), 0.000001);
             pct_eql(test_value.unwrap(), 9.0, test_error.unwrap());
+        });
+    }
+    #[pg_test]
+    fn test_approx_percentile_array() {
+        Spi::execute(|client| {
+            client.select(
+                "CREATE TABLE paa_test (device INTEGER, value DOUBLE PRECISION)",
+                None,
+                None,
+            );
+            client.select("INSERT INTO paa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
+
+            let sanity = client
+                .select("SELECT COUNT(*) FROM paa_test", None, None)
+                .first()
+                .get_one::<i32>();
+            assert_eq!(Some(1010), sanity);
+
+            client.select(
+                "CREATE VIEW uddsketch_test AS \
+                SELECT uddsketch(200, 0.001, value) as approx \
+                FROM paa_test ",
+                None,
+                None,
+            );
+
+            client.select(
+                "CREATE VIEW percentile_agg AS \
+                SELECT percentile_agg(value) as approx \
+                FROM paa_test",
+                None,
+                None,
+            );
+
+            let (value, error) = client
+                .select(
+                    "SELECT \
+                    toolkit_experimental.approx_percentile_array(array[0.9,0.5,0.2], approx), \
+                    error(approx) \
+                    FROM uddsketch_test",
+                    None,
+                    None,
+                )
+                .first()
+                .get_two::<Vec<f64>, f64>();
+
+            let (test_value, test_error) = client
+                .select(
+                    "SELECT \
+                    toolkit_experimental.approx_percentile_array(array[0.9,0.5,0.2], approx), \
+                    error(approx) \
+                    FROM percentile_agg",
+                    None,
+                    None,
+                )
+                .first()
+                .get_two::<Vec<f64>, f64>();
+            assert!(
+                test_value
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .zip(value.unwrap())
+                    .all(|(a, b)| { (a - b).abs() < 0.0001 }),
+                "Some Float value differs from expected by more than {}",
+                0.0001
+            );
+
+            apx_eql(test_error.unwrap(), error.unwrap(), 0.000001);
+            assert!(test_value
+                .unwrap()
+                .iter()
+                .zip(vec![9.0, 5.0, 2.0])
+                .all(|(a, b)| { matches!(pct_eql(*a, b, test_error.unwrap()), ()) }));
+        });
+    }
+
+    #[pg_test]
+    fn test_approx_percentile_array_arrow() {
+        Spi::execute(|client| {
+            client.select(
+                "CREATE TABLE paa_test (device INTEGER, value DOUBLE PRECISION)",
+                None,
+                None,
+            );
+            client.select("INSERT INTO paa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
+
+            let sanity = client
+                .select("SELECT COUNT(*) FROM paa_test", None, None)
+                .first()
+                .get_one::<i32>();
+            assert_eq!(Some(1010), sanity);
+
+            client.select(
+                "CREATE VIEW uddsketch_test AS \
+                SELECT uddsketch(200, 0.001, value) as approx \
+                FROM paa_test ",
+                None,
+                None,
+            );
+
+            client.select(
+                "CREATE VIEW percentile_agg AS \
+                SELECT percentile_agg(value) as approx \
+                FROM paa_test",
+                None,
+                None,
+            );
+
+            let (value, error) = client
+                .select(
+                    "SELECT \
+                    toolkit_experimental.approx_percentile_array(array[0.9,0.5,0.2], approx), \
+                    error(approx) \
+                    FROM uddsketch_test",
+                    None,
+                    None,
+                )
+                .first()
+                .get_two::<Vec<f64>, f64>();
+
+            let (test_value_arrow, test_error_arrow) = client
+                .select(
+                    "SELECT approx->toolkit_experimental.approx_percentiles(array[0.9,0.5,0.2]), \
+        	     error(approx) \
+                    FROM uddsketch_test",
+                    None,
+                    None,
+                )
+                .first()
+                .get_two::<Vec<f64>, f64>();
+
+            assert!(
+                test_value_arrow
+                    .as_ref()
+                    .unwrap()
+                    .iter()
+                    .zip(value.as_ref().unwrap())
+                    .all(|(a, b)| { (a - b).abs() < 0.0001 }),
+                "Some Float value differs from expected by more than {}",
+                0.0001
+            );
+
+            apx_eql(test_error_arrow.unwrap(), error.unwrap(), 0.000001);
+            assert!(test_value_arrow
+                .unwrap()
+                .iter()
+                .zip(vec![9.0, 5.0, 2.0])
+                .all(|(a, b)| { matches!(pct_eql(*a, b, test_error_arrow.unwrap()), ()) }));
         });
     }
 

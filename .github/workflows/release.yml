@@ -10,8 +10,9 @@ on:
         type: string
         required: false
         default: main
+      # TODO Make this harder to screw up by making a checkbox.
       dry-run:
-        description: '-n for dry-run, -y to really release'
+        description: '-n for dry-run, -push to really release'
         type: string
         required: false
         default: -n

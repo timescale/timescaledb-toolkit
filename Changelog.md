@@ -30,6 +30,8 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
   Users can use the new `toolkit_experimental.approx_percentile_array(percentiles)` to generate an array of percentile results instead of having to call and rebuild the aggregate multiple times.
   
+- [#638](https://github.com/timescale/timescaledb-toolkit/pull/638): Introducing Time Vector Templates.
+
 #### Bug fixes
 - [#644](https://github.com/timescale/timescaledb-toolkit/pull/644): Fix bug in Candlestick aggregate and reenable partial aggregation.
 

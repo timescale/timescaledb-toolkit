@@ -43,11 +43,12 @@ rand = { version = "0.8.3", features = ["getrandom", "small_rng"] }
 rand_distr = "0.4.0"
 rand_chacha = "0.3.0"
 ron="0.6.0"
+tera = { version = "1.17.0", default-features = false }
 twofloat = { version = "0.6.0", features = ["serde"] }
 num-traits = "0.2.15"
 
-pest = "2.1"
-pest_derive = "2.1"
+pest = "=2.3.0"
+pest_derive = "=2.3.0"
 
 spfunc = "0.1.0"
 statrs = "0.15.0"

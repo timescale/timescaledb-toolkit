@@ -32,6 +32,9 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
   
 - [#636](https://github.com/timescale/timescaledb-toolkit/pull/636): New `timeline_agg` aggregate, which is similar to `state_agg` but tracks the entire state timeline instead of just the duration in each state.
 
+- [#640](https://github.com/timescale/timescaledb-toolkit/pull/640): Support `rollup` for `state_agg` and `timeline_agg`.
+- [#640](https://github.com/timescale/timescaledb-toolkit/pull/640): Support integer states for `state_agg` and `timeline_agg`.
+
 - [#638](https://github.com/timescale/timescaledb-toolkit/pull/638): Introducing Time Vector Templates.
 
 #### Bug fixes

@@ -30,6 +30,13 @@ INSERT INTO states_test_4 VALUES
     ('2020-01-01 00:01:00+00', 2),
     ('2020-01-01 00:01:03+00', 51351),
     ('2020-01-01 00:02:00+00', -9);
+CREATE TABLE states_test_5(ts TIMESTAMPTZ, state BIGINT);
+INSERT INTO states_test_5 VALUES
+    ('2020-01-01 00:00:00+00', 4),
+    ('2020-01-01 00:00:11+00', 51351),
+    ('2020-01-01 00:01:00+00', 2),
+    ('2020-01-01 00:02:03+00', 51351),
+    ('2020-01-01 00:02:05+00', -9);
 ```
 
 ## Functions
@@ -417,4 +424,24 @@ FROM buckets;
 (START,"2020-01-01 00:00:00+00","2020-01-01 00:00:11+00")
    (OK,"2020-01-01 00:00:11+00","2020-01-01 00:02:00+00")
  (STOP,"2020-01-01 00:02:00+00","2020-01-01 00:02:00+00")
+```
+
+```SQL
+WITH buckets AS (SELECT
+    date_trunc('minute', ts) as dt,
+    toolkit_experimental.timeline_agg(ts, state) AS sa
+FROM states_test_5
+GROUP BY date_trunc('minute', ts)
+HAVING date_trunc('minute', ts) != '2020-01-01 00:01:00+00'::timestamptz)
+SELECT toolkit_experimental.state_int_timeline(
+    toolkit_experimental.rollup(buckets.sa)
+)
+FROM buckets;
+```
+```output
+                      state_timeline
+-----------------------------------------------------------
+    (4,"2020-01-01 00:00:00+00","2020-01-01 00:00:11+00")
+(51351,"2020-01-01 00:00:11+00","2020-01-01 00:02:05+00")
+   (-9,"2020-01-01 00:02:05+00","2020-01-01 00:02:05+00")
 ```

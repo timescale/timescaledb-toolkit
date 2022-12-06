@@ -353,6 +353,7 @@ pub fn state_agg_rollup_combine(
     }
 }
 
+#[allow(clippy::redundant_clone)] // clone is needed so we don't mutate shared memory
 pub fn state_agg_rollup_combine_inner(
     state1: Option<Inner<RollupTransState>>,
     state2: Option<Inner<RollupTransState>>,
@@ -361,11 +362,25 @@ pub fn state_agg_rollup_combine_inner(
     unsafe {
         in_aggregate_context(fcinfo, || match (state1, state2) {
             (None, None) => None,
-            (Some(x), None) => Some(x),
-            (None, Some(x)) => Some(x),
-            (Some(mut x), Some(mut y)) => {
-                x.values.append(&mut y.values);
-                Some(x.into())
+            (Some(x), None) => Some(x.clone().into()),
+            (None, Some(x)) => Some(x.clone().into()),
+            (Some(x), Some(y)) => {
+                let from_timeline_agg = x.from_timeline_agg;
+                assert_eq!(
+                    from_timeline_agg, y.from_timeline_agg,
+                    "trying to merge state and timeline aggs, this should be unreachable"
+                );
+                let values = x
+                    .values
+                    .iter()
+                    .chain(y.values.iter())
+                    .map(Clone::clone)
+                    .collect::<Vec<_>>();
+                let trans_state = RollupTransState {
+                    values,
+                    from_timeline_agg,
+                };
+                Some(trans_state.clone().into())
             }
         })
     }

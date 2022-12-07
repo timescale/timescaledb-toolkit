@@ -619,20 +619,29 @@ fn counter_agg_extrapolated_delta<'a>(summary: CounterSummary<'a>, method: &str)
     }
 }
 
-#[pg_extern(
-    name = "interpolated_delta",
-    immutable,
-    parallel_safe,
-    schema = "toolkit_experimental"
-)]
+// Public facing interpolated_delta
+extension_sql!(
+    "\n\
+     CREATE FUNCTION toolkit_experimental.interpolated_delta(summary countersummary,\n\
+          start timestamptz,\n\
+          duration interval,\n\
+          prev countersummary,\n\
+          next countersummary) RETURNS DOUBLE PRECISION\n\
+     AS $$\n\
+          SELECT interpolated_delta(summary,start,duration,prev,next) $$ LANGUAGE SQL IMMUTABLE PARALLEL SAFE;\n\
+",
+    name = "experimental_interpolated_delta", requires=[counter_agg_interpolated_delta]
+);
+
+#[pg_extern(name = "interpolated_delta", immutable, parallel_safe)]
 fn counter_agg_interpolated_delta<'a>(
     summary: CounterSummary<'a>,
     start: crate::raw::TimestampTz,
-    interval: crate::raw::Interval,
+    duration: crate::raw::Interval,
     prev: Option<CounterSummary<'a>>,
     next: Option<CounterSummary<'a>>,
 ) -> f64 {
-    let interval = crate::datum_utils::interval_to_ms(&start, &interval);
+    let interval = crate::datum_utils::interval_to_ms(&start, &duration);
     summary
         .interpolate(start.into(), interval, prev, next)
         .to_internal_counter_summary()
@@ -659,20 +668,30 @@ fn counter_agg_extrapolated_rate<'a>(summary: CounterSummary<'a>, method: &str) 
     }
 }
 
-#[pg_extern(
-    name = "interpolated_rate",
-    immutable,
-    parallel_safe,
-    schema = "toolkit_experimental"
-)]
+// Public facing interpolated_rate
+extension_sql!(
+    "\n\
+     CREATE FUNCTION toolkit_experimental.interpolated_rate(summary countersummary,\n\
+          start timestamptz,\n\
+          duration interval,\n\
+          prev countersummary,\n\
+          next countersummary) RETURNS DOUBLE PRECISION\n\
+     AS $$\n\
+          SELECT interpolated_rate(summary,start,duration,prev,next) $$ LANGUAGE SQL IMMUTABLE PARALLEL SAFE;\n\
+",
+    name = "experimental_interpolated_rate",
+    requires = [counter_agg_interpolated_rate]
+);
+
+#[pg_extern(name = "interpolated_rate", immutable, parallel_safe)]
 fn counter_agg_interpolated_rate<'a>(
     summary: CounterSummary<'a>,
     start: crate::raw::TimestampTz,
-    interval: crate::raw::Interval,
+    duration: crate::raw::Interval,
     prev: Option<CounterSummary<'a>>,
     next: Option<CounterSummary<'a>>,
 ) -> Option<f64> {
-    let interval = crate::datum_utils::interval_to_ms(&start, &interval);
+    let interval = crate::datum_utils::interval_to_ms(&start, &duration);
     summary
         .interpolate(start.into(), interval, prev, next)
         .to_internal_counter_summary()
@@ -1332,9 +1351,75 @@ mod tests {
             assert_eq!(deltas.next().unwrap()[1].value(), Some(35. + 30. - 27.5));
             assert!(deltas.next().is_none());
 
+            // test that the non experimental version also returns the same result
+            let mut deltas = client.select(
+                r#"SELECT
+                interpolated_delta(
+                    agg,
+                    bucket,
+                    '1 day'::interval, 
+                    LAG(agg) OVER (ORDER BY bucket), 
+                    LEAD(agg) OVER (ORDER BY bucket)
+                ) FROM (
+                    SELECT bucket, counter_agg(time, value) as agg 
+                    FROM test 
+                    GROUP BY bucket
+                ) s
+                ORDER BY bucket"#,
+                None,
+                None,
+            );
+
+            // Day 1, start at 10, interpolated end of day is 10 (after reset), reset at 40 and 20
+            assert_eq!(
+                deltas.next().unwrap()[1].value(),
+                Some(10. + 40. + 20. - 10.)
+            );
+            // Day 2, interpolated start is 10, interpolated end is 27.5, reset at 50
+            assert_eq!(deltas.next().unwrap()[1].value(), Some(27.5 + 50. - 10.));
+            // Day 3, interpolated start is 27.5, end is 35, reset at 30
+            assert_eq!(deltas.next().unwrap()[1].value(), Some(35. + 30. - 27.5));
+            assert!(deltas.next().is_none());
+
             let mut rates = client.select(
                 r#"SELECT
                 toolkit_experimental.interpolated_rate(
+                    agg,
+                    bucket,
+                    '1 day'::interval, 
+                    LAG(agg) OVER (ORDER BY bucket), 
+                    LEAD(agg) OVER (ORDER BY bucket)
+                ) FROM (
+                    SELECT bucket, counter_agg(time, value) as agg 
+                    FROM test 
+                    GROUP BY bucket
+                ) s
+                ORDER BY bucket"#,
+                None,
+                None,
+            );
+
+            // Day 1, 14 hours (rate is per second)
+            assert_eq!(
+                rates.next().unwrap()[1].value(),
+                Some((10. + 40. + 20. - 10.) / (14. * 60. * 60.))
+            );
+            // Day 2, 24 hours
+            assert_eq!(
+                rates.next().unwrap()[1].value(),
+                Some((27.5 + 50. - 10.) / (24. * 60. * 60.))
+            );
+            // Day 3, 16 hours
+            assert_eq!(
+                rates.next().unwrap()[1].value(),
+                Some((35. + 30. - 27.5) / (16. * 60. * 60.))
+            );
+
+            // test that the non experimental version also returns the same result
+            assert!(rates.next().is_none());
+            let mut rates = client.select(
+                r#"SELECT
+                interpolated_rate(
                     agg,
                     bucket,
                     '1 day'::interval, 

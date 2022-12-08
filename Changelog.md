@@ -37,6 +37,8 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 - [#638](https://github.com/timescale/timescaledb-toolkit/pull/638): Introducing Time Vector Templates.
 
+Users can use the new experimental function `toolkit_experimental.to_text(timevector(time, value),format_string)` to render a formatted text representation of their time vector series. These changes also include `toolkit_experimental.to_plotly(timevector(time, value))`, which will render your time vector series in a format suitable for use with plotly.
+
 #### Bug fixes
 - [#644](https://github.com/timescale/timescaledb-toolkit/pull/644): Fix bug in Candlestick aggregate and reenable partial aggregation.
 

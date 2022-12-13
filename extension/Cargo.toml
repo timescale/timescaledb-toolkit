@@ -11,13 +11,14 @@ default = ["pg14"]
 pg12 = ["pgx/pg12", "pgx-tests/pg12"]
 pg13 = ["pgx/pg13", "pgx-tests/pg13"]
 pg14 = ["pgx/pg14", "pgx-tests/pg14"]
+pg15 = ["pgx/pg15", "pgx-tests/pg15"]
 pg_test = ["approx"]
 
 [dependencies]
 # Keep synchronized with `cargo install --version N.N.N cargo-pgx` in Readme.md and docker/ci/Dockerfile
 # Also `pgx-tests` down below in `dev-dependencies`.
-pgx = "=0.5.4"
-pgx-macros = "=0.5.4"
+pgx = "=0.6.1"
+pgx-macros = "=0.6.1"
 encodings = {path="../crates/encodings"}
 flat_serialize = {path="../crates/flat_serialize/flat_serialize"}
 flat_serialize_macro = {path="../crates/flat_serialize/flat_serialize_macro"}
@@ -54,5 +55,5 @@ spfunc = "0.1.0"
 statrs = "0.15.0"
 
 [dev-dependencies]
-pgx-tests = "=0.5.4"
+pgx-tests = "=0.6.1"
 approx = "0.4.0"

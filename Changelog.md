@@ -43,6 +43,7 @@ Users can use the new experimental function `toolkit_experimental.to_text(timeve
 - [#644](https://github.com/timescale/timescaledb-toolkit/pull/644): Fix bug in Candlestick aggregate and reenable partial aggregation.
 
 #### Other notable changes
+- [#646](https://github.com/timescale/timescaledb-toolkit/pull/646): Added experimental support for PostgreSQL 15.
 
 #### Shout-outs
 

@@ -23,7 +23,7 @@ jobs:
       image: ${{ inputs.container-image || 'timescaledev/toolkit-builder:debian-11-amd64' }}
     strategy:
       matrix:
-        pgversion: [12, 13, 14]
+        pgversion: [12, 13, 14, 15]
     env:
       # TODO Why?  Cargo default is to pass `-C incremental` to rustc; why don't we want that?
       #   https://doc.rust-lang.org/rustc/codegen-options/index.html#incremental
@@ -68,9 +68,13 @@ jobs:
       run: su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-extension 2>&1'
 
     - name: Run doc tests
+      # TODO: remove this once TimescaleDB supports PostgreSQL 15: issue #648
+      if: ${{ matrix.pgversion != 15 }}
       run: su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-doc 2>&1'
 
     - name: Run binary update tests
+      # TODO: remove this once TimescaleDB supports PostgreSQL 15: issue #648
+      if: ${{ matrix.pgversion != 15 }}
       run: |
         su postgres -c 'OS_NAME=debian OS_VERSION=11 tools/testbin -version no -bindir / -pgversions ${{ matrix.pgversion }} ci 2>&1'
 

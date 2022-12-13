@@ -131,9 +131,12 @@ EOF
                 yum -q -y install \
                     postgresql$pg-devel \
                     postgresql$pg-server \
-                    timescaledb-2-postgresql-$pg
                 # We install as user postgres, so that needs write access to these.
                 chown $BUILDER_USERNAME $PG_BASE$pg/lib $PG_BASE$pg/share/extension
+            done
+            for pg in $TSDB_PG_VERSIONS; do
+                yum -q -y install \
+                    timescaledb-2-postgresql-$pg
             done
 
             gem install fpm -v $FPM_VERSION -N
@@ -192,10 +195,13 @@ EOF
             apt-get -qq install \
                     postgresql-$pg \
                     postgresql-server-dev-$pg
-            # timescaledb packages Recommend toolkit, which we don't want here.
-            apt-get -qq install --no-install-recommends timescaledb-2-postgresql-$pg
             # We install as user postgres, so that needs write access to these.
             chown $BUILDER_USERNAME $PG_BASE$pg/lib /usr/share/postgresql/$pg/extension
+        done
+
+        for pg in $TSDB_PG_VERSIONS; do
+            # timescaledb packages Recommend toolkit, which we don't want here.
+            apt-get -qq install --no-install-recommends timescaledb-2-postgresql-$pg
         done
 
         # Ubuntu is the only system we want an image for that sticks an extra

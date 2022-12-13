@@ -8,6 +8,8 @@
 #![allow(clippy::needless_lifetimes)]
 // triggered by pg_extern macros
 #![allow(clippy::useless_conversion)]
+// caused by pgx
+#![allow(clippy::unnecessary_lazy_evaluations)]
 
 pub mod accessors;
 pub mod asap;

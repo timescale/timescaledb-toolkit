@@ -7,14 +7,16 @@
 # All our automation scripts read this, so at least we're not duplicating this
 # information across all those.
 
-PG_VERSIONS='12 13 14'
+PG_VERSIONS='12 13 14 15'
+# TODO: remove this once TimescaleDB supports PostgreSQL 15: issue #648
+TSDB_PG_VERSIONS='12 13 14'
 
 CARGO_EDIT=0.11.2
 
 # Keep synchronized with extension/Cargo.toml and `cargo install --version N.N.N cargo-pgx` in Readme.md .
-PGX_VERSION=0.5.4
+PGX_VERSION=0.6.1
 
-RUST_TOOLCHAIN=1.60.0
+RUST_TOOLCHAIN=1.63.0
 RUST_PROFILE=minimal
 RUST_COMPONENTS=clippy,rustfmt
 

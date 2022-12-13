@@ -2,7 +2,7 @@ use crate::{m3, m4, FloatLike, StatsError, INV_FLOATING_ERROR_THRESHOLD};
 use serde::{Deserialize, Serialize};
 use twofloat::TwoFloat;
 
-#[derive(Debug, PartialEq, Copy, Clone, Serialize, Deserialize)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone, Serialize, Deserialize)]
 #[repr(C)]
 pub struct StatsSummary1D<T: FloatLike> {
     pub n: u64,

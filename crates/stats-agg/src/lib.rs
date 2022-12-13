@@ -30,7 +30,7 @@ pub enum StatsError {
     DoubleOverflow,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct XYPair<T: FloatLike> {
     pub x: T,
     pub y: T,

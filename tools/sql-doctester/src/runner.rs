@@ -115,7 +115,7 @@ pub fn run_tests<OnErr: FnMut(Test, TestError)>(
                     (stateless_db.map(|s| Cow::Borrowed(&**s)), None)
                 }
                 false => {
-                    let (db_name, deferred) = start_db(&*tests.name);
+                    let (db_name, deferred) = start_db(&tests.name);
                     (Some(Cow::Owned(db_name)), Some(deferred))
                 }
             };

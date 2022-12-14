@@ -955,7 +955,7 @@ pub fn arrow_stats1d_stddev<'a>(
     accessor: AccessorStdDev<'a>,
 ) -> Option<f64> {
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats1d_stddev(sketch, &*method)
+    stats1d_stddev(sketch, &method)
 }
 
 #[pg_extern(name = "stddev", immutable, parallel_safe)]
@@ -976,7 +976,7 @@ pub fn arrow_stats1d_variance<'a>(
     accessor: AccessorVariance<'a>,
 ) -> Option<f64> {
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats1d_variance(sketch, &*method)
+    stats1d_variance(sketch, &method)
 }
 
 #[pg_extern(name = "variance", immutable, parallel_safe)]
@@ -997,7 +997,7 @@ pub fn arrow_stats1d_skewness<'a>(
     accessor: AccessorSkewness<'a>,
 ) -> Option<f64> {
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats1d_skewness(sketch, &*method)
+    stats1d_skewness(sketch, &method)
 }
 
 #[pg_extern(name = "skewness", immutable, parallel_safe)]
@@ -1018,7 +1018,7 @@ pub fn arrow_stats1d_kurtosis<'a>(
     accessor: AccessorKurtosis<'a>,
 ) -> Option<f64> {
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats1d_kurtosis(sketch, &*method)
+    stats1d_kurtosis(sketch, &method)
 }
 
 #[pg_extern(name = "kurtosis", immutable, parallel_safe)]
@@ -1109,7 +1109,7 @@ pub fn arrow_stats2d_stdddev_x<'a>(
     accessor: AccessorStdDevX<'a>,
 ) -> Option<f64> {
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats2d_stddev_x(sketch, &*method)
+    stats2d_stddev_x(sketch, &method)
 }
 
 #[pg_extern(name = "stddev_x", immutable, parallel_safe)]
@@ -1130,7 +1130,7 @@ pub fn arrow_stats2d_stdddev_y<'a>(
     accessor: AccessorStdDevY<'a>,
 ) -> Option<f64> {
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats2d_stddev_y(sketch, &*method)
+    stats2d_stddev_y(sketch, &method)
 }
 
 #[pg_extern(name = "stddev_y", immutable, parallel_safe)]
@@ -1151,7 +1151,7 @@ pub fn arrow_stats2d_variance_x<'a>(
     accessor: AccessorVarianceX<'a>,
 ) -> Option<f64> {
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats2d_variance_x(sketch, &*method)
+    stats2d_variance_x(sketch, &method)
 }
 
 #[pg_extern(name = "variance_x", immutable, parallel_safe)]
@@ -1172,7 +1172,7 @@ pub fn arrow_stats2d_variance_y<'a>(
     accessor: AccessorVarianceY<'a>,
 ) -> Option<f64> {
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats2d_variance_y(sketch, &*method)
+    stats2d_variance_y(sketch, &method)
 }
 
 #[pg_extern(name = "variance_y", immutable, parallel_safe)]
@@ -1193,7 +1193,7 @@ pub fn arrow_stats2d_skewness_x<'a>(
     accessor: AccessorSkewnessX<'a>,
 ) -> Option<f64> {
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats2d_skewness_x(sketch, &*method)
+    stats2d_skewness_x(sketch, &method)
 }
 
 #[pg_extern(name = "skewness_x", strict, immutable, parallel_safe)]
@@ -1214,7 +1214,7 @@ pub fn arrow_stats2d_skewness_y<'a>(
     accessor: AccessorSkewnessY<'a>,
 ) -> Option<f64> {
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats2d_skewness_y(sketch, &*method)
+    stats2d_skewness_y(sketch, &method)
 }
 
 #[pg_extern(name = "skewness_y", strict, immutable, parallel_safe)]
@@ -1235,7 +1235,7 @@ pub fn arrow_stats2d_kurtosis_x<'a>(
     accessor: AccessorKurtosisX<'a>,
 ) -> Option<f64> {
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats2d_kurtosis_x(sketch, &*method)
+    stats2d_kurtosis_x(sketch, &method)
 }
 
 #[pg_extern(name = "kurtosis_x", strict, immutable, parallel_safe)]
@@ -1256,7 +1256,7 @@ pub fn arrow_stats2d_kurtosis_y<'a>(
     accessor: AccessorKurtosisY<'a>,
 ) -> Option<f64> {
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats2d_kurtosis_y(sketch, &*method)
+    stats2d_kurtosis_y(sketch, &method)
 }
 
 #[pg_extern(name = "kurtosis_y", strict, immutable, parallel_safe)]
@@ -1361,7 +1361,7 @@ pub fn arrow_stats2d_covar<'a>(
     accessor: AccessorCovar<'a>,
 ) -> Option<f64> {
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats2d_covar(sketch, &*method)
+    stats2d_covar(sketch, &method)
 }
 
 #[pg_extern(name = "covariance", immutable, parallel_safe)]

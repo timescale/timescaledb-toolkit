@@ -707,7 +707,7 @@ pub fn space_saving_combine_inner(
 ) -> Option<Inner<SpaceSavingTransState>> {
     unsafe {
         in_aggregate_context(fcinfo, || match (a, b) {
-            (Some(a), Some(b)) => Some(SpaceSavingTransState::combine(&*a, &*b).into()),
+            (Some(a), Some(b)) => Some(SpaceSavingTransState::combine(&a, &b).into()),
             (Some(a), None) => Some(a.clone().into()),
             (None, Some(b)) => Some(b.clone().into()),
             (None, None) => None,

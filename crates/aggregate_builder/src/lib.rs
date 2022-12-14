@@ -646,7 +646,7 @@ impl AggregateFn {
 
         let inner_arg_signatures = expanded_args.iter().map(|arg| &arg.rust);
 
-        let return_type_check = state_type_check_tokens(&*ret_type(ret), Some(()));
+        let return_type_check = state_type_check_tokens(&ret_type(ret), Some(()));
 
         // use different variables for these to ensure the type-check is called
         let input_var = syn::Ident::new("__inner", input_ty.span());
@@ -783,7 +783,7 @@ impl AggregateFn {
         let input_ty = &*args[0].rust.ty;
         let state_type_check = refstate_type_check_tokens(input_ty, None);
 
-        let return_type_check = bytea_type_check_tokens(&*ret_type(ret));
+        let return_type_check = bytea_type_check_tokens(&ret_type(ret));
 
         let inner_arg_signatures = args.iter().map(|arg| &arg.rust);
 
@@ -841,9 +841,9 @@ impl AggregateFn {
 
         let state_name = arg_ident(&args[0]);
 
-        let state_type_check = bytea_type_check_tokens(&*args[0].rust.ty);
+        let state_type_check = bytea_type_check_tokens(&args[0].rust.ty);
 
-        let return_type_check = state_type_check_tokens(&*ret_type(ret), None);
+        let return_type_check = state_type_check_tokens(&ret_type(ret), None);
 
         // use different variables for these to ensure the type-check is called
         let result_var = syn::Ident::new("result", ret_type(ret).span());
@@ -900,10 +900,10 @@ impl AggregateFn {
         let a_name = arg_ident(&args[0]);
         let b_name = arg_ident(&args[1]);
 
-        let state_type_check_a = refstate_type_check_tokens(&*args[0].rust.ty, Some(()));
-        let state_type_check_b = refstate_type_check_tokens(&*args[1].rust.ty, Some(()));
+        let state_type_check_a = refstate_type_check_tokens(&args[0].rust.ty, Some(()));
+        let state_type_check_b = refstate_type_check_tokens(&args[1].rust.ty, Some(()));
 
-        let return_type_check = state_type_check_tokens(&*ret_type(ret), Some(()));
+        let return_type_check = state_type_check_tokens(&ret_type(ret), Some(()));
         let inner_arg_signatures = args.iter().map(|arg| &arg.rust);
 
         // use different variables for these to ensure the type-check is called

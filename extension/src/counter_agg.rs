@@ -606,7 +606,7 @@ pub fn arrow_counter_agg_extrapolated_delta<'a>(
     accessor: AccessorExtrapolatedDelta<'a>,
 ) -> Option<f64> {
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    counter_agg_extrapolated_delta(sketch, &*method)
+    counter_agg_extrapolated_delta(sketch, &method)
 }
 
 #[pg_extern(name = "extrapolated_delta", strict, immutable, parallel_safe)]
@@ -646,7 +646,7 @@ pub fn arrow_counter_agg_extrapolated_rate<'a>(
     accessor: AccessorExtrapolatedRate<'a>,
 ) -> Option<f64> {
     let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    counter_agg_extrapolated_rate(sketch, &*method)
+    counter_agg_extrapolated_rate(sketch, &method)
 }
 
 #[pg_extern(name = "extrapolated_rate", strict, immutable, parallel_safe)]

@@ -39,7 +39,7 @@ pub fn extract_tests_from_string(s: &str, file_stem: &str) -> TestFile {
                 heading_stack.truncate(level as usize - 1);
                 let mut header = "`".to_string();
                 consume_text_until!(parser yields Event::End(Heading(..)) =>
-                    |text: CowStr| header.push_str(&*text)
+                    |text: CowStr| header.push_str(&text)
                 );
                 header.truncate(header.trim_end().len());
                 header.push('`');
@@ -93,7 +93,7 @@ pub fn extract_tests_from_string(s: &str, file_stem: &str) -> TestFile {
 
                 // consume the lines of the test
                 consume_text_until!(parser yields Event::End(CodeBlock(Fenced(..))) =>
-                    |text: CowStr| test.text.push_str(&*text)
+                    |text: CowStr| test.text.push_str(&text)
                 );
 
                 // search to see if we have output

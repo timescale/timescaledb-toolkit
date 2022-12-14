@@ -843,9 +843,7 @@ mod tests {
     fn test_merge_sorted_against_skewed_distro() {
         let t = TDigest::new_with_size(100);
         let mut values: Vec<f64> = (1..=600_000).map(f64::from).collect();
-        for _ in 0..400_000 {
-            values.push(1_000_000.0);
-        }
+        values.resize(values.len() + 400_000, 1_000_000.0);
 
         let t = t.merge_sorted(values);
 
@@ -871,9 +869,7 @@ mod tests {
     fn test_merge_unsorted_against_skewed_distro() {
         let t = TDigest::new_with_size(100);
         let mut values: Vec<f64> = (1..=600_000).map(f64::from).collect();
-        for _ in 0..400_000 {
-            values.push(1_000_000.0);
-        }
+        values.resize(values.len() + 400_000, 1_000_000.0);
 
         let t = t.merge_unsorted(values);
 

@@ -327,6 +327,8 @@ Add two new lines to `bundles.yaml` containing the new version tag:
   tag: $VERSION
 ```
 
+And update `.github/build_bundles.py` if new pgx is required.
+
 - [ ] Copy Changelog.md entries for this release into
   [github release](https://github.com/timescale/timescaledb-toolkit/releases/tag/$VERSION)
 

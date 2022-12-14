@@ -141,18 +141,14 @@ impl Parse for FlatSerializeField {
         // TODO switch to `drain_filter()` once stable
         let path = flat_serialize_attr_path("flatten");
         let mut use_trait = false;
-        field.attrs = field
-            .attrs
-            .into_iter()
-            .filter(|attr| {
-                let is_flatten = attr.path == path;
-                if is_flatten {
-                    use_trait = true;
-                    return false;
-                }
-                true
-            })
-            .collect();
+        field.attrs.retain(|attr| {
+            let is_flatten = attr.path == path;
+            if is_flatten {
+                use_trait = true;
+                return false;
+            }
+            true
+        });
         let mut length_info = None;
         if input.peek(Token![if]) {
             let _: Token![if] = input.parse()?;

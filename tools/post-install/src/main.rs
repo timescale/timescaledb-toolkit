@@ -306,7 +306,7 @@ fn get_quoted_field(line: &str) -> &str {
 
 fn open_file(path: impl AsRef<Path>) -> BufReader<File> {
     let path = path.as_ref();
-    let file = File::open(&path)
+    let file = File::open(path)
         .unwrap_or_else(|e| panic!("cannot open file `{}` due to {}", path.to_string_lossy(), e,));
     BufReader::new(file)
 }

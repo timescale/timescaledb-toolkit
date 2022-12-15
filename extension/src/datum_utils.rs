@@ -328,7 +328,7 @@ impl<'a, 'de> Deserialize<'de> for DatumStore<'a> {
             {
                 let oid = seq.next_element::<Oid>().unwrap().unwrap(); // TODO: error handling
 
-                // TODO seperate human-readable and binary forms
+                // TODO separate human-readable and binary forms
                 let mut reader = DatumFromSerializedTextReader::from_oid(oid);
 
                 let mut data = vec![];

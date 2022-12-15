@@ -161,7 +161,7 @@ macro_rules! pg_type_impl {
                     use flat_serialize::FlatSerializable as _;
                     unsafe {
                         let len = self.num_bytes();
-                        // valena tyes have a maximum size
+                        // valena types have a maximum size
                         if len > 0x3FFFFFFF {
                             pgx::error!("size {} bytes is to large", len)
                         }
@@ -336,7 +336,7 @@ macro_rules! do_serialize {
             let allocated_size = our_size + 4; // size of our data + the varlena header
             let allocated_size = allocated_size.try_into()
                 .unwrap_or_else(|e| pgx::error!("serialization error {}", e));
-            // valena tyes have a maximum size
+            // valena types have a maximum size
             if allocated_size > 0x3FFFFFFF {
                 pgx::error!("size {} bytes is to large", allocated_size)
             }

@@ -1,7 +1,7 @@
 
 # Info dump on rolling average APIs #
 
-Rolling averages are currntly nasty to do with with timescaledb (user complaint https://news.ycombinator.com/item?id=27051005).  In our timevector API we will eventually provide a function like
+Rolling averages are currently nasty to do with with timescaledb (user complaint https://news.ycombinator.com/item?id=27051005).  In our timevector API we will eventually provide a function like
 ```SQL , ignore
 moving_average(window => '30 minutes', slide => '5 minutes', data)
 ```
@@ -25,7 +25,7 @@ FROM data
 GROUP BY bucket
 WINDOW thirty_minutes as (ORDER BY ts RANGE '30 minutes' PRECEDING);
 ```
-However, this once again runs into postgres limitations: we need to aggregate over the `value` column in order for this to query to be correctly executed; the `rolling_average()` executes strictly after the `GROUP BY`, and will only see things within its 5-minute group. To fix this issue we need a seperate aggregation step. First we'll aggregate the data into 5-minute summaries, then we'll re-aggregate over 30-minute windows of summaries
+However, this once again runs into postgres limitations: we need to aggregate over the `value` column in order for this to query to be correctly executed; the `rolling_average()` executes strictly after the `GROUP BY`, and will only see things within its 5-minute group. To fix this issue we need a separate aggregation step. First we'll aggregate the data into 5-minute summaries, then we'll re-aggregate over 30-minute windows of summaries
 ```SQL , ignore
 SELECT
     time_bucket('5 minutes'::interval, time) as bucket,
@@ -75,9 +75,9 @@ FROM (
     WINDOW thirty_minutes as (ORDER BY time_bucket('5 minutes'::interval, ts) RANGE '30 minutes' PRECEDING)
 ) aggs;
 ```
-since in real world, and all our documentation, we expect to see multi-statistic queries, we plan to optimize for readability in this case, and have seperate rollup and query steps.
+since in real world, and all our documentation, we expect to see multi-statistic queries, we plan to optimize for readability in this case, and have separate rollup and query steps.
 
-Seperating out the re-aggregation step also allows for more powerful composition, for instance:
+Separating out the re-aggregation step also allows for more powerful composition, for instance:
 ```SQL , ignore
 SELECT
     bucket,

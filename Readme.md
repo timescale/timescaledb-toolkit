@@ -54,7 +54,7 @@ Next you need [cargo-pgx](https://github.com/tcdi/pgx), which can be installed w
 cargo install --version '=0.6.1' --force cargo-pgx
 ```
 
-You must reinstall cargo-pgx whenver you update your Rust compiler, since cargo-pgx needs to be built with the same compiler as Toolkit.
+You must reinstall cargo-pgx whenever you update your Rust compiler, since cargo-pgx needs to be built with the same compiler as Toolkit.
 
 Finally, setup the pgx development environment with
 
@@ -78,7 +78,7 @@ cargo pgx install --release && \
 cargo run --manifest-path ../tools/post-install/Cargo.toml -- pg_config
 ```
 
-To initialize the extension afer installation, star enter the following into `psql`:
+To initialize the extension atfer installation, enter the following into `psql`:
 ```
 CREATE EXTENSION timescaledb_toolkit;
 ```

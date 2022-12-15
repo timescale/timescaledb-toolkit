@@ -207,7 +207,7 @@ impl TDigest {
     }
 
     pub fn format_for_postgres(&self) -> String {
-        /// Mimicks the version-1 serialization format the extension uses.  TODO don't!
+        /// Mimics the version-1 serialization format the extension uses.  TODO don't!
         #[derive(Serialize)]
         struct Hack {
             version: u32,

@@ -25,7 +25,7 @@ Current syntax looks something like like
 
     // the remaining items are optional
 
-    // parallel-safety marker if desireable
+    // parallel-safety marker if desirable
     const PARALLEL_SAFE: bool = true;
 
     fn serialize(state: &State) -> bytea {

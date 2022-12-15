@@ -1,5 +1,5 @@
 // based on https://github.com/stanford-futuredata/ASAP/blob/8b39db4bc92590cbe5b44ddace9b7bb1d677248b/ASAP-optimized.js
-// orginal copyright notice as follows
+// original copyright notice as follows
 //
 // Free FFT and convolution (JavaScript)
 //

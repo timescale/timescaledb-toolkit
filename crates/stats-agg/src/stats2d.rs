@@ -672,7 +672,7 @@ impl<T: FloatLike> StatsSummary2D<T> {
         Some(-self.intercept()? / self.slope()?)
     }
 
-    /// returns the square of the correlation coefficent (aka the coefficient of determination)
+    /// returns the square of the correlation coefficient (aka the coefficient of determination)
     pub fn determination_coeff(&self) -> Option<T> {
         if self.n == 0 || self.sx2 == T::zero() {
             return None;

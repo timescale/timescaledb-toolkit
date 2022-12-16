@@ -235,7 +235,7 @@ Users can use the new experimental function `toolkit_experimental.to_text(timeve
 - [#399](https://github.com/timescale/timescaledb-toolkit/pull/399): Allow manual packaging.
 - [#405](https://github.com/timescale/timescaledb-toolkit/pull/405): Update CI to rust 1.60.
 - [#407](https://github.com/timescale/timescaledb-toolkit/pull/407): Update postgres versions in ci Dockerfile.
-- [#409](https://github.com/timescale/timescaledb-toolkit/pull/409): Make depencencies version explicit in our CI image.
+- [#409](https://github.com/timescale/timescaledb-toolkit/pull/409): Make dependencies version explicit in our CI image.
 - [#404](https://github.com/timescale/timescaledb-toolkit/pull/404): Refactor TimeVector to greatly simplify structure.
 - [#412](https://github.com/timescale/timescaledb-toolkit/pull/412): Allow building CI image in Actions.
 - [#411](https://github.com/timescale/timescaledb-toolkit/pull/411), [#413](https://github.com/timescale/timescaledb-toolkit/pull/413): Create reportpackagingfailures.yml for reporting packaging failures not from CI builds.

@@ -123,7 +123,7 @@ delta(
 ) RETURNS TimevectorPipelineElement
 ```
 
-This element will return a new timevector where each point is the difference between the current and preceeding value in the input timevector.  The new series will be one point shorter as it will not have a preceding value to return a delta for the first point.
+This element will return a new timevector where each point is the difference between the current and preceding value in the input timevector.  The new series will be one point shorter as it will not have a preceding value to return a delta for the first point.
 
 ### Required Arguments <a id="timevector_pipeline_delta-arguments"></a>
 |Name| Type |Description|

@@ -417,7 +417,7 @@ impl<'input, T: 'input> Slice<'input, T> {
     {
         match self {
             Slice::Iter(_) => panic!("cannot convert iterator to slice without mutating"),
-            Slice::Slice(s) => *s,
+            Slice::Slice(s) => s,
             Slice::Owned(o) => o,
         }
     }
@@ -427,7 +427,7 @@ impl<'input, T: 'input> Slice<'input, T> {
         T: Clone + FlatSerializable<'input>,
     {
         match self {
-            Slice::Slice(s) => *s,
+            Slice::Slice(s) => s,
             _ => panic!("cannot convert to slice without mutating"),
         }
     }
@@ -468,7 +468,7 @@ where
     fn clone(&self) -> Self {
         match self {
             Slice::Iter(i) => Slice::Iter(*i),
-            Slice::Slice(s) => Slice::Slice(*s),
+            Slice::Slice(s) => Slice::Slice(s),
             Slice::Owned(v) => Slice::Owned(Vec::clone(v)),
         }
     }
@@ -704,7 +704,7 @@ impl<T: ?Sized> ValOrRef<T> for T {
 
 impl<T: ?Sized> ValOrRef<T> for &T {
     fn to_ref(&self) -> &T {
-        *self
+        self
     }
 }
 

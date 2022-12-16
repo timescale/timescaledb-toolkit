@@ -299,7 +299,7 @@ pub fn hyperloglog_union_inner(
             };
             let other = unflatten_log(other);
             if state.logger.buildhasher.type_id != other.buildhasher.type_id {
-                error!("missmatched types")
+                error!("mismatched types")
             }
             // TODO error on mismatched collation?
             state.logger.merge_in(&other);

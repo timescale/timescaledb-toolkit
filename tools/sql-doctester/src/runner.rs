@@ -115,7 +115,7 @@ pub fn run_tests<OnErr: FnMut(Test, TestError)>(
                     (stateless_db.map(|s| Cow::Borrowed(&**s)), None)
                 }
                 false => {
-                    let (db_name, deferred) = start_db(&*tests.name);
+                    let (db_name, deferred) = start_db(&tests.name);
                     (Some(Cow::Owned(db_name)), Some(deferred))
                 }
             };
@@ -245,7 +245,7 @@ fn stringify_table(table: &[Vec<String>]) -> String {
     let mut width = vec![0; table[0].len()];
     for row in table {
         // Ensure that we have width for every column
-        // TODO this shouldn't be needed, but somtimes is?
+        // TODO this shouldn't be needed, but sometimes is?
         if width.len() < row.len() {
             width.extend((0..row.len() - width.len()).map(|_| 0));
         }

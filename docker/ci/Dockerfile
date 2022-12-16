@@ -2,7 +2,7 @@ ARG ARCH
 ARG OS_NAME
 ARG OS_VERSION
 
-# Without DockerKit, this doesn't work, even though documetation suggests it should.
+# Without DockerKit, this doesn't work, even though documentation suggests it should.
 # With DockerKit, TARGETARCH is supposed to come in for free, but that doesn't work either.
 FROM --platform=${ARCH} ${OS_NAME}:${OS_VERSION} AS toolkit-base
 

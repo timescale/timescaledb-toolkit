@@ -84,7 +84,7 @@ fn rbound_inclusive(flags: u8) -> bool {
 // 1.51. `DiskOption<...>` is `repr(C, u64)` and thus does have a well-defined
 // layout: 8 bytes for the tag-bit determining if it's `None` or `Some` followed
 // by `size_of::<T>()` bytes in which the type can be stored.
-// Before stabalization we should probably change the layout to
+// Before stabilization we should probably change the layout to
 // ```
 // flat_serialize! {
 //     is_some: bool,

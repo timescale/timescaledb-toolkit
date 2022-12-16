@@ -654,7 +654,7 @@ FROM (
 ```
 ---
 # **Counting functions** <a id="counter-agg-api-counting"></a>
-The counting functions comprise several accessor functions that calculate the number of times a certain thing occured while calculating the [`counter_agg`](#counter-agg-point).
+The counting functions comprise several accessor functions that calculate the number of times a certain thing occurred while calculating the [`counter_agg`](#counter-agg-point).
 
 ---
 ## **num_changes()** <a id="counter-agg-num-changes"></a>
@@ -882,7 +882,7 @@ The time at which the counter value is predicted to have been zero based on the 
 
 |Column|Type|Description|
 |---|---|---|
-| `counter_zero_time` | `TIMESTAMPTZ` | The time at which the counter value is predicted to have been zero based onthe least squares fit of the points input to the `CounterSummary`|
+| `counter_zero_time` | `TIMESTAMPTZ` | The time at which the counter value is predicted to have been zero based on the least squares fit of the points input to the `CounterSummary`|
 <br>
 
 ### Sample Usage <a id="counter-agg-counter-zero-time-sample"></a>

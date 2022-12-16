@@ -125,7 +125,7 @@ impl CountMinSketch {
     /// that the estimate will exceed the true count beyond the epsilon error
     /// term.
     ///
-    /// To accomodate this result, the sketch will have a width of ⌈e/ε⌉ and a
+    /// To accommodate this result, the sketch will have a width of ⌈e/ε⌉ and a
     /// depth of ⌈ln(1/δ)⌉.
     pub fn with_prob(epsilon: f64, delta: f64) -> Self {
         assert!(0.0 < epsilon && epsilon < 1.0);

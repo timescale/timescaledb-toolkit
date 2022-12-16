@@ -768,7 +768,7 @@ mod tests {
             // FIXME this doesn't work yet
             let (a, b) = client
                 .select(
-                    &*format!(
+                    &format!(
                         "SELECT \
                     '{}'::UnstableTimevectorPipeline::Text, \
                     '{}'::UnstableTimevectorPipeline::Text",

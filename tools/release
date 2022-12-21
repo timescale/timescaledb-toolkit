@@ -12,7 +12,7 @@
 # 7a. Update upgradeable_form in control file.
 # 7b. Set toolkit version to released version with '-dev' appended.
 # 7c. Update Changelog.md .
-# 7d. Push to main (if -push).
+# 7d. Push to post-$VERSION branch (if -push).
 # 8. File issue for release tasks that are not yet automated (if -push).
 
 # [1] We need a self-hosted runner for arm64 build, which we can only get with
@@ -302,9 +302,9 @@ fi
 $nop git show
 
 if $push; then
-    # 7d. Push to main.
-    # TODO Create a pull request instead?
-    $nop git push origin main
+    # 7d. Push to post-$VERSION branch.
+    $nop git push origin post-$VERSION
+    # TODO Create a pull request for it.
 
     # 8. File issue for release tasks that are not yet automated.
     $nop gh issue create -R timescale/timescaledb-toolkit -F- -t "Release $VERSION" <<EOF
@@ -326,6 +326,8 @@ Add two new lines to `bundles.yaml` containing the new version tag:
 - repository: https://github.com/timescale/timescaledb-toolkit
   tag: $VERSION
 ```
+
+And update `.github/build_bundles.py` if new pgx is required.
 
 - [ ] Copy Changelog.md entries for this release into
   [github release](https://github.com/timescale/timescaledb-toolkit/releases/tag/$VERSION)

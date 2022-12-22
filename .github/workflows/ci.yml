@@ -22,6 +22,7 @@ jobs:
     container:
       image: ${{ inputs.container-image || 'timescaledev/toolkit-builder:debian-11-amd64' }}
     strategy:
+      fail-fast: false
       matrix:
         pgversion: [12, 13, 14, 15]
     env:

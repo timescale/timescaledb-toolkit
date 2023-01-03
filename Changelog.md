@@ -6,6 +6,12 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 ## [1.13.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.13.0) (2022-12-13)
 
+**Full Changelog**:
+
+- [#664](https://github.com/timescale/timescaledb-toolkit/pull/664) Support PostgreSQL 15.
+
+## [1.13.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.13.0) (2022-12-13)
+
 #### New experimental features
 - [#615](https://github.com/timescale/timescaledb-toolkit/pull/615): Heartbeat aggregate
 
@@ -46,10 +52,6 @@ Users can use the new experimental function `toolkit_experimental.to_text(timeve
 #### Other notable changes
 - [#646](https://github.com/timescale/timescaledb-toolkit/pull/646): Added experimental support for PostgreSQL 15.
 - [#621](https://github.com/timescale/timescaledb-toolkit/pull/621): Rocky Linux 9 support
-
-#### Shout-outs
-
-**Full Changelog**: [TODO]
 
 ## [1.12.1](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.12.1) (2022-11-17)
 

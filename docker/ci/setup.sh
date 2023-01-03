@@ -101,7 +101,6 @@ if $privileged; then
             # - make
             # - pkg-config
             yum -q -y install \
-                curl \
                 gcc \
                 git \
                 make \

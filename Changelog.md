@@ -7,6 +7,18 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 ## Next Release (Date TBD)
 
 #### New experimental features
+
+#### Bug fixes
+
+#### Other notable changes
+
+#### Shout-outs
+
+**Full Changelog**: [TODO]
+
+## [1.13.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.13.0) (2022-12-13)
+
+#### New experimental features
 - [#615](https://github.com/timescale/timescaledb-toolkit/pull/615): Heartbeat aggregate
 
   Users can use the new `heartbeat_agg(timestamp, start_time, agg_interval, heartbeat_interval)` to track the liveness of a system in the range (`start_time`, `start_time` + `agg_interval`). Each timestamp seen in that range is assumed to indicate system liveness for the following `heartbeat_interval`.
@@ -48,8 +60,6 @@ Users can use the new experimental function `toolkit_experimental.to_text(timeve
 - [#621](https://github.com/timescale/timescaledb-toolkit/pull/621): Rocky Linux 9 support
 
 #### Shout-outs
-
-**Full Changelog**: [TODO]
 
 ## [1.12.1](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.12.1) (2022-11-17)
 

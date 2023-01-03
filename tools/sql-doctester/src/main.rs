@@ -1,5 +1,4 @@
 use std::{
-    borrow::Cow,
     collections::HashMap,
     ffi::OsStr,
     fs,
@@ -28,20 +27,6 @@ fn main() {
                 .takes_value(true),
         )
         .arg(Arg::new("DB").short('d').long("database").takes_value(true))
-        .arg(
-            Arg::new("START_SCRIPT")
-                .short('s')
-                .long("startup-script")
-                .takes_value(true)
-                .conflicts_with("START_FILE"),
-        )
-        .arg(
-            Arg::new("START_FILE")
-                .short('f')
-                .long("startup-file")
-                .takes_value(true)
-                .conflicts_with("START_SCRIPT"),
-        )
         .arg(Arg::new("INPUT").takes_value(true))
         .mut_arg("help", |_h| Arg::new("help").long("help"))
         .get_matches();
@@ -56,13 +41,7 @@ fn main() {
         database: matches.value_of("DB"),
     };
 
-    let startup_script = match matches.value_of("START_SCRIPT") {
-        Some(script) => Some(Cow::Borrowed(script)),
-        None => matches.value_of("START_FILE").map(|file| {
-            let contents = fs::read_to_string(file).expect("cannot read script file");
-            Cow::Owned(contents)
-        }),
-    };
+    let startup_script = include_str!("startup.sql");
 
     let all_tests = extract_tests(dirname);
 

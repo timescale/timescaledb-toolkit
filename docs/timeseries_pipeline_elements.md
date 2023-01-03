@@ -31,12 +31,6 @@ For this example let start with a table of temperatures collected from different
 ```SQL ,non-transactional,ignore-output
 SET TIME ZONE 'UTC';
 CREATE TABLE test_data(time TIMESTAMPTZ, device INTEGER, temperature DOUBLE PRECISION);
-
--- random function
-CREATE SEQUENCE rand START 567;
-CREATE FUNCTION test_random() RETURNS float AS
-    'SELECT ((nextval(''rand'')*34567)%1000)::float/1000'
-LANGUAGE SQL;
 ```
 
 In order to have some nominally interesting data to look at, let's populate this table with random data covering 30 days of readings over 10 devices.

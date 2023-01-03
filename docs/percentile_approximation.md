@@ -22,11 +22,6 @@ CREATE TABLE response_times (
 );
 -- and we'll make it a hypertable for ease of use in the rest of the example
 SELECT create_hypertable('response_times', 'ts');
--- utilities for generating random numbers
-CREATE SEQUENCE rand START 567;
-CREATE FUNCTION test_random() RETURNS float AS
-    'SELECT ((nextval(''rand'')*34567)%1000)::float/1000'
-LANGUAGE SQL;
 ```
 <details> <a id="data-generation"></a>
     <summary> We'll also generate some data to work with here. And insert it into the table (expand for the generation script if you want to see it). </summary>

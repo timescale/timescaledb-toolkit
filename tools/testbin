@@ -98,6 +98,14 @@ skip_from_version() {
 
 # Requires:
 # - FROM_VERSION
+# - PG_VERSION
+skip_from_version_pg_version() {
+    # skip versions without PG15 binaries
+    [ $PG_VERSION -gt 14 ] && [ `cmp_version $FROM_VERSION` -lt 011301 ] && return
+}
+
+# Requires:
+# - FROM_VERSION
 deb_start_test() {
     skip_from_version && return 1
     cmp_version=`cmp_version $FROM_VERSION`
@@ -105,6 +113,7 @@ deb_start_test() {
 
     [ $cmp_version -ge $MIN_DEB_EPOCH ] && EPOCH=1:
     for PG_VERSION in $PG_VERSIONS; do
+        skip_from_version_pg_version && continue
         select_pg $PG_VERSION
         deb=timescaledb-toolkit-postgresql-${PG_VERSION}=${EPOCH}${FROM_VERSION}~${OS_NAME}${OS_VERSION}
         $nop sudo apt-get -qq install $deb || die
@@ -118,6 +127,7 @@ test_deb() {
     for FROM_VERSION; do
         deb_start_test || continue
         for PG_VERSION in $PG_VERSIONS; do
+            skip_from_version_pg_version && continue
             select_pg $PG_VERSION
             deb=timescaledb-toolkit-postgresql-${PG_VERSION}_${TOOLKIT_VERSION}~${OS_NAME}${OS_VERSION}_${ARCH}.deb
             $nop sudo dpkg -i "$BINDIR/$deb"
@@ -139,6 +149,7 @@ test_ci() {
     for FROM_VERSION; do
         deb_start_test || continue
         for PG_VERSION in $PG_VERSIONS; do
+            skip_from_version_pg_version && continue
             select_pg $PG_VERSION
             $nop sudo dpkg -P timescaledb-toolkit-postgresql-$PG_VERSION
             # Installing (and possibly uninstalling) toolkit binary gives this back to root but we need to write to it.
@@ -155,6 +166,7 @@ test_rpm() {
     for FROM_VERSION; do
         skip_from_version && continue
         for PG_VERSION in $PG_VERSIONS; do
+            skip_from_version_pg_version && continue
             select_pg $PG_VERSION
             rpm=timescaledb-toolkit-postgresql-$PG_VERSION
             # yum doesn't seem to allow force-install of a specific version.
@@ -167,6 +179,7 @@ test_rpm() {
             start_test
         done
         for PG_VERSION in $PG_VERSIONS; do
+            skip_from_version_pg_version && continue
             select_pg $PG_VERSION
             rpm=timescaledb-toolkit-postgresql-$PG_VERSION-$TOOLKIT_VERSION-0.el$OS_VERSION.$ARCH.rpm
             $nop sudo rpm -U "$BINDIR/$rpm"

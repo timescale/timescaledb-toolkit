@@ -27,18 +27,16 @@ SELECT create_hypertable('response_times', 'ts');
     <summary> We'll also generate some data to work with here. And insert it into the table (expand for the generation script if you want to see it). </summary>
 
 ```SQL , non-transactional, ignore-output
-SELECT setseed(0.43); -- do this to make sure we get the same random number for each run so the results are the same
-
 WITH apis as MATERIALIZED (SELECT generate_series(1, 12) as api_id),
 users as MATERIALIZED (SELECT generate_series(1, 30) as user_id),
 api_users as MATERIALIZED (SELECT * FROM apis JOIN users on api_id % 3 = user_id % 3),  -- users use ~ 1/3 of apis
 times as MATERIALIZED (SELECT generate_series('2020-01-01'::timestamptz, '2020-01-02'::timestamptz, '1 minute'::interval) as ts),
 raw_joined as MATERIALIZED (SELECT * from api_users CROSS JOIN times ORDER BY api_id, user_id, ts),
 generated_data as MATERIALIZED (
-SELECT ts + '5 min'::interval * random() as ts,
+SELECT ts + '5 min'::interval * test_random() as ts,
     api_id,
     user_id,
-    10 * api_id * user_id   / (1+(extract(hour FROM ts)::int % api_id)) * random() as response_time
+    10 * api_id * user_id   / (1+(extract(hour FROM ts)::int % api_id)) * test_random() as response_time
 FROM raw_joined
 ORDER BY api_id, user_id, ts)
 
@@ -65,23 +63,23 @@ GROUP BY 1, 2
 ORDER BY 3 DESC LIMIT 15;
 ```
 ```output, precision(2: 7)
-         bucket         | api_id |      avg      |    median
-------------------------+--------+---------------+--------------
- 2020-01-01 00:00:00+00 |     12 |  963.71332589 | 718.523974458
- 2020-01-01 12:00:00+00 |     12 | 960.321550984 | 702.553342115
- 2020-01-01 00:00:00+00 |     11 | 869.080106405 | 672.323915584
- 2020-01-01 11:00:00+00 |     11 | 812.398067226 | 601.097789543
- 2020-01-01 22:00:00+00 |     11 | 807.601702923 |   588.4594427
- 2020-01-01 09:00:00+00 |      9 | 734.571525228 | 568.587417008
- 2020-01-01 18:00:00+00 |      9 |  729.74167841 | 579.954580675
- 2020-01-01 10:00:00+00 |     10 |  706.33545502 | 530.221293445
- 2020-01-01 20:00:00+00 |     10 |  703.37743915 | 547.222908361
- 2020-01-01 00:00:00+00 |      9 | 699.838199982 | 512.966472958
- 2020-01-01 00:00:00+00 |     10 | 693.538069163 | 520.245282353
- 2020-01-02 00:00:00+00 |     11 | 664.649986691 | 526.017052809
- 2020-01-01 08:00:00+00 |      8 | 614.010225183 | 450.329133442
- 2020-01-01 16:00:00+00 |      8 | 600.166598131 | 448.352142719
- 2020-01-01 00:00:00+00 |      8 | 598.260875149 | 430.921181959
+         bucket        | api_id |      avg      |    median
+-----------------------+--------+---------------+--------------
+2020-01-01 00:00:00+00 | 12     | 993.878689655 | 751.68
+2020-01-01 12:00:00+00 | 12     |      948.4199 |  714.6
+2020-01-01 00:00:00+00 | 11     | 848.218549223 |    638
+2020-01-01 22:00:00+00 | 11     | 824.517045075 | 606.32
+2020-01-01 11:00:00+00 | 11     | 824.277392027 | 603.79
+2020-01-01 00:00:00+00 |  9     | 739.073793103 | 562.95
+2020-01-01 00:00:00+00 | 10     | 731.558894646 |  547.5
+2020-01-01 18:00:00+00 |  9     | 724.052854758 | 536.22
+2020-01-01 09:00:00+00 |  9     | 719.944816054 | 529.74
+2020-01-01 20:00:00+00 | 10     | 696.328870432 |  500.8
+2020-01-01 10:00:00+00 | 10     | 694.303472454 |  507.5
+2020-01-01 00:00:00+00 |  8     | 622.262145329 | 466.56
+2020-01-01 08:00:00+00 |  8     | 597.849434276 | 437.12
+2020-01-01 16:00:00+00 |  8     | 597.591488294 | 433.92
+2020-01-02 00:00:00+00 | 11     | 583.857241379 | 383.35
  ```
 
 So, this returns some interesting results, maybe something like what those of you who read over our [data generation](#data-generation) code would expect. Given how we generate the data, we expect that the larger `api_ids` will have longer generated response times but that it will be cyclic with `hour % api_id`, so we can see that here.
@@ -89,8 +87,7 @@ So, this returns some interesting results, maybe something like what those of yo
 But what happens if we introduce some aberrant data points? They could have come from anywhere, maybe a user ran a weird query, maybe there's an odd bug in the code that causes some timings to get multiplied in an odd code path, who knows, here we'll introduce just 10 outlier points out of half a million:
 
 ```SQL , non-transactional, ignore-output
-SELECT setseed(0.43); --make sure we've got a consistent seed so the output is consistent.
-WITH rand_points as (SELECT ts, api_id, user_id FROM response_times ORDER BY random() LIMIT 10)
+WITH rand_points as (SELECT ts, api_id, user_id FROM response_times ORDER BY test_random() LIMIT 10)
 UPDATE response_times SET response_time_ms = 10000 * response_time_ms WHERE (ts, api_id, user_id) IN (SELECT * FROM rand_points);
 ```
 ```SQL
@@ -107,21 +104,21 @@ ORDER BY 3 DESC LIMIT 15;
 ```output, precision(2: 7)
          bucket         | api_id |      avg      |     median
 ------------------------+--------+---------------+---------------
- 2020-01-01 09:00:00+00 |      9 | 11508.5077421 | 568.587417008
- 2020-01-01 13:00:00+00 |     11 | 11406.1365163 | 218.613331575
- 2020-01-01 00:00:00+00 |      8 | 10795.1549884 | 430.921181959
- 2020-01-01 02:00:00+00 |     11 | 6982.65943397 | 231.997136085
- 2020-01-01 21:00:00+00 |      8 | 4166.71533182 | 80.9020478838
- 2020-01-01 12:00:00+00 |      5 | 1417.81186885 | 97.1619017291
- 2020-01-01 18:00:00+00 |     12 |   1382.216682 | 110.607063032
- 2020-01-01 19:00:00+00 |      9 | 1152.86960635 | 300.074082831
- 2020-01-01 23:00:00+00 |      6 | 1025.71057197 | 68.2470801603
- 2020-01-01 00:00:00+00 |     12 |  963.71332589 | 718.523974458
- 2020-01-01 12:00:00+00 |     12 | 960.321550984 | 702.553342115
- 2020-01-01 00:00:00+00 |     11 | 869.080106405 | 672.323915584
- 2020-01-01 11:00:00+00 |     11 | 812.398067226 | 601.097789543
- 2020-01-01 22:00:00+00 |     11 | 807.601702923 |   588.4594427
- 2020-01-01 18:00:00+00 |      9 |  729.74167841 | 579.954580675
+2020-01-01 14:00:00+00  |  1     | 1658.34585977 |  53.46
+2020-01-01 06:00:00+00  |  1     | 1226.37258765 |  53.77
+2020-01-01 23:00:00+00  |  1     |     1224.1063 |  53.55
+2020-01-01 00:00:00+00  | 12     | 993.878689655 | 751.68
+2020-01-01 11:00:00+00  |  1     | 961.352933333 |  53.76
+2020-01-01 12:00:00+00  | 12     |      948.4199 |  714.6
+2020-01-01 00:00:00+00  | 11     | 848.218549223 |    638
+2020-01-01 21:00:00+00  |  1     | 846.309280936 |  52.92
+2020-01-01 04:00:00+00  |  1     | 845.378981636 |  54.78
+2020-01-01 22:00:00+00  | 11     | 824.517045075 | 606.32
+2020-01-01 11:00:00+00  | 11     | 824.277392027 | 603.79
+2020-01-01 00:00:00+00  |  9     | 739.073793103 | 562.95
+2020-01-01 00:00:00+00  | 10     | 731.558894646 |  547.5
+2020-01-01 18:00:00+00  |  9     | 724.052854758 | 536.22
+2020-01-01 09:00:00+00  |  9     | 719.944816054 | 529.74
  ```
 
 Now, `avg` is giving horribly misleading results and not showing us the underlying patterns in our data anymore. But if I order by the `median` instead:
@@ -138,21 +135,21 @@ ORDER BY 4 DESC, 2, 1 LIMIT 15;
 ```output, precision(2: 7)
          bucket         | api_id |      avg      |    median
 ------------------------+--------+---------------+---------------
- 2020-01-01 00:00:00+00 |     12 |  963.71332589 | 718.523974458
- 2020-01-01 12:00:00+00 |     12 | 960.321550984 | 702.553342115
- 2020-01-01 00:00:00+00 |     11 | 869.080106405 | 672.323915584
- 2020-01-01 11:00:00+00 |     11 | 812.398067226 | 601.097789543
- 2020-01-01 22:00:00+00 |     11 | 807.601702923 |   588.4594427
- 2020-01-01 18:00:00+00 |      9 |  729.74167841 | 579.954580675
- 2020-01-01 09:00:00+00 |      9 | 11508.5077421 | 568.587417008
- 2020-01-01 20:00:00+00 |     10 |  703.37743915 | 547.222908361
- 2020-01-01 10:00:00+00 |     10 |  706.33545502 | 530.221293445
- 2020-01-02 00:00:00+00 |     11 | 664.649986691 | 526.017052809
- 2020-01-01 00:00:00+00 |     10 | 693.538069163 | 520.245282353
- 2020-01-01 00:00:00+00 |      9 | 699.838199982 | 512.966472958
- 2020-01-01 08:00:00+00 |      8 | 614.010225183 | 450.329133442
- 2020-01-01 16:00:00+00 |      8 | 600.166598131 | 448.352142719
- 2020-01-01 00:00:00+00 |      8 | 10795.1549884 | 430.921181959
+2020-01-01 00:00:00+00  | 12     | 993.878689655 | 751.68
+2020-01-01 12:00:00+00  | 12     |      948.4199 |  714.6
+2020-01-01 00:00:00+00  | 11     | 848.218549223 |    638
+2020-01-01 22:00:00+00  | 11     | 824.517045075 | 606.32
+2020-01-01 11:00:00+00  | 11     | 824.277392027 | 603.79
+2020-01-01 00:00:00+00  |  9     | 739.073793103 | 562.95
+2020-01-01 00:00:00+00  | 10     | 731.558894646 |  547.5
+2020-01-01 18:00:00+00  |  9     | 724.052854758 | 536.22
+2020-01-01 09:00:00+00  |  9     | 719.944816054 | 529.74
+2020-01-01 10:00:00+00  | 10     | 694.303472454 |  507.5
+2020-01-01 20:00:00+00  | 10     | 696.328870432 |  500.8
+2020-01-01 00:00:00+00  |  8     | 622.262145329 | 466.56
+2020-01-01 08:00:00+00  |  8     | 597.849434276 | 437.12
+2020-01-01 16:00:00+00  |  8     | 597.591488294 | 433.92
+2020-01-01 01:00:00+00  | 12     | 511.567512521 | 390.24
  ```
  I can see the pattern in my data again! The median was much better at dealing with outliers than `avg` was, and percentiles in general are much less noisy. This becomes even more obvious where we might want to measure the worst case scenario for users. So we might want to use the `max`, but often the 99th percentile value gives a better representation of the *likely* worst outcome for users than the max response time, which might be due to unrealistic parameters, an error, or some other non-representative condition. The maximum response time becomes something useful for engineers to investigate, ie to find errors or other weird outlier use cases, but less useful for, say, measuring overall user experience and how it changes over time. Both are useful for different circumstances, but often the 95th or 99th or other percentile outcome becomes the design parameter and what we measure success against.
 
@@ -179,22 +176,22 @@ ORDER BY 5 DESC LIMIT 15;
 ```output, precision(2: 7)
          bucket         | api_id |      avg      |  true_median  | approx_median
 ------------------------+--------+---------------+---------------+---------------
- 2020-01-01 00:00:00+00 |     12 |  963.71332589 | 718.523974458 | 717.572650369
- 2020-01-01 12:00:00+00 |     12 | 960.321550984 | 702.553342115 | 694.973827589
- 2020-01-01 00:00:00+00 |     11 | 869.080106405 | 672.323915584 | 673.086719213
- 2020-01-01 22:00:00+00 |     11 | 807.601702923 |   588.4594427 | 592.217599089
- 2020-01-01 11:00:00+00 |     11 | 812.398067226 | 601.097789543 | 592.217599089
- 2020-01-01 18:00:00+00 |      9 |  729.74167841 | 579.954580675 | 592.217599089
- 2020-01-01 09:00:00+00 |      9 | 11508.5077421 | 568.587417008 | 573.566636623
- 2020-01-01 20:00:00+00 |     10 |  703.37743915 | 547.222908361 | 555.503056905
- 2020-01-01 10:00:00+00 |     10 |  706.33545502 | 530.221293445 | 538.008361239
- 2020-01-02 00:00:00+00 |     11 | 664.649986691 | 526.017052809 | 525.842421172
- 2020-01-01 00:00:00+00 |     10 | 693.538069163 | 520.245282353 | 521.064633515
- 2020-01-01 00:00:00+00 |      9 | 699.838199982 | 512.966472958 | 521.064633515
- 2020-01-01 08:00:00+00 |      8 | 614.010225183 | 450.329133442 | 444.021967419
- 2020-01-01 16:00:00+00 |      8 | 600.166598131 | 448.352142719 | 444.021967419
- 2020-01-01 00:00:00+00 |      8 | 10795.1549884 | 430.921181959 | 430.038193446
- ```
+2020-01-01 00:00:00+00  | 12     | 993.878689655 | 751.68        | 764.998764437
+2020-01-01 12:00:00+00  | 12     |      948.4199 |  714.6        | 717.572650369
+2020-01-01 00:00:00+00  | 11     | 848.218549223 |    638        | 631.358694271
+2020-01-01 22:00:00+00  | 11     | 824.517045075 | 606.32        | 611.475044532
+2020-01-01 11:00:00+00  | 11     | 824.277392027 | 603.79        | 611.475044532
+2020-01-01 00:00:00+00  |  9     | 739.073793103 | 562.95        | 573.566636623
+2020-01-01 00:00:00+00  | 10     | 731.558894646 |  547.5        | 555.503056905
+2020-01-01 18:00:00+00  |  9     | 724.052854758 | 536.22        | 538.008361239
+2020-01-01 09:00:00+00  |  9     | 719.944816054 | 529.74        | 538.008361239
+2020-01-01 20:00:00+00  | 10     | 696.328870432 |  500.8        | 504.654521865
+2020-01-01 10:00:00+00  | 10     | 694.303472454 |  507.5        | 504.654521865
+2020-01-01 00:00:00+00  |  8     | 622.262145329 | 466.56        | 473.368454447
+2020-01-01 08:00:00+00  |  8     | 597.849434276 | 437.12        | 444.021967419
+2020-01-01 16:00:00+00  |  8     | 597.591488294 | 433.92        | 444.021967419
+2020-01-01 01:00:00+00  | 12     | 511.567512521 | 390.24        | 390.674211779
+```
 Pretty darn close! We can definitely still see the patterns in the data. Note that the calling conventions are a bit different for ours, partially because it's no longer an [ordered set aggregate](), and partially because we use [two-step aggregation](), see the [API documentation]() below for exactly how to use.
 
 The approximation algorithms can provide better performance than algorithms that need the whole sorted data set, especially on very large data sets that can't be easily sorted in memory. Not only that, but they are able to be incorporated into [continuous aggregates](), because they have partializable forms, can be used in [parallel]() and [partitionwise]() aggregation. They are used very frequently in continuous aggregates as that's where they give the largest benefit over the usual Postgres percentile algorithms, which can't be used at all because they require the entire ordered data set to function.
@@ -226,21 +223,21 @@ ORDER BY 4 DESC, 2, 1 LIMIT 15;
 ```output, precision(2: 7)
          bucket         | api_id |      avg      | approx_median
 ------------------------+--------+---------------+---------------
- 2020-01-01 00:00:00+00 |     12 |  963.71332589 | 717.572650369
- 2020-01-01 12:00:00+00 |     12 | 960.321550984 | 694.973827589
- 2020-01-01 00:00:00+00 |     11 | 869.080106405 | 673.086719213
- 2020-01-01 18:00:00+00 |      9 |  729.74167841 | 592.217599089
- 2020-01-01 11:00:00+00 |     11 | 812.398067226 | 592.217599089
- 2020-01-01 22:00:00+00 |     11 | 807.601702923 | 592.217599089
- 2020-01-01 09:00:00+00 |      9 | 11508.5077421 | 573.566636623
- 2020-01-01 20:00:00+00 |     10 |  703.37743915 | 555.503056905
- 2020-01-01 10:00:00+00 |     10 |  706.33545502 | 538.008361239
- 2020-01-02 00:00:00+00 |     11 | 664.649986691 | 525.842421172
- 2020-01-01 00:00:00+00 |      9 | 699.838199982 | 521.064633515
- 2020-01-01 00:00:00+00 |     10 | 693.538069163 | 521.064633515
- 2020-01-01 08:00:00+00 |      8 | 614.010225183 | 444.021967419
- 2020-01-01 16:00:00+00 |      8 | 600.166598131 | 444.021967419
- 2020-01-01 00:00:00+00 |      8 | 10795.1549884 | 430.038193446
+2020-01-01 00:00:00+00  | 12     | 993.878689655 | 764.998764437
+2020-01-01 12:00:00+00  | 12     |      948.4199 | 717.572650369
+2020-01-01 00:00:00+00  | 11     | 848.218549223 | 631.358694271
+2020-01-01 11:00:00+00  | 11     | 824.277392027 | 611.475044532
+2020-01-01 22:00:00+00  | 11     | 824.517045075 | 611.475044532
+2020-01-01 00:00:00+00  |  9     | 739.073793103 | 573.566636623
+2020-01-01 00:00:00+00  | 10     | 731.558894646 | 555.503056905
+2020-01-01 09:00:00+00  |  9     | 719.944816054 | 538.008361239
+2020-01-01 18:00:00+00  |  9     | 724.052854758 | 538.008361239
+2020-01-01 10:00:00+00  | 10     | 694.303472454 | 504.654521865
+2020-01-01 20:00:00+00  | 10     | 696.328870432 | 504.654521865
+2020-01-01 00:00:00+00  |  8     | 622.262145329 | 473.368454447
+2020-01-01 08:00:00+00  |  8     | 597.849434276 | 444.021967419
+2020-01-01 16:00:00+00  |  8     | 597.591488294 | 444.021967419
+2020-01-01 00:00:00+00  |  6     | 500.610103448 | 390.674211779
 ```
 
 So, that's nifty, and much faster, especially for large data sets. But what's even cooler is I can do aggregates over the aggregates and speed those up, let's look at the median by `api_id`:
@@ -255,18 +252,18 @@ ORDER BY api_id;
 ```output
  api_id | approx_median
 --------+---------------
-      1 | 54.5702804443
-      2 | 80.1171187405
-      3 | 97.0755568949
-      4 | 91.0573557571
-      5 | 110.331520385
-      6 | 117.623597735
-      7 | 110.331520385
-      8 | 117.623597735
-      9 | 133.685458898
-     10 | 117.623597735
-     11 | 125.397626136
-     12 | 133.685458898
+ 1      | 54.5702804443
+ 2      | 80.1171187405
+ 3      | 103.491515519
+ 4      | 91.0573557571
+ 5      | 110.331520385
+ 6      | 117.623597735
+ 7      | 110.331520385
+ 8      | 117.623597735
+ 9      | 133.685458898
+10      | 117.623597735
+11      | 125.397626136
+12      | 133.685458898
 ```
 
 You'll notice that I didn't include the average response time here, that's because `avg` is not a [two-step aggregate](), and doesn't actually give you the average if you stack calls using it. But it turns out, we can derive the true average from the sketch we use to calculate the approximate percentiles! (We call that accessor function `mean` because there would otherwise be odd conflicts with `avg` in terms of how they're called).
@@ -282,18 +279,18 @@ ORDER BY api_id;
 ```output, precision(1: 7)
  api_id |      avg      | approx_median
 --------+---------------+---------------
-      1 | 71.5532290753 | 54.5702804443
-      2 | 116.144620055 | 80.1171187405
-      3 | 151.694318353 | 97.0755568949
-      4 | 151.805468188 | 91.0573557571
-      5 | 240.732188975 | 110.331520385
-      6 | 242.390944182 | 117.623597735
-      7 | 204.316670161 | 110.331520385
-      8 | 791.721302735 | 117.623597735
-      9 |  730.10776889 | 133.685458898
-     10 | 237.621813524 | 117.623597735
-     11 | 1006.15878094 | 125.397626136
-     12 | 308.595292221 | 133.685458898
+ 1      | 358.974815406 | 54.5702804443
+ 2      | 116.208743234 | 80.1171187405
+ 3      | 151.194417418 | 103.491515519
+ 4      | 150.963527481 | 91.0573557571
+ 5      | 180.906869604 | 110.331520385
+ 6      | 202.234328036 | 117.623597735
+ 7      | 203.056659681 | 110.331520385
+ 8      | 210.823512283 | 117.623597735
+ 9      | 250.775971756 | 133.685458898
+10      | 239.834855656 | 117.623597735
+11      | 267.750932477 | 125.397626136
+12      | 256.252763567 | 133.685458898
 ```
 
 We have several other accessor functions, including `error` which returns the maximum relative error for the percentile estimate, `num_vals` which returns the number of elements in the estimator, and perhaps the most interesting one, `approx_percentile_rank`, which gives the hypothetical percentile for a given value. Let's say we really don't want our apis to go over 1s in response time (1000 ms), we can use that to figure out what fraction of users waited over a second for each api:
@@ -309,18 +306,18 @@ ORDER BY api_id;
 ```output
  api_id | percent_over_1s
 --------+-----------------
-      1 |            0.00
-      2 |            0.00
-      3 |            0.00
-      4 |            0.42
-      5 |            1.61
-      6 |            2.59
-      7 |            2.90
-      8 |            3.20
-      9 |            4.47
-     10 |            4.42
-     11 |            5.84
-     12 |            4.97
+ 1      | 0.07
+ 2      | 0.00
+ 3      | 0.00
+ 4      | 0.40
+ 5      | 1.56
+ 6      | 2.54
+ 7      | 2.87
+ 8      | 3.30
+ 9      | 4.56
+10      | 4.54
+11      | 5.90
+12      | 4.97
 ```
 
 

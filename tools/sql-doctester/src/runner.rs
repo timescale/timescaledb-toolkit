@@ -52,11 +52,10 @@ impl<'s> ConnectionConfig<'s> {
 
 pub fn run_tests<OnErr: FnMut(Test, TestError)>(
     connection_config: ConnectionConfig<'_>,
-    startup_script: Option<Cow<'_, str>>,
+    startup_script: &str,
     all_tests: Vec<TestFile>,
     mut on_error: OnErr,
 ) {
-    let startup_script = startup_script.as_deref();
     let root_connection_config = connection_config.config_string();
     let root_connection_config = &*root_connection_config;
     eprintln!("running {} test files", all_tests.len());
@@ -92,7 +91,7 @@ pub fn run_tests<OnErr: FnMut(Test, TestError)>(
         }
     };
 
-    if let (Some(db), Some(startup_script)) = (stateless_db.as_ref(), startup_script) {
+    if let Some(db) = stateless_db.as_ref() {
         let stateless_connection_config = ConnectionConfig {
             database: Some(db),
             ..connection_config
@@ -127,7 +126,7 @@ pub fn run_tests<OnErr: FnMut(Test, TestError)>(
             let mut client = Client::connect(&test_connection_config.config_string(), NoTls)
                 .expect("could not connect to test DB");
 
-            if let (false, Some(startup_script)) = (tests.stateless, startup_script) {
+            if !tests.stateless {
                 let _ = client
                     .simple_query(startup_script)
                     .expect("could not run init script");

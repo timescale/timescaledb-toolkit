@@ -7,7 +7,7 @@
 
 ## Description <a id="asap-description"></a>
 
-The [ASAP smoothing alogrithm](https://arxiv.org/pdf/1703.00983.pdf) is designed create human readable graphs which preserve the rough shape and larger trends of the input data while minimizing the local variance between points.  TimescaleDB Toolkit provides an implementation of this which will take `(timestamp, value)` pairs, normalize them to the target interval, and return the ASAP smoothed values.
+The [ASAP smoothing algorithm](https://arxiv.org/pdf/1703.00983.pdf) is designed create human readable graphs which preserve the rough shape and larger trends of the input data while minimizing the local variance between points.  TimescaleDB Toolkit provides an implementation of this which will take `(timestamp, value)` pairs, normalize them to the target interval, and return the ASAP smoothed values.
 
 ## Details <a id="asap-details"></a>
 
@@ -106,7 +106,7 @@ This normalize time, value pairs over a given interval and return a smoothed rep
 <br>
 
 ### Sample Usages <a id="asap-examples"></a>
-For this examples assume we have a table 'metrics' with columns 'date' and 'reading' which contains some interesting measurment we've accumulated over a large interval.  The following example would take that data and give us a smoothed representation of approximately 10 points which would still show any anomolous readings:
+For this examples assume we have a table 'metrics' with columns 'date' and 'reading' which contains some interesting measurement we've accumulated over a large interval.  The following example would take that data and give us a smoothed representation of approximately 10 points which would still show any anomalous readings:
 
 <div hidden>
 

@@ -48,7 +48,7 @@ pub fn extract_tests(root: &str) -> Vec<TestFile> {
 
         let contents = fs::read_to_string(entry.path()).unwrap();
 
-        let tests = extract_tests_from_string(&*contents, &*entry.path().to_string_lossy());
+        let tests = extract_tests_from_string(&contents, &entry.path().to_string_lossy());
         if !tests.tests.is_empty() {
             all_tests.push(tests)
         }
@@ -86,7 +86,7 @@ pub fn extract_tests_from_string(s: &str, file_stem: &str) -> TestFile {
                 heading_stack.truncate(level as usize - 1);
                 let mut header = "`".to_string();
                 consume_text_until!(parser yields Event::End(Heading(..)) =>
-                    |text: CowStr| header.push_str(&*text)
+                    |text: CowStr| header.push_str(&text)
                 );
                 header.truncate(header.trim_end().len());
                 header.push('`');
@@ -143,7 +143,7 @@ pub fn extract_tests_from_string(s: &str, file_stem: &str) -> TestFile {
 
                 // consume the lines of the test
                 consume_text_until!(parser yields Event::End(CodeBlock(Fenced(..))) =>
-                    |text: CowStr| test.text.push_str(&*text)
+                    |text: CowStr| test.text.push_str(&text)
                 );
 
                 // search to see if we have output

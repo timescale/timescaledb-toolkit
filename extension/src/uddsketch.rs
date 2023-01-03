@@ -162,17 +162,17 @@ impl From<SerializedUddSketch> for UddSketchInternal {
 impl SerializedUddSketch {
     fn keys(&self) -> impl Iterator<Item = SketchHashKey> + '_ {
         decompress_keys(
-            &*self.buckets.negative_indexes,
+            &self.buckets.negative_indexes,
             self.buckets.zero_bucket_count != 0,
-            &*self.buckets.positive_indexes,
+            &self.buckets.positive_indexes,
         )
     }
 
     fn counts(&self) -> impl Iterator<Item = u64> + '_ {
         decompress_counts(
-            &*self.buckets.negative_counts,
+            &self.buckets.negative_counts,
             self.buckets.zero_bucket_count,
-            &*self.buckets.positive_counts,
+            &self.buckets.positive_counts,
         )
     }
 }

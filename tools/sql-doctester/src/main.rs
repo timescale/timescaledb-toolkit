@@ -137,7 +137,7 @@ fn extract_tests(root: &str) -> Vec<TestFile> {
         };
         let contents = fs::read_to_string(path).unwrap();
 
-        let tests = parser::extract_tests_from_string(&*contents, &*entry.path().to_string_lossy());
+        let tests = parser::extract_tests_from_string(&contents, &entry.path().to_string_lossy());
         if !tests.tests.is_empty() {
             all_tests.push(tests)
         }

@@ -91,7 +91,7 @@ impl<'s> Registers<'s> {
     }
 
     pub fn bytes(&self) -> &[u8] {
-        &*self.0
+        &self.0
     }
 
     pub fn count_zeroed_registers(&self) -> u64 {

@@ -10,7 +10,7 @@
 
 [UddSketch](https://arxiv.org/pdf/2004.08604.pdf) is a specialization of the [DDSketch](https://arxiv.org/pdf/1908.10693.pdf) data structure.  It follows the same approach of breaking the data range into a series of logarithmically sized buckets such that it can guarantee a maximum relative error for any percentile estimate as long as it knows which bucket that percentile falls in.
 
-Where UddSketch differs from DDSketch in its behavior when the number of buckets required by a set of values exceeds some predefined maximum.  In these cirumstances DDSketch will maintain it's original error bound, but only for a subset of the range of percentiles.  UddSketch, on the other hand, will combine buckets in such a way that it loosens the error bound, but can still estimate all percentile values.
+Where UddSketch differs from DDSketch in its behavior when the number of buckets required by a set of values exceeds some predefined maximum.  In these circumstances DDSketch will maintain it's original error bound, but only for a subset of the range of percentiles.  UddSketch, on the other hand, will combine buckets in such a way that it loosens the error bound, but can still estimate all percentile values.
 
 As an example, assume both sketches were trying to capture an large set of values to be able to estimate percentiles with 1% relative error but were given too few buckets to do so.  The DDSketch implementation would still guarantee 1% relative error, but may only be able to provides estimates in the range (0.05, 0.95).  The UddSketch implementation however, might end up only able to guarantee 2% relative error, but would still be able to estimate all percentiles at that error.
 

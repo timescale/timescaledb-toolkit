@@ -6,15 +6,9 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 ## Next Release (Date TBD)
 
-#### New experimental features
+**Full Changelog**:
 
-#### Bug fixes
-
-#### Other notable changes
-
-#### Shout-outs
-
-**Full Changelog**: [TODO]
+- [#664](https://github.com/timescale/timescaledb-toolkit/pull/664) Support PostgreSQL 15.
 
 ## [1.13.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.13.0) (2022-12-13)
 

@@ -59,8 +59,6 @@ Users can use the new experimental function `toolkit_experimental.to_text(timeve
 - [#646](https://github.com/timescale/timescaledb-toolkit/pull/646): Added experimental support for PostgreSQL 15.
 - [#621](https://github.com/timescale/timescaledb-toolkit/pull/621): Rocky Linux 9 support
 
-#### Shout-outs
-
 ## [1.12.1](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.12.1) (2022-11-17)
 
 #### Bug fixes

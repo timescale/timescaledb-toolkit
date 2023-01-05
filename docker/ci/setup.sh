@@ -153,8 +153,10 @@ EOF
             # - libssl-dev
             # - make
             # - pkg-config
+            # cmake and libkrb5-dev are needed to build TimescaleDB
             apt-get -qq install \
                     build-essential \
+                    cmake \
                     curl \
                     debhelper \
                     ed \
@@ -162,6 +164,7 @@ EOF
                     gcc \
                     git \
                     gnupg \
+                    libkrb5-dev \
                     libssl-dev \
                     make \
                     pkg-config \

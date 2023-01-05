@@ -1,0 +1,9 @@
+#!/bin/sh
+git clone "$2" timescaledb
+cd timescaledb
+git switch --detach "$3"
+mkdir build
+cd build
+# this overwrites the files from the TimescaleDB package
+cmake .. -DUSE_OPENSSL=0 -DLINTER=0 -DCMAKE_PROGRAM_PATH=/usr/lib/postgresql/$1/bin
+make install

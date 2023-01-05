@@ -14,6 +14,14 @@ on:
       container-image:
         description: 'Container image to pull from DockerHub'
         required: false
+      tsdb-commit:
+        description: 'TimescaleDB commit to use'
+        default: ''
+        required: false
+      tsdb-repo:
+        description: 'TimescaleDB repo to use'
+        default: 'https://github.com/timescale/timescaledb.git'
+        required: false
 
 jobs:
   testpostgres:
@@ -22,6 +30,7 @@ jobs:
     container:
       image: ${{ inputs.container-image || 'timescaledev/toolkit-builder:debian-11-amd64' }}
     strategy:
+      fail-fast: false
       matrix:
         pgversion: [12, 13, 14, 15]
     env:
@@ -54,6 +63,10 @@ jobs:
     # this file and the packaging Actions file, but it's non-trivial.
     - name: chown Repository
       run: chown -R postgres .
+
+    - name: Build and install TimescaleDB
+      if: ${{ inputs.tsdb-commit != '' }}
+      run: ./tools/install-timescaledb '${{ matrix.pgversion }}' '${{ inputs.tsdb-repo }}' '${{ inputs.tsdb-commit }}'
 
     # TODO After the container image contains a primed target dir, is this still worth it?
     #   Only possible advantage is this one is per-pg-version but what's the impact?

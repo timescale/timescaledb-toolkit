@@ -12,7 +12,7 @@
 # 7a. Update upgradeable_form in control file.
 # 7b. Set toolkit version to released version with '-dev' appended.
 # 7c. Update Changelog.md .
-# 7d. Push to post-$VERSION branch (if -push).
+# 7d. Push to and create pull request for post-$VERSION branch (if -push).
 # 8. File issue for release tasks that are not yet automated (if -push).
 
 # [1] We need a self-hosted runner for arm64 build, which we can only get with
@@ -33,6 +33,7 @@ GIT_AUTHOR_NAME=tools/release
 GIT_COMMITTER_NAME=$GIT_AUTHOR_NAME
 export EMAIL GIT_AUTHOR_NAME GIT_COMMITTER_NAME
 
+MAIN_BRANCH=main
 BRANCH_BASENAME=forge-stable-
 CONTROL=extension/timescaledb_toolkit.control
 TOML=extension/Cargo.toml
@@ -230,7 +231,7 @@ branch_commit=`git log -1 --pretty=format:%h`
 if $push; then
     $nop gh workflow run toolkit-package.yml \
         -R timescale/release-build-scripts \
-        -r main \
+        -r $MAIN_BRANCH \
         -f version=$VERSION \
         -f commit-id=$branch_commit \
         -f upload-artifacts=true
@@ -240,12 +241,18 @@ fi
 $nop git tag $VERSION
 if $push; then
     $nop git push origin $VERSION
+    # TODO gh release
+#     ed -s > release-notes Changelog.md <<EOF
+# /^## \[[^]]*](https:..github.com.timescale.timescaledb-toolkit.releases.tag/
+# +,/^## \[[^]]*](https:..github.com.timescale.timescaledb-toolkit.releases.tag/p
+# EOF
+#     gh release create -dF release-notes --target $VERSION $VERSION
 fi
 
 # 7. Prepare the main branch for the next release cycle.
 # Github action gives us a shallow checkout which we must deepen before we can push changes.
-$nop git fetch --deepen=2147483647 origin main
-$nop git checkout main
+$nop git fetch --deepen=2147483647 origin $MAIN_BRANCH
+$nop git checkout $MAIN_BRANCH
 
 # 7a. Update upgradeable_form in control file.
 $nop sed --in-place "/$UPGRADEABLE_FROM_RE/ { s/'\$/, $VERSION'/ }" $CONTROL
@@ -301,10 +308,15 @@ else
 fi
 $nop git show
 
+# We've had a lot of trouble with the rest of these, so let's continue on
+# error, to see what works and what doesn't.
+set +e
+# TODO Carefully attempt to report errors but keep going on all steps after we push the tag in step 6.
+
 if $push; then
     # 7d. Push to post-$VERSION branch.
-    $nop git push origin post-$VERSION
-    # TODO Create a pull request for it.
+    $nop git push origin HEAD:post-$VERSION
+    $nop gh pr create -R timescale/timescaledb-toolkit -B $MAIN_BRANCH --fill -H post-$VERSION
 
     # 8. File issue for release tasks that are not yet automated.
     $nop gh issue create -R timescale/timescaledb-toolkit -F- -t "Release $VERSION" <<EOF

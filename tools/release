@@ -37,6 +37,7 @@ BRANCH_BASENAME=forge-stable-
 CONTROL=extension/timescaledb_toolkit.control
 TOML=extension/Cargo.toml
 UPGRADEABLE_FROM_RE="^# upgradeable_from = '[^']*'\$"
+NEXT_RELEASE_RE='^## Next Release (Date TBD)'
 
 . tools/dependencies.sh
 
@@ -167,6 +168,12 @@ PATCH=${minpat#*.}
 # 0. Sanity-check the surroundings.
 # working directory clean?
 assert_clean || die 'cowardly refusing to operate on dirty working directory'
+
+# 1. Create release branch from target commit.
+branch="$BRANCH_BASENAME"$VERSION
+$nop git checkout -b $branch $COMMIT
+
+# Sanity-check the branch contents.
 # control file matches expectations?
 count=`grep -c "$UPGRADEABLE_FROM_RE" $CONTROL` || die "upgradeable_from line malformed"
 if [ "$count" -ne 1 ]; then
@@ -174,10 +181,10 @@ if [ "$count" -ne 1 ]; then
     grep >&2 "$UPGRADEABLE_FROM_RE" $CONTROL
     die
 fi
-
-# 1. Create release branch from target commit.
-branch="$BRANCH_BASENAME"$VERSION
-$nop git checkout -b $branch $COMMIT
+# If we forget to update the Changelog (or forget to cherry-pick Changelog
+# updates), show a clear error message rather than letting the ed script fail
+# mysteriously.
+grep -qs "$NEXT_RELEASE_RE" Changelog.md || die 'Changelod.md lacks "Next Release" section'
 
 # 1a. Validate contents of target commit (just upgradeable_from currently).
 if ! release_is_minor; then
@@ -202,7 +209,7 @@ commit Cargo.lock
 # Update Changelog.md .
 branch_commit_date=`git log -1 --pretty=format:%as $branch_commit`
 $nop ed Changelog.md <<EOF
-/^## Next Release (Date TBD)/
+/$NEXT_RELEASE_RE/
 d
 i
 ## [$VERSION](https://github.com/timescale/timescaledb-toolkit/releases/tag/$VERSION) ($branch_commit_date)
@@ -275,7 +282,7 @@ if release_is_minor; then
     # TODO Or is it?
     branch_commit_date=`git log -1 --pretty=format:%as $branch_commit`
     $nop ed Changelog.md <<EOF
-/^## Next Release (Date TBD)/
+/$NEXT_RELEASE_RE/
 a
 
 #### New experimental features

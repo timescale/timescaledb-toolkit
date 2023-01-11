@@ -65,8 +65,8 @@ jobs:
       run: chown -R postgres .
 
     - name: Build and install TimescaleDB
-      if: ${{ inputs.tsdb-commit != '' }}
-      run: ./tools/install-timescaledb '${{ matrix.pgversion }}' '${{ inputs.tsdb-repo }}' '${{ inputs.tsdb-commit }}'
+      if: ${{ github.event_name == 'schedule' || inputs.tsdb-commit != '' }}
+      run: ./tools/install-timescaledb '${{ matrix.pgversion }}' '${{ inputs.tsdb-repo || 'https://github.com/timescale/timescaledb.git' }}' '${{ inputs.tsdb-commit == '' && 'main' || inputs.tsdb-commit }}'
 
     # TODO After the container image contains a primed target dir, is this still worth it?
     #   Only possible advantage is this one is per-pg-version but what's the impact?

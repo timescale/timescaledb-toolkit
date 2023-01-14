@@ -46,7 +46,10 @@ pub fn tdigest_trans_inner(
                 }
             };
             let mut state = match state {
-                None => tdigest::Builder::with_size(size.try_into().expect("unsigned size must fit in usize")).into(),
+                None => tdigest::Builder::with_size(
+                    size.try_into().expect("unsigned size must fit in usize"),
+                )
+                .into(),
                 Some(state) => state,
             };
             state.push(value);
@@ -88,7 +91,11 @@ use crate::raw::bytea;
 
 #[pg_extern(immutable, parallel_safe, strict)]
 pub fn tdigest_serialize(state: Internal) -> bytea {
-    let state: &mut tdigest::Builder = unsafe { state.get_mut().expect("state must exist to serialize tdigest") };
+    let state: &mut tdigest::Builder = unsafe {
+        state
+            .get_mut()
+            .expect("state must exist to serialize tdigest")
+    };
     // TODO this macro is really broken
     let hack = state.build();
     let hackref = &hack;
@@ -137,7 +144,8 @@ impl<'input> InOutFuncs for TDigest<'input> {
         use crate::serialization::str_from_db_encoding;
 
         let input = str_from_db_encoding(input);
-        let mut val: TDigestData = ron::from_str(input).expect("must be able to read self as ronstring");
+        let mut val: TDigestData =
+            ron::from_str(input).expect("must be able to read self as ronstring");
         val.buckets = val
             .centroids
             .len()
@@ -160,7 +168,10 @@ impl<'input> TDigest<'input> {
     }
 
     fn from_internal_tdigest(digest: &InternalTDigest) -> TDigest<'static> {
-        let max_buckets: u32 = digest.max_size().try_into().expect("usize must fit into u32 for max_buckets");
+        let max_buckets: u32 = digest
+            .max_size()
+            .try_into()
+            .expect("usize must fit into u32 for max_buckets");
 
         let centroids = digest.raw_centroids();
 
@@ -295,7 +306,11 @@ fn tdigest_compound_final(
 
 #[pg_extern(immutable, parallel_safe)]
 fn tdigest_compound_serialize(state: Internal, _fcinfo: pg_sys::FunctionCallInfo) -> bytea {
-    let state: Inner<InternalTDigest> = unsafe { state.to_inner().expect("an internal tdigest must exist for serialization") };
+    let state: Inner<InternalTDigest> = unsafe {
+        state
+            .to_inner()
+            .expect("an internal tdigest must exist for serialization")
+    };
     crate::do_serialize!(state)
 }
 

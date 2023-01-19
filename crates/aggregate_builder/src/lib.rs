@@ -15,6 +15,48 @@ use syn::{
     Token,
 };
 
+mod aggregate;
+mod combine;
+
+#[proc_macro_attribute]
+pub fn aggregate2(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let attributes;
+    match aggregate::Attributes::parse(attr) {
+        Err(e) => return TokenStream::from(e.to_compile_error()),
+        Ok(value) => attributes = value,
+    }
+    let generator;
+    match aggregate::Generator::new(
+        attributes,
+        parse_macro_input!(item as aggregate::SourceFunction),
+    ) {
+        Err(e) => return TokenStream::from(e.to_compile_error()),
+        Ok(value) => generator = value,
+    }
+    let generated = generator.generate();
+    if cfg!(feature = "print-generated") {
+        println!("{}", generated);
+    }
+    generated.into()
+}
+
+#[proc_macro_attribute]
+pub fn combine(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let generator;
+    match combine::Generator::new(
+        parse_macro_input!(attr as syn::AttributeArgs),
+        parse_macro_input!(item as combine::SourceFunction),
+    ) {
+        Err(e) => return TokenStream::from(e.to_compile_error()),
+        Ok(value) => generator = value,
+    }
+    let generated = generator.generate();
+    if cfg!(feature = "print-generated") {
+        println!("{}", generated);
+    }
+    generated.into()
+}
+
 #[proc_macro_attribute]
 pub fn aggregate(_attr: TokenStream, item: TokenStream) -> TokenStream {
     // Parse the input tokens into a syntax tree
@@ -32,7 +74,7 @@ pub fn aggregate(_attr: TokenStream, item: TokenStream) -> TokenStream {
 
 // like ItemImpl except that we allow `name: Type "SqlType"` for `fn transition`
 struct Aggregate {
-    schema: Option<syn::Ident>,
+    schema: std::option::Option<syn::Ident>,
     name: syn::Ident,
 
     state_ty: AggregateTy,
@@ -72,7 +114,7 @@ struct AggregateFn {
     fcinfo: Option<AggregateArg>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct AggregateArg {
     rust: syn::PatType,
     sql: Option<syn::LitStr>,

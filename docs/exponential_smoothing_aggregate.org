@@ -1,0 +1,190 @@
+* Purpose
+** How will this be used?
+*** Technical Indicator to track stocks and annotate candlestick charts
+    EMA is a popular indicator in financial technical analysis and is
+    often layered on top of candlestick charts
+
+*** Fitting time-series models for forecasting
+    The exponential smoothing framework generates reliable
+    forecasts quickly and for a wide range of time series
+
+** What problem is the user trying to solve?
+   User is trying to fit a statistical model to their time-series
+   data. This can be a useful analysis tool for understanding some
+   behavior of the time series. However, the primary value of this
+   feature would be allowing users to make predictions about future
+   values of the time series according to a given forecasting
+   method/model.
+
+** Is there pure SQL query we are simplifying?
+  No
+  
+** What kind of SQL are they going to write?
+  In order to get smoothed/fitted values, user will need to specify:
+  - timestamp + value columns
+  - length of season (not applicable if user just wants EMA or
+    specific model w/o seasonality)
+  - interval length (could we infer ourselves?)
+
+  When computing predictions, user will need to specify:
+  - how far into the future to forecast
+
+*** Aggregate
+    Exponential smoothing aggregate fits a model to the data and
+    returns an ~ExpSmooth~ type which contains data needed to return
+    smoothed values as well as the parameters to be used for
+    forecasting.
+
+    #+begin_src
+toolkit_experimental.exp_smooth(
+  ts TIMESTAMPTZ,
+  val DOUBLE PRECISION,
+  model ???
+  season INTERVAL (maybe optional?)
+  estimation_method TEXT -- accepts one of 'optimize', 'heuristic'
+)
+RETURNS ExpSmooth
+#+end_src
+    
+    Exponential Moving Average possibly as a wrapper around the
+    ~exp_smooth~ aggregate that does simple exponential smoothing and
+    doesn't optimize parameter estimates $l_0$ and $\alpha$.
+    #+begin_src
+toolkit_experimental.ema(
+  ts TIMESTAMPTZ,
+  val DOUBLE PRECISION,
+)
+RETURNS ExpSmooth
+#+end_src
+
+    #+begin_src sql
+  SELECT EMA(ts, closing_price) OVER(ORDER BY ts ROWS 21 PRECEDING)
+  FROM ohlc;
+    #+end_src
+
+  Window function isn't good for CAggs and there is likely to be some
+  confusion over using ~ROWS 21 PRECEDING~ for an EMA(20). Does the 20
+  need to be an argument to EMA as a sanity check?
+
+**** How to specify model?
+     - string 
+      ~'AAA', 'ANN', etc~
+
+     - enum
+       #+begin_src sql
+  CREATE TYPE ets AS ENUM ('ANN', 'AAM', 'AAdM', '...');
+       #+end_src
+
+
+     - ETS function
+       ~ETS('AAA')~
+       ~ETS(error => 'A', trend => 'A', season => 'A')~
+
+     - each component is an argument
+       #+begin_src sql
+    SELECT exp_smooth(
+	ts,
+	closing_price,
+	error => 'A'
+	trend => 'A',
+	season => 'A',
+	seasonality => '1 week'
+    )
+    FROM ohlc;
+       #+end_src
+
+   Assume users would usually just use an auto-fit model if that is
+   available rather than trying to specify a particular model. This is
+   probably even more true in the case that the UI for model
+   specification is confusing or onerous.
+   
+**** Existing exponential smoothing/Holt-Winters APIs
+     - https://docs.influxdata.com/flux/v0.x/stdlib/universe/holtwinters/
+       InfluxDB offers a ~holtWinters()~ function
+
+     - https://fable.tidyverts.org/reference/ETS.html
+       This R package is written by the research group who wrote the
+       book on ETS models. Likely the reference implementation for
+       everything else on this list
+       
+     - https://www.statsmodels.org/stable/statespace.html
+       Python stats library that aims to re-implement many of the R
+       packages in a Pythonic way
+       
+     - https://nixtla.github.io/statsforecast/models.html#autoets
+       Newest offering I've seen in this space. Impressive.
+       
+     - https://pandas.pydata.org/docs/reference/api/pandas.DataFrame.ewm.html#pandas.DataFrame.ewm
+       Pandas does have a way to do Exponential Moving Average
+       
+       
+*** Accessors
+**** Predict/Forecast
+     Compute a prediction $h$ steps ahead
+    #+begin_src
+toolkit_experimental.predict(
+  ets ExpSmooth
+  h INTERVAL
+)
+RETURNS DOUBLE PRECISION
+#+end_src
+
+**** Residuals
+     Return the difference between the observed and fitted values in
+     each row
+    #+begin_src
+toolkit_experimental.residuals(
+  ets ExpSmooth
+)
+RETURNS SETOF DOUBLE PRECISION
+#+end_src
+    
+* Common Functionality
+** ~rollup~
+   Would require re-fitting to the new observations in the
+   rolled-up time series 
+
+** ~into_values/unnest~
+   would be a good to have an accessor that gives back all at once:
+   - observed values
+   - fitted/smoothed values 
+   - residuals (difference between the above columns)
+   - a column for each estimated level, trend, and seasonal component
+
+   or in the case of forecasting:
+   - point forecast
+   - prediction interval lower bound
+   - prediction interval upper bound
+
+* Implementation Plan
+** Current Status
+   - Need to settle on an API design.
+   - Have made some progress on implementing models in code.
+
+** Next Steps
+   - Finish models crate
+   - Write extension code
+   - Implement a parameter solver
+   - Auto-selection of model?
+
+* Performance 
+** Fitting a model
+   Estimating the smoothing parameters and initial states requires
+   solving a nonlinear optimization problem. This is typically solved
+   using Nelder-Mead which is a derivative-free algorithm.
+
+   I have found https://www.argmin-rs.org which seems to be a good
+   implementation of several different optimization algorithms if we
+   wanted to benchmark solution methods.
+
+** Predicting
+   Producing point estimates from the aggregate should be a very
+   straightforward and fast operation. 
+
+   Anticipate that users will be predicting more than they are fitting
+   models. 
+
+* Alternatives
+  Could implement different Technical Indicators or different
+  forecasting framework. I like that the exponential smoothing is both
+  for the price of one however.

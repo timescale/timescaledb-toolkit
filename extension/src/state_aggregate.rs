@@ -737,8 +737,32 @@ impl StateAggTransState {
 fn duration_in_inner<'a>(
     state: Option<StateEntry>,
     aggregate: Option<StateAgg<'a>>,
+    range: Option<(TimestampTz, TimestampTz)>,
 ) -> crate::raw::Interval {
-    let time: i64 = state.and_then(|state| aggregate?.get(state)).unwrap_or(0);
+    let time: i64 = if let Some((start, end)) = range {
+        let (start, end) = (start.into(), end.into());
+        assert!(end >= start, "End time must be after start time");
+        if let (Some(state), Some(agg)) = (state, aggregate) {
+            let state = state.materialize(agg.states_as_str());
+            let mut total = 0;
+            for tis in agg.combined_durations.iter() {
+                if tis.state.materialize(agg.states_as_str()) == state {
+                    let tis_start_time = i64::max(tis.start_time, start);
+                    let tis_end_time = i64::min(tis.end_time, end);
+                    if tis_end_time >= start && tis_start_time <= end {
+                        let amount = tis_end_time - tis_start_time;
+                        assert!(amount >= 0, "incorrectly ordered times");
+                        total += amount;
+                    }
+                }
+            }
+            total
+        } else {
+            0
+        }
+    } else {
+        state.and_then(|state| aggregate?.get(state)).unwrap_or(0)
+    };
     let interval = pg_sys::Interval {
         time,
         ..Default::default()
@@ -771,6 +795,7 @@ pub fn duration_in<'a>(state: String, aggregate: Option<StateAgg<'a>>) -> crate:
             StateEntry::try_from_existing_str(aggregate.states_as_str(), &state)
         }),
         aggregate,
+        None,
     )
 }
 
@@ -784,7 +809,7 @@ pub fn duration_in_int<'a>(state: i64, aggregate: Option<StateAgg<'a>>) -> crate
     if let Some(ref aggregate) = aggregate {
         aggregate.assert_int()
     };
-    duration_in_inner(Some(StateEntry::from_integer(state)), aggregate)
+    duration_in_inner(Some(StateEntry::from_integer(state)), aggregate, None)
 }
 
 #[pg_extern(
@@ -819,6 +844,54 @@ pub fn duration_in_tl_int<'a>(
     duration_in_inner(
         Some(StateEntry::from_integer(state)),
         aggregate.map(TimelineAgg::as_state_agg),
+        None,
+    )
+}
+
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "duration_in",
+    schema = "toolkit_experimental"
+)]
+pub fn duration_in_range<'a>(
+    state: String,
+    aggregate: Option<TimelineAgg<'a>>,
+    start: TimestampTz,
+    end: default!(TimestampTz, "'infinity'"),
+) -> crate::raw::Interval {
+    if let Some(ref aggregate) = aggregate {
+        aggregate.assert_str()
+    };
+    let aggregate = aggregate.map(TimelineAgg::as_state_agg);
+    duration_in_inner(
+        aggregate.as_ref().and_then(|aggregate| {
+            StateEntry::try_from_existing_str(aggregate.states_as_str(), &state)
+        }),
+        aggregate,
+        Some((start, end)),
+    )
+}
+
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "duration_in",
+    schema = "toolkit_experimental"
+)]
+pub fn duration_in_range_int<'a>(
+    state: i64,
+    aggregate: Option<TimelineAgg<'a>>,
+    start: TimestampTz,
+    end: default!(TimestampTz, "'infinity'"),
+) -> crate::raw::Interval {
+    if let Some(ref aggregate) = aggregate {
+        aggregate.assert_int()
+    };
+    duration_in_inner(
+        Some(StateEntry::from_integer(state)),
+        aggregate.map(TimelineAgg::as_state_agg),
+        Some((start, end)),
     )
 }
 
@@ -839,7 +912,7 @@ fn interpolated_duration_in_inner<'a>(
             let new_agg = aggregate.interpolate(start.into(), interval, prev, next.is_some());
             let state_entry =
                 state.and_then(|state| state.try_existing_entry(new_agg.states_as_str()));
-            duration_in_inner(state_entry, Some(new_agg))
+            duration_in_inner(state_entry, Some(new_agg), None)
         }
     }
 }

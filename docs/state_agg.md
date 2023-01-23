@@ -77,6 +77,40 @@ FROM states_test;
        3
 ```
 
+#### duration_in for a range
+```SQL
+SELECT toolkit_experimental.duration_in('OK', toolkit_experimental.timeline_agg(ts, state), '2020-01-01 00:01:00+00', '2020-01-03 00:01:00+00') FROM states_test;
+```
+```output
+ duration_in
+-------------
+ 00:00:57
+```
+```SQL
+SELECT toolkit_experimental.duration_in('OK', toolkit_experimental.timeline_agg(ts, state), '2020-01-01 00:01:00+00') FROM states_test;
+```
+```output
+ duration_in
+-------------
+ 00:00:57
+```
+```SQL
+SELECT toolkit_experimental.duration_in(51351, toolkit_experimental.timeline_agg(ts, state), '2020-01-01 00:01:00+00', '2020-01-03 00:01:00+00') FROM states_test_4;
+```
+```output
+ duration_in
+-------------
+ 00:00:57
+```
+```SQL
+SELECT toolkit_experimental.duration_in(51351, toolkit_experimental.timeline_agg(ts, state), '2020-01-01 00:01:00+00') FROM states_test_4;
+```
+```output
+ duration_in
+-------------
+ 00:00:57
+```
+
 ### into_values
 
 ```SQL

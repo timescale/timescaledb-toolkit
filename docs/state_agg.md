@@ -46,7 +46,7 @@ INSERT INTO states_test_5 VALUES
 Compute the amount of time spent in a state as INTERVAL.
 
 ```SQL
-SELECT toolkit_experimental.duration_in('ERROR', toolkit_experimental.state_agg(ts, state)) FROM states_test;
+SELECT toolkit_experimental.duration_in('ERROR', toolkit_experimental.compressed_state_agg(ts, state)) FROM states_test;
 ```
 ```output
  interval
@@ -54,7 +54,7 @@ SELECT toolkit_experimental.duration_in('ERROR', toolkit_experimental.state_agg(
  00:00:03
 ```
 ```SQL
-SELECT toolkit_experimental.duration_in(2, toolkit_experimental.state_agg(ts, state)) FROM states_test_4;
+SELECT toolkit_experimental.duration_in(2, toolkit_experimental.compressed_state_agg(ts, state)) FROM states_test_4;
 ```
 ```output
  interval
@@ -67,7 +67,7 @@ Extract as number of seconds:
 ```SQL
 SELECT
   EXTRACT(epoch FROM
-    toolkit_experimental.duration_in('ERROR', toolkit_experimental.state_agg(ts, state))
+    toolkit_experimental.duration_in('ERROR', toolkit_experimental.compressed_state_agg(ts, state))
   )::INTEGER
 FROM states_test;
 ```
@@ -79,7 +79,7 @@ FROM states_test;
 
 #### duration_in for a range
 ```SQL
-SELECT toolkit_experimental.duration_in('OK', toolkit_experimental.timeline_agg(ts, state), '2020-01-01 00:01:00+00', '2020-01-03 00:01:00+00') FROM states_test;
+SELECT toolkit_experimental.duration_in('OK', toolkit_experimental.state_agg(ts, state), '2020-01-01 00:01:00+00', '2020-01-03 00:01:00+00') FROM states_test;
 ```
 ```output
  duration_in
@@ -87,7 +87,7 @@ SELECT toolkit_experimental.duration_in('OK', toolkit_experimental.timeline_agg(
  00:00:57
 ```
 ```SQL
-SELECT toolkit_experimental.duration_in('OK', toolkit_experimental.timeline_agg(ts, state), '2020-01-01 00:01:00+00') FROM states_test;
+SELECT toolkit_experimental.duration_in('OK', toolkit_experimental.state_agg(ts, state), '2020-01-01 00:01:00+00') FROM states_test;
 ```
 ```output
  duration_in
@@ -95,7 +95,7 @@ SELECT toolkit_experimental.duration_in('OK', toolkit_experimental.timeline_agg(
  00:00:57
 ```
 ```SQL
-SELECT toolkit_experimental.duration_in(51351, toolkit_experimental.timeline_agg(ts, state), '2020-01-01 00:01:00+00', '2020-01-03 00:01:00+00') FROM states_test_4;
+SELECT toolkit_experimental.duration_in(51351, toolkit_experimental.state_agg(ts, state), '2020-01-01 00:01:00+00', '2020-01-03 00:01:00+00') FROM states_test_4;
 ```
 ```output
  duration_in
@@ -103,7 +103,7 @@ SELECT toolkit_experimental.duration_in(51351, toolkit_experimental.timeline_agg
  00:00:57
 ```
 ```SQL
-SELECT toolkit_experimental.duration_in(51351, toolkit_experimental.timeline_agg(ts, state), '2020-01-01 00:01:00+00') FROM states_test_4;
+SELECT toolkit_experimental.duration_in(51351, toolkit_experimental.state_agg(ts, state), '2020-01-01 00:01:00+00') FROM states_test_4;
 ```
 ```output
  duration_in
@@ -115,7 +115,7 @@ SELECT toolkit_experimental.duration_in(51351, toolkit_experimental.timeline_agg
 
 ```SQL
 SELECT state, duration FROM toolkit_experimental.into_values(
-    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test))
+    (SELECT toolkit_experimental.compressed_state_agg(ts, state) FROM states_test))
     ORDER BY state, duration;
 ```
 ```output
@@ -128,7 +128,7 @@ SELECT state, duration FROM toolkit_experimental.into_values(
 ```
 ```SQL
 SELECT state, duration FROM toolkit_experimental.into_int_values(
-    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test_4))
+    (SELECT toolkit_experimental.compressed_state_agg(ts, state) FROM states_test_4))
     ORDER BY state, duration;
 ```
 ```output
@@ -144,7 +144,7 @@ SELECT state, duration FROM toolkit_experimental.into_int_values(
 
 ```SQL
 SELECT state, start_time, end_time FROM toolkit_experimental.state_timeline(
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test))
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test))
     ORDER BY start_time;
 ```
 ```output
@@ -159,7 +159,7 @@ ERROR | 2020-01-01 00:01:00+00 | 2020-01-01 00:01:03+00
 
 ```SQL
 SELECT state, start_time, end_time FROM toolkit_experimental.state_int_timeline(
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_4))
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test_4))
     ORDER BY start_time;
 ```
 ```output
@@ -175,7 +175,7 @@ state | start_time             | end_time
 
 ```SQL
 SELECT state, start_time, end_time FROM toolkit_experimental.state_timeline(
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_2))
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test_2))
     ORDER BY start_time;
 ```
 ```output
@@ -192,7 +192,7 @@ START | 2019-12-31 00:00:00+00 | 2019-12-31 00:00:11+00
 SELECT start_time, end_time
 FROM toolkit_experimental.state_periods(
     'OK',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test)
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test)
 )
 ORDER BY start_time;
 ```
@@ -207,7 +207,7 @@ start_time             | end_time
 SELECT start_time, end_time
 FROM toolkit_experimental.state_periods(
     51351,
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_4)
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test_4)
 )
 ORDER BY start_time;
 ```
@@ -222,7 +222,7 @@ start_time             | end_time
 SELECT start_time, end_time
 FROM toolkit_experimental.state_periods(
     'ANYTHING',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test)
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test)
 )
 ORDER BY start_time;
 ```
@@ -235,9 +235,9 @@ start_time             | end_time
 
 ```SQL
 SELECT state, start_time, end_time FROM toolkit_experimental.interpolated_state_timeline(
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test),
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test),
     '2019-12-31', '1 days',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_3)
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test_3)
 )
 ORDER BY start_time;
 ```
@@ -253,9 +253,9 @@ ERROR | 2020-01-01 00:01:00+00 | 2020-01-01 00:01:03+00
 
 ```SQL
 SELECT state, start_time, end_time FROM toolkit_experimental.interpolated_state_timeline(
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test),
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test),
     '2019-12-31', '5 days',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_3)
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test_3)
 )
 ORDER BY start_time;
 ```
@@ -271,9 +271,9 @@ ERROR | 2020-01-01 00:01:00+00 | 2020-01-01 00:01:03+00
 
 ```SQL
 SELECT state, start_time, end_time FROM toolkit_experimental.interpolated_state_timeline(
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test),
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test),
     '2019-12-31', '1 days',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_2)
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test_2)
 )
 ORDER BY start_time;
 ```
@@ -290,9 +290,9 @@ ERROR | 2020-01-01 00:01:00+00 | 2020-01-01 00:01:03+00
 
 ```SQL
 SELECT state, start_time, end_time FROM toolkit_experimental.interpolated_state_timeline(
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test),
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test),
     '2019-12-31', '5 days',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_2)
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test_2)
 )
 ORDER BY start_time;
 ```
@@ -313,9 +313,9 @@ ERROR | 2020-01-01 00:01:00+00 | 2020-01-01 00:01:03+00
 ```SQL
 SELECT start_time, end_time FROM toolkit_experimental.interpolated_state_periods(
     'OK',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test),
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test),
     '2019-12-31', '1 days',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_3)
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test_3)
 )
 ORDER BY start_time;
 ```
@@ -329,9 +329,9 @@ start_time             | end_time
 ```SQL
 SELECT start_time, end_time FROM toolkit_experimental.interpolated_state_periods(
     'START',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test),
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test),
     '2019-12-31', '5 days',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_3)
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test_3)
 )
 ORDER BY start_time;
 ```
@@ -344,9 +344,9 @@ start_time             | end_time
 ```SQL
 SELECT start_time, end_time FROM toolkit_experimental.interpolated_state_periods(
     'STOP',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test),
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test),
     '2019-12-31', '1 days',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_2)
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test_2)
 )
 ORDER BY start_time;
 ```
@@ -360,9 +360,9 @@ start_time             | end_time
 ```SQL
 SELECT start_time, end_time FROM toolkit_experimental.interpolated_state_periods(
     'STOP',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test),
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test),
     '2019-12-31', '5 days',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_2)
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test_2)
 )
 ORDER BY start_time;
 ```
@@ -378,7 +378,7 @@ start_time             | end_time
 ```SQL
 WITH buckets AS (SELECT
     date_trunc('minute', ts) as dt,
-    toolkit_experimental.state_agg(ts, state) AS sa
+    toolkit_experimental.compressed_state_agg(ts, state) AS sa
 FROM states_test
 GROUP BY date_trunc('minute', ts))
 SELECT toolkit_experimental.duration_in(
@@ -396,7 +396,7 @@ FROM buckets;
 ```SQL
 WITH buckets AS (SELECT
     date_trunc('minute', ts) as dt,
-    toolkit_experimental.state_agg(ts, state) AS sa
+    toolkit_experimental.compressed_state_agg(ts, state) AS sa
 FROM states_test
 GROUP BY date_trunc('minute', ts))
 SELECT toolkit_experimental.duration_in(
@@ -414,7 +414,7 @@ FROM buckets;
 ```SQL
 WITH buckets AS (SELECT
     date_trunc('minute', ts) as dt,
-    toolkit_experimental.timeline_agg(ts, state) AS sa
+    toolkit_experimental.state_agg(ts, state) AS sa
 FROM states_test
 GROUP BY date_trunc('minute', ts))
 SELECT toolkit_experimental.state_timeline(
@@ -435,7 +435,7 @@ FROM buckets;
 ```SQL
 WITH buckets AS (SELECT
     date_trunc('minute', ts) as dt,
-    toolkit_experimental.timeline_agg(ts, state) AS sa
+    toolkit_experimental.state_agg(ts, state) AS sa
 FROM states_test
 GROUP BY date_trunc('minute', ts)
 HAVING date_trunc('minute', ts) != '2020-01-01 00:01:00+00'::timestamptz)
@@ -455,7 +455,7 @@ FROM buckets;
 ```SQL
 WITH buckets AS (SELECT
     date_trunc('minute', ts) as dt,
-    toolkit_experimental.timeline_agg(ts, state) AS sa
+    toolkit_experimental.state_agg(ts, state) AS sa
 FROM states_test_5
 GROUP BY date_trunc('minute', ts)
 HAVING date_trunc('minute', ts) != '2020-01-01 00:01:00+00'::timestamptz)

@@ -738,10 +738,17 @@ impl CompressedStateAggTransState {
 fn duration_in_inner<'a>(
     state: Option<StateEntry>,
     aggregate: Option<CompressedStateAgg<'a>>,
-    range: Option<(TimestampTz, TimestampTz)>,
+    range: Option<(TimestampTz, Option<crate::raw::Interval>)>,
 ) -> crate::raw::Interval {
-    let time: i64 = if let Some((start, end)) = range {
-        let (start, end) = (start.into(), end.into());
+    let time: i64 = if let Some((start, interval)) = range {
+        let (start, end) = if let Some(interval) = interval {
+            let interval = crate::datum_utils::interval_to_ms(&start, &interval);
+            assert!(interval >= 0, "Interval must not be negative");
+            let start = start.into();
+            (start, start + interval)
+        } else {
+            (start.into(), i64::MAX)
+        };
         assert!(end >= start, "End time must be after start time");
         if let (Some(state), Some(agg)) = (state, aggregate) {
             let state = state.materialize(agg.states_as_str());
@@ -859,7 +866,7 @@ pub fn duration_in_range<'a>(
     state: String,
     aggregate: Option<StateAgg<'a>>,
     start: TimestampTz,
-    end: default!(TimestampTz, "'infinity'"),
+    interval: Option<crate::raw::Interval>,
 ) -> crate::raw::Interval {
     if let Some(ref aggregate) = aggregate {
         aggregate.assert_str()
@@ -870,7 +877,7 @@ pub fn duration_in_range<'a>(
             StateEntry::try_from_existing_str(aggregate.states_as_str(), &state)
         }),
         aggregate,
-        Some((start, end)),
+        Some((start, interval)),
     )
 }
 
@@ -884,7 +891,7 @@ pub fn duration_in_range_int<'a>(
     state: i64,
     aggregate: Option<StateAgg<'a>>,
     start: TimestampTz,
-    end: default!(TimestampTz, "'infinity'"),
+    interval: Option<crate::raw::Interval>,
 ) -> crate::raw::Interval {
     if let Some(ref aggregate) = aggregate {
         aggregate.assert_int()
@@ -892,7 +899,7 @@ pub fn duration_in_range_int<'a>(
     duration_in_inner(
         Some(StateEntry::from_integer(state)),
         aggregate.map(StateAgg::as_compressed_state_agg),
-        Some((start, end)),
+        Some((start, interval)),
     )
 }
 

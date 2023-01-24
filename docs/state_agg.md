@@ -79,7 +79,7 @@ FROM states_test;
 
 #### duration_in for a range
 ```SQL
-SELECT toolkit_experimental.duration_in('OK', toolkit_experimental.state_agg(ts, state), '2020-01-01 00:01:00+00', '2020-01-03 00:01:00+00') FROM states_test;
+SELECT toolkit_experimental.duration_in('OK', toolkit_experimental.state_agg(ts, state), '2020-01-01 00:01:00+00', '2 days') FROM states_test;
 ```
 ```output
  duration_in
@@ -87,7 +87,7 @@ SELECT toolkit_experimental.duration_in('OK', toolkit_experimental.state_agg(ts,
  00:00:57
 ```
 ```SQL
-SELECT toolkit_experimental.duration_in('OK', toolkit_experimental.state_agg(ts, state), '2020-01-01 00:01:00+00') FROM states_test;
+SELECT toolkit_experimental.duration_in('OK', toolkit_experimental.state_agg(ts, state), '2020-01-01 00:01:00+00', NULL) FROM states_test;
 ```
 ```output
  duration_in
@@ -95,7 +95,7 @@ SELECT toolkit_experimental.duration_in('OK', toolkit_experimental.state_agg(ts,
  00:00:57
 ```
 ```SQL
-SELECT toolkit_experimental.duration_in(51351, toolkit_experimental.state_agg(ts, state), '2020-01-01 00:01:00+00', '2020-01-03 00:01:00+00') FROM states_test_4;
+SELECT toolkit_experimental.duration_in(51351, toolkit_experimental.state_agg(ts, state), '2020-01-01 00:01:00+00', '2 days') FROM states_test_4;
 ```
 ```output
  duration_in
@@ -103,12 +103,30 @@ SELECT toolkit_experimental.duration_in(51351, toolkit_experimental.state_agg(ts
  00:00:57
 ```
 ```SQL
-SELECT toolkit_experimental.duration_in(51351, toolkit_experimental.state_agg(ts, state), '2020-01-01 00:01:00+00') FROM states_test_4;
+SELECT toolkit_experimental.duration_in(51351, toolkit_experimental.state_agg(ts, state), '2020-01-01 00:01:00+00', NULL) FROM states_test_4;
 ```
 ```output
  duration_in
 -------------
  00:00:57
+```
+
+```SQL
+SELECT toolkit_experimental.duration_in('OK', toolkit_experimental.state_agg(ts, state), '2020-01-01 00:00:15+00', '30 seconds') FROM states_test;
+```
+```output
+ duration_in
+-------------
+ 00:00:30
+```
+
+```SQL
+SELECT toolkit_experimental.duration_in('OK', toolkit_experimental.state_agg(ts, state), '2020-01-01 00:00:15+00', '1 minute 1 second') FROM states_test;
+```
+```output
+ duration_in
+-------------
+ 00:00:58
 ```
 
 ### into_values

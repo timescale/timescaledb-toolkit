@@ -255,7 +255,6 @@ pub mod toolkit_experimental {
             interval_start: i64,
             interval_len: i64,
             prev: Option<StateAgg>,
-            has_next: bool,
         ) -> StateAgg {
             if self.durations.is_empty() {
                 pgx::error!("unable to interpolate interval on state aggregate with no data");
@@ -342,7 +341,7 @@ pub mod toolkit_experimental {
                 },
             };
 
-            let last = if interval_start + interval_len > self.last_time && has_next {
+            let last = if interval_start + interval_len > self.last_time {
                 let last_interval = interval_start + interval_len - self.last_time;
                 match durations.get_mut(self.last_state as usize) {
                     None => pgx::error!("poorly formed StateAgg, last_state out of starts"),
@@ -901,7 +900,6 @@ fn interpolated_duration_in_inner<'a>(
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<StateAgg<'a>>,
-    next: Option<StateAgg<'a>>,
 ) -> crate::raw::Interval {
     match aggregate {
         None => pgx::error!(
@@ -909,7 +907,7 @@ fn interpolated_duration_in_inner<'a>(
         ),
         Some(aggregate) => {
             let interval = crate::datum_utils::interval_to_ms(&start, &interval);
-            let new_agg = aggregate.interpolate(start.into(), interval, prev, next.is_some());
+            let new_agg = aggregate.interpolate(start.into(), interval, prev);
             let state_entry =
                 state.and_then(|state| state.try_existing_entry(new_agg.states_as_str()));
             duration_in_inner(state_entry, Some(new_agg), None)
@@ -923,7 +921,6 @@ pub fn interpolated_duration_in<'a>(
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<StateAgg<'a>>,
-    next: Option<StateAgg<'a>>,
 ) -> crate::raw::Interval {
     if let Some(ref aggregate) = aggregate {
         aggregate.assert_str()
@@ -934,7 +931,6 @@ pub fn interpolated_duration_in<'a>(
         start,
         interval,
         prev,
-        next,
     )
 }
 
@@ -950,7 +946,6 @@ pub fn interpolated_duration_in_tl<'a>(
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<TimelineAgg<'a>>,
-    next: Option<TimelineAgg<'a>>,
 ) -> crate::raw::Interval {
     if let Some(ref aggregate) = aggregate {
         aggregate.assert_str()
@@ -961,7 +956,6 @@ pub fn interpolated_duration_in_tl<'a>(
         start,
         interval,
         prev.map(TimelineAgg::as_state_agg),
-        next.map(TimelineAgg::as_state_agg),
     )
 }
 
@@ -977,7 +971,6 @@ pub fn interpolated_duration_in_int<'a>(
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<StateAgg<'a>>,
-    next: Option<StateAgg<'a>>,
 ) -> crate::raw::Interval {
     if let Some(ref aggregate) = aggregate {
         aggregate.assert_int()
@@ -988,7 +981,6 @@ pub fn interpolated_duration_in_int<'a>(
         start,
         interval,
         prev,
-        next,
     )
 }
 
@@ -1004,7 +996,6 @@ pub fn interpolated_duration_in_tl_int<'a>(
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<TimelineAgg<'a>>,
-    next: Option<TimelineAgg<'a>>,
 ) -> crate::raw::Interval {
     if let Some(ref aggregate) = aggregate {
         aggregate.assert_int()
@@ -1015,7 +1006,6 @@ pub fn interpolated_duration_in_tl_int<'a>(
         start,
         interval,
         prev.map(TimelineAgg::as_state_agg),
-        next.map(TimelineAgg::as_state_agg),
     )
 }
 
@@ -1164,7 +1154,6 @@ pub fn interpolated_state_timeline<'a>(
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<TimelineAgg<'a>>,
-    next: Option<TimelineAgg<'a>>,
 ) -> TableIterator<
     'a,
     (
@@ -1187,7 +1176,6 @@ pub fn interpolated_state_timeline<'a>(
                     start.into(),
                     interval,
                     prev.map(TimelineAgg::as_state_agg),
-                    next.is_some(),
                 ))
                 .collect::<Vec<_>>()
                 .into_iter(),
@@ -1201,7 +1189,6 @@ pub fn interpolated_int_state_timeline<'a>(
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<TimelineAgg<'a>>,
-    next: Option<TimelineAgg<'a>>,
 ) -> TableIterator<
     'a,
     (
@@ -1224,7 +1211,6 @@ pub fn interpolated_int_state_timeline<'a>(
                     start.into(),
                     interval,
                     prev.map(TimelineAgg::as_state_agg),
-                    next.is_some(),
                 ))
                 .collect::<Vec<_>>()
                 .into_iter(),
@@ -1306,7 +1292,6 @@ fn interpolated_state_periods_inner<'a>(
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<TimelineAgg<'a>>,
-    next: Option<TimelineAgg<'a>>,
 ) -> TableIterator<
     'a,
     (
@@ -1327,7 +1312,6 @@ fn interpolated_state_periods_inner<'a>(
                         start.into(),
                         interval,
                         prev.map(TimelineAgg::as_state_agg),
-                        next.is_some(),
                     ),
                 )
                 .collect::<Vec<_>>()
@@ -1343,7 +1327,6 @@ pub fn interpolated_state_periods<'a>(
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<TimelineAgg<'a>>,
-    next: Option<TimelineAgg<'a>>,
 ) -> TableIterator<
     'a,
     (
@@ -1360,7 +1343,6 @@ pub fn interpolated_state_periods<'a>(
         start,
         interval,
         prev,
-        next,
     )
 }
 #[pg_extern(
@@ -1375,7 +1357,6 @@ pub fn interpolated_state_periods_int<'a>(
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<TimelineAgg<'a>>,
-    next: Option<TimelineAgg<'a>>,
 ) -> TableIterator<
     'a,
     (
@@ -1392,7 +1373,6 @@ pub fn interpolated_state_periods_int<'a>(
         start,
         interval,
         prev,
-        next,
     )
 }
 
@@ -1884,8 +1864,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
                     'three', 
                     agg, 
                     '2019-12-31 0:00'::timestamptz + (bucket * '1 day'::interval), '1 day'::interval, 
-                    LAG(agg) OVER (ORDER BY bucket), 
-                    LEAD(agg) OVER (ORDER BY bucket)
+                    LAG(agg) OVER (ORDER BY bucket)
                 )::TEXT FROM (
                     SELECT bucket, toolkit_experimental.state_agg(time, state) as agg 
                     FROM inttest 
@@ -1900,8 +1879,8 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
             assert_eq!(durations.next().unwrap()[1].value(), Some("08:00:00"));
             // Day 2, in "three" from start of day to "2:00" and "20:00" to end of day
             assert_eq!(durations.next().unwrap()[1].value(), Some("06:00:00"));
-            // Day 3, in "three" from start of day to "10:00"; end in that state, but no following point
-            assert_eq!(durations.next().unwrap()[1].value(), Some("10:00:00"));
+            // Day 3, in "three" from start of day to end
+            assert_eq!(durations.next().unwrap()[1].value(), Some("18:00:00"));
             assert!(durations.next().is_none());
 
             let mut durations = client.select(
@@ -1910,8 +1889,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
                     'three', 
                     agg, 
                     '2019-12-31 0:00'::timestamptz + (bucket * '1 day'::interval), '1 day'::interval, 
-                    LAG(agg) OVER (ORDER BY bucket), 
-                    LEAD(agg) OVER (ORDER BY bucket)
+                    LAG(agg) OVER (ORDER BY bucket)
                 )::TEXT FROM (
                     SELECT bucket, toolkit_experimental.timeline_agg(time, state) as agg 
                     FROM inttest 
@@ -1926,8 +1904,8 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
             assert_eq!(durations.next().unwrap()[1].value(), Some("08:00:00"));
             // Day 2, in "three" from start of day to "2:00" and "20:00" to end of day
             assert_eq!(durations.next().unwrap()[1].value(), Some("06:00:00"));
-            // Day 3, in "three" from start of day to "10:00"; end in that state, but no following point
-            assert_eq!(durations.next().unwrap()[1].value(), Some("10:00:00"));
+            // Day 3, in "three" from start of day to end
+            assert_eq!(durations.next().unwrap()[1].value(), Some("18:00:00"));
             assert!(durations.next().is_none());
 
             let mut durations = client.select(
@@ -1936,8 +1914,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
                     10003,
                     agg, 
                     '2019-12-31 0:00'::timestamptz + (bucket * '1 day'::interval), '1 day'::interval, 
-                    LAG(agg) OVER (ORDER BY bucket), 
-                    LEAD(agg) OVER (ORDER BY bucket)
+                    LAG(agg) OVER (ORDER BY bucket)
                 )::TEXT FROM (
                     SELECT bucket, toolkit_experimental.state_agg(time, state) as agg 
                     FROM inttest2
@@ -1952,8 +1929,8 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
             assert_eq!(durations.next().unwrap()[1].value(), Some("08:00:00"));
             // Day 2, in "three" from start of day to "2:00" and "20:00" to end of day
             assert_eq!(durations.next().unwrap()[1].value(), Some("06:00:00"));
-            // Day 3, in "three" from start of day to "10:00"; end in that state, but no following point
-            assert_eq!(durations.next().unwrap()[1].value(), Some("10:00:00"));
+            // Day 3, in "three" from start of day to end
+            assert_eq!(durations.next().unwrap()[1].value(), Some("18:00:00"));
             assert!(durations.next().is_none());
         });
     }
@@ -2010,8 +1987,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
                   'running',
                   agg,
                   '2019-12-31 0:00'::timestamptz + (bucket * '1 day'::interval), '1 day'::interval,
-                  LAG(agg) OVER (ORDER BY bucket),
-                  LEAD(agg) OVER (ORDER BY bucket)
+                  LAG(agg) OVER (ORDER BY bucket)
                 )::TEXT FROM (
                     SELECT bucket, toolkit_experimental.state_agg(time, state) as agg
                     FROM states
@@ -2033,8 +2009,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts
                   'running',
                   agg,
                   '2019-12-31 0:00'::timestamptz + (bucket * '1 day'::interval), '1 day'::interval,
-                  LAG(agg) OVER (ORDER BY bucket),
-                  LEAD(agg) OVER (ORDER BY bucket)
+                  LAG(agg) OVER (ORDER BY bucket)
                 )::TEXT FROM (
                     SELECT bucket, toolkit_experimental.timeline_agg(time, state) as agg
                     FROM states

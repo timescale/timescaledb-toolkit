@@ -237,7 +237,6 @@ start_time             | end_time
 SELECT state, start_time, end_time FROM toolkit_experimental.interpolated_state_timeline(
     (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test),
     '2019-12-31', '1 days',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_3),
     (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_3)
 )
 ORDER BY start_time;
@@ -256,7 +255,6 @@ ERROR | 2020-01-01 00:01:00+00 | 2020-01-01 00:01:03+00
 SELECT state, start_time, end_time FROM toolkit_experimental.interpolated_state_timeline(
     (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test),
     '2019-12-31', '5 days',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_3),
     (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_3)
 )
 ORDER BY start_time;
@@ -275,7 +273,6 @@ ERROR | 2020-01-01 00:01:00+00 | 2020-01-01 00:01:03+00
 SELECT state, start_time, end_time FROM toolkit_experimental.interpolated_state_timeline(
     (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test),
     '2019-12-31', '1 days',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_2),
     (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_2)
 )
 ORDER BY start_time;
@@ -295,7 +292,6 @@ ERROR | 2020-01-01 00:01:00+00 | 2020-01-01 00:01:03+00
 SELECT state, start_time, end_time FROM toolkit_experimental.interpolated_state_timeline(
     (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test),
     '2019-12-31', '5 days',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_2),
     (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_2)
 )
 ORDER BY start_time;
@@ -319,7 +315,6 @@ SELECT start_time, end_time FROM toolkit_experimental.interpolated_state_periods
     'OK',
     (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test),
     '2019-12-31', '1 days',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_3),
     (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_3)
 )
 ORDER BY start_time;
@@ -336,7 +331,6 @@ SELECT start_time, end_time FROM toolkit_experimental.interpolated_state_periods
     'START',
     (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test),
     '2019-12-31', '5 days',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_3),
     (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_3)
 )
 ORDER BY start_time;
@@ -352,7 +346,6 @@ SELECT start_time, end_time FROM toolkit_experimental.interpolated_state_periods
     'STOP',
     (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test),
     '2019-12-31', '1 days',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_2),
     (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_2)
 )
 ORDER BY start_time;
@@ -369,7 +362,6 @@ SELECT start_time, end_time FROM toolkit_experimental.interpolated_state_periods
     'STOP',
     (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test),
     '2019-12-31', '5 days',
-    (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_2),
     (SELECT toolkit_experimental.timeline_agg(ts, state) FROM states_test_2)
 )
 ORDER BY start_time;

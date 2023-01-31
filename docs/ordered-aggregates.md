@@ -1,6 +1,16 @@
 # Implementing aggregates that require ordered inputs
 
-Some aggregates require that each aggregate to be aggregated cover a non-overlapping period of time, since the way these aggregate items require the items to be sequential. The technique this document describes is specific to aggregates that require sequential ordering. This is useful for some of our `rollup` aggregates, and some other aggregates, such as `counter_agg`.
+PostgreSQL has a couple different ways of dealing with aggregates that require ordered inputs, [ordered set aggregates](https://www.postgresql.org/docs/current/functions-aggregate.html#FUNCTIONS-ORDEREDSET-TABLE), which guarantee ordered input but have non-intuitive syntax. You can also specify an ordering within an aggregate call (ie `SELECT array_agg(foo ORDER BY foo, bar)`), however, AFAIK the aggregate doesn't know and has no way of enforcing that this ordering has occurred other than balking if it got out of order data. 
+
+Both of these have rather annoying syntax and require the *user* to understand that the input needs to be ordered for the aggregate to function. We decided that this was a poor choice. Instead, we decided to do the ordering ourselves *inside* the aggregate function. This means that the transition function for any of the aggregates that require ordering to function (`time_weight`, `counter_agg` etc) first have a transition function that simply builds up an array of inputs to the aggregate, then sorts the array and then processes the inputs in order. 
+
+In addition, these aggregates have different semantics for combine and rollup than some of our other functions. Once the data has been sorted and processed, in general, these aggregates can *only* be combined in the traditional sense if they contain disjoint regions of time, in other words, only aggregates covering non-overlapping periods of time can be rolled up or combined. 
+
+PostgreSQL doesn't have a way to guarantee that only non-overlapping time periods can be sent to each parallel worker, rows are distributed essentially as they are seen in a round robin. This means that the aggregates cannot be marked as parallel safe. So then, why do they need combine functions at all? Well, there is another time when combine functions are called and that is in the case of partiionwise aggregation. Partitionwise aggregation is used to perform part of the aggregation on a particular partition and then take the state and combine with aggregates from other partitions. Partitions are disjoint in time for us (this assumes some things and we should still have checks to make sure that we are not getting out of order / overlapping data). We believe the test for this is whether they have a combine function, not whether they are marked parallel safe. Therefore, we always mark these aggregates as parallel restricted rather than parallel safe, which hopefully will allow them to be used for partitionwise but not parallel aggregates. Partitionwise aggregation is a potential large optimization area for multinode so we wanted to make sure we could support that case. 
+
+This also impacts the way that `rollup` can be called on these functions and the cases in which we should error. 
+
+Note also that the `combine` and `rollup` functions for these aggregates must do essentially the same thing that the transition function does and build up an array of partial states, then order them and combine them at the end. This is a bit odd, but seems to be the best way. 
 
 ## Implementation example
 
@@ -19,7 +29,7 @@ CREATE AGGREGATE rollup(tws TimeWeightSummary)
 ```
 
 ### Parallel safety
-The aggregate above is marked as `parallel = restricted`, which specifies that ["the function can be executed in parallel mode, but the execution is restricted to parallel group leader"](https://www.postgresql.org/docs/current/sql-createfunction.html). Note that only the value of the `parallel` parameter of the `CREATE AGGREGATE` call is used for determining the parallel safety of the aggregate; the parallel safetyness of the support functions that make up the aggregate are ignored when the aggregate is called.
+The aggregate above is marked as `parallel = restricted`, which specifies that ["the function can be executed in parallel mode, but the execution is restricted to parallel group leader"](https://www.postgresql.org/docs/current/sql-createfunction.html). Note that only the value of the `parallel` parameter of the `CREATE AGGREGATE` call is used for determining the parallel safety of the aggregate; the parallel safetyness of the support functions that make up the aggregate are ignored when the aggregate is called. But all support functions should be marked parallel safe because, AFAIK, they are immutable and parallel safe in all cases, it is only when they are called in the correct ordering with the aggregate that they can cause problems / error if not used correctly. 
 
 ### Merging on serialization
 
@@ -45,8 +55,4 @@ This method doesn't work when two partitions contain overlapping time ranges. Th
 
 Note that this approach means that `deserialfunc(serialfunc(x)) != x`, which is weird but doesn't seem to cause any problems.
 
-## Ordered-set aggregates
 
-PostgreSQL supports [ordered-set aggregates](https://www.postgresql.org/docs/15/xaggr.html#XAGGR-ORDERED-SET-AGGREGATES), which can be used to implement a very similar thing. We don't use it because it would result in a more confusing interface for most aggregates: `SELECT rollup(agg) FROM aggs` versus `SELECT rollup() WITHIN GROUP (ORDER BY agg) FROM aggs`. 
-
-PostgreSQL doesn't sort the values of an ordered-set aggregate for it: the transition function may recieve the inputs in any order, and the final function is responsible for sorting them. For our use cases, ordered-set aggregates would provide a more confusing interface with minimal benefits.

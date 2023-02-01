@@ -345,7 +345,7 @@ pub mod toolkit_experimental {
                 let last_interval = interval_start + interval_len - self.last_time;
                 match durations.get_mut(self.last_state as usize) {
                     None => {
-                        pgx::error!("poorly formed CompressedStateAgg, last_state out of starts")
+                        pgx::error!("poorly formed state aggregate, last_state out of starts")
                     }
                     Some(dis) => {
                         dis.duration += last_interval;
@@ -353,7 +353,7 @@ pub mod toolkit_experimental {
                             // extend last duration
                             combined_durations
                                 .last_mut()
-                                .expect("poorly formed StateAgg, length mismatch")
+                                .expect("poorly formed state aggregate, length mismatch")
                                 .end_time += last_interval;
                         };
                         Record {

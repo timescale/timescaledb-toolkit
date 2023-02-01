@@ -1018,6 +1018,38 @@ pub fn interpolated_duration_in_tl_int<'a>(
     )
 }
 
+fn duration_in_bad_args_inner() -> ! {
+    panic!("The start and interval parameters cannot be used for duration_in with a compressed state aggregate")
+}
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "duration_in",
+    schema = "toolkit_experimental"
+)]
+pub fn duration_in_bad_args<'a>(
+    _state: String,
+    _aggregate: Option<CompressedStateAgg<'a>>,
+    _start: TimestampTz,
+    _interval: crate::raw::Interval,
+) -> crate::raw::Interval {
+    duration_in_bad_args_inner()
+}
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    name = "duration_in",
+    schema = "toolkit_experimental"
+)]
+pub fn duration_in_int_bad_args<'a>(
+    _state: i64,
+    _aggregate: Option<CompressedStateAgg<'a>>,
+    _start: TimestampTz,
+    _interval: crate::raw::Interval,
+) -> crate::raw::Interval {
+    duration_in_bad_args_inner()
+}
+
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn into_values<'a>(
     agg: CompressedStateAgg<'a>,
@@ -1474,6 +1506,22 @@ mod tests {
                 .get_one::<$type>()
                 .unwrap()
         };
+    }
+
+    #[pg_test]
+    #[should_panic = "The start and interval parameters cannot be used for duration_in with"]
+    fn duration_in_misuse_error() {
+        Spi::execute(|client| {
+            client.select("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
+            assert_eq!(
+                "365 days 00:02:00",
+                select_one!(
+                    client,
+                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compressed_state_agg(ts, state), '2020-01-01', '1 day')::TEXT FROM test",
+                    &str
+                )
+            );
+        })
     }
 
     #[pg_test]

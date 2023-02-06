@@ -13,6 +13,7 @@
 
 pub mod accessors;
 pub mod asap;
+pub mod candlestick;
 pub mod counter_agg;
 pub mod countminsketch;
 pub mod frequency;
@@ -21,7 +22,6 @@ pub mod heartbeat_agg;
 pub mod hyperloglog;
 pub mod lttb;
 pub mod nmost;
-pub mod ohlc;
 pub mod range;
 pub mod saturation;
 pub mod state_aggregate;

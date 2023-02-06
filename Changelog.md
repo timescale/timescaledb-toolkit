@@ -12,6 +12,10 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 - [#660](https://github.com/timescale/timescaledb-toolkit/issues/660): Heartbeat aggregate rollup should interpolate aggregates
 - [#679](https://github.com/timescale/timescaledb-toolkit/issues/679): Heartbeat agg rollup producing invalid aggregates.
 
+#### Stabilized features
+
+- [#701](https://github.com/timescale/timescaledb-toolkit/pull/701): Stabilize candlestick.
+
 #### Other notable changes
 - [#685](https://github.com/timescale/timescaledb-toolkit/issues/685): rollup for freq_agg and topn_agg
 - [#692](https://github.com/timescale/timescaledb-toolkit/pull/692): Support specifying a range to `duration_in` to specify a time range to get states in for state aggregates

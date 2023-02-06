@@ -1,5 +1,5 @@
 //! SELECT duration_in('STOPPED', states) as run_time, duration_in('ERROR', states) as error_time FROM (
-//!   SELECT compressed_state_agg(time, state) as states FROM ...
+//!   SELECT compact_state_agg(time, state) as states FROM ...
 //! );
 //!
 //! Currently requires loading all data into memory in order to sort it by time.
@@ -22,7 +22,7 @@ use crate::{
     ron_inout_funcs,
 };
 
-use toolkit_experimental::{CompressedStateAgg, StateAgg};
+use toolkit_experimental::{CompactStateAgg, StateAgg};
 
 pub mod rollup;
 
@@ -125,7 +125,7 @@ pub mod toolkit_experimental {
 
     pg_type! {
         #[derive(Debug)]
-        struct CompressedStateAgg<'input> {
+        struct CompactStateAgg<'input> {
             states_len: u64, // TODO JOSH this and durations_len can be 32
             durations_len: u64,
             durations: [DurationInState; self.durations_len],
@@ -136,7 +136,7 @@ pub mod toolkit_experimental {
             first_state: u32,
             last_state: u32,  // first/last state are idx into durations, keep together for alignment
             states: [u8; self.states_len],
-            compressed: bool,
+            compact: bool,
             integer_states: bool,
         }
     }
@@ -144,14 +144,14 @@ pub mod toolkit_experimental {
     pg_type! {
         #[derive(Debug)]
         struct StateAgg<'input> {
-            compressed_state_agg: CompressedStateAggData<'input>,
+            compact_state_agg: CompactStateAggData<'input>,
         }
     }
 
-    impl CompressedStateAgg<'_> {
-        pub(super) fn empty(compressed: bool, integer_states: bool) -> Self {
+    impl CompactStateAgg<'_> {
+        pub(super) fn empty(compact: bool, integer_states: bool) -> Self {
             unsafe {
-                flatten!(CompressedStateAgg {
+                flatten!(CompactStateAgg {
                     states_len: 0,
                     states: Slice::Slice(&[]),
                     durations_len: 0,
@@ -162,7 +162,7 @@ pub mod toolkit_experimental {
                     last_time: 0,
                     first_state: 0,
                     last_state: 0,
-                    compressed,
+                    compact,
                     integer_states,
                 })
             }
@@ -176,7 +176,7 @@ pub mod toolkit_experimental {
             combined_durations: Option<Vec<TimeInState>>,
             integer_states: bool,
         ) -> Self {
-            let compressed = combined_durations.is_none();
+            let compact = combined_durations.is_none();
             if durations.is_empty() {
                 assert!(
                     first.is_none()
@@ -185,7 +185,7 @@ pub mod toolkit_experimental {
                         && combined_durations.map(|v| v.is_empty()).unwrap_or(true)
                 );
 
-                return Self::empty(compressed, integer_states);
+                return Self::empty(compact, integer_states);
             }
 
             assert!(first.is_some() && last.is_some());
@@ -217,7 +217,7 @@ pub mod toolkit_experimental {
             let combined_durations = combined_durations.unwrap_or_default();
 
             unsafe {
-                flatten!(CompressedStateAgg {
+                flatten!(CompactStateAgg {
                     states_len,
                     states: states.into_bytes().into(),
                     durations_len,
@@ -228,7 +228,7 @@ pub mod toolkit_experimental {
                     last_time: last.time,
                     first_state: first_state as u32,
                     last_state: last_state as u32,
-                    compressed,
+                    compact,
                     integer_states,
                 })
             }
@@ -254,8 +254,8 @@ pub mod toolkit_experimental {
             &self,
             interval_start: i64,
             interval_len: i64,
-            prev: Option<CompressedStateAgg>,
-        ) -> CompressedStateAgg {
+            prev: Option<CompactStateAgg>,
+        ) -> CompactStateAgg {
             if self.durations.is_empty() {
                 pgx::error!("unable to interpolate interval on state aggregate with no data");
             }
@@ -271,7 +271,7 @@ pub mod toolkit_experimental {
                 .to_string();
             let mut durations: Vec<DurationInState> = self.durations.iter().collect();
 
-            let mut combined_durations = if self.compressed {
+            let mut combined_durations = if self.compact {
                 None
             } else {
                 Some(self.combined_durations.iter().collect::<Vec<_>>())
@@ -371,7 +371,7 @@ pub mod toolkit_experimental {
                 }
             };
 
-            CompressedStateAgg::new(
+            CompactStateAgg::new(
                 states,
                 durations,
                 Some(first),
@@ -396,53 +396,53 @@ pub mod toolkit_experimental {
     }
 
     impl<'input> StateAgg<'input> {
-        pub fn new(compressed_state_agg: CompressedStateAgg) -> Self {
+        pub fn new(compact_state_agg: CompactStateAgg) -> Self {
             unsafe {
                 flatten!(StateAgg {
-                    compressed_state_agg: compressed_state_agg.0,
+                    compact_state_agg: compact_state_agg.0,
                 })
             }
         }
 
-        pub fn as_compressed_state_agg(self) -> CompressedStateAgg<'input> {
-            unsafe { self.0.compressed_state_agg.flatten() }
+        pub fn as_compact_state_agg(self) -> CompactStateAgg<'input> {
+            unsafe { self.0.compact_state_agg.flatten() }
         }
 
         pub fn assert_int<'a>(&self) {
             assert!(
-                self.0.compressed_state_agg.integer_states,
+                self.0.compact_state_agg.integer_states,
                 "State must have integer values for this function"
             );
         }
         pub fn assert_str<'a>(&self) {
             assert!(
-                !self.0.compressed_state_agg.integer_states,
+                !self.0.compact_state_agg.integer_states,
                 "State must have string values for this function"
             );
         }
     }
 
-    ron_inout_funcs!(CompressedStateAgg);
+    ron_inout_funcs!(CompactStateAgg);
     ron_inout_funcs!(StateAgg);
 }
 
 fn state_trans_inner(
-    state: Option<CompressedStateAggTransState>,
+    state: Option<CompactStateAggTransState>,
     ts: TimestampTz,
     value: Option<MaterializedState>,
     integer_states: bool,
-) -> Option<CompressedStateAggTransState> {
+) -> Option<CompactStateAggTransState> {
     let value = match value {
         None => return state,
         Some(value) => value,
     };
-    let mut state = state.unwrap_or_else(|| CompressedStateAggTransState::new(integer_states));
+    let mut state = state.unwrap_or_else(|| CompactStateAggTransState::new(integer_states));
     state.record(value, ts.into());
     Some(state)
 }
 #[aggregate]
-impl toolkit_experimental::compressed_state_agg {
-    type State = CompressedStateAggTransState;
+impl toolkit_experimental::compact_state_agg {
+    type State = CompactStateAggTransState;
 
     const PARALLEL_SAFE: bool = true;
 
@@ -471,10 +471,10 @@ impl toolkit_experimental::compressed_state_agg {
     }
 
     fn deserialize(bytes: bytea) -> State {
-        crate::do_deserialize!(bytes, CompressedStateAggTransState)
+        crate::do_deserialize!(bytes, CompactStateAggTransState)
     }
 
-    fn finally(state: Option<&mut State>) -> Option<CompressedStateAgg<'static>> {
+    fn finally(state: Option<&mut State>) -> Option<CompactStateAgg<'static>> {
         state.map(|s| {
             let mut states = String::new();
             let mut durations: Vec<DurationInState> = vec![];
@@ -485,35 +485,35 @@ impl toolkit_experimental::compressed_state_agg {
                     state: state.entry(&mut states),
                 });
             }
-            CompressedStateAgg::new(states, durations, first, last, None, s.integer_states)
+            CompactStateAgg::new(states, durations, first, last, None, s.integer_states)
         })
     }
 }
 
 extension_sql!(
-    "CREATE AGGREGATE toolkit_experimental.compressed_state_agg(
+    "CREATE AGGREGATE toolkit_experimental.compact_state_agg(
         ts timestamptz,
         value bigint
     ) (
         stype = internal,
-        sfunc = toolkit_experimental.compressed_state_agg_int_trans,
-        finalfunc = toolkit_experimental.compressed_state_agg_finally_fn_outer,
+        sfunc = toolkit_experimental.compact_state_agg_int_trans,
+        finalfunc = toolkit_experimental.compact_state_agg_finally_fn_outer,
         parallel = safe,
-        serialfunc = toolkit_experimental.compressed_state_agg_serialize_fn_outer,
-        deserialfunc = toolkit_experimental.compressed_state_agg_deserialize_fn_outer,
-        combinefunc = toolkit_experimental.compressed_state_agg_combine_fn_outer
+        serialfunc = toolkit_experimental.compact_state_agg_serialize_fn_outer,
+        deserialfunc = toolkit_experimental.compact_state_agg_deserialize_fn_outer,
+        combinefunc = toolkit_experimental.compact_state_agg_combine_fn_outer
     );",
-    name = "compressed_state_agg_bigint",
+    name = "compact_state_agg_bigint",
     requires = [
-        compressed_state_agg_int_trans,
-        compressed_state_agg_finally_fn_outer,
-        compressed_state_agg_serialize_fn_outer,
-        compressed_state_agg_deserialize_fn_outer,
-        compressed_state_agg_combine_fn_outer
+        compact_state_agg_int_trans,
+        compact_state_agg_finally_fn_outer,
+        compact_state_agg_serialize_fn_outer,
+        compact_state_agg_deserialize_fn_outer,
+        compact_state_agg_combine_fn_outer
     ],
 );
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-fn compressed_state_agg_int_trans(
+fn compact_state_agg_int_trans(
     __inner: pgx::Internal,
     ts: TimestampTz,
     value: Option<i64>,
@@ -521,7 +521,7 @@ fn compressed_state_agg_int_trans(
 ) -> Option<pgx::Internal> {
     // expanded from #[aggregate] transition function
     use crate::palloc::{Inner, InternalAsValue, ToInternal};
-    type State = CompressedStateAggTransState;
+    type State = CompactStateAggTransState;
     unsafe {
         let mut __inner: Option<Inner<Option<State>>> = __inner.to_inner();
         let inner: Option<State> = match &mut __inner {
@@ -547,7 +547,7 @@ fn compressed_state_agg_int_trans(
 
 #[aggregate]
 impl toolkit_experimental::state_agg {
-    type State = CompressedStateAggTransState;
+    type State = CompactStateAggTransState;
 
     const PARALLEL_SAFE: bool = true;
 
@@ -556,19 +556,19 @@ impl toolkit_experimental::state_agg {
         #[sql_type("timestamptz")] ts: TimestampTz,
         #[sql_type("text")] value: Option<String>,
     ) -> Option<State> {
-        compressed_state_agg::transition(state, ts, value)
+        compact_state_agg::transition(state, ts, value)
     }
 
     fn combine(a: Option<&State>, b: Option<&State>) -> Option<State> {
-        compressed_state_agg::combine(a, b)
+        compact_state_agg::combine(a, b)
     }
 
     fn serialize(state: &mut State) -> bytea {
-        compressed_state_agg::serialize(state)
+        compact_state_agg::serialize(state)
     }
 
     fn deserialize(bytes: bytea) -> State {
-        compressed_state_agg::deserialize(bytes)
+        compact_state_agg::deserialize(bytes)
     }
 
     fn finally(state: Option<&mut State>) -> Option<StateAgg<'static>> {
@@ -604,7 +604,7 @@ impl toolkit_experimental::state_agg {
                 last_time_in_state.end_time = last.as_ref().unwrap().time;
             }
 
-            StateAgg::new(CompressedStateAgg::new(
+            StateAgg::new(CompactStateAgg::new(
                 states,
                 durations,
                 first,
@@ -647,7 +647,7 @@ fn state_agg_int_trans(
 ) -> Option<pgx::Internal> {
     // expanded from #[aggregate] transition function
     use crate::palloc::{Inner, InternalAsValue, ToInternal};
-    type State = CompressedStateAggTransState;
+    type State = CompactStateAggTransState;
     unsafe {
         let mut __inner: Option<Inner<Option<State>>> = __inner.to_inner();
         let inner: Option<State> = match &mut __inner {
@@ -673,12 +673,12 @@ fn state_agg_int_trans(
 
 // Intermediate state kept in postgres.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
-pub struct CompressedStateAggTransState {
+pub struct CompactStateAggTransState {
     records: Vec<Record>,
     integer_states: bool,
 }
 
-impl CompressedStateAggTransState {
+impl CompactStateAggTransState {
     fn new(integer_states: bool) -> Self {
         Self {
             records: vec![],
@@ -737,7 +737,7 @@ impl CompressedStateAggTransState {
 
 fn duration_in_inner<'a>(
     state: Option<StateEntry>,
-    aggregate: Option<CompressedStateAgg<'a>>,
+    aggregate: Option<CompactStateAgg<'a>>,
     range: Option<(i64, Option<i64>)>, // start and interval
 ) -> crate::raw::Interval {
     let time: i64 = if let Some((start, interval)) = range {
@@ -750,8 +750,8 @@ fn duration_in_inner<'a>(
         assert!(end >= start, "End time must be after start time");
         if let (Some(state), Some(agg)) = (state, aggregate) {
             assert!(
-                !agg.0.compressed,
-                "unreachable: interval specified for compressed aggregate"
+                !agg.0.compact,
+                "unreachable: interval specified for compact aggregate"
             );
             assert!(
                 start >= agg.0.first_time,
@@ -805,7 +805,7 @@ fn duration_in_inner<'a>(
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn duration_in<'a>(
     state: String,
-    aggregate: Option<CompressedStateAgg<'a>>,
+    aggregate: Option<CompactStateAgg<'a>>,
 ) -> crate::raw::Interval {
     if let Some(ref aggregate) = aggregate {
         aggregate.assert_str()
@@ -827,7 +827,7 @@ pub fn duration_in<'a>(
 )]
 pub fn duration_in_int<'a>(
     state: i64,
-    aggregate: Option<CompressedStateAgg<'a>>,
+    aggregate: Option<CompactStateAgg<'a>>,
 ) -> crate::raw::Interval {
     if let Some(ref aggregate) = aggregate {
         aggregate.assert_int()
@@ -845,7 +845,7 @@ pub fn duration_in_tl<'a>(state: String, aggregate: Option<StateAgg<'a>>) -> cra
     if let Some(ref aggregate) = aggregate {
         aggregate.assert_str()
     };
-    duration_in(state, aggregate.map(StateAgg::as_compressed_state_agg))
+    duration_in(state, aggregate.map(StateAgg::as_compact_state_agg))
 }
 
 #[pg_extern(
@@ -860,7 +860,7 @@ pub fn duration_in_tl_int<'a>(state: i64, aggregate: Option<StateAgg<'a>>) -> cr
     };
     duration_in_inner(
         Some(StateEntry::from_integer(state)),
-        aggregate.map(StateAgg::as_compressed_state_agg),
+        aggregate.map(StateAgg::as_compact_state_agg),
         None,
     )
 }
@@ -880,7 +880,7 @@ pub fn duration_in_range<'a>(
     if let Some(ref aggregate) = aggregate {
         aggregate.assert_str()
     };
-    let aggregate = aggregate.map(StateAgg::as_compressed_state_agg);
+    let aggregate = aggregate.map(StateAgg::as_compact_state_agg);
     let interval = interval.map(|interval| crate::datum_utils::interval_to_ms(&start, &interval));
     let start = start.into();
     duration_in_inner(
@@ -911,17 +911,17 @@ pub fn duration_in_range_int<'a>(
     let start = start.into();
     duration_in_inner(
         Some(StateEntry::from_integer(state)),
-        aggregate.map(StateAgg::as_compressed_state_agg),
+        aggregate.map(StateAgg::as_compact_state_agg),
         Some((start, interval)),
     )
 }
 
 fn interpolated_duration_in_inner<'a>(
     state: Option<MaterializedState>,
-    aggregate: Option<CompressedStateAgg<'a>>,
+    aggregate: Option<CompactStateAgg<'a>>,
     start: TimestampTz,
     interval: crate::raw::Interval,
-    prev: Option<CompressedStateAgg<'a>>,
+    prev: Option<CompactStateAgg<'a>>,
 ) -> crate::raw::Interval {
     match aggregate {
         None => pgx::error!(
@@ -936,14 +936,14 @@ fn interpolated_duration_in_inner<'a>(
                     "Start time cannot be before last state of previous aggregate"
                 );
             };
-            let range = if aggregate.compressed {
+            let range = if aggregate.compact {
                 assert!(
                     start <= aggregate.first_time,
-                    "For compressed state aggregates, the start cannot be after the first state"
+                    "For compact state aggregates, the start cannot be after the first state"
                 );
                 assert!(
                     (start + interval) >= aggregate.last_time,
-                    "For compressed state aggregates, the time range cannot be after the last state"
+                    "For compact state aggregates, the time range cannot be after the last state"
                 );
                 None
             } else {
@@ -959,10 +959,10 @@ fn interpolated_duration_in_inner<'a>(
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn interpolated_duration_in<'a>(
     state: String,
-    aggregate: Option<CompressedStateAgg<'a>>,
+    aggregate: Option<CompactStateAgg<'a>>,
     start: TimestampTz,
     interval: crate::raw::Interval,
-    prev: Option<CompressedStateAgg<'a>>,
+    prev: Option<CompactStateAgg<'a>>,
 ) -> crate::raw::Interval {
     if let Some(ref aggregate) = aggregate {
         aggregate.assert_str()
@@ -994,10 +994,10 @@ pub fn interpolated_duration_in_tl<'a>(
     };
     interpolated_duration_in(
         state,
-        aggregate.map(StateAgg::as_compressed_state_agg),
+        aggregate.map(StateAgg::as_compact_state_agg),
         start,
         interval,
-        prev.map(StateAgg::as_compressed_state_agg),
+        prev.map(StateAgg::as_compact_state_agg),
     )
 }
 
@@ -1009,10 +1009,10 @@ pub fn interpolated_duration_in_tl<'a>(
 )]
 pub fn interpolated_duration_in_int<'a>(
     state: i64,
-    aggregate: Option<CompressedStateAgg<'a>>,
+    aggregate: Option<CompactStateAgg<'a>>,
     start: TimestampTz,
     interval: crate::raw::Interval,
-    prev: Option<CompressedStateAgg<'a>>,
+    prev: Option<CompactStateAgg<'a>>,
 ) -> crate::raw::Interval {
     if let Some(ref aggregate) = aggregate {
         aggregate.assert_int()
@@ -1044,15 +1044,15 @@ pub fn interpolated_duration_in_tl_int<'a>(
     };
     interpolated_duration_in_int(
         state,
-        aggregate.map(StateAgg::as_compressed_state_agg),
+        aggregate.map(StateAgg::as_compact_state_agg),
         start,
         interval,
-        prev.map(StateAgg::as_compressed_state_agg),
+        prev.map(StateAgg::as_compact_state_agg),
     )
 }
 
 fn duration_in_bad_args_inner() -> ! {
-    panic!("The start and interval parameters cannot be used for duration_in with a compressed state aggregate")
+    panic!("The start and interval parameters cannot be used for duration_in with a compact state aggregate")
 }
 #[pg_extern(
     immutable,
@@ -1062,7 +1062,7 @@ fn duration_in_bad_args_inner() -> ! {
 )]
 pub fn duration_in_bad_args<'a>(
     _state: String,
-    _aggregate: Option<CompressedStateAgg<'a>>,
+    _aggregate: Option<CompactStateAgg<'a>>,
     _start: TimestampTz,
     _interval: crate::raw::Interval,
 ) -> crate::raw::Interval {
@@ -1076,7 +1076,7 @@ pub fn duration_in_bad_args<'a>(
 )]
 pub fn duration_in_int_bad_args<'a>(
     _state: i64,
-    _aggregate: Option<CompressedStateAgg<'a>>,
+    _aggregate: Option<CompactStateAgg<'a>>,
     _start: TimestampTz,
     _interval: crate::raw::Interval,
 ) -> crate::raw::Interval {
@@ -1085,7 +1085,7 @@ pub fn duration_in_int_bad_args<'a>(
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn into_values<'a>(
-    agg: CompressedStateAgg<'a>,
+    agg: CompactStateAgg<'a>,
 ) -> TableIterator<'a, (pgx::name!(state, String), pgx::name!(duration, i64))> {
     agg.assert_str();
     let states: String = agg.states_as_str().to_owned();
@@ -1098,7 +1098,7 @@ pub fn into_values<'a>(
 }
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn into_int_values<'a>(
-    agg: CompressedStateAgg<'a>,
+    agg: CompactStateAgg<'a>,
 ) -> TableIterator<'a, (pgx::name!(state, i64), pgx::name!(duration, i64))> {
     agg.assert_int();
     TableIterator::new(
@@ -1120,7 +1120,7 @@ pub fn into_values_tl<'a>(
     aggregate: StateAgg<'a>,
 ) -> TableIterator<'a, (pgx::name!(state, String), pgx::name!(duration, i64))> {
     aggregate.assert_str();
-    into_values(aggregate.as_compressed_state_agg())
+    into_values(aggregate.as_compact_state_agg())
 }
 #[pg_extern(
     immutable,
@@ -1132,11 +1132,11 @@ pub fn into_values_tl_int<'a>(
     aggregate: StateAgg<'a>,
 ) -> TableIterator<'a, (pgx::name!(state, i64), pgx::name!(duration, i64))> {
     aggregate.assert_int();
-    into_int_values(aggregate.as_compressed_state_agg())
+    into_int_values(aggregate.as_compact_state_agg())
 }
 
 fn state_timeline_inner<'a>(
-    agg: CompressedStateAgg<'a>,
+    agg: CompactStateAgg<'a>,
 ) -> TableIterator<
     'a,
     (
@@ -1146,8 +1146,8 @@ fn state_timeline_inner<'a>(
     ),
 > {
     assert!(
-        !agg.compressed,
-        "state_timeline can only be called on a compressed_state_agg built from state_agg"
+        !agg.compact,
+        "state_timeline can only be called on a compact_state_agg built from state_agg"
     );
     let states: String = agg.states_as_str().to_owned();
     TableIterator::new(
@@ -1164,7 +1164,7 @@ fn state_timeline_inner<'a>(
     )
 }
 fn state_int_timeline_inner<'a>(
-    agg: CompressedStateAgg<'a>,
+    agg: CompactStateAgg<'a>,
 ) -> TableIterator<
     'a,
     (
@@ -1174,8 +1174,8 @@ fn state_int_timeline_inner<'a>(
     ),
 > {
     assert!(
-        !agg.compressed,
-        "state_timeline can only be called on a compressed_state_agg built from state_agg"
+        !agg.compact,
+        "state_timeline can only be called on a compact_state_agg built from state_agg"
     );
     TableIterator::new(
         agg.combined_durations
@@ -1205,7 +1205,7 @@ pub fn state_timeline<'a>(
     ),
 > {
     agg.assert_str();
-    state_timeline_inner(agg.as_compressed_state_agg())
+    state_timeline_inner(agg.as_compact_state_agg())
 }
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn state_int_timeline<'a>(
@@ -1219,7 +1219,7 @@ pub fn state_int_timeline<'a>(
     ),
 > {
     agg.assert_int();
-    state_int_timeline_inner(agg.as_compressed_state_agg())
+    state_int_timeline_inner(agg.as_compact_state_agg())
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
@@ -1246,10 +1246,10 @@ pub fn interpolated_state_timeline<'a>(
         Some(aggregate) => {
             let interval = crate::datum_utils::interval_to_ms(&start, &interval);
             TableIterator::new(
-                state_timeline_inner(aggregate.as_compressed_state_agg().interpolate(
+                state_timeline_inner(aggregate.as_compact_state_agg().interpolate(
                     start.into(),
                     interval,
-                    prev.map(StateAgg::as_compressed_state_agg),
+                    prev.map(StateAgg::as_compact_state_agg),
                 ))
                 .collect::<Vec<_>>()
                 .into_iter(),
@@ -1281,10 +1281,10 @@ pub fn interpolated_int_state_timeline<'a>(
         Some(aggregate) => {
             let interval = crate::datum_utils::interval_to_ms(&start, &interval);
             TableIterator::new(
-                state_int_timeline_inner(aggregate.as_compressed_state_agg().interpolate(
+                state_int_timeline_inner(aggregate.as_compact_state_agg().interpolate(
                     start.into(),
                     interval,
-                    prev.map(StateAgg::as_compressed_state_agg),
+                    prev.map(StateAgg::as_compact_state_agg),
                 ))
                 .collect::<Vec<_>>()
                 .into_iter(),
@@ -1295,7 +1295,7 @@ pub fn interpolated_int_state_timeline<'a>(
 
 fn state_periods_inner<'a>(
     state: MaterializedState,
-    agg: CompressedStateAgg<'a>,
+    agg: CompactStateAgg<'a>,
 ) -> TableIterator<
     'a,
     (
@@ -1304,8 +1304,8 @@ fn state_periods_inner<'a>(
     ),
 > {
     assert!(
-        !agg.compressed,
-        "state_periods can only be called on a compressed_state_agg built from state_agg"
+        !agg.compact,
+        "state_periods can only be called on a compact_state_agg built from state_agg"
     );
     let states: String = agg.states_as_str().to_owned();
     TableIterator::new(
@@ -1337,7 +1337,7 @@ pub fn state_periods<'a>(
     ),
 > {
     agg.assert_str();
-    let agg = agg.as_compressed_state_agg();
+    let agg = agg.as_compact_state_agg();
     state_periods_inner(MaterializedState::String(state), agg)
 }
 #[pg_extern(
@@ -1359,7 +1359,7 @@ pub fn state_int_periods<'a>(
     agg.assert_int();
     state_periods_inner(
         MaterializedState::Integer(state),
-        agg.as_compressed_state_agg(),
+        agg.as_compact_state_agg(),
     )
 }
 
@@ -1385,10 +1385,10 @@ fn interpolated_state_periods_inner<'a>(
             TableIterator::new(
                 state_periods_inner(
                     state,
-                    aggregate.as_compressed_state_agg().interpolate(
+                    aggregate.as_compact_state_agg().interpolate(
                         start.into(),
                         interval,
-                        prev.map(StateAgg::as_compressed_state_agg),
+                        prev.map(StateAgg::as_compact_state_agg),
                     ),
                 )
                 .collect::<Vec<_>>()
@@ -1550,7 +1550,7 @@ mod tests {
                 "365 days 00:02:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compressed_state_agg(ts, state), '2020-01-01', '1 day')::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_state_agg(ts, state), '2020-01-01', '1 day')::TEXT FROM test",
                     &str
                 )
             );
@@ -1573,7 +1573,7 @@ mod tests {
                 "365 days 00:02:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compressed_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
                     &str
                 )
             );
@@ -1606,7 +1606,7 @@ mod tests {
                 "00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compressed_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
                     &str
                 )
             );
@@ -1614,7 +1614,7 @@ mod tests {
                 "365 days 00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.compressed_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
                     &str
                 )
             );
@@ -1640,7 +1640,7 @@ mod tests {
                 "365 days 00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compressed_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
                     &str
                 )
             );
@@ -1648,7 +1648,7 @@ mod tests {
                 "00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.compressed_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
                     &str
                 )
             );
@@ -1691,7 +1691,7 @@ mod tests {
                 "365 days 00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compressed_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
                     &str
                 )
             );
@@ -1699,7 +1699,7 @@ mod tests {
                 "00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.compressed_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
                     &str
                 )
             );
@@ -1726,7 +1726,7 @@ mod tests {
                 "00:02:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compressed_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
                     &str
                 )
             );
@@ -1734,7 +1734,7 @@ mod tests {
                 "365 days",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.compressed_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
                     &str
                 )
             );
@@ -1758,7 +1758,7 @@ mod tests {
                 "00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compressed_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
                     &str
                 )
             );
@@ -1766,7 +1766,7 @@ mod tests {
                 "365 days 00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.compressed_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
                     &str
                 )
             );
@@ -1790,7 +1790,7 @@ mod tests {
                 "00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.compressed_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
                     &str
                 )
             );
@@ -1799,7 +1799,7 @@ mod tests {
 
     #[pg_test]
     fn combine_using_muchos_data() {
-        compressed_state_agg::counters::reset();
+        compact_state_agg::counters::reset();
         Spi::execute(|client| {
             client.select("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
             client.select(
@@ -1816,15 +1816,15 @@ insert into test select '2020-01-02 UTC'::timestamptz + make_interval(days=>v), 
                 "2 days",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compressed_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
                     &str
                 )
             );
         });
-        assert!(compressed_state_agg::counters::COMBINE_NONE.load(Relaxed) == 0); // TODO untested
-        assert!(compressed_state_agg::counters::COMBINE_A.load(Relaxed) == 0); // TODO untested
-        assert!(compressed_state_agg::counters::COMBINE_B.load(Relaxed) > 0); // tested
-        assert!(compressed_state_agg::counters::COMBINE_BOTH.load(Relaxed) > 0);
+        assert!(compact_state_agg::counters::COMBINE_NONE.load(Relaxed) == 0); // TODO untested
+        assert!(compact_state_agg::counters::COMBINE_A.load(Relaxed) == 0); // TODO untested
+        assert!(compact_state_agg::counters::COMBINE_B.load(Relaxed) > 0); // tested
+        assert!(compact_state_agg::counters::COMBINE_BOTH.load(Relaxed) > 0);
         // tested
     }
 
@@ -1834,7 +1834,7 @@ insert into test select '2020-01-02 UTC'::timestamptz + make_interval(days=>v), 
     // #[pg_test]
     #[allow(dead_code)]
     fn combine_using_settings() {
-        compressed_state_agg::counters::reset();
+        compact_state_agg::counters::reset();
         Spi::execute(|client| {
             client.select("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
             client.select(
@@ -1856,7 +1856,7 @@ SET min_parallel_table_scan_size = 0;
 SET max_parallel_workers_per_gather = 4;
 SET parallel_leader_participation = off;
 SET enable_indexonlyscan = off;
-SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compressed_state_agg(ts, state))::TEXT FROM (
+SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM (
     SELECT * FROM test
     UNION ALL SELECT * FROM test
     UNION ALL SELECT * FROM test
@@ -1866,10 +1866,10 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compressed_s
                 )
             );
         });
-        assert!(compressed_state_agg::counters::COMBINE_NONE.load(Relaxed) == 0); // TODO untested
-        assert!(compressed_state_agg::counters::COMBINE_A.load(Relaxed) == 0); // TODO untested
-        assert!(compressed_state_agg::counters::COMBINE_B.load(Relaxed) > 0); // tested
-        assert!(compressed_state_agg::counters::COMBINE_BOTH.load(Relaxed) > 0);
+        assert!(compact_state_agg::counters::COMBINE_NONE.load(Relaxed) == 0); // TODO untested
+        assert!(compact_state_agg::counters::COMBINE_A.load(Relaxed) == 0); // TODO untested
+        assert!(compact_state_agg::counters::COMBINE_B.load(Relaxed) > 0); // tested
+        assert!(compact_state_agg::counters::COMBINE_BOTH.load(Relaxed) > 0);
         // tested
     }
 
@@ -1892,7 +1892,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compressed_s
                         r#"SELECT toolkit_experimental.duration_in('ERROR', states)::TEXT as error,
                                   toolkit_experimental.duration_in('START', states)::TEXT as start,
                                   toolkit_experimental.duration_in('STOPPED', states)::TEXT as stopped
-                             FROM (SELECT toolkit_experimental.compressed_state_agg(ts, state) as states FROM test) as foo"#,
+                             FROM (SELECT toolkit_experimental.compact_state_agg(ts, state) as states FROM test) as foo"#,
                         None,
                         None,
                     )
@@ -1961,7 +1961,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compressed_s
                     '2019-12-31 0:00'::timestamptz + (bucket * '1 day'::interval), '1 day'::interval, 
                     LAG(agg) OVER (ORDER BY bucket)
                 )::TEXT FROM (
-                    SELECT bucket, toolkit_experimental.compressed_state_agg(time, state) as agg 
+                    SELECT bucket, toolkit_experimental.compact_state_agg(time, state) as agg 
                     FROM inttest 
                     GROUP BY bucket
                 ) s
@@ -2011,7 +2011,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compressed_s
                     '2019-12-31 0:00'::timestamptz + (bucket * '1 day'::interval), '1 day'::interval, 
                     LAG(agg) OVER (ORDER BY bucket)
                 )::TEXT FROM (
-                    SELECT bucket, toolkit_experimental.compressed_state_agg(time, state) as agg 
+                    SELECT bucket, toolkit_experimental.compact_state_agg(time, state) as agg 
                     FROM inttest2
                     GROUP BY bucket ORDER BY bucket
                 ) s
@@ -2044,7 +2044,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compressed_s
                 None,
             );
             client.select(
-                "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compressed_state_agg(ts, state)) FROM test",
+                "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_state_agg(ts, state)) FROM test",
                 None,
                 None,
             );
@@ -2084,7 +2084,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compressed_s
                   '2019-12-31 0:00'::timestamptz + (bucket * '1 day'::interval), '1 day'::interval,
                   LAG(agg) OVER (ORDER BY bucket)
                 )::TEXT FROM (
-                    SELECT bucket, toolkit_experimental.compressed_state_agg(time, state) as agg
+                    SELECT bucket, toolkit_experimental.compact_state_agg(time, state) as agg
                     FROM states
                     GROUP BY bucket
                 ) s

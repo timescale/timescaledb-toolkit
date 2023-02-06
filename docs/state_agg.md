@@ -46,7 +46,7 @@ INSERT INTO states_test_5 VALUES
 Compute the amount of time spent in a state as INTERVAL.
 
 ```SQL
-SELECT toolkit_experimental.duration_in('ERROR', toolkit_experimental.compressed_state_agg(ts, state)) FROM states_test;
+SELECT toolkit_experimental.duration_in('ERROR', toolkit_experimental.compact_state_agg(ts, state)) FROM states_test;
 ```
 ```output
  interval
@@ -54,7 +54,7 @@ SELECT toolkit_experimental.duration_in('ERROR', toolkit_experimental.compressed
  00:00:03
 ```
 ```SQL
-SELECT toolkit_experimental.duration_in(2, toolkit_experimental.compressed_state_agg(ts, state)) FROM states_test_4;
+SELECT toolkit_experimental.duration_in(2, toolkit_experimental.compact_state_agg(ts, state)) FROM states_test_4;
 ```
 ```output
  interval
@@ -67,7 +67,7 @@ Extract as number of seconds:
 ```SQL
 SELECT
   EXTRACT(epoch FROM
-    toolkit_experimental.duration_in('ERROR', toolkit_experimental.compressed_state_agg(ts, state))
+    toolkit_experimental.duration_in('ERROR', toolkit_experimental.compact_state_agg(ts, state))
   )::INTEGER
 FROM states_test;
 ```
@@ -133,7 +133,7 @@ SELECT toolkit_experimental.duration_in('OK', toolkit_experimental.state_agg(ts,
 
 ```SQL
 SELECT state, duration FROM toolkit_experimental.into_values(
-    (SELECT toolkit_experimental.compressed_state_agg(ts, state) FROM states_test))
+    (SELECT toolkit_experimental.compact_state_agg(ts, state) FROM states_test))
     ORDER BY state, duration;
 ```
 ```output
@@ -146,7 +146,7 @@ SELECT state, duration FROM toolkit_experimental.into_values(
 ```
 ```SQL
 SELECT state, duration FROM toolkit_experimental.into_int_values(
-    (SELECT toolkit_experimental.compressed_state_agg(ts, state) FROM states_test_4))
+    (SELECT toolkit_experimental.compact_state_agg(ts, state) FROM states_test_4))
     ORDER BY state, duration;
 ```
 ```output
@@ -396,7 +396,7 @@ start_time             | end_time
 ```SQL
 WITH buckets AS (SELECT
     date_trunc('minute', ts) as dt,
-    toolkit_experimental.compressed_state_agg(ts, state) AS sa
+    toolkit_experimental.compact_state_agg(ts, state) AS sa
 FROM states_test
 GROUP BY date_trunc('minute', ts))
 SELECT toolkit_experimental.duration_in(
@@ -414,7 +414,7 @@ FROM buckets;
 ```SQL
 WITH buckets AS (SELECT
     date_trunc('minute', ts) as dt,
-    toolkit_experimental.compressed_state_agg(ts, state) AS sa
+    toolkit_experimental.compact_state_agg(ts, state) AS sa
 FROM states_test
 GROUP BY date_trunc('minute', ts))
 SELECT toolkit_experimental.duration_in(

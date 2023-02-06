@@ -11,6 +11,11 @@
 
 crate::functions_stabilized_at! {
     STABLE_FUNCTIONS
+    "1.14.0" => {
+        interpolated_average(timeweightsummary,timestamp with time zone,interval,timeweightsummary,timeweightsummary),
+        interpolated_delta(countersummary,timestamp with time zone,interval,countersummary,countersummary),
+        interpolated_rate(countersummary,timestamp with time zone,interval,countersummary,countersummary),
+    }
     "1.12.0" => {
         stats1d_tf_inv_trans(internal,double precision),
         stats1d_tf_final(internal),

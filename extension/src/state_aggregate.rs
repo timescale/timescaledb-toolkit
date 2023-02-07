@@ -337,7 +337,7 @@ pub mod toolkit_experimental {
                     state: self.durations.as_slice()[self.first_state as usize]
                         .state
                         .materialize(&states),
-                    time: interval_start,
+                    time: self.first_time,
                 },
             };
 
@@ -752,12 +752,6 @@ fn duration_in_inner<'a>(
             assert!(
                 !agg.0.compact,
                 "unreachable: interval specified for compact aggregate"
-            );
-            assert!(
-                start >= agg.0.first_time,
-                "Start time ({}) cannot be before first state ({})",
-                start,
-                agg.0.first_time,
             );
 
             let state = state.materialize(agg.states_as_str());

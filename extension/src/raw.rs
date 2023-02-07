@@ -24,6 +24,8 @@ extension_sql!(
     bootstrap,
 );
 
+// What's this about?  I don't think we've been migrating anything.  If this
+// raw_type stuff is old n busted, let's bite the bullet now.
 // TODO temporary holdover types while we migrate from nominal types to actual
 
 macro_rules! raw_type {

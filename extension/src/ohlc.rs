@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 use pgx::*;
 use serde::{Deserialize, Serialize};
 
@@ -215,51 +216,54 @@ pub fn candlestick(
     }
 }
 
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn tick_data_no_vol_transition(
-    state: Internal,
-    ts: Option<crate::raw::TimestampTz>,
-    price: Option<f64>,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal> {
-    tick_data_transition_inner(unsafe { state.to_inner() }, ts, price, None, fcinfo).internal()
+#[aggregate_builder::aggregate2(
+    name = ohlc,
+    // TODO Can we derive namespace from mod?
+    finalfunc = toolkit_experimental::candlestick_final,
+    combinefunc = toolkit_experimental::candlestick_combine,
+    serialfunc = toolkit_experimental::candlestick_serialize,
+    deserialfunc = toolkit_experimental::candlestick_deserialize,
+    parallel = safe,
+    schema = toolkit_experimental,
+)]
+fn tick_data_no_vol_transition(
+    // TODO Teach AggregateFn parser to handle lifetime generics and change this
+    // back to a scoped lifetime ('input), not static.
+    state: Option<Candlestick<'static>>,
+    #[sql_type("timestamptz")] ts: Option<crate::raw::TimestampTz>,
+    #[sql_type("double precision")] price: Option<f64>,
+) -> Option<Candlestick<'static>> {
+    tick_data_transition(state, ts, price, None)
 }
 
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn tick_data_transition(
-    state: Internal,
-    ts: Option<crate::raw::TimestampTz>,
-    price: Option<f64>,
-    volume: Option<f64>,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal> {
-    tick_data_transition_inner(unsafe { state.to_inner() }, ts, price, volume, fcinfo).internal()
-}
-
-pub fn tick_data_transition_inner(
-    state: Option<Inner<Candlestick>>,
-    ts: Option<crate::raw::TimestampTz>,
-    price: Option<f64>,
-    volume: Option<f64>,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<Candlestick>> {
-    unsafe {
-        in_aggregate_context(fcinfo, || {
-            if let (Some(ts), Some(price)) = (ts, price) {
-                match state {
-                    None => {
-                        let cs = Candlestick::from_tick(ts.into(), price, volume);
-                        Some(cs.into())
-                    }
-                    Some(mut cs) => {
-                        cs.add_tick_data(ts.into(), price, volume);
-                        Some(cs)
-                    }
-                }
-            } else {
-                state
+#[aggregate_builder::aggregate2(
+    name = candlestick_agg,
+    schema = toolkit_experimental,
+    finalfunc = toolkit_experimental::candlestick_final,
+    combinefunc = toolkit_experimental::candlestick_combine,
+    serialfunc = toolkit_experimental::candlestick_serialize,
+    deserialfunc = toolkit_experimental::candlestick_deserialize,
+    parallel = safe,
+)]
+fn tick_data_transition(
+    state: Option<Candlestick<'static>>,
+    #[sql_type("timestamptz")] ts: Option<crate::raw::TimestampTz>,
+    #[sql_type("double precision")] price: Option<f64>,
+    #[sql_type("double precision")] volume: Option<f64>,
+) -> Option<Candlestick<'static>> {
+    if let (Some(ts), Some(price)) = (ts, price) {
+        match state {
+            None => {
+                let cs = Candlestick::from_tick(ts.into(), price, volume);
+                Some(cs.into())
             }
-        })
+            Some(mut cs) => {
+                cs.add_tick_data(ts.into(), price, volume);
+                Some(cs)
+            }
+        }
+    } else {
+        state
     }
 }
 
@@ -295,7 +299,7 @@ pub fn candlestick_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Candlestick<'static>> {
-    unsafe { candlestick_final_inner(state.to_inner(), fcinfo) }
+    candlestick_final_inner(unsafe { state.to_inner() }, fcinfo)
 }
 
 pub fn candlestick_final_inner(
@@ -313,36 +317,27 @@ pub fn candlestick_final_inner(
     }
 }
 
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn candlestick_combine(
-    state1: Internal,
-    state2: Internal,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal> {
-    unsafe { candlestick_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal() }
-}
-
-pub fn candlestick_combine_inner<'input>(
-    state1: Option<Inner<Candlestick<'input>>>,
-    state2: Option<Inner<Candlestick<'input>>>,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<Candlestick<'input>>> {
-    unsafe {
-        in_aggregate_context(fcinfo, || match (state1, state2) {
-            (None, None) => None,
-            (None, Some(only)) | (Some(only), None) => Some((*only).into()),
-            (Some(a), Some(b)) => {
-                let (mut a, b) = (*a, *b);
-                a.combine(&b);
-                Some(a.into())
-            }
-        })
+#[aggregate_builder::combine(immutable, parallel_safe, schema = "toolkit_experimental")]
+fn candlestick_combine(
+    // TODO Teach AggregateFn parser to handle lifetime generics and change this
+    // back to a scoped lifetime ('input), not static.
+    state1: Option<&Candlestick<'static>>,
+    state2: Option<&Candlestick<'static>>,
+) -> Option<Candlestick<'static>> {
+    match (state1, state2) {
+        (None, None) => None,
+        (None, Some(only)) | (Some(only), None) => Some(*only),
+        (Some(a), Some(b)) => {
+            let (mut a, b) = (*a, *b);
+            a.combine(&b);
+            Some(a)
+        }
     }
 }
 
 #[pg_extern(immutable, parallel_safe, strict, schema = "toolkit_experimental")]
 pub fn candlestick_serialize(state: Internal) -> bytea {
-    let cs: &mut Candlestick = unsafe { state.get_mut().unwrap() };
+    let cs: &Candlestick = unsafe { state.get() }.unwrap();
     let ser = &**cs;
     crate::do_serialize!(ser)
 }
@@ -359,54 +354,7 @@ pub fn candlestick_deserialize_inner(bytes: bytea) -> Inner<Candlestick<'static>
     cs.into()
 }
 
-extension_sql!(
-    "\n\
-    CREATE AGGREGATE toolkit_experimental.ohlc( ts timestamptz, price DOUBLE PRECISION )\n\
-    (\n\
-        sfunc = toolkit_experimental.tick_data_no_vol_transition,\n\
-        stype = internal,\n\
-        finalfunc = toolkit_experimental.candlestick_final,\n\
-        combinefunc = toolkit_experimental.candlestick_combine,\n\
-        serialfunc = toolkit_experimental.candlestick_serialize,\n\
-        deserialfunc = toolkit_experimental.candlestick_deserialize,\n\
-        parallel = safe\n\
-    );\n",
-    name = "ohlc",
-    requires = [
-        tick_data_no_vol_transition,
-        candlestick_final,
-        candlestick_combine,
-        candlestick_serialize,
-        candlestick_deserialize
-    ],
-);
-
-extension_sql!(
-    "\n\
-    CREATE AGGREGATE toolkit_experimental.candlestick_agg( \n\
-        ts TIMESTAMPTZ,\n\
-        price DOUBLE PRECISION,\n\
-        volume DOUBLE PRECISION\n\
-    )\n\
-    (\n\
-        sfunc = toolkit_experimental.tick_data_transition,\n\
-        stype = internal,\n\
-        finalfunc = toolkit_experimental.candlestick_final,\n\
-        combinefunc = toolkit_experimental.candlestick_combine,\n\
-        serialfunc = toolkit_experimental.candlestick_serialize,\n\
-        deserialfunc = toolkit_experimental.candlestick_deserialize,\n\
-        parallel = safe\n\
-    );\n",
-    name = "candlestick_agg",
-    requires = [
-        tick_data_transition,
-        candlestick_final,
-        candlestick_combine,
-        candlestick_serialize,
-        candlestick_deserialize
-    ],
-);
-
+// TODO Automate generation of this too.
 extension_sql!(
     "\n\
     CREATE AGGREGATE toolkit_experimental.rollup( candlestick toolkit_experimental.Candlestick)\n\

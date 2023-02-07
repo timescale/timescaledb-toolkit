@@ -875,7 +875,7 @@ pub fn duration_in_range<'a>(
     state: String,
     aggregate: Option<StateAgg<'a>>,
     start: TimestampTz,
-    interval: Option<crate::raw::Interval>,
+    interval: default!(Option<crate::raw::Interval>, "NULL"),
 ) -> crate::raw::Interval {
     if let Some(ref aggregate) = aggregate {
         aggregate.assert_str()
@@ -902,7 +902,7 @@ pub fn duration_in_range_int<'a>(
     state: i64,
     aggregate: Option<StateAgg<'a>>,
     start: TimestampTz,
-    interval: Option<crate::raw::Interval>,
+    interval: default!(Option<crate::raw::Interval>, "NULL"),
 ) -> crate::raw::Interval {
     if let Some(ref aggregate) = aggregate {
         aggregate.assert_int()

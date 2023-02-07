@@ -757,14 +757,16 @@ fn duration_in_inner<'a>(
             let state = state.materialize(agg.states_as_str());
             let mut total = 0;
             for tis in agg.combined_durations.iter() {
-                if tis.state.materialize(agg.states_as_str()) == state {
-                    let tis_start_time = i64::max(tis.start_time, start);
-                    let tis_end_time = i64::min(tis.end_time, end);
-                    if tis_end_time >= start && tis_start_time <= end {
-                        let amount = tis_end_time - tis_start_time;
-                        assert!(amount >= 0, "incorrectly ordered times");
-                        total += amount;
-                    }
+                let tis_start_time = i64::max(tis.start_time, start);
+                let tis_end_time = i64::min(tis.end_time, end);
+                if tis_start_time > end {
+                    // combined_durations is sorted, so after this point there can't be any more
+                    break;
+                };
+                if tis_end_time >= start && tis.state.materialize(agg.states_as_str()) == state {
+                    let amount = tis_end_time - tis_start_time;
+                    assert!(amount >= 0, "incorrectly ordered times");
+                    total += amount;
                 }
             }
             total

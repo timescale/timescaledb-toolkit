@@ -11,6 +11,14 @@ pub unsafe fn get_collation(fcinfo: pg_sys::FunctionCallInfo) -> Option<pg_sys::
     }
 }
 
+pub fn get_collation_or_default(fcinfo: pg_sys::FunctionCallInfo) -> Option<pg_sys::Oid> {
+    if fcinfo.is_null() {
+        Some(100) // TODO: default OID, there should be a constant for this
+    } else {
+        unsafe { get_collation(fcinfo) }
+    }
+}
+
 pub unsafe fn in_aggregate_context<T, F: FnOnce() -> T>(
     fcinfo: pg_sys::FunctionCallInfo,
     f: F,

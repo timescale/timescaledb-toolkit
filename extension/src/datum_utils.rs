@@ -170,11 +170,7 @@ impl DatumHashBuilder {
 
 impl Clone for DatumHashBuilder {
     fn clone(&self) -> Self {
-        Self {
-            info: self.info,
-            type_id: self.type_id,
-            collation: self.collation,
-        }
+        unsafe { DatumHashBuilder::from_type_id(self.type_id, Some(self.collation)) }
     }
 }
 

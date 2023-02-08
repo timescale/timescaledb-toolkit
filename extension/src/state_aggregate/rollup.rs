@@ -7,57 +7,57 @@ use serde::{Deserialize, Serialize};
 
 extension_sql!(
     "CREATE AGGREGATE toolkit_experimental.rollup(
+        value toolkit_experimental.CompactStateAgg
+    ) (
+        sfunc = toolkit_experimental.compact_state_agg_rollup_trans,
+        stype = internal,
+        finalfunc = toolkit_experimental.compact_state_agg_rollup_final,
+        combinefunc = toolkit_experimental.compact_state_agg_rollup_combine,
+        serialfunc = toolkit_experimental.compact_state_agg_rollup_serialize,
+        deserialfunc = toolkit_experimental.compact_state_agg_rollup_deserialize,
+        parallel = restricted
+    );",
+    name = "compact_state_agg_rollup",
+    requires = [
+        compact_state_agg_rollup_trans,
+        compact_state_agg_rollup_final,
+        compact_state_agg_rollup_combine,
+        compact_state_agg_rollup_serialize,
+        compact_state_agg_rollup_deserialize,
+        CompactStateAgg,
+    ],
+);
+extension_sql!(
+    "CREATE AGGREGATE toolkit_experimental.rollup(
         value toolkit_experimental.StateAgg
     ) (
         sfunc = toolkit_experimental.state_agg_rollup_trans,
         stype = internal,
         finalfunc = toolkit_experimental.state_agg_rollup_final,
-        combinefunc = toolkit_experimental.state_agg_rollup_combine,
-        serialfunc = toolkit_experimental.state_agg_rollup_serialize,
-        deserialfunc = toolkit_experimental.state_agg_rollup_deserialize,
+        combinefunc = toolkit_experimental.compact_state_agg_rollup_combine,
+        serialfunc = toolkit_experimental.compact_state_agg_rollup_serialize,
+        deserialfunc = toolkit_experimental.compact_state_agg_rollup_deserialize,
         parallel = restricted
     );",
     name = "state_agg_rollup",
     requires = [
         state_agg_rollup_trans,
         state_agg_rollup_final,
-        state_agg_rollup_combine,
-        state_agg_rollup_serialize,
-        state_agg_rollup_deserialize,
+        compact_state_agg_rollup_combine,
+        compact_state_agg_rollup_serialize,
+        compact_state_agg_rollup_deserialize,
         StateAgg,
-    ],
-);
-extension_sql!(
-    "CREATE AGGREGATE toolkit_experimental.rollup(
-        value toolkit_experimental.TimelineAgg
-    ) (
-        sfunc = toolkit_experimental.timeline_agg_rollup_trans,
-        stype = internal,
-        finalfunc = toolkit_experimental.timeline_agg_rollup_final,
-        combinefunc = toolkit_experimental.state_agg_rollup_combine,
-        serialfunc = toolkit_experimental.state_agg_rollup_serialize,
-        deserialfunc = toolkit_experimental.state_agg_rollup_deserialize,
-        parallel = restricted
-    );",
-    name = "timeline_agg_rollup",
-    requires = [
-        timeline_agg_rollup_trans,
-        timeline_agg_rollup_final,
-        state_agg_rollup_combine,
-        state_agg_rollup_serialize,
-        state_agg_rollup_deserialize,
-        TimelineAgg,
     ],
 );
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RollupTransState {
-    values: Vec<OwnedStateAgg>,
-    from_timeline_agg: bool,
+    values: Vec<OwnedCompactStateAgg>,
+    compact: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-struct OwnedStateAgg {
+struct OwnedCompactStateAgg {
     durations: Vec<DurationInState>,
     combined_durations: Vec<TimeInState>,
     first_time: i64,
@@ -65,15 +65,15 @@ struct OwnedStateAgg {
     first_state: u32,
     last_state: u32,
     states: Vec<u8>,
-    from_timeline_agg: bool,
+    compact: bool,
     integer_states: bool,
 }
 
-impl OwnedStateAgg {
+impl OwnedCompactStateAgg {
     pub fn merge(self, other: Self) -> Self {
         assert_eq!(
-            self.from_timeline_agg, other.from_timeline_agg,
-            "can't merge state_agg and timeline_agg"
+            self.compact, other.compact,
+            "can't merge compact_state_agg and state_agg"
         );
         assert_eq!(
             self.integer_states, other.integer_states,
@@ -145,7 +145,7 @@ impl OwnedStateAgg {
         merged_durations[earlier.last_state as usize].duration += gap;
 
         // ensure combined_durations covers the whole range of time
-        if earlier.from_timeline_agg {
+        if !earlier.compact {
             if combined_durations[earlier_len - 1]
                 .state
                 .materialize(&merged_states)
@@ -162,7 +162,7 @@ impl OwnedStateAgg {
         }
 
         let merged_states = merged_states.into_bytes();
-        OwnedStateAgg {
+        OwnedCompactStateAgg {
             states: merged_states,
             durations: merged_durations,
             combined_durations,
@@ -173,16 +173,16 @@ impl OwnedStateAgg {
             last_state: added_entries + later.last_state,
 
             // these values are always the same for both
-            from_timeline_agg: earlier.from_timeline_agg,
+            compact: earlier.compact,
             integer_states: earlier.integer_states,
         }
     }
 }
 
-impl<'a> From<OwnedStateAgg> for StateAgg<'a> {
-    fn from(owned: OwnedStateAgg) -> StateAgg<'a> {
+impl<'a> From<OwnedCompactStateAgg> for CompactStateAgg<'a> {
+    fn from(owned: OwnedCompactStateAgg) -> CompactStateAgg<'a> {
         unsafe {
-            flatten!(StateAgg {
+            flatten!(CompactStateAgg {
                 states_len: owned.states.len() as u64,
                 states: (&*owned.states).into(),
                 durations_len: owned.durations.len() as u64,
@@ -193,16 +193,16 @@ impl<'a> From<OwnedStateAgg> for StateAgg<'a> {
                 last_time: owned.last_time,
                 first_state: owned.first_state,
                 last_state: owned.last_state,
-                from_timeline_agg: owned.from_timeline_agg,
+                compact: owned.compact,
                 integer_states: owned.integer_states,
             })
         }
     }
 }
 
-impl<'a> From<StateAgg<'a>> for OwnedStateAgg {
-    fn from(agg: StateAgg<'a>) -> OwnedStateAgg {
-        OwnedStateAgg {
+impl<'a> From<CompactStateAgg<'a>> for OwnedCompactStateAgg {
+    fn from(agg: CompactStateAgg<'a>) -> OwnedCompactStateAgg {
+        OwnedCompactStateAgg {
             states: agg.states.iter().collect::<Vec<_>>(),
             durations: agg.durations.iter().collect::<Vec<_>>(),
             combined_durations: agg.combined_durations.iter().collect::<Vec<_>>(),
@@ -210,7 +210,7 @@ impl<'a> From<StateAgg<'a>> for OwnedStateAgg {
             last_time: agg.last_time,
             first_state: agg.first_state,
             last_state: agg.last_state,
-            from_timeline_agg: agg.from_timeline_agg,
+            compact: agg.compact,
             integer_states: agg.integer_states,
         }
     }
@@ -228,17 +228,17 @@ impl RollupTransState {
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn state_agg_rollup_trans<'a>(
+pub fn compact_state_agg_rollup_trans<'a>(
     state: Internal,
-    next: Option<StateAgg<'a>>,
+    next: Option<CompactStateAgg<'a>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    state_agg_rollup_trans_inner(unsafe { state.to_inner() }, next, fcinfo).internal()
+    compact_state_agg_rollup_trans_inner(unsafe { state.to_inner() }, next, fcinfo).internal()
 }
 
-pub fn state_agg_rollup_trans_inner<'a>(
+pub fn compact_state_agg_rollup_trans_inner<'a>(
     state: Option<Inner<RollupTransState>>,
-    next: Option<StateAgg<'a>>,
+    next: Option<CompactStateAgg<'a>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<RollupTransState>> {
     unsafe {
@@ -247,7 +247,7 @@ pub fn state_agg_rollup_trans_inner<'a>(
             (None, Some(next)) => Some(
                 RollupTransState {
                     values: vec![next.into()],
-                    from_timeline_agg: false,
+                    compact: false,
                 }
                 .into(),
             ),
@@ -261,17 +261,43 @@ pub fn state_agg_rollup_trans_inner<'a>(
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn timeline_agg_rollup_trans<'a>(
+pub fn state_agg_rollup_trans<'a>(
     state: Internal,
-    next: Option<TimelineAgg<'a>>,
+    next: Option<StateAgg<'a>>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
-    state_agg_rollup_trans_inner(
+    compact_state_agg_rollup_trans_inner(
         unsafe { state.to_inner() },
-        next.map(TimelineAgg::as_state_agg),
+        next.map(StateAgg::as_compact_state_agg),
         fcinfo,
     )
     .internal()
+}
+
+#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+fn compact_state_agg_rollup_final<'a>(
+    state: Internal,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<CompactStateAgg<'a>> {
+    compact_state_agg_rollup_final_inner(unsafe { state.to_inner() }, fcinfo)
+}
+
+fn compact_state_agg_rollup_final_inner<'a>(
+    state: Option<Inner<RollupTransState>>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<CompactStateAgg<'a>> {
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            let mut state = match state {
+                None => return None,
+                Some(state) => state.clone(),
+            };
+            state.merge();
+            assert!(state.values.len() == 1);
+            let agg: Option<OwnedCompactStateAgg> = state.values.drain(..).next().unwrap().into();
+            agg.map(Into::into)
+        })
+    }
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
@@ -294,67 +320,42 @@ fn state_agg_rollup_final_inner<'a>(
             };
             state.merge();
             assert!(state.values.len() == 1);
-            let agg: Option<OwnedStateAgg> = state.values.drain(..).next().unwrap().into();
-            agg.map(Into::into)
-        })
-    }
-}
-
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-fn timeline_agg_rollup_final<'a>(
-    state: Internal,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<TimelineAgg<'a>> {
-    timeline_agg_rollup_final_inner(unsafe { state.to_inner() }, fcinfo)
-}
-
-fn timeline_agg_rollup_final_inner<'a>(
-    state: Option<Inner<RollupTransState>>,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<TimelineAgg<'a>> {
-    unsafe {
-        in_aggregate_context(fcinfo, || {
-            let mut state = match state {
-                None => return None,
-                Some(state) => state.clone(),
-            };
-            state.merge();
-            assert!(state.values.len() == 1);
-            let agg: Option<OwnedStateAgg> = state.values.drain(..).next().unwrap().into();
-            agg.map(Into::into).map(TimelineAgg::new)
+            let agg: Option<OwnedCompactStateAgg> = state.values.drain(..).next().unwrap().into();
+            agg.map(Into::into).map(StateAgg::new)
         })
     }
 }
 
 #[pg_extern(immutable, parallel_safe, strict, schema = "toolkit_experimental")]
-pub fn state_agg_rollup_serialize(state: Internal) -> bytea {
+pub fn compact_state_agg_rollup_serialize(state: Internal) -> bytea {
     let mut state: Inner<RollupTransState> = unsafe { state.to_inner().unwrap() };
     state.merge();
     crate::do_serialize!(state)
 }
 
 #[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn state_agg_rollup_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
-    state_agg_rollup_deserialize_inner(bytes).internal()
+pub fn compact_state_agg_rollup_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
+    compact_state_agg_rollup_deserialize_inner(bytes).internal()
 }
-pub fn state_agg_rollup_deserialize_inner(bytes: bytea) -> Inner<RollupTransState> {
+pub fn compact_state_agg_rollup_deserialize_inner(bytes: bytea) -> Inner<RollupTransState> {
     let t: RollupTransState = crate::do_deserialize!(bytes, RollupTransState);
     t.into()
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn state_agg_rollup_combine(
+pub fn compact_state_agg_rollup_combine(
     state1: Internal,
     state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     unsafe {
-        state_agg_rollup_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
+        compact_state_agg_rollup_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo)
+            .internal()
     }
 }
 
 #[allow(clippy::redundant_clone)] // clone is needed so we don't mutate shared memory
-pub fn state_agg_rollup_combine_inner(
+pub fn compact_state_agg_rollup_combine_inner(
     state1: Option<Inner<RollupTransState>>,
     state2: Option<Inner<RollupTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
@@ -365,10 +366,10 @@ pub fn state_agg_rollup_combine_inner(
             (Some(x), None) => Some(x.clone().into()),
             (None, Some(x)) => Some(x.clone().into()),
             (Some(x), Some(y)) => {
-                let from_timeline_agg = x.from_timeline_agg;
+                let compact = x.compact;
                 assert_eq!(
-                    from_timeline_agg, y.from_timeline_agg,
-                    "trying to merge state and timeline aggs, this should be unreachable"
+                    compact, y.compact,
+                    "trying to merge compact and non-compact state aggs, this should be unreachable"
                 );
                 let values = x
                     .values
@@ -376,10 +377,7 @@ pub fn state_agg_rollup_combine_inner(
                     .chain(y.values.iter())
                     .map(Clone::clone)
                     .collect::<Vec<_>>();
-                let trans_state = RollupTransState {
-                    values,
-                    from_timeline_agg,
-                };
+                let trans_state = RollupTransState { values, compact };
                 Some(trans_state.clone().into())
             }
         })
@@ -395,11 +393,11 @@ mod tests {
     #[pg_test]
     #[should_panic = "can't merge overlapping aggregates"]
     fn merge_range_full_overlap() {
-        let mut outer: OwnedStateAgg = StateAgg::empty(false, false).into();
+        let mut outer: OwnedCompactStateAgg = CompactStateAgg::empty(false, false).into();
         outer.first_time = 10;
         outer.last_time = 50;
 
-        let mut inner: OwnedStateAgg = StateAgg::empty(false, false).into();
+        let mut inner: OwnedCompactStateAgg = CompactStateAgg::empty(false, false).into();
         inner.first_time = 20;
         inner.last_time = 30;
 
@@ -409,11 +407,11 @@ mod tests {
     #[pg_test]
     #[should_panic = "can't merge overlapping aggregates"]
     fn merge_range_partial_overlap() {
-        let mut r1: OwnedStateAgg = StateAgg::empty(false, false).into();
+        let mut r1: OwnedCompactStateAgg = CompactStateAgg::empty(false, false).into();
         r1.first_time = 10;
         r1.last_time = 50;
 
-        let mut r2: OwnedStateAgg = StateAgg::empty(false, false).into();
+        let mut r2: OwnedCompactStateAgg = CompactStateAgg::empty(false, false).into();
         r2.first_time = 20;
         r2.last_time = 50;
 

@@ -9,8 +9,11 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 #### New experimental features
 
 #### Bug fixes
+- [#660](https://github.com/timescale/timescaledb-toolkit/issues/660): Heartbeat aggregate rollup should interpolate aggregates
+- [#679](https://github.com/timescale/timescaledb-toolkit/issues/679): Heartbeat agg rollup producing invalid aggregates.
 
 #### Other notable changes
+- [#685](https://github.com/timescale/timescaledb-toolkit/issues/685): rollup for freq_agg and topn_agg
 - [#692](https://github.com/timescale/timescaledb-toolkit/pull/692): Support specifying a range to `duration_in` to specify a time range to get states in for state aggregates
 - [#692](https://github.com/timescale/timescaledb-toolkit/pull/692): Removed `next` parameter from interpolated state aggregate functions
 - [#692](https://github.com/timescale/timescaledb-toolkit/pull/692): Renamed `state_agg` to `compact_state_agg` and `timeline_agg` to `state_agg`

@@ -804,17 +804,14 @@ fn duration_in_inner<'a>(
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn duration_in<'a>(
-    aggregate: Option<CompactStateAgg<'a>>,
-    state: String,
-) -> crate::raw::Interval {
-    if let Some(ref aggregate) = aggregate {
-        aggregate.assert_str()
+pub fn duration_in<'a>(agg: Option<CompactStateAgg<'a>>, state: String) -> crate::raw::Interval {
+    if let Some(ref agg) = agg {
+        agg.assert_str()
     };
-    let state = aggregate
+    let state = agg
         .as_ref()
-        .and_then(|aggregate| StateEntry::try_from_existing_str(aggregate.states_as_str(), &state));
-    duration_in_inner(aggregate, state, None)
+        .and_then(|agg| StateEntry::try_from_existing_str(agg.states_as_str(), &state));
+    duration_in_inner(agg, state, None)
 }
 
 #[pg_extern(
@@ -823,14 +820,11 @@ pub fn duration_in<'a>(
     name = "duration_in",
     schema = "toolkit_experimental"
 )]
-pub fn duration_in_int<'a>(
-    aggregate: Option<CompactStateAgg<'a>>,
-    state: i64,
-) -> crate::raw::Interval {
-    if let Some(ref aggregate) = aggregate {
-        aggregate.assert_int()
+pub fn duration_in_int<'a>(agg: Option<CompactStateAgg<'a>>, state: i64) -> crate::raw::Interval {
+    if let Some(ref agg) = agg {
+        agg.assert_int()
     };
-    duration_in_inner(aggregate, Some(StateEntry::from_integer(state)), None)
+    duration_in_inner(agg, Some(StateEntry::from_integer(state)), None)
 }
 
 #[pg_extern(
@@ -839,11 +833,11 @@ pub fn duration_in_int<'a>(
     name = "duration_in",
     schema = "toolkit_experimental"
 )]
-pub fn duration_in_tl<'a>(aggregate: Option<StateAgg<'a>>, state: String) -> crate::raw::Interval {
-    if let Some(ref aggregate) = aggregate {
-        aggregate.assert_str()
+pub fn duration_in_tl<'a>(agg: Option<StateAgg<'a>>, state: String) -> crate::raw::Interval {
+    if let Some(ref agg) = agg {
+        agg.assert_str()
     };
-    duration_in(aggregate.map(StateAgg::as_compact_state_agg), state)
+    duration_in(agg.map(StateAgg::as_compact_state_agg), state)
 }
 
 #[pg_extern(
@@ -852,12 +846,12 @@ pub fn duration_in_tl<'a>(aggregate: Option<StateAgg<'a>>, state: String) -> cra
     name = "duration_in",
     schema = "toolkit_experimental"
 )]
-pub fn duration_in_tl_int<'a>(aggregate: Option<StateAgg<'a>>, state: i64) -> crate::raw::Interval {
-    if let Some(ref aggregate) = aggregate {
-        aggregate.assert_int()
+pub fn duration_in_tl_int<'a>(agg: Option<StateAgg<'a>>, state: i64) -> crate::raw::Interval {
+    if let Some(ref agg) = agg {
+        agg.assert_int()
     };
     duration_in_inner(
-        aggregate.map(StateAgg::as_compact_state_agg),
+        agg.map(StateAgg::as_compact_state_agg),
         Some(StateEntry::from_integer(state)),
         None,
     )
@@ -870,21 +864,21 @@ pub fn duration_in_tl_int<'a>(aggregate: Option<StateAgg<'a>>, state: i64) -> cr
     schema = "toolkit_experimental"
 )]
 pub fn duration_in_range<'a>(
-    aggregate: Option<StateAgg<'a>>,
+    agg: Option<StateAgg<'a>>,
     state: String,
     start: TimestampTz,
     interval: default!(Option<crate::raw::Interval>, "NULL"),
 ) -> crate::raw::Interval {
-    if let Some(ref aggregate) = aggregate {
-        aggregate.assert_str()
+    if let Some(ref agg) = agg {
+        agg.assert_str()
     };
-    let aggregate = aggregate.map(StateAgg::as_compact_state_agg);
+    let agg = agg.map(StateAgg::as_compact_state_agg);
     let interval = interval.map(|interval| crate::datum_utils::interval_to_ms(&start, &interval));
     let start = start.into();
-    let state = aggregate
+    let state = agg
         .as_ref()
-        .and_then(|aggregate| StateEntry::try_from_existing_str(aggregate.states_as_str(), &state));
-    duration_in_inner(aggregate, state, Some((start, interval)))
+        .and_then(|agg| StateEntry::try_from_existing_str(agg.states_as_str(), &state));
+    duration_in_inner(agg, state, Some((start, interval)))
 }
 
 #[pg_extern(
@@ -894,18 +888,18 @@ pub fn duration_in_range<'a>(
     schema = "toolkit_experimental"
 )]
 pub fn duration_in_range_int<'a>(
-    aggregate: Option<StateAgg<'a>>,
+    agg: Option<StateAgg<'a>>,
     state: i64,
     start: TimestampTz,
     interval: default!(Option<crate::raw::Interval>, "NULL"),
 ) -> crate::raw::Interval {
-    if let Some(ref aggregate) = aggregate {
-        aggregate.assert_int()
+    if let Some(ref agg) = agg {
+        agg.assert_int()
     };
     let interval = interval.map(|interval| crate::datum_utils::interval_to_ms(&start, &interval));
     let start = start.into();
     duration_in_inner(
-        aggregate.map(StateAgg::as_compact_state_agg),
+        agg.map(StateAgg::as_compact_state_agg),
         Some(StateEntry::from_integer(state)),
         Some((start, interval)),
     )
@@ -953,17 +947,17 @@ fn interpolated_duration_in_inner<'a>(
 }
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn interpolated_duration_in<'a>(
-    aggregate: Option<CompactStateAgg<'a>>,
+    agg: Option<CompactStateAgg<'a>>,
     state: String,
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<CompactStateAgg<'a>>,
 ) -> crate::raw::Interval {
-    if let Some(ref aggregate) = aggregate {
-        aggregate.assert_str()
+    if let Some(ref agg) = agg {
+        agg.assert_str()
     };
     interpolated_duration_in_inner(
-        aggregate,
+        agg,
         Some(MaterializedState::String(state)),
         start,
         interval,
@@ -978,17 +972,17 @@ pub fn interpolated_duration_in<'a>(
     schema = "toolkit_experimental"
 )]
 pub fn interpolated_duration_in_tl<'a>(
-    aggregate: Option<StateAgg<'a>>,
+    agg: Option<StateAgg<'a>>,
     state: String,
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<StateAgg<'a>>,
 ) -> crate::raw::Interval {
-    if let Some(ref aggregate) = aggregate {
-        aggregate.assert_str()
+    if let Some(ref agg) = agg {
+        agg.assert_str()
     };
     interpolated_duration_in(
-        aggregate.map(StateAgg::as_compact_state_agg),
+        agg.map(StateAgg::as_compact_state_agg),
         state,
         start,
         interval,
@@ -1003,17 +997,17 @@ pub fn interpolated_duration_in_tl<'a>(
     name = "interpolated_duration_in"
 )]
 pub fn interpolated_duration_in_int<'a>(
-    aggregate: Option<CompactStateAgg<'a>>,
+    agg: Option<CompactStateAgg<'a>>,
     state: i64,
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<CompactStateAgg<'a>>,
 ) -> crate::raw::Interval {
-    if let Some(ref aggregate) = aggregate {
-        aggregate.assert_int()
+    if let Some(ref agg) = agg {
+        agg.assert_int()
     };
     interpolated_duration_in_inner(
-        aggregate,
+        agg,
         Some(MaterializedState::Integer(state)),
         start,
         interval,
@@ -1028,17 +1022,17 @@ pub fn interpolated_duration_in_int<'a>(
     schema = "toolkit_experimental"
 )]
 pub fn interpolated_duration_in_tl_int<'a>(
-    aggregate: Option<StateAgg<'a>>,
+    agg: Option<StateAgg<'a>>,
     state: i64,
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<StateAgg<'a>>,
 ) -> crate::raw::Interval {
-    if let Some(ref aggregate) = aggregate {
-        aggregate.assert_int()
+    if let Some(ref agg) = agg {
+        agg.assert_int()
     };
     interpolated_duration_in_int(
-        aggregate.map(StateAgg::as_compact_state_agg),
+        agg.map(StateAgg::as_compact_state_agg),
         state,
         start,
         interval,
@@ -1049,6 +1043,8 @@ pub fn interpolated_duration_in_tl_int<'a>(
 fn duration_in_bad_args_inner() -> ! {
     panic!("The start and interval parameters cannot be used for duration_in with a compact state aggregate")
 }
+
+#[allow(unused_variables)] // can't underscore-prefix since argument names are used by pgx
 #[pg_extern(
     immutable,
     parallel_safe,
@@ -1056,13 +1052,14 @@ fn duration_in_bad_args_inner() -> ! {
     schema = "toolkit_experimental"
 )]
 pub fn duration_in_bad_args<'a>(
-    _aggregate: Option<CompactStateAgg<'a>>,
-    _state: String,
-    _start: TimestampTz,
-    _interval: crate::raw::Interval,
+    agg: Option<CompactStateAgg<'a>>,
+    state: String,
+    start: TimestampTz,
+    interval: crate::raw::Interval,
 ) -> crate::raw::Interval {
     duration_in_bad_args_inner()
 }
+#[allow(unused_variables)] // can't underscore-prefix since argument names are used by pgx
 #[pg_extern(
     immutable,
     parallel_safe,
@@ -1070,10 +1067,10 @@ pub fn duration_in_bad_args<'a>(
     schema = "toolkit_experimental"
 )]
 pub fn duration_in_int_bad_args<'a>(
-    _aggregate: Option<CompactStateAgg<'a>>,
-    _state: i64,
-    _start: TimestampTz,
-    _interval: crate::raw::Interval,
+    agg: Option<CompactStateAgg<'a>>,
+    state: i64,
+    start: TimestampTz,
+    interval: crate::raw::Interval,
 ) -> crate::raw::Interval {
     duration_in_bad_args_inner()
 }
@@ -1124,7 +1121,7 @@ pub fn into_int_values<'a>(
     schema = "toolkit_experimental"
 )]
 pub fn into_values_tl<'a>(
-    aggregate: StateAgg<'a>,
+    agg: StateAgg<'a>,
 ) -> TableIterator<
     'a,
     (
@@ -1132,8 +1129,8 @@ pub fn into_values_tl<'a>(
         pgx::name!(duration, crate::raw::Interval),
     ),
 > {
-    aggregate.assert_str();
-    into_values(aggregate.as_compact_state_agg())
+    agg.assert_str();
+    into_values(agg.as_compact_state_agg())
 }
 #[pg_extern(
     immutable,
@@ -1142,7 +1139,7 @@ pub fn into_values_tl<'a>(
     schema = "toolkit_experimental"
 )]
 pub fn into_values_tl_int<'a>(
-    aggregate: StateAgg<'a>,
+    agg: StateAgg<'a>,
 ) -> TableIterator<
     'a,
     (
@@ -1150,8 +1147,8 @@ pub fn into_values_tl_int<'a>(
         pgx::name!(duration, crate::raw::Interval),
     ),
 > {
-    aggregate.assert_int();
-    into_int_values(aggregate.as_compact_state_agg())
+    agg.assert_int();
+    into_int_values(agg.as_compact_state_agg())
 }
 
 fn state_timeline_inner<'a>(
@@ -1243,7 +1240,7 @@ pub fn state_int_timeline<'a>(
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn interpolated_state_timeline<'a>(
-    aggregate: Option<StateAgg<'a>>,
+    agg: Option<StateAgg<'a>>,
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<StateAgg<'a>>,
@@ -1255,17 +1252,17 @@ pub fn interpolated_state_timeline<'a>(
         pgx::name!(end_time, TimestampTz),
     ),
 > {
-    if let Some(ref aggregate) = aggregate {
-        aggregate.assert_str()
+    if let Some(ref agg) = agg {
+        agg.assert_str()
     };
-    match aggregate {
+    match agg {
         None => pgx::error!(
             "when interpolating data between grouped data, all groups must contain some data"
         ),
-        Some(aggregate) => {
+        Some(agg) => {
             let interval = crate::datum_utils::interval_to_ms(&start, &interval);
             TableIterator::new(
-                state_timeline_inner(aggregate.as_compact_state_agg().interpolate(
+                state_timeline_inner(agg.as_compact_state_agg().interpolate(
                     start.into(),
                     interval,
                     prev.map(StateAgg::as_compact_state_agg),
@@ -1278,7 +1275,7 @@ pub fn interpolated_state_timeline<'a>(
 }
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn interpolated_int_state_timeline<'a>(
-    aggregate: Option<StateAgg<'a>>,
+    agg: Option<StateAgg<'a>>,
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<StateAgg<'a>>,
@@ -1290,17 +1287,17 @@ pub fn interpolated_int_state_timeline<'a>(
         pgx::name!(end_time, TimestampTz),
     ),
 > {
-    if let Some(ref aggregate) = aggregate {
-        aggregate.assert_int()
+    if let Some(ref agg) = agg {
+        agg.assert_int()
     };
-    match aggregate {
+    match agg {
         None => pgx::error!(
             "when interpolating data between grouped data, all groups must contain some data"
         ),
-        Some(aggregate) => {
+        Some(agg) => {
             let interval = crate::datum_utils::interval_to_ms(&start, &interval);
             TableIterator::new(
-                state_int_timeline_inner(aggregate.as_compact_state_agg().interpolate(
+                state_int_timeline_inner(agg.as_compact_state_agg().interpolate(
                     start.into(),
                     interval,
                     prev.map(StateAgg::as_compact_state_agg),
@@ -1418,7 +1415,7 @@ fn interpolated_state_periods_inner<'a>(
 }
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn interpolated_state_periods<'a>(
-    aggregate: Option<StateAgg<'a>>,
+    agg: Option<StateAgg<'a>>,
     state: String,
     start: TimestampTz,
     interval: crate::raw::Interval,
@@ -1430,16 +1427,10 @@ pub fn interpolated_state_periods<'a>(
         pgx::name!(end_time, TimestampTz),
     ),
 > {
-    if let Some(ref aggregate) = aggregate {
-        aggregate.assert_str()
+    if let Some(ref agg) = agg {
+        agg.assert_str()
     };
-    interpolated_state_periods_inner(
-        aggregate,
-        MaterializedState::String(state),
-        start,
-        interval,
-        prev,
-    )
+    interpolated_state_periods_inner(agg, MaterializedState::String(state), start, interval, prev)
 }
 #[pg_extern(
     immutable,
@@ -1448,7 +1439,7 @@ pub fn interpolated_state_periods<'a>(
     name = "interpolated_state_periods"
 )]
 pub fn interpolated_state_periods_int<'a>(
-    aggregate: Option<StateAgg<'a>>,
+    agg: Option<StateAgg<'a>>,
     state: i64,
     start: TimestampTz,
     interval: crate::raw::Interval,
@@ -1460,11 +1451,11 @@ pub fn interpolated_state_periods_int<'a>(
         pgx::name!(end_time, TimestampTz),
     ),
 > {
-    if let Some(ref aggregate) = aggregate {
-        aggregate.assert_int()
+    if let Some(ref agg) = agg {
+        agg.assert_int()
     };
     interpolated_state_periods_inner(
-        aggregate,
+        agg,
         MaterializedState::Integer(state),
         start,
         interval,

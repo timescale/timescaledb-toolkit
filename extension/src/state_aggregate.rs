@@ -736,8 +736,8 @@ impl CompactStateAggTransState {
 }
 
 fn duration_in_inner<'a>(
-    state: Option<StateEntry>,
     aggregate: Option<CompactStateAgg<'a>>,
+    state: Option<StateEntry>,
     range: Option<(i64, Option<i64>)>, // start and interval
 ) -> crate::raw::Interval {
     let time: i64 = if let Some((start, interval)) = range {
@@ -800,19 +800,16 @@ fn duration_in_inner<'a>(
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn duration_in<'a>(
-    state: String,
     aggregate: Option<CompactStateAgg<'a>>,
+    state: String,
 ) -> crate::raw::Interval {
     if let Some(ref aggregate) = aggregate {
         aggregate.assert_str()
     };
-    duration_in_inner(
-        aggregate.as_ref().and_then(|aggregate| {
-            StateEntry::try_from_existing_str(aggregate.states_as_str(), &state)
-        }),
-        aggregate,
-        None,
-    )
+    let state = aggregate
+        .as_ref()
+        .and_then(|aggregate| StateEntry::try_from_existing_str(aggregate.states_as_str(), &state));
+    duration_in_inner(aggregate, state, None)
 }
 
 #[pg_extern(
@@ -822,13 +819,13 @@ pub fn duration_in<'a>(
     schema = "toolkit_experimental"
 )]
 pub fn duration_in_int<'a>(
-    state: i64,
     aggregate: Option<CompactStateAgg<'a>>,
+    state: i64,
 ) -> crate::raw::Interval {
     if let Some(ref aggregate) = aggregate {
         aggregate.assert_int()
     };
-    duration_in_inner(Some(StateEntry::from_integer(state)), aggregate, None)
+    duration_in_inner(aggregate, Some(StateEntry::from_integer(state)), None)
 }
 
 #[pg_extern(
@@ -837,11 +834,11 @@ pub fn duration_in_int<'a>(
     name = "duration_in",
     schema = "toolkit_experimental"
 )]
-pub fn duration_in_tl<'a>(state: String, aggregate: Option<StateAgg<'a>>) -> crate::raw::Interval {
+pub fn duration_in_tl<'a>(aggregate: Option<StateAgg<'a>>, state: String) -> crate::raw::Interval {
     if let Some(ref aggregate) = aggregate {
         aggregate.assert_str()
     };
-    duration_in(state, aggregate.map(StateAgg::as_compact_state_agg))
+    duration_in(aggregate.map(StateAgg::as_compact_state_agg), state)
 }
 
 #[pg_extern(
@@ -850,13 +847,13 @@ pub fn duration_in_tl<'a>(state: String, aggregate: Option<StateAgg<'a>>) -> cra
     name = "duration_in",
     schema = "toolkit_experimental"
 )]
-pub fn duration_in_tl_int<'a>(state: i64, aggregate: Option<StateAgg<'a>>) -> crate::raw::Interval {
+pub fn duration_in_tl_int<'a>(aggregate: Option<StateAgg<'a>>, state: i64) -> crate::raw::Interval {
     if let Some(ref aggregate) = aggregate {
         aggregate.assert_int()
     };
     duration_in_inner(
-        Some(StateEntry::from_integer(state)),
         aggregate.map(StateAgg::as_compact_state_agg),
+        Some(StateEntry::from_integer(state)),
         None,
     )
 }
@@ -868,8 +865,8 @@ pub fn duration_in_tl_int<'a>(state: i64, aggregate: Option<StateAgg<'a>>) -> cr
     schema = "toolkit_experimental"
 )]
 pub fn duration_in_range<'a>(
-    state: String,
     aggregate: Option<StateAgg<'a>>,
+    state: String,
     start: TimestampTz,
     interval: default!(Option<crate::raw::Interval>, "NULL"),
 ) -> crate::raw::Interval {
@@ -879,13 +876,10 @@ pub fn duration_in_range<'a>(
     let aggregate = aggregate.map(StateAgg::as_compact_state_agg);
     let interval = interval.map(|interval| crate::datum_utils::interval_to_ms(&start, &interval));
     let start = start.into();
-    duration_in_inner(
-        aggregate.as_ref().and_then(|aggregate| {
-            StateEntry::try_from_existing_str(aggregate.states_as_str(), &state)
-        }),
-        aggregate,
-        Some((start, interval)),
-    )
+    let state = aggregate
+        .as_ref()
+        .and_then(|aggregate| StateEntry::try_from_existing_str(aggregate.states_as_str(), &state));
+    duration_in_inner(aggregate, state, Some((start, interval)))
 }
 
 #[pg_extern(
@@ -895,8 +889,8 @@ pub fn duration_in_range<'a>(
     schema = "toolkit_experimental"
 )]
 pub fn duration_in_range_int<'a>(
-    state: i64,
     aggregate: Option<StateAgg<'a>>,
+    state: i64,
     start: TimestampTz,
     interval: default!(Option<crate::raw::Interval>, "NULL"),
 ) -> crate::raw::Interval {
@@ -906,15 +900,15 @@ pub fn duration_in_range_int<'a>(
     let interval = interval.map(|interval| crate::datum_utils::interval_to_ms(&start, &interval));
     let start = start.into();
     duration_in_inner(
-        Some(StateEntry::from_integer(state)),
         aggregate.map(StateAgg::as_compact_state_agg),
+        Some(StateEntry::from_integer(state)),
         Some((start, interval)),
     )
 }
 
 fn interpolated_duration_in_inner<'a>(
-    state: Option<MaterializedState>,
     aggregate: Option<CompactStateAgg<'a>>,
+    state: Option<MaterializedState>,
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<CompactStateAgg<'a>>,
@@ -948,14 +942,14 @@ fn interpolated_duration_in_inner<'a>(
             let new_agg = aggregate.interpolate(start, interval, prev);
             let state_entry =
                 state.and_then(|state| state.try_existing_entry(new_agg.states_as_str()));
-            duration_in_inner(state_entry, Some(new_agg), range)
+            duration_in_inner(Some(new_agg), state_entry, range)
         }
     }
 }
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn interpolated_duration_in<'a>(
-    state: String,
     aggregate: Option<CompactStateAgg<'a>>,
+    state: String,
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<CompactStateAgg<'a>>,
@@ -964,8 +958,8 @@ pub fn interpolated_duration_in<'a>(
         aggregate.assert_str()
     };
     interpolated_duration_in_inner(
-        Some(MaterializedState::String(state)),
         aggregate,
+        Some(MaterializedState::String(state)),
         start,
         interval,
         prev,
@@ -979,8 +973,8 @@ pub fn interpolated_duration_in<'a>(
     schema = "toolkit_experimental"
 )]
 pub fn interpolated_duration_in_tl<'a>(
-    state: String,
     aggregate: Option<StateAgg<'a>>,
+    state: String,
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<StateAgg<'a>>,
@@ -989,8 +983,8 @@ pub fn interpolated_duration_in_tl<'a>(
         aggregate.assert_str()
     };
     interpolated_duration_in(
-        state,
         aggregate.map(StateAgg::as_compact_state_agg),
+        state,
         start,
         interval,
         prev.map(StateAgg::as_compact_state_agg),
@@ -1004,8 +998,8 @@ pub fn interpolated_duration_in_tl<'a>(
     name = "interpolated_duration_in"
 )]
 pub fn interpolated_duration_in_int<'a>(
-    state: i64,
     aggregate: Option<CompactStateAgg<'a>>,
+    state: i64,
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<CompactStateAgg<'a>>,
@@ -1014,8 +1008,8 @@ pub fn interpolated_duration_in_int<'a>(
         aggregate.assert_int()
     };
     interpolated_duration_in_inner(
-        Some(MaterializedState::Integer(state)),
         aggregate,
+        Some(MaterializedState::Integer(state)),
         start,
         interval,
         prev,
@@ -1029,8 +1023,8 @@ pub fn interpolated_duration_in_int<'a>(
     schema = "toolkit_experimental"
 )]
 pub fn interpolated_duration_in_tl_int<'a>(
-    state: i64,
     aggregate: Option<StateAgg<'a>>,
+    state: i64,
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<StateAgg<'a>>,
@@ -1039,8 +1033,8 @@ pub fn interpolated_duration_in_tl_int<'a>(
         aggregate.assert_int()
     };
     interpolated_duration_in_int(
-        state,
         aggregate.map(StateAgg::as_compact_state_agg),
+        state,
         start,
         interval,
         prev.map(StateAgg::as_compact_state_agg),
@@ -1057,8 +1051,8 @@ fn duration_in_bad_args_inner() -> ! {
     schema = "toolkit_experimental"
 )]
 pub fn duration_in_bad_args<'a>(
-    _state: String,
     _aggregate: Option<CompactStateAgg<'a>>,
+    _state: String,
     _start: TimestampTz,
     _interval: crate::raw::Interval,
 ) -> crate::raw::Interval {
@@ -1071,8 +1065,8 @@ pub fn duration_in_bad_args<'a>(
     schema = "toolkit_experimental"
 )]
 pub fn duration_in_int_bad_args<'a>(
-    _state: i64,
     _aggregate: Option<CompactStateAgg<'a>>,
+    _state: i64,
     _start: TimestampTz,
     _interval: crate::raw::Interval,
 ) -> crate::raw::Interval {
@@ -1546,7 +1540,7 @@ mod tests {
                 "365 days 00:02:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_state_agg(ts, state), '2020-01-01', '1 day')::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in(toolkit_experimental.compact_state_agg(ts, state), 'one', '2020-01-01', '1 day')::TEXT FROM test",
                     &str
                 )
             );
@@ -1569,7 +1563,7 @@ mod tests {
                 "365 days 00:02:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in(toolkit_experimental.compact_state_agg(ts, state), 'one')::TEXT FROM test",
                     &str
                 )
             );
@@ -1577,7 +1571,7 @@ mod tests {
                 "365 days 00:02:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in(toolkit_experimental.state_agg(ts, state), 'one')::TEXT FROM test",
                     &str
                 )
             );
@@ -1602,7 +1596,7 @@ mod tests {
                 "00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in(toolkit_experimental.compact_state_agg(ts, state), 'one')::TEXT FROM test",
                     &str
                 )
             );
@@ -1610,7 +1604,7 @@ mod tests {
                 "365 days 00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in(toolkit_experimental.compact_state_agg(ts, state), 'two')::TEXT FROM test",
                     &str
                 )
             );
@@ -1636,7 +1630,7 @@ mod tests {
                 "365 days 00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in(toolkit_experimental.compact_state_agg(ts, state), 'one')::TEXT FROM test",
                     &str
                 )
             );
@@ -1644,7 +1638,7 @@ mod tests {
                 "00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in(toolkit_experimental.compact_state_agg(ts, state), 'two')::TEXT FROM test",
                     &str
                 )
             );
@@ -1653,7 +1647,7 @@ mod tests {
                 "365 days 00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in(toolkit_experimental.state_agg(ts, state), 'one')::TEXT FROM test",
                     &str
                 )
             );
@@ -1661,7 +1655,7 @@ mod tests {
                 "00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in(toolkit_experimental.state_agg(ts, state), 'two')::TEXT FROM test",
                     &str
                 )
             );
@@ -1687,7 +1681,7 @@ mod tests {
                 "365 days 00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in(toolkit_experimental.compact_state_agg(ts, state), 'one')::TEXT FROM test",
                     &str
                 )
             );
@@ -1695,7 +1689,7 @@ mod tests {
                 "00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in(toolkit_experimental.compact_state_agg(ts, state), 'two')::TEXT FROM test",
                     &str
                 )
             );
@@ -1722,7 +1716,7 @@ mod tests {
                 "00:02:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in(toolkit_experimental.compact_state_agg(ts, state), 'one')::TEXT FROM test",
                     &str
                 )
             );
@@ -1730,7 +1724,7 @@ mod tests {
                 "365 days",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in(toolkit_experimental.compact_state_agg(ts, state), 'two')::TEXT FROM test",
                     &str
                 )
             );
@@ -1754,7 +1748,7 @@ mod tests {
                 "00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in(toolkit_experimental.compact_state_agg(ts, state), 'one')::TEXT FROM test",
                     &str
                 )
             );
@@ -1762,7 +1756,7 @@ mod tests {
                 "365 days 00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in(toolkit_experimental.compact_state_agg(ts, state), 'two')::TEXT FROM test",
                     &str
                 )
             );
@@ -1786,7 +1780,7 @@ mod tests {
                 "00:01:00",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('two', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in(toolkit_experimental.compact_state_agg(ts, state), 'two')::TEXT FROM test",
                     &str
                 )
             );
@@ -1812,7 +1806,7 @@ insert into test select '2020-01-02 UTC'::timestamptz + make_interval(days=>v), 
                 "2 days",
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_state_agg(ts, state))::TEXT FROM test",
+                    "SELECT toolkit_experimental.duration_in(toolkit_experimental.compact_state_agg(ts, state), 'one')::TEXT FROM test",
                     &str
                 )
             );
@@ -1885,9 +1879,9 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
             assert_eq!(
                 client
                     .select(
-                        r#"SELECT toolkit_experimental.duration_in('ERROR', states)::TEXT as error,
-                                  toolkit_experimental.duration_in('START', states)::TEXT as start,
-                                  toolkit_experimental.duration_in('STOPPED', states)::TEXT as stopped
+                        r#"SELECT toolkit_experimental.duration_in(states, 'ERROR')::TEXT as error,
+                                  toolkit_experimental.duration_in(states, 'START')::TEXT as start,
+                                  toolkit_experimental.duration_in(states, 'STOPPED')::TEXT as stopped
                              FROM (SELECT toolkit_experimental.compact_state_agg(ts, state) as states FROM test) as foo"#,
                         None,
                         None,
@@ -1899,9 +1893,9 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
             assert_eq!(
                 client
                     .select(
-                        r#"SELECT toolkit_experimental.duration_in('ERROR', states)::TEXT as error,
-                                  toolkit_experimental.duration_in('START', states)::TEXT as start,
-                                  toolkit_experimental.duration_in('STOPPED', states)::TEXT as stopped
+                        r#"SELECT toolkit_experimental.duration_in(states, 'ERROR')::TEXT as error,
+                                  toolkit_experimental.duration_in(states, 'START')::TEXT as start,
+                                  toolkit_experimental.duration_in(states, 'STOPPED')::TEXT as stopped
                              FROM (SELECT toolkit_experimental.state_agg(ts, state) as states FROM test) as foo"#,
                         None,
                         None,
@@ -1952,8 +1946,8 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
             let mut durations = client.select(
                 r#"SELECT
                 toolkit_experimental.interpolated_duration_in(
-                    'three', 
                     agg, 
+                    'three',
                     '2019-12-31 0:00'::timestamptz + (bucket * '1 day'::interval), '1 day'::interval, 
                     LAG(agg) OVER (ORDER BY bucket)
                 )::TEXT FROM (
@@ -1977,8 +1971,8 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
             let mut durations = client.select(
                 r#"SELECT
                 toolkit_experimental.interpolated_duration_in(
+                    agg,
                     'three', 
-                    agg, 
                     '2019-12-31 0:00'::timestamptz + (bucket * '1 day'::interval), '1 day'::interval, 
                     LAG(agg) OVER (ORDER BY bucket)
                 )::TEXT FROM (
@@ -2002,8 +1996,8 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
             let mut durations = client.select(
                 r#"SELECT
                 toolkit_experimental.interpolated_duration_in(
+                    agg,
                     10003,
-                    agg, 
                     '2019-12-31 0:00'::timestamptz + (bucket * '1 day'::interval), '1 day'::interval, 
                     LAG(agg) OVER (ORDER BY bucket)
                 )::TEXT FROM (
@@ -2040,12 +2034,12 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                 None,
             );
             client.select(
-                "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_state_agg(ts, state)) FROM test",
+                "SELECT toolkit_experimental.duration_in(toolkit_experimental.compact_state_agg(ts, state), 'one') FROM test",
                 None,
                 None,
             );
             client.select(
-                "SELECT toolkit_experimental.duration_in('one', toolkit_experimental.state_agg(ts, state)) FROM test",
+                "SELECT toolkit_experimental.duration_in(toolkit_experimental.state_agg(ts, state), 'one') FROM test",
                 None,
                 None,
             );
@@ -2075,8 +2069,8 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
             let mut durations = client.select(
                 r#"SELECT 
                 toolkit_experimental.interpolated_duration_in(
-                  'running',
-                  agg,
+                    agg,
+                    'running',
                   '2019-12-31 0:00'::timestamptz + (bucket * '1 day'::interval), '1 day'::interval,
                   LAG(agg) OVER (ORDER BY bucket)
                 )::TEXT FROM (
@@ -2097,8 +2091,8 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
             let mut durations = client.select(
                 r#"SELECT 
                 toolkit_experimental.interpolated_duration_in(
-                  'running',
-                  agg,
+                    agg,
+                    'running',
                   '2019-12-31 0:00'::timestamptz + (bucket * '1 day'::interval), '1 day'::interval,
                   LAG(agg) OVER (ORDER BY bucket)
                 )::TEXT FROM (

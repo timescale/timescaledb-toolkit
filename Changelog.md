@@ -14,6 +14,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 #### Stabilized features
 - [#701](https://github.com/timescale/timescaledb-toolkit/pull/701): Stabilize candlestick.
+- [#650](https://github.com/timescale/timescaledb-toolkit/pull/650): Stabilize interpolated_delta & interpolated_rate for counter aggregate, and interpolated_average for time-weighted aggregate.
 
 #### Other notable changes
 - [#685](https://github.com/timescale/timescaledb-toolkit/issues/685): rollup for freq_agg and topn_agg

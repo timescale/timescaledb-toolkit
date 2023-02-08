@@ -217,8 +217,8 @@ START | 2019-12-31 00:00:00+00 | 2019-12-31 00:00:11+00
 ```SQL
 SELECT start_time, end_time
 FROM toolkit_experimental.state_periods(
-    'OK',
-    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test)
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test),
+    'OK'
 )
 ORDER BY start_time;
 ```
@@ -232,8 +232,8 @@ start_time             | end_time
 ```SQL
 SELECT start_time, end_time
 FROM toolkit_experimental.state_periods(
-    51351,
-    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test_4)
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test_4),
+    51351
 )
 ORDER BY start_time;
 ```
@@ -247,8 +247,8 @@ start_time             | end_time
 ```SQL
 SELECT start_time, end_time
 FROM toolkit_experimental.state_periods(
-    'ANYTHING',
-    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test)
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test),
+    'ANYTHING'
 )
 ORDER BY start_time;
 ```
@@ -338,8 +338,8 @@ ERROR | 2020-01-01 00:01:00+00 | 2020-01-01 00:01:03+00
 
 ```SQL
 SELECT start_time, end_time FROM toolkit_experimental.interpolated_state_periods(
-    'OK',
     (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test),
+    'OK',
     '2019-12-31', '1 days',
     (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test_3)
 )
@@ -354,8 +354,8 @@ start_time             | end_time
 
 ```SQL
 SELECT start_time, end_time FROM toolkit_experimental.interpolated_state_periods(
-    'START',
     (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test),
+    'START',
     '2019-12-31', '5 days',
     (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test_3)
 )
@@ -369,8 +369,8 @@ start_time             | end_time
 
 ```SQL
 SELECT start_time, end_time FROM toolkit_experimental.interpolated_state_periods(
-    'STOP',
     (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test),
+    'STOP',
     '2019-12-31', '1 days',
     (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test_2)
 )
@@ -385,8 +385,8 @@ start_time             | end_time
 
 ```SQL
 SELECT start_time, end_time FROM toolkit_experimental.interpolated_state_periods(
-    'STOP',
     (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test),
+    'STOP',
     '2019-12-31', '5 days',
     (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test_2)
 )

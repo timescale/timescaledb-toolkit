@@ -1346,8 +1346,8 @@ fn state_periods_inner<'a>(
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn state_periods<'a>(
-    state: String,
     agg: StateAgg<'a>,
+    state: String,
 ) -> TableIterator<
     'a,
     (
@@ -1366,8 +1366,8 @@ pub fn state_periods<'a>(
     name = "state_periods"
 )]
 pub fn state_int_periods<'a>(
-    state: i64,
     agg: StateAgg<'a>,
+    state: i64,
 ) -> TableIterator<
     'a,
     (
@@ -1383,8 +1383,8 @@ pub fn state_int_periods<'a>(
 }
 
 fn interpolated_state_periods_inner<'a>(
-    state: MaterializedState,
     aggregate: Option<StateAgg<'a>>,
+    state: MaterializedState,
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<StateAgg<'a>>,
@@ -1418,8 +1418,8 @@ fn interpolated_state_periods_inner<'a>(
 }
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn interpolated_state_periods<'a>(
-    state: String,
     aggregate: Option<StateAgg<'a>>,
+    state: String,
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<StateAgg<'a>>,
@@ -1434,8 +1434,8 @@ pub fn interpolated_state_periods<'a>(
         aggregate.assert_str()
     };
     interpolated_state_periods_inner(
-        MaterializedState::String(state),
         aggregate,
+        MaterializedState::String(state),
         start,
         interval,
         prev,
@@ -1448,8 +1448,8 @@ pub fn interpolated_state_periods<'a>(
     name = "interpolated_state_periods"
 )]
 pub fn interpolated_state_periods_int<'a>(
-    state: i64,
     aggregate: Option<StateAgg<'a>>,
+    state: i64,
     start: TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<StateAgg<'a>>,
@@ -1464,8 +1464,8 @@ pub fn interpolated_state_periods_int<'a>(
         aggregate.assert_int()
     };
     interpolated_state_periods_inner(
-        MaterializedState::Integer(state),
         aggregate,
+        MaterializedState::Integer(state),
         start,
         interval,
         prev,

@@ -17,6 +17,8 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 - [#692](https://github.com/timescale/timescaledb-toolkit/pull/692): Support specifying a range to `duration_in` to specify a time range to get states in for state aggregates
 - [#692](https://github.com/timescale/timescaledb-toolkit/pull/692): Removed `next` parameter from interpolated state aggregate functions
 - [#692](https://github.com/timescale/timescaledb-toolkit/pull/692): Renamed `state_agg` to `compact_state_agg` and `timeline_agg` to `state_agg`
+- [#699](https://github.com/timescale/timescaledb-toolkit/pull/699): `interpolated_duration_in`/`duration_in`/`interpolated_state_periods`/`state_periods` have the first two arguments swapped: now the aggregate is first and the state is second
+- [#699](https://github.com/timescale/timescaledb-toolkit/pull/699): `into_values`/`into_int_values` now returns a table with intervals instead of microseconds
 
 #### Shout-outs
 

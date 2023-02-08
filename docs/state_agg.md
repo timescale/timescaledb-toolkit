@@ -147,23 +147,23 @@ SELECT state, duration FROM toolkit_experimental.into_values(
 ```output
  state | duration
 -------+-----------
- ERROR |   3000000
- OK    | 106000000
- START |  11000000
- STOP  |         0
+ ERROR |  00:00:03
+ OK    |  00:01:46
+ START |  00:00:11
+ STOP  |  00:00:00
 ```
 ```SQL
 SELECT state, duration FROM toolkit_experimental.into_int_values(
-    (SELECT toolkit_experimental.compact_state_agg(ts, state) FROM states_test_4))
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test_4))
     ORDER BY state, duration;
 ```
 ```output
  state | duration
 -------+-----------
-   -9 |         0
-    2 |   3000000
-    4 |  11000000
-51351 | 106000000
+   -9 |  00:00:00
+    2 |  00:00:03
+    4 |  00:00:11
+51351 |  00:01:46
 ```
 
 ### state_timeline

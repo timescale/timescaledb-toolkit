@@ -671,6 +671,30 @@ fn state_agg_int_trans(
     }
 }
 
+/// Makes an interval from an `i64` representing the number of microseconds.
+fn make_interval(time: i64) -> crate::raw::Interval {
+    let interval = pg_sys::Interval {
+        time,
+        ..Default::default()
+    };
+    let interval: *const pg_sys::Interval = to_palloc(interval);
+    // Now we have a valid Interval in at least one sense.  But we have the
+    // microseconds in the `time` field and `day` and `month` are both 0,
+    // which is legal.  However, directly converting one of these to TEXT
+    // comes out quite ugly if the number of microseconds is greater than 1 day:
+    //   8760:02:00
+    // Should be:
+    //   365 days 00:02:00
+    // How does postgresql do it?  It happens in src/backend/utils/adt/timestamp.c:timestamp_mi:
+    //  result->time = dt1 - dt2;
+    //  result = DatumGetIntervalP(DirectFunctionCall1(interval_justify_hours,
+    //                                                 IntervalPGetDatum(result)));
+    // So if we want the same behavior, we need to call interval_justify_hours too:
+    let function_args = vec![Some(pg_sys::Datum::from(interval))];
+    unsafe { pgx::direct_function_call(pg_sys::interval_justify_hours, function_args) }
+        .expect("interval_justify_hours does not return None")
+}
+
 // Intermediate state kept in postgres.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct CompactStateAggTransState {
@@ -776,26 +800,7 @@ fn duration_in_inner<'a>(
     } else {
         state.and_then(|state| aggregate?.get(state)).unwrap_or(0)
     };
-    let interval = pg_sys::Interval {
-        time,
-        ..Default::default()
-    };
-    let interval: *const pg_sys::Interval = to_palloc(interval);
-    // Now we have a valid Interval in at least one sense.  But we have the
-    // microseconds in the `time` field and `day` and `month` are both 0,
-    // which is legal.  However, directly converting one of these to TEXT
-    // comes out quite ugly if the number of microseconds is greater than 1 day:
-    //   8760:02:00
-    // Should be:
-    //   365 days 00:02:00
-    // How does postgresql do it?  It happens in src/backend/utils/adt/timestamp.c:timestamp_mi:
-    //  result->time = dt1 - dt2;
-    //  result = DatumGetIntervalP(DirectFunctionCall1(interval_justify_hours,
-    //                                                 IntervalPGetDatum(result)));
-    // So if we want the same behavior, we need to call interval_justify_hours too:
-    let function_args = vec![Some(pg_sys::Datum::from(interval))];
-    unsafe { pgx::direct_function_call(pg_sys::interval_justify_hours, function_args) }
-        .expect("interval_justify_hours does not return None")
+    make_interval(time)
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
@@ -1076,26 +1081,38 @@ pub fn duration_in_int_bad_args<'a>(
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn into_values<'a>(
     agg: CompactStateAgg<'a>,
-) -> TableIterator<'a, (pgx::name!(state, String), pgx::name!(duration, i64))> {
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(state, String),
+        pgx::name!(duration, crate::raw::Interval),
+    ),
+> {
     agg.assert_str();
     let states: String = agg.states_as_str().to_owned();
-    TableIterator::new(
-        agg.durations
-            .clone()
-            .into_iter()
-            .map(move |record| (record.state.as_str(&states).to_string(), record.duration)),
-    )
+    TableIterator::new(agg.durations.clone().into_iter().map(move |record| {
+        (
+            record.state.as_str(&states).to_string(),
+            make_interval(record.duration),
+        )
+    }))
 }
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn into_int_values<'a>(
     agg: CompactStateAgg<'a>,
-) -> TableIterator<'a, (pgx::name!(state, i64), pgx::name!(duration, i64))> {
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(state, i64),
+        pgx::name!(duration, crate::raw::Interval),
+    ),
+> {
     agg.assert_int();
     TableIterator::new(
         agg.durations
             .clone()
             .into_iter()
-            .map(move |record| (record.state.as_integer(), record.duration))
+            .map(move |record| (record.state.as_integer(), make_interval(record.duration)))
             .collect::<Vec<_>>()
             .into_iter(), // make map panic now instead of at iteration time
     )
@@ -1108,7 +1125,13 @@ pub fn into_int_values<'a>(
 )]
 pub fn into_values_tl<'a>(
     aggregate: StateAgg<'a>,
-) -> TableIterator<'a, (pgx::name!(state, String), pgx::name!(duration, i64))> {
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(state, String),
+        pgx::name!(duration, crate::raw::Interval),
+    ),
+> {
     aggregate.assert_str();
     into_values(aggregate.as_compact_state_agg())
 }
@@ -1120,7 +1143,13 @@ pub fn into_values_tl<'a>(
 )]
 pub fn into_values_tl_int<'a>(
     aggregate: StateAgg<'a>,
-) -> TableIterator<'a, (pgx::name!(state, i64), pgx::name!(duration, i64))> {
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(state, i64),
+        pgx::name!(duration, crate::raw::Interval),
+    ),
+> {
     aggregate.assert_int();
     into_int_values(aggregate.as_compact_state_agg())
 }

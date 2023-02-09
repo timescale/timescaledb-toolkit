@@ -13,7 +13,6 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 - [#679](https://github.com/timescale/timescaledb-toolkit/issues/679): Heartbeat agg rollup producing invalid aggregates.
 
 #### Stabilized features
-
 - [#701](https://github.com/timescale/timescaledb-toolkit/pull/701): Stabilize candlestick.
 
 #### Other notable changes

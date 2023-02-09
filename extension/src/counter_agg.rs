@@ -29,6 +29,10 @@ use crate::raw::tstzrange;
 
 use crate::raw::bytea;
 
+mod accessors;
+
+use accessors::{CounterInterpolatedDeltaAccessor, CounterInterpolatedRateAccessor};
+
 // pg_type! can't handle generics so use a type alias to specify the type for `stats`
 type PgTypeHackStatsSummary2D = StatsSummary2D<f64>;
 // TODO wrap FlatSummary a la GaugeSummary - requires serialization version bump
@@ -619,20 +623,6 @@ fn counter_agg_extrapolated_delta<'a>(summary: CounterSummary<'a>, method: &str)
     }
 }
 
-// Public facing interpolated_delta
-extension_sql!(
-    "\n\
-     CREATE FUNCTION toolkit_experimental.interpolated_delta(summary countersummary,\n\
-          start timestamptz,\n\
-          duration interval,\n\
-          prev countersummary,\n\
-          next countersummary) RETURNS DOUBLE PRECISION\n\
-     AS $$\n\
-          SELECT interpolated_delta(summary,start,duration,prev,next) $$ LANGUAGE SQL IMMUTABLE PARALLEL SAFE;\n\
-",
-    name = "experimental_interpolated_delta", requires=[counter_agg_interpolated_delta]
-);
-
 #[pg_extern(name = "interpolated_delta", immutable, parallel_safe)]
 fn counter_agg_interpolated_delta<'a>(
     summary: CounterSummary<'a>,
@@ -646,6 +636,32 @@ fn counter_agg_interpolated_delta<'a>(
         .interpolate(start.into(), interval, prev, next)
         .to_internal_counter_summary()
         .delta()
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_interpolated_delta<'a>(
+    sketch: CounterSummary<'a>,
+    accessor: CounterInterpolatedDeltaAccessor<'a>,
+) -> f64 {
+    let prev = if accessor.flags & 1 == 1 {
+        Some(accessor.prev.clone().into())
+    } else {
+        None
+    };
+    let next = if accessor.flags & 2 == 2 {
+        Some(accessor.next.clone().into())
+    } else {
+        None
+    };
+
+    counter_agg_interpolated_delta(
+        sketch,
+        accessor.timestamp.into(),
+        accessor.interval.into(),
+        prev,
+        next,
+    )
 }
 
 #[pg_operator(immutable, parallel_safe)]
@@ -668,21 +684,6 @@ fn counter_agg_extrapolated_rate<'a>(summary: CounterSummary<'a>, method: &str) 
     }
 }
 
-// Public facing interpolated_rate
-extension_sql!(
-    "\n\
-     CREATE FUNCTION toolkit_experimental.interpolated_rate(summary countersummary,\n\
-          start timestamptz,\n\
-          duration interval,\n\
-          prev countersummary,\n\
-          next countersummary) RETURNS DOUBLE PRECISION\n\
-     AS $$\n\
-          SELECT interpolated_rate(summary,start,duration,prev,next) $$ LANGUAGE SQL IMMUTABLE PARALLEL SAFE;\n\
-",
-    name = "experimental_interpolated_rate",
-    requires = [counter_agg_interpolated_rate]
-);
-
 #[pg_extern(name = "interpolated_rate", immutable, parallel_safe)]
 fn counter_agg_interpolated_rate<'a>(
     summary: CounterSummary<'a>,
@@ -696,6 +697,32 @@ fn counter_agg_interpolated_rate<'a>(
         .interpolate(start.into(), interval, prev, next)
         .to_internal_counter_summary()
         .rate()
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_counter_interpolated_rate<'a>(
+    sketch: CounterSummary<'a>,
+    accessor: CounterInterpolatedRateAccessor<'a>,
+) -> Option<f64> {
+    let prev = if accessor.flags & 1 == 1 {
+        Some(accessor.prev.clone().into())
+    } else {
+        None
+    };
+    let next = if accessor.flags & 2 == 2 {
+        Some(accessor.next.clone().into())
+    } else {
+        None
+    };
+
+    counter_agg_interpolated_rate(
+        sketch,
+        accessor.timestamp.into(),
+        accessor.interval.into(),
+        prev,
+        next,
+    )
 }
 
 #[pg_operator(immutable, parallel_safe)]
@@ -1335,44 +1362,6 @@ mod tests {
             let mut deltas = client
                 .update(
                     r#"SELECT
-                toolkit_experimental.interpolated_delta(
-                    agg,
-                    bucket,
-                    '1 day'::interval, 
-                    LAG(agg) OVER (ORDER BY bucket), 
-                    LEAD(agg) OVER (ORDER BY bucket)
-                ) FROM (
-                    SELECT bucket, counter_agg(time, value) as agg 
-                    FROM test 
-                    GROUP BY bucket
-                ) s
-                ORDER BY bucket"#,
-                    None,
-                    None,
-                )
-                .unwrap();
-
-            // Day 1, start at 10, interpolated end of day is 10 (after reset), reset at 40 and 20
-            assert_eq!(
-                deltas.next().unwrap()[1].value().unwrap(),
-                Some(10. + 40. + 20. - 10.)
-            );
-            // Day 2, interpolated start is 10, interpolated end is 27.5, reset at 50
-            assert_eq!(
-                deltas.next().unwrap()[1].value().unwrap(),
-                Some(27.5 + 50. - 10.)
-            );
-            // Day 3, interpolated start is 27.5, end is 35, reset at 30
-            assert_eq!(
-                deltas.next().unwrap()[1].value().unwrap(),
-                Some(35. + 30. - 27.5)
-            );
-            assert!(deltas.next().is_none());
-
-            // test that the non experimental version also returns the same result
-            let mut deltas = client
-                .update(
-                    r#"SELECT
                 interpolated_delta(
                     agg,
                     bucket,
@@ -1407,10 +1396,47 @@ mod tests {
             );
             assert!(deltas.next().is_none());
 
+            // test that the arrow version also returns the same result
+            let mut deltas = client
+                .update(
+                    r#"SELECT
+                agg -> interpolated_delta(
+                    bucket,
+                    '1 day'::interval, 
+                    LAG(agg) OVER (ORDER BY bucket), 
+                    LEAD(agg) OVER (ORDER BY bucket)
+                ) FROM (
+                    SELECT bucket, counter_agg(time, value) as agg 
+                    FROM test 
+                    GROUP BY bucket
+                ) s
+                ORDER BY bucket"#,
+                    None,
+                    None,
+                )
+                .unwrap();
+
+            // Day 1, start at 10, interpolated end of day is 10 (after reset), reset at 40 and 20
+            assert_eq!(
+                deltas.next().unwrap()[1].value().unwrap(),
+                Some(10. + 40. + 20. - 10.)
+            );
+            // Day 2, interpolated start is 10, interpolated end is 27.5, reset at 50
+            assert_eq!(
+                deltas.next().unwrap()[1].value().unwrap(),
+                Some(27.5 + 50. - 10.)
+            );
+            // Day 3, interpolated start is 27.5, end is 35, reset at 30
+            assert_eq!(
+                deltas.next().unwrap()[1].value().unwrap(),
+                Some(35. + 30. - 27.5)
+            );
+            assert!(deltas.next().is_none());
+
             let mut rates = client
                 .update(
                     r#"SELECT
-                toolkit_experimental.interpolated_rate(
+                interpolated_rate(
                     agg,
                     bucket,
                     '1 day'::interval, 
@@ -1442,14 +1468,13 @@ mod tests {
                 rates.next().unwrap()[1].value().unwrap(),
                 Some((35. + 30. - 27.5) / (16. * 60. * 60.))
             );
-
-            // test that the non experimental version also returns the same result
             assert!(rates.next().is_none());
+
+            // test that the arrow operator version also returns the same result
             let mut rates = client
                 .update(
                     r#"SELECT
-                interpolated_rate(
-                    agg,
+                agg -> interpolated_rate(
                     bucket,
                     '1 day'::interval, 
                     LAG(agg) OVER (ORDER BY bucket), 
@@ -1509,7 +1534,7 @@ mod tests {
             let mut deltas = client
                 .update(
                     r#"SELECT
-                toolkit_experimental.interpolated_delta(
+                interpolated_delta(
                     agg,
                     bucket,
                     '1 day'::interval, 

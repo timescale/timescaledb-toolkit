@@ -12,6 +12,8 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 - [#715](https://github.com/timescale/timescaledb-toolkit/pull/715): Fix out-of-bounds indexing error in `state_agg` rollup
 
 #### Other notable changes
+- [#716](https://github.com/timescale/timescaledb-toolkit/issues/716): Add arrow operator support for counter aggregate and time-weighted aggregate interpolated accessors.
+- [#716](https://github.com/timescale/timescaledb-toolkit/issues/716): Remove experimental versions of interpolated accessors for counter aggregate and time-weighted aggregates.  The stable versions introduced in 1.14.0 should be used instead.
 
 #### Shout-outs
 

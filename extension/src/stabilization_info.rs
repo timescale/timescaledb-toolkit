@@ -11,6 +11,20 @@
 
 crate::functions_stabilized_at! {
     STABLE_FUNCTIONS
+    "1.15.0" => {
+        arrow_counter_interpolated_delta(countersummary,counterinterpolateddeltaaccessor),
+        arrow_counter_interpolated_rate(countersummary,counterinterpolatedrateaccessor),
+        arrow_time_weighted_average_interpolated_average(timeweightsummary,timeweightinterpolatedaverageaccessor),
+        counterinterpolateddeltaaccessor_in(cstring),
+        counterinterpolateddeltaaccessor_out(counterinterpolateddeltaaccessor),
+        counterinterpolatedrateaccessor_in(cstring),
+        counterinterpolatedrateaccessor_out(counterinterpolatedrateaccessor),
+        interpolated_average(timestamp with time zone,interval,timeweightsummary,timeweightsummary),
+        interpolated_delta(timestamp with time zone,interval,countersummary,countersummary),
+        interpolated_rate(timestamp with time zone,interval,countersummary,countersummary),
+        timeweightinterpolatedaverageaccessor_in(cstring),
+        timeweightinterpolatedaverageaccessor_out(timeweightinterpolatedaverageaccessor),
+    }
     "1.14.0" => {
         interpolated_average(timeweightsummary,timestamp with time zone,interval,timeweightsummary,timeweightsummary),
         interpolated_delta(countersummary,timestamp with time zone,interval,countersummary,countersummary),
@@ -492,6 +506,11 @@ crate::functions_stabilized_at! {
 
 crate::types_stabilized_at! {
     STABLE_TYPES
+    "1.15.0" => {
+        counterinterpolateddeltaaccessor,
+        counterinterpolatedrateaccessor,
+        timeweightinterpolatedaverageaccessor,
+    }
     "1.14.0" => {
         candlestick,
         accessorclose,
@@ -581,6 +600,11 @@ crate::types_stabilized_at! {
 
 crate::operators_stabilized_at! {
     STABLE_OPERATORS
+    "1.15.0" => {
+        "->"(countersummary,counterinterpolateddeltaaccessor),
+        "->"(countersummary,counterinterpolatedrateaccessor),
+        "->"(timeweightsummary,timeweightinterpolatedaverageaccessor),
+    }
     "1.14.0" => {
         "->"(candlestick,accessorclose),
         "->"(candlestick,accessorclosetime),

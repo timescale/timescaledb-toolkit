@@ -9,6 +9,18 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 #### New experimental features
 
 #### Bug fixes
+
+#### Other notable changes
+
+#### Shout-outs
+
+**Full Changelog**: [TODO]
+
+## [1.14.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.14.0) (2023-02-09)
+
+#### New experimental features
+
+#### Bug fixes
 - [#660](https://github.com/timescale/timescaledb-toolkit/issues/660): Heartbeat aggregate rollup should interpolate aggregates
 - [#679](https://github.com/timescale/timescaledb-toolkit/issues/679): Heartbeat agg rollup producing invalid aggregates.
 

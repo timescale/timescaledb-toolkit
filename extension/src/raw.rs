@@ -128,12 +128,27 @@ impl From<i64> for Interval {
             time: interval,
             ..Default::default()
         };
-        unsafe {
+        let interval = unsafe {
             let ptr =
                 pg_sys::palloc(std::mem::size_of::<pg_sys::Interval>()) as *mut pg_sys::Interval;
             *ptr = interval;
             Interval(pg_sys::Datum::from(ptr))
-        }
+        };
+        // Now we have a valid Interval in at least one sense.  But we have the
+        // microseconds in the `time` field and `day` and `month` are both 0,
+        // which is legal.  However, directly converting one of these to TEXT
+        // comes out quite ugly if the number of microseconds is greater than 1 day:
+        //   8760:02:00
+        // Should be:
+        //   365 days 00:02:00
+        // How does postgresql do it?  It happens in src/backend/utils/adt/timestamp.c:timestamp_mi:
+        //  result->time = dt1 - dt2;
+        //  result = DatumGetIntervalP(DirectFunctionCall1(interval_justify_hours,
+        //                                                 IntervalPGetDatum(result)));
+        // So if we want the same behavior, we need to call interval_justify_hours too:
+        let function_args = vec![Some(pg_sys::Datum::from(interval))];
+        unsafe { pgx::direct_function_call(pg_sys::interval_justify_hours, function_args) }
+            .expect("interval_justify_hours does not return None")
     }
 }
 

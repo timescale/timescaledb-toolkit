@@ -333,22 +333,22 @@ if $push; then
 
 [Sample pull request](https://github.com/timescale/timescaledb-docker-ha/pull/298)
 
-Add new version to `TIMESCALEDB_TOOLKIT_EXTENSIONS` in:
-- `.github/workflows/build_image.yaml`
-- `.github/workflows/publish_image.yaml`
-- `Makefile`
+Add new version to \`TIMESCALEDB_TOOLKIT_EXTENSIONS\` in:
+- \`.github/workflows/build_image.yaml\`
+- \`.github/workflows/publish_image.yaml\`
+- \`Makefile\`
 
 - [ ] hot-forge
 
 [Sample pull request](https://github.com/timescale/hot-forge/pull/67)
 
-Add two new lines to `bundles.yaml` containing the new version tag:
-```
+Add two new lines to \`bundles.yaml\` containing the new version tag:
+\`\`\`
 - repository: https://github.com/timescale/timescaledb-toolkit
   tag: $VERSION
-```
+\`\`\`
 
-And update `.github/build_bundles.py` if new pgx is required.
+And update \`.github/build_bundles.py\` if new pgx is required.
 
 - [ ] Copy Changelog.md entries for this release into
   [github release](https://github.com/timescale/timescaledb-toolkit/releases/tag/$VERSION)

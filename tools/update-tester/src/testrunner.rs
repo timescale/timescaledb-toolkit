@@ -257,22 +257,15 @@ impl TestClient {
                     .simple_query(&drop)
                     .unwrap_or_else(|e| panic!("could not drop db {} due to {}", test_db_name, e));
                 let locale_flags = {
-                    #[cfg(target_os = "macos")]
-                    {
-                        "LC_COLLATE 'C' LC_CTYPE 'UTF-8'"
-                    }
-                    #[cfg(not(target_os = "macos"))]
-                    {
-                        match std::process::Command::new("locale").arg("-a").output() {
-                            Ok(cmd)
-                                if String::from_utf8_lossy(&cmd.stdout)
-                                    .lines()
-                                    .any(|l| l == "C.UTF-8") =>
-                            {
-                                "LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8'"
-                            }
-                            _ => "LC_COLLATE 'C' LC_CTYPE 'C'",
+                    match std::process::Command::new("locale").arg("-a").output() {
+                        Ok(cmd)
+                            if String::from_utf8_lossy(&cmd.stdout)
+                                .lines()
+                                .any(|l| l == "C.UTF-8") =>
+                        {
+                            "LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8'"
                         }
+                        _ => "LC_COLLATE 'C' LC_CTYPE 'C'",
                     }
                 };
                 let create = format!(r#"CREATE DATABASE "{}" {}"#, test_db_name, locale_flags,);

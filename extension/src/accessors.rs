@@ -89,7 +89,14 @@ accessor! { first_val() }
 accessor! { last_val() }
 accessor! { first_time() }
 accessor! { last_time() }
-
+accessor! { open() }
+accessor! { close() }
+accessor! { high() }
+accessor! { low() }
+accessor! { open_time() }
+accessor! { high_time() }
+accessor! { low_time() }
+accessor! { close_time() }
 // The rest are more complex, with String or other challenges.  Leaving alone for now.
 
 pg_type! {

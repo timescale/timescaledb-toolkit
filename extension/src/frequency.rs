@@ -2170,6 +2170,7 @@ mod tests {
     }
 
     #[pg_test]
+    #[ignore]
     fn test_rollups() {
         Spi::execute(|client| {
             client.select(

@@ -2170,7 +2170,6 @@ mod tests {
     }
 
     #[pg_test]
-    #[ignore]
     fn test_rollups() {
         Spi::execute(|client| {
             client.select(
@@ -2179,18 +2178,18 @@ mod tests {
                 None,
             );
 
-            // Generate an array of 1000 values by taking the probability curve for a
+            // Generate an array of 10000 values by taking the probability curve for a
             // zeta curve with an s of 1.1 for the top 5 values, then adding smaller
             // amounts of the next 5 most common values, and finally filling with unique values.
-            let mut vals = vec![1; 95];
-            vals.append(&mut vec![2; 45]);
-            vals.append(&mut vec![3; 39]);
-            vals.append(&mut vec![4; 21]);
-            vals.append(&mut vec![5; 17]);
+            let mut vals = vec![1; 945];
+            vals.append(&mut vec![2; 441]);
+            vals.append(&mut vec![3; 283]);
+            vals.append(&mut vec![4; 206]);
+            vals.append(&mut vec![5; 161]);
             for v in 6..=10 {
-                vals.append(&mut vec![v, 10]);
+                vals.append(&mut vec![v, 125]);
             }
-            for v in 0..(1000 - 95 - 45 - 39 - 21 - 17 - (5 * 10)) {
+            for v in 0..(10000 - 945 - 441 - 283 - 206 - 161 - (5 * 125)) {
                 vals.push(11 + v);
             }
             vals.shuffle(&mut thread_rng());

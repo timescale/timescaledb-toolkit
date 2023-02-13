@@ -166,6 +166,8 @@ minpat=${VERSION#*.}
 MINOR=${minpat%.*}
 PATCH=${minpat#*.}
 
+POST_REL_BRANCH=post-$VERSION
+
 # 0. Sanity-check the surroundings.
 # working directory clean?
 assert_clean || die 'cowardly refusing to operate on dirty working directory'
@@ -259,7 +261,7 @@ fi
 # 7. Prepare the main branch for the next release cycle.
 # Github action gives us a shallow checkout which we must deepen before we can push changes.
 $nop git fetch --deepen=2147483647 origin $MAIN_BRANCH
-$nop git checkout $MAIN_BRANCH
+$nop git checkout -b $POST_REL_BRANCH $MAIN_BRANCH
 
 # 7a. Update upgradeable_form in control file.
 $nop sed --in-place "/$UPGRADEABLE_FROM_RE/ { s/'\$/, $VERSION'/ }" $CONTROL
@@ -321,9 +323,9 @@ set +e
 # TODO Carefully attempt to report errors but keep going on all steps after we push the tag in step 6.
 
 if $push; then
-    # 7d. Push to post-$VERSION branch.
-    $nop git push origin HEAD:post-$VERSION
-    $nop gh pr create -R timescale/timescaledb-toolkit -B $MAIN_BRANCH --fill -H post-$VERSION
+    # 7d. Push to $POST_REL_BRANCH branch.
+    $nop git push origin HEAD:$POST_REL_BRANCH
+    $nop gh pr create -R timescale/timescaledb-toolkit -B $MAIN_BRANCH --fill -H $POST_REL_BRANCH
 
     # 8. File issue for release tasks that are not yet automated.
     $nop gh issue create -R timescale/timescaledb-toolkit -F- -t "Release $VERSION" <<EOF
@@ -331,22 +333,22 @@ if $push; then
 
 [Sample pull request](https://github.com/timescale/timescaledb-docker-ha/pull/298)
 
-Add new version to `TIMESCALEDB_TOOLKIT_EXTENSIONS` in:
-- `.github/workflows/build_image.yaml`
-- `.github/workflows/publish_image.yaml`
-- `Makefile`
+Add new version to \`TIMESCALEDB_TOOLKIT_EXTENSIONS\` in:
+- \`.github/workflows/build_image.yaml\`
+- \`.github/workflows/publish_image.yaml\`
+- \`Makefile\`
 
 - [ ] hot-forge
 
 [Sample pull request](https://github.com/timescale/hot-forge/pull/67)
 
-Add two new lines to `bundles.yaml` containing the new version tag:
-```
+Add two new lines to \`bundles.yaml\` containing the new version tag:
+\`\`\`
 - repository: https://github.com/timescale/timescaledb-toolkit
   tag: $VERSION
-```
+\`\`\`
 
-And update `.github/build_bundles.py` if new pgx is required.
+And update \`.github/build_bundles.py\` if new pgx is required.
 
 - [ ] Copy Changelog.md entries for this release into
   [github release](https://github.com/timescale/timescaledb-toolkit/releases/tag/$VERSION)

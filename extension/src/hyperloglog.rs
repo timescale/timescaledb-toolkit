@@ -617,7 +617,10 @@ mod tests {
             // Unable to build the hyperloglog through hyperloglog_trans, as that requires a valid fcinfo to determine OIDs.
 
             // FIXME: use named constant for default correlation oid
-            let hasher = DatumHashBuilder::from_type_id(pg_sys::TEXTOID, Some(100));
+            let hasher = DatumHashBuilder::from_type_id(
+                pg_sys::TEXTOID,
+                Some(crate::serialization::collations::DEFAULT_COLLATION_OID),
+            );
             let mut control = HyperLogLogTrans {
                 logger: HLL::new(6, hasher),
             };
@@ -644,7 +647,11 @@ mod tests {
                 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 136, 136, 9, 7,
                 8, 74, 76, 47, 200, 231, 53, 25, 3, 0, 0, 0, 0, 0, 0, 0, 6, 9, 0, 0, 0, 1,
             ];
-            bincode::serialize_into(&mut expected, &PgCollationId(100)).unwrap();
+            bincode::serialize_into(
+                &mut expected,
+                &PgCollationId(crate::serialization::collations::DEFAULT_COLLATION_OID),
+            )
+            .unwrap();
             assert_eq!(buffer, expected);
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
@@ -670,7 +677,11 @@ mod tests {
                 49, 2, 8, 65, 131, 24, 32, 133, 12, 50, 66, 12, 48, 197, 12, 81, 130, 255, 58, 6,
                 255, 255, 255, 255, 255, 255, 255, 3, 9, 0, 0, 0, 1,
             ];
-            bincode::serialize_into(&mut expected, &PgCollationId(100)).unwrap();
+            bincode::serialize_into(
+                &mut expected,
+                &PgCollationId(crate::serialization::collations::DEFAULT_COLLATION_OID),
+            )
+            .unwrap();
             assert_eq!(buffer, expected);
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
@@ -749,7 +760,10 @@ mod tests {
                 .first()
                 .get_one::<String>();
 
-            let default_collation = ron::to_string(&PgCollationId(100)).unwrap();
+            let default_collation = ron::to_string(&PgCollationId(
+                crate::serialization::collations::DEFAULT_COLLATION_OID,
+            ))
+            .unwrap();
             let expected = format!(
                 "(\
                 version:1,\

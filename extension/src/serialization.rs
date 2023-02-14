@@ -9,7 +9,7 @@ use std::{
 use pgx::pg_sys;
 use std::ffi::CStr;
 
-mod collations;
+pub(crate) mod collations;
 mod functions;
 mod types;
 

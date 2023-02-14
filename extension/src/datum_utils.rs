@@ -62,7 +62,7 @@ pub struct TextSerializableDatumWriter {
 
 impl TextSerializableDatumWriter {
     pub fn from_oid(typoid: Oid) -> Self {
-        let mut type_output = 0;
+        let mut type_output = pg_sys::Oid::INVALID;
         let mut typ_is_varlena = false;
         let mut flinfo = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
 
@@ -81,13 +81,13 @@ impl TextSerializableDatumWriter {
 
 pub struct DatumFromSerializedTextReader {
     flinfo: pg_sys::FmgrInfo,
-    typ_io_param: u32,
+    typ_io_param: pg_sys::Oid,
 }
 
 impl DatumFromSerializedTextReader {
     pub fn from_oid(typoid: Oid) -> Self {
-        let mut type_input = 0;
-        let mut typ_io_param = 0;
+        let mut type_input = pg_sys::Oid::INVALID;
+        let mut typ_io_param = pg_sys::oids::Oid::INVALID;
         let mut flinfo = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
         unsafe {
             pg_sys::getTypeInputInfo(typoid, &mut type_input, &mut typ_io_param);
@@ -237,7 +237,7 @@ impl Serialize for DatumHashBuilder {
     where
         S: serde::Serializer,
     {
-        let collation = if self.collation == 0 {
+        let collation = if self.collation == pg_sys::oids::Oid::INVALID {
             None
         } else {
             Some(PgCollationId(self.collation))

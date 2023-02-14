@@ -444,7 +444,7 @@ pub mod toolkit_experimental {
 
             build! {
                 SpaceSavingAggregate {
-                    type_oid: trans.type_oid() as _,
+                    type_oid: trans.type_oid().into(),
                     num_values: trans.entries.len() as _,
                     values_seen: trans.total_vals,
                     freq_param: trans.freq_param,
@@ -466,14 +466,14 @@ pub mod toolkit_experimental {
             let mut trans = if agg.topn == 0 {
                 SpaceSavingTransState::freq_agg_from_type_id(
                     agg.freq_param,
-                    agg.type_oid,
+                    unsafe { Oid::from_u32_unchecked(agg.type_oid) },
                     collation,
                 )
             } else {
                 SpaceSavingTransState::topn_agg_from_type_id(
                     agg.freq_param,
                     agg.topn as u32,
-                    agg.type_oid,
+                    unsafe { Oid::from_u32_unchecked(agg.type_oid) },
                     collation,
                 )
             };
@@ -1287,14 +1287,19 @@ pub fn freq_iter<'a>(
     ),
 > {
     unsafe {
-        if ty.oid() != agg.type_oid {
+        if ty.oid().as_u32() != agg.type_oid {
             pgx::error!("mischatched types")
         }
         let counts = agg.counts.slice().iter().zip(agg.overcounts.slice().iter());
         TableIterator::new(agg.datums.clone().into_iter().zip(counts).map_while(
             move |(value, (&count, &overcount))| {
                 let total = agg.values_seen as f64;
-                let value = AnyElement::from_polymorphic_datum(value, false, agg.type_oid).unwrap();
+                let value = AnyElement::from_polymorphic_datum(
+                    value,
+                    false,
+                    Oid::from_u32_unchecked(agg.type_oid),
+                )
+                .unwrap();
                 let min_freq = (count - overcount) as f64 / total;
                 let max_freq = count as f64 / total;
                 Some((value, min_freq, max_freq))
@@ -1394,7 +1399,7 @@ pub fn topn(
     ty: Option<AnyElement>,
 ) -> SetOfIterator<AnyElement> {
     // If called with a NULL, assume type matches
-    if ty.is_some() && ty.unwrap().oid() != agg.type_oid {
+    if ty.is_some() && ty.unwrap().oid().as_u32() != agg.type_oid {
         pgx::error!("mischatched types")
     }
 
@@ -1418,7 +1423,7 @@ pub fn topn(
         )
         // TODO Shouldn't failure to convert to AnyElement cause error, not early stop?
         .map_while(move |value| unsafe {
-            AnyElement::from_polymorphic_datum(value, false, type_oid)
+            AnyElement::from_polymorphic_datum(value, false, Oid::from_u32_unchecked(type_oid))
         }),
     )
 }
@@ -1527,7 +1532,7 @@ pub fn max_frequency(agg: SpaceSavingAggregate<'_>, value: AnyElement) -> f64 {
     match agg
         .datums
         .iter()
-        .position(|datum| value == (datum, agg.type_oid).into())
+        .position(|datum| value == (datum, unsafe { Oid::from_u32_unchecked(agg.type_oid) }).into())
     {
         Some(idx) => agg.counts.slice()[idx] as f64 / agg.values_seen as f64,
         None => 0.,
@@ -1540,7 +1545,7 @@ pub fn min_frequency(agg: SpaceSavingAggregate<'_>, value: AnyElement) -> f64 {
     match agg
         .datums
         .iter()
-        .position(|datum| value == (datum, agg.type_oid).into())
+        .position(|datum| value == (datum, unsafe { Oid::from_u32_unchecked(agg.type_oid) }).into())
     {
         Some(idx) => {
             (agg.counts.slice()[idx] - agg.overcounts.slice()[idx]) as f64 / agg.values_seen as f64

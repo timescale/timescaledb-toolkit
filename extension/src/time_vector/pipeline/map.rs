@@ -93,7 +93,10 @@ pub fn map_series_pipeline_element<'e>(
 }
 
 pub fn map_series_element<'a>(function: crate::raw::regproc) -> Element<'a> {
-    let function: pg_sys::regproc = function.0.value().try_into().unwrap();
+    let function: pg_sys::regproc =
+        unsafe { pg_sys::Oid::from_u32_unchecked(function.0.value() as u32) }
+            .try_into()
+            .unwrap();
     check_user_function_type(function);
     Element::MapSeries {
         function: PgProcId(function),
@@ -156,7 +159,7 @@ pub fn map_data_pipeline_element<'e>(
     let mut nargs: ::std::os::raw::c_int = 0;
     let rettype = unsafe {
         pg_sys::get_func_signature(
-            function.0.value().try_into().unwrap(),
+            pg_sys::Oid::from_u32_unchecked(function.0.value() as u32),
             &mut argtypes,
             &mut nargs,
         )
@@ -175,7 +178,7 @@ pub fn map_data_pipeline_element<'e>(
     }
 
     Element::MapData {
-        function: PgProcId(function.0.value().try_into().unwrap()),
+        function: PgProcId(unsafe { pg_sys::Oid::from_u32_unchecked(function.0.value() as u32) }),
     }
     .flatten()
 }

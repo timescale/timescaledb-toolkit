@@ -4,7 +4,7 @@ use pgx::pg_sys;
 
 // TODO move to func_utils once there are enough function to warrant one
 pub unsafe fn get_collation(fcinfo: pg_sys::FunctionCallInfo) -> Option<pg_sys::Oid> {
-    if (*fcinfo).fncollation == 0 {
+    if (*fcinfo).fncollation == pg_sys::Oid::INVALID {
         None
     } else {
         Some((*fcinfo).fncollation)
@@ -13,7 +13,7 @@ pub unsafe fn get_collation(fcinfo: pg_sys::FunctionCallInfo) -> Option<pg_sys::
 
 pub fn get_collation_or_default(fcinfo: pg_sys::FunctionCallInfo) -> Option<pg_sys::Oid> {
     if fcinfo.is_null() {
-        Some(100) // TODO: default OID, there should be a constant for this
+        Some(unsafe { pg_sys::Oid::from_u32_unchecked(100) }) // TODO: default OID, there should be a constant for this
     } else {
         unsafe { get_collation(fcinfo) }
     }

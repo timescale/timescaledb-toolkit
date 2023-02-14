@@ -166,8 +166,12 @@ pub fn arrow_add_unstable_element<'p>(
 )]
 pub unsafe fn pipeline_support(input: Internal) -> Internal {
     pipeline_support_helper(input, |old_pipeline, new_element| {
-        let new_element =
-            UnstableTimevectorPipeline::from_polymorphic_datum(new_element, false, 0).unwrap();
+        let new_element = UnstableTimevectorPipeline::from_polymorphic_datum(
+            new_element,
+            false,
+            pg_sys::Oid::INVALID,
+        )
+        .unwrap();
         arrow_add_unstable_element(old_pipeline, new_element)
             .into_datum()
             .unwrap()
@@ -252,9 +256,12 @@ pub(crate) unsafe fn pipeline_support_helper(
 
     let new_element_const: *mut pg_sys::Const = arg2.cast();
 
-    let old_pipeline =
-        UnstableTimevectorPipeline::from_polymorphic_datum((*old_const).constvalue, false, 0)
-            .unwrap();
+    let old_pipeline = UnstableTimevectorPipeline::from_polymorphic_datum(
+        (*old_const).constvalue,
+        false,
+        pg_sys::Oid::INVALID,
+    )
+    .unwrap();
     let new_pipeline = make_new_pipeline(old_pipeline, (*new_element_const).constvalue);
 
     let new_const = pg_sys::palloc(size_of::<pg_sys::Const>()).cast();

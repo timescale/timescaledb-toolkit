@@ -545,7 +545,7 @@ mod tests {
 
     #[pg_test]
     fn candlestick_single_point() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
 
             let stmt = r#"SELECT candlestick(ts, open, high, low, close, volume)::text
@@ -569,7 +569,7 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_single_point() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
 
             let stmt = r#"SELECT candlestick_agg(ts, price, volume)::text
@@ -593,7 +593,7 @@ mod tests {
 
     #[pg_test]
     fn candlestick_accessors() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
 
             for ohlc in ["open", "high", "low", "close"] {
@@ -648,7 +648,7 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_accessors() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
 
             for ohlc in ["open", "high", "low", "close"] {
@@ -686,7 +686,7 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_extreme_values() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
 
             // timestamptz low and high val according to https://www.postgresql.org/docs/14/datatype-datetime.html
@@ -744,7 +744,7 @@ mod tests {
 
     #[pg_test]
     fn candlestick_null_inputs() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             for (t, o, h, l, c, v) in &[
                 ("NULL", "NULL", "NULL", "NULL", "NULL", "NULL"),
                 ("NULL", "1.0", "1.0", "1.0", "1.0", "1.0"),
@@ -762,7 +762,7 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_null_inputs() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             for (ts, price, vol) in &[
                 ("NULL", "NULL", "NULL"),
                 ("NULL", "1.0", "1.0"),
@@ -796,7 +796,7 @@ mod tests {
 
     #[pg_test]
     fn candlestick_as_constructor() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
 
             let stmt = r#"SELECT
@@ -834,7 +834,7 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_constant() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
 
             let stmt = r#"SELECT
@@ -864,7 +864,7 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_strictly_increasing() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
 
             let stmt = r#"SELECT
@@ -894,7 +894,7 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_strictly_decreasing() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
 
             let stmt = r#"SELECT
@@ -924,7 +924,7 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_oscillating() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
 
             let stmt = r#"SELECT
@@ -961,7 +961,7 @@ mod tests {
 
     #[pg_test]
     fn candlestick_rollup() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
 
             let stmt = r#"WITH t AS (
@@ -992,7 +992,7 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_rollup() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
 
             let stmt = r#"WITH t AS (

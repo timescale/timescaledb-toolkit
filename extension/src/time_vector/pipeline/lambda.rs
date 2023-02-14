@@ -42,7 +42,7 @@ impl<'input> InOutFuncs for Lambda<'input> {
         }
     }
 
-    fn input(input: &pgx::cstr_core::CStr) -> Self
+    fn input(input: &std::ffi::CStr) -> Self
     where
         Self: Sized,
     {
@@ -544,7 +544,7 @@ mod tests {
 
     #[pg_test]
     fn test_lambda_general() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -684,7 +684,7 @@ mod tests {
 
     #[pg_test]
     fn test_lambda_comparison() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -732,7 +732,7 @@ mod tests {
 
     #[pg_test]
     fn test_lambda_function() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -779,7 +779,7 @@ mod tests {
 
     #[pg_test]
     fn test_lambda_unary() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -808,7 +808,7 @@ mod tests {
 
     #[pg_test]
     fn test_lambda_interval_ops() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -835,7 +835,7 @@ mod tests {
 
     #[pg_test]
     fn test_lambda_variable() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.

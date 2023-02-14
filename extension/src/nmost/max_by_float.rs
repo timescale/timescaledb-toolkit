@@ -150,7 +150,7 @@ mod tests {
 
     #[pg_test]
     fn max_by_float_correctness() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             client.select(
                 "CREATE TABLE data(val DOUBLE PRECISION, category INT)",

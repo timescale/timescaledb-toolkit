@@ -1681,7 +1681,7 @@ mod tests {
 
     #[pg_test]
     fn test_freq_aggregate() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             // using the search path trick for this test to make it easier to stabilize later on
             let sp = client
                 .select(
@@ -1721,7 +1721,7 @@ mod tests {
 
     #[pg_test]
     fn test_topn_aggregate() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             // using the search path trick for this test to make it easier to stabilize later on
             let sp = client
                 .select(
@@ -2007,7 +2007,7 @@ mod tests {
     // API tests
     #[pg_test]
     fn test_topn() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             setup_with_test_table(&client);
 
             // simple tests
@@ -2054,7 +2054,7 @@ mod tests {
         error = "data is not skewed enough to find top 0 parameters with a skew of 1.5, try reducing the skew factor"
     )]
     fn topn_on_underskewed_topn_agg() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             setup_with_test_table(&client);
             client
                 .select(
@@ -2068,7 +2068,7 @@ mod tests {
 
     #[pg_test(error = "requested N (8) exceeds creation parameter of topn aggregate (5)")]
     fn topn_high_n_on_topn_agg() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             setup_with_test_table(&client);
             client
                 .select(
@@ -2082,7 +2082,7 @@ mod tests {
 
     #[pg_test(error = "frequency aggregates require a N parameter to topn")]
     fn topn_requires_n_for_freq_agg() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             setup_with_test_table(&client);
             assert_eq!(
                 0,
@@ -2099,7 +2099,7 @@ mod tests {
 
     #[pg_test]
     fn test_into_values() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             setup_with_test_table(&client);
 
             let rows = client
@@ -2131,7 +2131,7 @@ mod tests {
 
     #[pg_test]
     fn test_frequency_getters() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             setup_with_test_table(&client);
 
             // simple tests
@@ -2171,7 +2171,7 @@ mod tests {
 
     #[pg_test]
     fn test_rollups() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select(
                 "CREATE TABLE test (raw_data DOUBLE PRECISION, int_data INTEGER, text_data TEXT, bucket INTEGER)",
                 None,

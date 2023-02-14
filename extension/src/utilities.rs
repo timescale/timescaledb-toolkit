@@ -121,7 +121,7 @@ mod tests {
 
     #[pg_test]
     fn test_to_epoch() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let test_val = client
                 .select(
                     "SELECT toolkit_experimental.to_epoch('2021-01-01 00:00:00+03'::timestamptz)",
@@ -154,27 +154,27 @@ mod tests {
 
     #[pg_test]
     fn test_days_in_month() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let test_val = client.select("SELECT toolkit_experimental.days_in_month('2021-01-01 00:00:00+03'::timestamptz)",None,None,).first().get_one::<i64>().unwrap();
             assert_eq!(test_val, 31);
         });
 
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let test_val = client.select("SELECT toolkit_experimental.days_in_month('2020-02-03 00:00:00+03'::timestamptz)",None,None,).first().get_one::<i64>().unwrap();
             assert_eq!(test_val, 29);
         });
     }
     #[pg_test]
     fn test_monthly_normalize() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let test_val = client.select("SELECT toolkit_experimental.month_normalize(1000,'2021-01-01 00:00:00+03'::timestamptz)",None,None,).first().get_one::<f64>().unwrap();
             assert_eq!(test_val, 981.8548387096774f64);
         });
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let test_val = client.select("SELECT toolkit_experimental.month_normalize(1000,'2021-01-01 00:00:00+03'::timestamptz,30.5)",None,None,).first().get_one::<f64>().unwrap();
             assert_eq!(test_val, 983.8709677419355f64);
         });
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let test_val = client.select("SELECT toolkit_experimental.month_normalize(1000,'2021-01-01 00:00:00+03'::timestamptz,30)",None,None,).first().get_one::<f64>().unwrap();
             assert_eq!(test_val, 967.741935483871f64);
         });

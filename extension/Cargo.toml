@@ -19,6 +19,7 @@ pg_test = ["approx"]
 # Also `pgx-tests` down below in `dev-dependencies`.
 pgx = "=0.7.1"
 pgx-macros = "=0.7.1"
+pgx-sql-entity-graph = "=0.7.1"
 encodings = {path="../crates/encodings"}
 flat_serialize = {path="../crates/flat_serialize/flat_serialize"}
 flat_serialize_macro = {path="../crates/flat_serialize/flat_serialize_macro"}

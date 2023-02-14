@@ -923,7 +923,7 @@ mod tests {
 
     #[pg_test]
     fn test_counter_aggregate() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             // set search_path after defining our table so we don't pollute the wrong schema
             let stmt = "SELECT format('toolkit_experimental, %s',current_setting('search_path'))";
             let search_path = select_one!(client, stmt, String);
@@ -1039,7 +1039,7 @@ mod tests {
 
     #[pg_test]
     fn test_counter_io() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select(
                 "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
                 None,
@@ -1186,7 +1186,7 @@ mod tests {
 
     #[pg_test]
     fn delta_after_counter_decrease() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             decrease(&client);
             let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
             // 10 after 30 means there was a reset so we add 30 + 10 = 40.
@@ -1197,7 +1197,7 @@ mod tests {
 
     #[pg_test]
     fn delta_after_counter_increase() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             increase(&client);
             let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
@@ -1206,7 +1206,7 @@ mod tests {
 
     #[pg_test]
     fn delta_after_counter_decrease_then_increase_to_same_value() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             decrease_then_increase_to_same_value(&client);
             let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
             // 10 after 30 means there was a reset so we add 30 + 10 + 30 = 70.
@@ -1217,7 +1217,7 @@ mod tests {
 
     #[pg_test]
     fn delta_after_counter_increase_then_decrease_to_same_value() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             increase_then_decrease_to_same_value(&client);
             let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
             // In this case, counter goes 10, 30, 40 (reset + 10).
@@ -1228,7 +1228,7 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_after_counter_decrease() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             decrease(&client);
             let stmt = "SELECT idelta_left(counter_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
@@ -1237,7 +1237,7 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_after_counter_increase() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             increase(&client);
             let stmt = "SELECT idelta_left(counter_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
@@ -1246,7 +1246,7 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_after_counter_increase_then_decrease_to_same_value() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             increase_then_decrease_to_same_value(&client);
             let stmt = "SELECT idelta_left(counter_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
@@ -1255,7 +1255,7 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_after_counter_decrease_then_increase_to_same_value() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             decrease_then_increase_to_same_value(&client);
 
             let stmt = "SELECT idelta_left(counter_agg(ts, val)) FROM test";
@@ -1265,7 +1265,7 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_after_counter_decrease() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             decrease(&client);
             let stmt = "SELECT idelta_right(counter_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
@@ -1274,7 +1274,7 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_after_counter_increase() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             increase(&client);
             let stmt = "SELECT idelta_right(counter_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
@@ -1283,7 +1283,7 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_after_counter_increase_then_decrease_to_same_value() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             increase_then_decrease_to_same_value(&client);
             let stmt = "SELECT idelta_right(counter_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
@@ -1292,7 +1292,7 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_after_counter_decrease_then_increase_to_same_value() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             decrease_then_increase_to_same_value(&client);
             let stmt = "SELECT idelta_right(counter_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
@@ -1301,7 +1301,7 @@ mod tests {
 
     #[pg_test]
     fn counter_agg_interpolation() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select(
                 "CREATE TABLE test(time timestamptz, value double precision, bucket timestamptz)",
                 None,
@@ -1456,7 +1456,7 @@ mod tests {
 
     #[pg_test]
     fn interpolated_delta_with_aligned_point() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select(
                 "CREATE TABLE test(time timestamptz, value double precision, bucket timestamptz)",
                 None,
@@ -1504,7 +1504,7 @@ mod tests {
 
     #[pg_test]
     fn irate_left_arrow_match() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             make_test_table(&client, "test");
 
             assert_relative_eq!(
@@ -1523,7 +1523,7 @@ mod tests {
 
     #[pg_test]
     fn irate_right_arrow_match() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             make_test_table(&client, "test");
 
             assert_relative_eq!(
@@ -1542,7 +1542,7 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_arrow_match() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             make_test_table(&client, "test");
 
             assert_relative_eq!(
@@ -1561,7 +1561,7 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_arrow_match() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             make_test_table(&client, "test");
 
             assert_relative_eq!(
@@ -1580,7 +1580,7 @@ mod tests {
 
     #[pg_test]
     fn num_resets_arrow_match() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             make_test_table(&client, "test");
 
             assert_relative_eq!(
@@ -1599,7 +1599,7 @@ mod tests {
 
     #[pg_test]
     fn first_and_last_val() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             make_test_table(&client, "test");
 
             assert_relative_eq!(
@@ -1628,7 +1628,7 @@ mod tests {
 
     #[pg_test]
     fn first_and_last_val_arrow_match() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             make_test_table(&client, "test");
 
             assert_relative_eq!(
@@ -1659,7 +1659,7 @@ mod tests {
 
     #[pg_test]
     fn first_and_last_time() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             make_test_table(&client, "test");
             client.select("SET TIME ZONE 'UTC'", None, None);
 
@@ -1689,7 +1689,7 @@ mod tests {
 
     #[pg_test]
     fn first_and_last_time_arrow_match() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             make_test_table(&client, "test");
             client.select("SET TIME ZONE 'UTC'", None, None);
 
@@ -1721,7 +1721,7 @@ mod tests {
 
     // #[pg_test]
     // fn test_combine_aggregate(){
-    //     Spi::execute(|client| {
+    //     Spi::connect(|client| {
 
     //     });
     // }

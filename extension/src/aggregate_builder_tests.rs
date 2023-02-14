@@ -87,7 +87,7 @@ mod tests {
 
     #[pg_test]
     fn test_anything_in_experimental_and_returns_first() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let output = client
                 .select(
                     "SELECT toolkit_experimental.anything(val) \
@@ -103,7 +103,7 @@ mod tests {
 
     #[pg_test]
     fn test_anything_has_correct_fn_names_and_def() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let spec = get_aggregate_spec(&client, "anything");
             // output is
             //   fn kind (`a`), volatility, parallel-safety, num args, final fn modify (is this right?)
@@ -131,7 +131,7 @@ mod tests {
 
     #[pg_test]
     fn test_cagg_anything_has_correct_fn_names_and_def() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let spec = get_aggregate_spec(&client, "cagg_anything");
             // output is
             //   fn kind (`a`), volatility, parallel-safety, num args, final fn modify (is this right?)
@@ -159,7 +159,7 @@ mod tests {
 
     #[pg_test]
     fn test_parallel_anything_has_correct_fn_names_and_def() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let spec = get_aggregate_spec(&client, "parallel_anything");
             // output is
             //   fn kind (`a`), volatility, parallel-safety, num args, final fn modify (is this right?)

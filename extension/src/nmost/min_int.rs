@@ -172,7 +172,7 @@ mod tests {
 
     #[pg_test]
     fn min_int_correctness() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             client.select("CREATE TABLE data(val INT8, category INT)", None, None);
 

@@ -130,7 +130,7 @@ impl<'input> InOutFuncs for TDigest<'input> {
         }
     }
 
-    fn input(input: &pgx::cstr_core::CStr) -> TDigest<'input>
+    fn input(input: &std::ffi::CStr) -> TDigest<'input>
     where
         Self: Sized,
     {
@@ -441,7 +441,7 @@ mod tests {
 
     #[pg_test]
     fn test_tdigest_aggregate() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("CREATE TABLE test (data DOUBLE PRECISION)", None, None);
             client.select(
                 "INSERT INTO test SELECT generate_series(0.01, 100, 0.01)",
@@ -560,7 +560,7 @@ mod tests {
 
     #[pg_test]
     fn test_tdigest_small_count() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let estimate = client
                 .select(
                     "SELECT \
@@ -593,7 +593,7 @@ mod tests {
 
     #[pg_test]
     fn test_tdigest_io() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let output = client
                 .select(
                     "SELECT \
@@ -655,7 +655,7 @@ mod tests {
 
     #[pg_test]
     fn test_tdigest_compound_agg() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select(
                 "CREATE TABLE new_test (device INTEGER, value DOUBLE PRECISION)",
                 None,

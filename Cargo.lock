@@ -2174,6 +2174,7 @@ dependencies = [
  "pest_derive",
  "pgx",
  "pgx-macros",
+ "pgx-sql-entity-graph",
  "pgx-tests",
  "rand",
  "rand_chacha",

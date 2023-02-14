@@ -273,7 +273,7 @@ impl<'input> InOutFuncs for UddSketch<'input> {
         }
     }
 
-    fn input(input: &pgx::cstr_core::CStr) -> Self
+    fn input(input: &std::ffi::CStr) -> Self
     where
         Self: Sized,
     {
@@ -706,7 +706,7 @@ mod tests {
 
     #[pg_test]
     fn test_aggregate() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("CREATE TABLE test (data DOUBLE PRECISION)", None, None);
             client.select(
                 "INSERT INTO test SELECT generate_series(0.01, 100, 0.01)",
@@ -827,7 +827,7 @@ mod tests {
 
     #[pg_test]
     fn test_compound_agg() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select(
                 "CREATE TABLE new_test (device INTEGER, value DOUBLE PRECISION)",
                 None,
@@ -898,7 +898,7 @@ mod tests {
 
     #[pg_test]
     fn test_percentile_agg() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select(
                 "CREATE TABLE pa_test (device INTEGER, value DOUBLE PRECISION)",
                 None,
@@ -960,7 +960,7 @@ mod tests {
     }
     #[pg_test]
     fn test_approx_percentile_array() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select(
                 "CREATE TABLE paa_test (device INTEGER, value DOUBLE PRECISION)",
                 None,
@@ -1035,7 +1035,7 @@ mod tests {
 
     #[pg_test]
     fn test_approx_percentile_array_arrow() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select(
                 "CREATE TABLE paa_test (device INTEGER, value DOUBLE PRECISION)",
                 None,
@@ -1110,7 +1110,7 @@ mod tests {
 
     #[pg_test]
     fn uddsketch_io_test() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("CREATE TABLE io_test (value DOUBLE PRECISION)", None, None);
             client.select("INSERT INTO io_test VALUES (-1000), (-100), (-10), (-1), (-0.1), (-0.01), (-0.001), (0), (0.001), (0.01), (0.1), (1), (10), (100), (1000)", None, None);
 
@@ -1215,7 +1215,7 @@ mod tests {
 
     #[pg_test]
     fn test_udd_null_input_yields_null_output() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let output = client
                 .select("SELECT uddsketch(20, 0.01, NULL)::TEXT", None, None)
                 .first()

@@ -250,7 +250,7 @@ mod tests {
 
     #[pg_test]
     fn test_pipeline_map_lambda() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -323,7 +323,7 @@ mod tests {
 
     #[pg_test]
     fn test_pipeline_map_lambda2() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -409,7 +409,7 @@ mod tests {
 
     #[pg_test]
     fn test_pipeline_map_data() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -489,7 +489,7 @@ mod tests {
 
     #[pg_test]
     fn test_pipeline_map_series() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -570,7 +570,7 @@ mod tests {
     #[pg_test]
     #[should_panic = "division by zero"]
     fn test_pipeline_map_series_failure() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -620,7 +620,7 @@ mod tests {
     #[pg_test]
     #[should_panic = " returned NULL"]
     fn test_pipeline_map_series_null() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -668,7 +668,7 @@ mod tests {
 
     #[pg_test]
     fn test_map_io() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.

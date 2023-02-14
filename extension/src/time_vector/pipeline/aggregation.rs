@@ -705,7 +705,7 @@ mod tests {
 
     #[pg_test]
     fn test_stats_agg_finalizer() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -748,7 +748,7 @@ mod tests {
 
     #[pg_test]
     fn test_stats_agg_pipeline_folding() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -792,7 +792,7 @@ mod tests {
 
     #[pg_test]
     fn test_sum_finalizer() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -829,7 +829,7 @@ mod tests {
 
     #[pg_test]
     fn test_sum_pipeline_folding() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -873,7 +873,7 @@ mod tests {
 
     #[pg_test]
     fn test_average_finalizer() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -913,7 +913,7 @@ mod tests {
 
     #[pg_test]
     fn test_average_pipeline_folding() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -957,7 +957,7 @@ mod tests {
 
     #[pg_test]
     fn test_num_vals_finalizer() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -997,7 +997,7 @@ mod tests {
 
     #[pg_test]
     fn test_num_vals_pipeline_folding() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -1041,7 +1041,7 @@ mod tests {
 
     #[pg_test]
     fn test_counter_agg_finalizer() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -1115,7 +1115,7 @@ mod tests {
 
     #[pg_test]
     fn test_hyperloglog_finalizer() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -1199,7 +1199,7 @@ mod tests {
 
     #[pg_test]
     fn test_percentile_agg_finalizer() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -1256,7 +1256,7 @@ mod tests {
 
     #[pg_test]
     fn test_percentile_agg_pipeline_folding() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.

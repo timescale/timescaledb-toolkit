@@ -528,7 +528,7 @@ mod tests {
 
     #[pg_test]
     pub fn test_unnest() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             client.select(
                 "CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION)",
@@ -578,7 +578,7 @@ mod tests {
 
     #[pg_test]
     pub fn test_format_timevector() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             client.select(
                 "CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION)",
@@ -651,7 +651,7 @@ mod tests {
     #[should_panic = "All values in the series must be finite"]
     #[pg_test]
     pub fn test_format_timevector_panics_on_infinities() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             client.select(
                 "CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION)",
@@ -687,7 +687,7 @@ mod tests {
 
     #[pg_test]
     pub fn timevector_io() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             client.select(
                 "CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION)",
@@ -746,7 +746,7 @@ mod tests {
 
     #[pg_test]
     pub fn test_arrow_equivalence() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             client.select(
                 "CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION)",
@@ -789,7 +789,7 @@ mod tests {
 
     #[pg_test]
     pub fn test_rollup() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             client.select(
                 "CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION, bucket INTEGER)",
@@ -860,7 +860,7 @@ mod tests {
 
     #[pg_test]
     fn test_rollup_preserves_nulls_flag() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             client.select(
                 "CREATE TABLE tvecs (vector Timevector_TSTZ_F64)",
@@ -908,7 +908,7 @@ mod tests {
 
     #[pg_test]
     fn test_asof_join() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
 
             let mut result = client.select(
@@ -950,7 +950,7 @@ mod tests {
 
     #[pg_test(error = "both timevectors must be populated for an asof join")]
     fn test_asof_none() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
 
             client.select(
@@ -970,7 +970,7 @@ mod tests {
 
     #[pg_test(error = "both timevectors must be populated for an asof join")]
     fn test_none_asof() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
 
             client.select(

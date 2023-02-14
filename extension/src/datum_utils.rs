@@ -101,7 +101,7 @@ impl DatumFromSerializedTextReader {
     }
 
     pub fn read_datum(&mut self, datum_str: &str) -> Datum {
-        let cstr = pgx::cstr_core::CString::new(datum_str).unwrap(); // TODO: error handling
+        let cstr = std::ffi::CString::new(datum_str).unwrap(); // TODO: error handling
         let cstr_ptr = cstr.as_ptr() as *mut std::os::raw::c_char;
         unsafe { pg_sys::InputFunctionCall(&mut self.flinfo, cstr_ptr, self.typ_io_param, -1) }
     }
@@ -115,7 +115,7 @@ impl Serialize for TextSerializeableDatum {
         S: serde::Serializer,
     {
         let chars = unsafe { pg_sys::OutputFunctionCall(self.1, self.0) };
-        let cstr = unsafe { pgx::cstr_core::CStr::from_ptr(chars) };
+        let cstr = unsafe { std::ffi::CStr::from_ptr(chars) };
         serializer.serialize_str(cstr.to_str().unwrap())
     }
 }
@@ -685,7 +685,7 @@ mod tests {
 
     #[pg_test]
     fn test_value_datum_store() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let test = client.select("SELECT toolkit_experimental.datum_test_agg(r.data)::TEXT FROM (SELECT generate_series(10, 100, 10) as data) r", None, None)
                 .first()
                 .get_one::<String>().unwrap();
@@ -696,7 +696,7 @@ mod tests {
 
     #[pg_test]
     fn test_varlena_datum_store() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let test = client.select("SELECT toolkit_experimental.datum_test_agg(r.data)::TEXT FROM (SELECT generate_series(10, 100, 10)::TEXT as data) r", None, None)
                 .first()
                 .get_one::<String>().unwrap();
@@ -707,7 +707,7 @@ mod tests {
 
     #[pg_test]
     fn test_byref_datum_store() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let test = client.select("SELECT toolkit_experimental.datum_test_agg(r.data)::TEXT FROM (SELECT (generate_series(10, 100, 10)::TEXT || ' seconds')::INTERVAL as data) r", None, None)
                 .first()
                 .get_one::<String>().unwrap();

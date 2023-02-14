@@ -293,7 +293,7 @@ mod tests {
 
     #[pg_test]
     fn test_simple_arith_binops() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -474,7 +474,7 @@ mod tests {
 
     #[pg_test]
     fn test_simple_arith_unaryops() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.

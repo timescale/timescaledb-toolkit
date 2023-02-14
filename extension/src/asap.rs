@@ -202,7 +202,7 @@ mod tests {
     fn test_against_reference() {
         // Test our ASAP implementation against the reference implementation at http://www.futuredata.io.s3-website-us-west-2.amazonaws.com/asap/
         // The sample data is the first 100 points of the second sample data set.  Note that the dates are not important for this test.
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             let mut result = client.select(
                 "
@@ -271,7 +271,7 @@ mod tests {
 
     #[pg_test]
     fn test_asap_equivalence() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let mut value_result = client.select(
                 "
                 SELECT time::text, value

@@ -260,7 +260,7 @@ macro_rules! ron_inout_funcs {
                 }
             }
 
-            fn input(input: &pgx::cstr_core::CStr) -> $name<'input>
+            fn input(input: &std::ffi::CStr) -> $name<'input>
             where
                 Self: Sized,
             {

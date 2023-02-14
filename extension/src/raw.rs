@@ -1,10 +1,8 @@
 #![allow(non_camel_case_types)]
 
-use pgx::{
-    utils::sql_entity_graph::metadata::{
-        ArgumentError, Returns, ReturnsError, SqlMapping, SqlTranslatable,
-    },
-    *,
+use pgx::*;
+use pgx_sql_entity_graph::metadata::{
+    ArgumentError, Returns, ReturnsError, SqlMapping, SqlTranslatable,
 };
 
 extension_sql!(

@@ -12,7 +12,7 @@ mod tests {
     // Test that any new features are added to the the experimental schema
     #[pg_test]
     fn test_schema_qualification() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let stable_functions: HashSet<String> = stable_functions();
             let stable_types: HashSet<String> = stable_types();
             let stable_operators: HashSet<String> = stable_operators();

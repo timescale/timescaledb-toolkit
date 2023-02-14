@@ -1522,7 +1522,7 @@ mod tests {
     #[pg_test]
     #[should_panic = "The start and interval parameters cannot be used for duration_in with"]
     fn duration_in_misuse_error() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
             assert_eq!(
                 "365 days 00:02:00",
@@ -1537,7 +1537,7 @@ mod tests {
 
     #[pg_test]
     fn one_state_one_change() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
             client.select(
                 r#"INSERT INTO test VALUES
@@ -1568,7 +1568,7 @@ mod tests {
 
     #[pg_test]
     fn two_states_two_changes() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
             client.select(
                 r#"INSERT INTO test VALUES
@@ -1601,7 +1601,7 @@ mod tests {
 
     #[pg_test]
     fn two_states_three_changes() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
             client.select(
                 r#"INSERT INTO test VALUES
@@ -1652,7 +1652,7 @@ mod tests {
 
     #[pg_test]
     fn out_of_order_times() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
             client.select(
                 r#"INSERT INTO test VALUES
@@ -1688,7 +1688,7 @@ mod tests {
     fn same_state_twice() {
         // TODO Do we care?  Could be that states are recorded not only when they change but
         // also at regular intervals even when they don't?
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
             client.select(
                 r#"INSERT INTO test VALUES
@@ -1721,7 +1721,7 @@ mod tests {
 
     #[pg_test]
     fn duration_in_two_states_two_changes() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
             client.select(
                 r#"INSERT INTO test VALUES
@@ -1753,7 +1753,7 @@ mod tests {
 
     #[pg_test]
     fn same_state_twice_last() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
             client.select(
                 r#"INSERT INTO test VALUES
@@ -1778,7 +1778,7 @@ mod tests {
     #[pg_test]
     fn combine_using_muchos_data() {
         compact_state_agg::counters::reset();
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
             client.select(
                 r#"
@@ -1813,7 +1813,7 @@ insert into test select '2020-01-02 UTC'::timestamptz + make_interval(days=>v), 
     #[allow(dead_code)]
     fn combine_using_settings() {
         compact_state_agg::counters::reset();
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
             client.select(
                 r#"INSERT INTO test VALUES
@@ -1854,7 +1854,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
     // the sample query from the ticket
     #[pg_test]
     fn sample_query() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
             client.select(
                 r#"INSERT INTO test VALUES
@@ -1897,7 +1897,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
 
     #[pg_test]
     fn interpolated_duration() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select(
                 "SET TIME ZONE 'UTC';
                 CREATE TABLE inttest(time TIMESTAMPTZ, state TEXT, bucket INT);
@@ -2012,7 +2012,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
         error = "state cannot be both String(\"ERROR\") and String(\"START\") at 631152000000000"
     )]
     fn two_states_at_one_time() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
             client.select(
                 r#"INSERT INTO test VALUES
@@ -2036,7 +2036,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
 
     #[pg_test]
     fn interpolate_introduces_state() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select(
                 "CREATE TABLE states(time TIMESTAMPTZ, state TEXT, bucket INT)",
                 None,

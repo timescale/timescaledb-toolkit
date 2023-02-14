@@ -582,7 +582,7 @@ mod tests {
 
     #[pg_test]
     pub fn test_heartbeat_agg() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET TIMEZONE to UTC", None, None);
 
             client.select("CREATE TABLE liveness(heartbeat TIMESTAMPTZ)", None, None);
@@ -695,7 +695,7 @@ mod tests {
 
     #[pg_test]
     pub fn test_heartbeat_rollup() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET TIMEZONE to UTC", None, None);
 
             client.select(
@@ -741,7 +741,7 @@ mod tests {
 
     #[pg_test]
     pub fn test_heartbeat_combining_rollup() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET TIMEZONE to UTC", None, None);
 
             client.select(
@@ -823,7 +823,7 @@ mod tests {
 
     #[pg_test]
     pub fn test_heartbeat_agg_interpolation() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET TIMEZONE to UTC", None, None);
 
             client.select(

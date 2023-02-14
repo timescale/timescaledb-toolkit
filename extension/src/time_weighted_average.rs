@@ -549,7 +549,7 @@ mod tests {
     }
     #[pg_test]
     fn test_time_weight_aggregate() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let stmt =
                 "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION); SET TIME ZONE 'UTC'";
             client.select(stmt, None, None);
@@ -662,7 +662,7 @@ mod tests {
 
     #[pg_test]
     fn test_time_weight_io() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             let stmt = "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)";
             client.select(stmt, None, None);
@@ -816,7 +816,7 @@ mod tests {
 
     #[pg_test]
     fn test_time_weight_interpolation() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select(
                 "CREATE TABLE test(time timestamptz, value double precision, bucket timestamptz)",
                 None,

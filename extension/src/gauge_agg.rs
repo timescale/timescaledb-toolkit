@@ -707,7 +707,7 @@ mod tests {
 
     #[pg_test]
     fn round_trip() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select(
                 "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
                 None,
@@ -784,7 +784,7 @@ mod tests {
 
     #[pg_test]
     fn delta_after_gauge_decrease() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             decrease(&client);
             let stmt = "SELECT toolkit_experimental.delta(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(-20.0, select_one!(client, stmt, f64));
@@ -793,7 +793,7 @@ mod tests {
 
     #[pg_test]
     fn delta_after_gauge_increase() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             increase(&client);
             let stmt = "SELECT toolkit_experimental.delta(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
@@ -802,7 +802,7 @@ mod tests {
 
     #[pg_test]
     fn delta_after_gauge_decrease_then_increase_to_same_value() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             decrease_then_increase_to_same_value(&client);
             let stmt = "SELECT toolkit_experimental.delta(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(0.0, select_one!(client, stmt, f64));
@@ -811,7 +811,7 @@ mod tests {
 
     #[pg_test]
     fn delta_after_gauge_increase_then_decrease_to_same_value() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             increase_then_decrease_to_same_value(&client);
             let stmt = "SELECT toolkit_experimental.delta(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(0.0, select_one!(client, stmt, f64));
@@ -820,7 +820,7 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_after_gauge_decrease() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             decrease(&client);
             let stmt = "SELECT toolkit_experimental.idelta_left(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
@@ -829,7 +829,7 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_after_gauge_increase() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             increase(&client);
             let stmt = "SELECT toolkit_experimental.idelta_left(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
@@ -838,7 +838,7 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_after_gauge_increase_then_decrease_to_same_value() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             increase_then_decrease_to_same_value(&client);
             let stmt = "SELECT toolkit_experimental.idelta_left(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
@@ -847,7 +847,7 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_after_gauge_decrease_then_increase_to_same_value() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             decrease_then_increase_to_same_value(&client);
             let stmt = "SELECT toolkit_experimental.idelta_left(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
@@ -856,7 +856,7 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_after_gauge_decrease() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             decrease(&client);
             let stmt = "SELECT toolkit_experimental.idelta_right(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
@@ -865,7 +865,7 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_after_gauge_increase() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             increase(&client);
             let stmt = "SELECT toolkit_experimental.idelta_right(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
@@ -874,7 +874,7 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_after_gauge_increase_then_decrease_to_same_value() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             increase_then_decrease_to_same_value(&client);
             let stmt = "SELECT toolkit_experimental.idelta_right(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
@@ -883,7 +883,7 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_after_gauge_decrease_then_increase_to_same_value() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             decrease_then_increase_to_same_value(&client);
             let stmt = "SELECT toolkit_experimental.idelta_right(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
@@ -910,7 +910,7 @@ mod tests {
 
     #[pg_test]
     fn rollup() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select(
                 "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
                 None,
@@ -939,7 +939,7 @@ mod tests {
 
     #[pg_test]
     fn gauge_agg_interpolation() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select(
                 "CREATE TABLE test(time timestamptz, value double precision, bucket timestamptz)",
                 None,
@@ -1023,7 +1023,7 @@ mod tests {
 
     #[pg_test]
     fn guage_agg_interpolated_delta_with_aligned_point() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select(
                 "CREATE TABLE test(time timestamptz, value double precision, bucket timestamptz)",
                 None,
@@ -1068,7 +1068,7 @@ mod tests {
 
     #[pg_test]
     fn no_results_on_null_input() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select(
                 "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
                 None,

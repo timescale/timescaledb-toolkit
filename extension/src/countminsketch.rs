@@ -139,7 +139,7 @@ mod tests {
 
     #[pg_test]
     fn test_countminsketch() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("CREATE TABLE test (data TEXT)", None, None);
             client.select("INSERT INTO test SELECT generate_series(1, 100)::TEXT UNION ALL SELECT generate_series(1, 50)::TEXT", None, None);
 
@@ -193,7 +193,7 @@ mod tests {
 
     #[pg_test]
     fn test_countminsketch_combine() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let combined = client
                 .select(
 		    "SELECT toolkit_experimental.approx_count('1', toolkit_experimental.count_min_sketch(v::text, 0.01, 0.01))
@@ -221,7 +221,7 @@ mod tests {
 
     #[pg_test]
     fn countminsketch_io_test() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("CREATE TABLE io_test (value TEXT)", None, None);
             client.select("INSERT INTO io_test VALUES ('lorem'), ('ipsum'), ('dolor'), ('sit'), ('amet'), ('consectetur'), ('adipiscing'), ('elit')", None, None);
 
@@ -253,7 +253,7 @@ mod tests {
 
     #[pg_test]
     fn test_cms_null_input_yields_null_output() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let output = client
                 .select(
                     "SELECT toolkit_experimental.count_min_sketch(NULL::TEXT, 0.1, 0.1)::TEXT",
@@ -268,7 +268,7 @@ mod tests {
 
     #[pg_test]
     fn test_approx_count_null_input_yields_null_output() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             let output = client
                 .select(
                     "SELECT toolkit_experimental.approx_count('1'::text, NULL::toolkit_experimental.countminsketch)",

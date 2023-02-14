@@ -156,7 +156,7 @@ mod tests {
 
     #[pg_test]
     fn max_by_time_correctness() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             client.select(
                 "CREATE TABLE data(val TIMESTAMPTZ, category INT)",

@@ -170,7 +170,7 @@ mod tests {
 
     #[pg_test]
     fn test_unnest_finalizer() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -211,7 +211,7 @@ mod tests {
 
     #[pg_test]
     fn test_series_finalizer() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
@@ -260,7 +260,7 @@ mod tests {
 
     #[pg_test]
     fn test_force_materialize() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.

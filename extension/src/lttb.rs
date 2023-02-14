@@ -435,7 +435,7 @@ mod tests {
 
     #[pg_test]
     fn test_lttb_equivalence() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select(
                 "CREATE TABLE test(time TIMESTAMPTZ, value DOUBLE PRECISION);",
                 None,
@@ -488,7 +488,7 @@ mod tests {
 
     #[pg_test]
     fn test_lttb_result() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             let mut result = client.select(
                 r#"SELECT unnest(lttb(ts, val, 5))::TEXT
@@ -535,7 +535,7 @@ mod tests {
 
     #[pg_test]
     fn test_gp_lttb() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             let mut result = client.select(
                 r#"SELECT unnest(toolkit_experimental.gp_lttb(ts, val, 7))::TEXT
@@ -590,7 +590,7 @@ mod tests {
 
     #[pg_test]
     fn test_gp_lttb_with_gap() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
             let mut result = client.select(
                 r#"SELECT unnest(toolkit_experimental.gp_lttb(ts, val, '36hr', 5))::TEXT

@@ -1434,7 +1434,7 @@ pub fn as_method(method: &str) -> Option<Method> {
 
 //     // #[pg_test]
 //     // fn test_combine_aggregate(){
-//     //     Spi::execute(|client| {
+//     //     Spi::connect(|client| {
 
 //     //     });
 //     // }
@@ -1458,7 +1458,7 @@ mod tests {
 
     #[pg_test]
     fn test_stats_agg_text_io() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select(
                 "CREATE TABLE test_table (test_x DOUBLE PRECISION, test_y DOUBLE PRECISION)",
                 None,
@@ -1827,7 +1827,7 @@ mod tests {
     }
 
     fn test_aggs(state: &mut TestState) {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select(
                 "CREATE TABLE test_table (test_x DOUBLE PRECISION, test_y DOUBLE PRECISION)",
                 None,
@@ -2236,7 +2236,7 @@ mod tests {
 
     #[pg_test]
     fn stats_agg_rolling() {
-        Spi::execute(|client| {
+        Spi::connect(|client| {
             client.select(
                 "
 SET timezone TO 'UTC';

@@ -1699,17 +1699,21 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
-            client.update("SET TIMEZONE to UTC", None, None);
-            client.update(
-                "CREATE TABLE test (data INTEGER, time TIMESTAMPTZ)",
-                None,
-                None,
-            );
+            client.update("SET TIMEZONE to UTC", None, None).unwrap();
+            client
+                .update(
+                    "CREATE TABLE test (data INTEGER, time TIMESTAMPTZ)",
+                    None,
+                    None,
+                )
+                .unwrap();
 
             for i in (0..100).rev() {
-                client.update(&format!("INSERT INTO test SELECT i, '2020-1-1'::TIMESTAMPTZ + ('{} days, ' || i::TEXT || ' seconds')::INTERVAL FROM generate_series({}, 99, 1) i", 100 - i, i), None, None);
+                client.update(&format!("INSERT INTO test SELECT i, '2020-1-1'::TIMESTAMPTZ + ('{} days, ' || i::TEXT || ' seconds')::INTERVAL FROM generate_series({}, 99, 1) i", 100 - i, i), None, None).unwrap();
             }
 
             let test = client.update("SELECT freq_agg(0.015, s.data)::TEXT FROM (SELECT data FROM test ORDER BY time) s", None, None)
@@ -1741,17 +1745,21 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
-            client.update("SET TIMEZONE to UTC", None, None);
-            client.update(
-                "CREATE TABLE test (data INTEGER, time TIMESTAMPTZ)",
-                None,
-                None,
-            );
+            client.update("SET TIMEZONE to UTC", None, None).unwrap();
+            client
+                .update(
+                    "CREATE TABLE test (data INTEGER, time TIMESTAMPTZ)",
+                    None,
+                    None,
+                )
+                .unwrap();
 
             for i in (0..200).rev() {
-                client.update(&format!("INSERT INTO test SELECT i, '2020-1-1'::TIMESTAMPTZ + ('{} days, ' || i::TEXT || ' seconds')::INTERVAL FROM generate_series({}, 199, 1) i", 200 - i, i), None, None);
+                client.update(&format!("INSERT INTO test SELECT i, '2020-1-1'::TIMESTAMPTZ + ('{} days, ' || i::TEXT || ' seconds')::INTERVAL FROM generate_series({}, 199, 1) i", 200 - i, i), None, None).unwrap();
             }
 
             let test = client.update("SELECT topn_agg(10, s.data)::TEXT FROM (SELECT data FROM test ORDER BY time) s", None, None)
@@ -1989,30 +1997,36 @@ mod tests {
             .get_one::<String>()
             .unwrap()
             .unwrap();
-        client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
+        client
+            .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+            .unwrap();
 
-        client.update("SET TIMEZONE to UTC", None, None);
-        client.update(
-            "CREATE TABLE test (data INTEGER, time TIMESTAMPTZ)",
-            None,
-            None,
-        );
+        client.update("SET TIMEZONE to UTC", None, None).unwrap();
+        client
+            .update(
+                "CREATE TABLE test (data INTEGER, time TIMESTAMPTZ)",
+                None,
+                None,
+            )
+            .unwrap();
 
         for i in (0..20).rev() {
-            client.update(&format!("INSERT INTO test SELECT i, '2020-1-1'::TIMESTAMPTZ + ('{} days, ' || i::TEXT || ' seconds')::INTERVAL FROM generate_series({}, 19, 1) i", 10 - i, i), None, None);
+            client.update(&format!("INSERT INTO test SELECT i, '2020-1-1'::TIMESTAMPTZ + ('{} days, ' || i::TEXT || ' seconds')::INTERVAL FROM generate_series({}, 19, 1) i", 10 - i, i), None, None).unwrap();
         }
 
-        client.update(
-            "CREATE TABLE aggs (name TEXT, agg SPACESAVINGBIGINTAGGREGATE)",
-            None,
-            None,
-        );
-        client.update("INSERT INTO aggs SELECT 'topn_default', topn_agg(5, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None);
-        client.update("INSERT INTO aggs SELECT 'topn_1.5', topn_agg(5, 1.5, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None);
-        client.update("INSERT INTO aggs SELECT 'topn_2', topn_agg(5, 2, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None);
-        client.update("INSERT INTO aggs SELECT 'freq_8', freq_agg(0.08, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None);
-        client.update("INSERT INTO aggs SELECT 'freq_5', freq_agg(0.05, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None);
-        client.update("INSERT INTO aggs SELECT 'freq_2', freq_agg(0.02, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None);
+        client
+            .update(
+                "CREATE TABLE aggs (name TEXT, agg SPACESAVINGBIGINTAGGREGATE)",
+                None,
+                None,
+            )
+            .unwrap();
+        client.update("INSERT INTO aggs SELECT 'topn_default', topn_agg(5, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None).unwrap();
+        client.update("INSERT INTO aggs SELECT 'topn_1.5', topn_agg(5, 1.5, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None).unwrap();
+        client.update("INSERT INTO aggs SELECT 'topn_2', topn_agg(5, 2, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None).unwrap();
+        client.update("INSERT INTO aggs SELECT 'freq_8', freq_agg(0.08, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None).unwrap();
+        client.update("INSERT INTO aggs SELECT 'freq_5', freq_agg(0.05, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None).unwrap();
+        client.update("INSERT INTO aggs SELECT 'freq_2', freq_agg(0.02, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None).unwrap();
     }
 
     // API tests
@@ -2197,7 +2211,7 @@ mod tests {
                 "CREATE TABLE test (raw_data DOUBLE PRECISION, int_data INTEGER, text_data TEXT, bucket INTEGER)",
                 None,
                 None,
-            );
+            ).unwrap();
 
             // Generate an array of 10000 values by taking the probability curve for a
             // zeta curve with an s of 1.1 for the top 5 values, then adding smaller
@@ -2221,7 +2235,7 @@ mod tests {
                     "INSERT INTO test SELECT {}, {}::INT, {}::TEXT, FLOOR(RANDOM() * 10)",
                     v, v, v
                 );
-                client.update(&cmd, None, None);
+                client.update(&cmd, None, None).unwrap();
             }
 
             // No matter how the values are batched into subaggregates, we should always

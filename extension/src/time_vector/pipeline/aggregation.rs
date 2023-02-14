@@ -723,7 +723,7 @@ mod tests {
     #[pg_test]
     fn test_stats_agg_finalizer() {
         Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None);
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
@@ -737,7 +737,9 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -770,7 +772,7 @@ mod tests {
     #[pg_test]
     fn test_stats_agg_pipeline_folding() {
         Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None);
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
@@ -784,7 +786,9 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
             let output = client
                 .update(
@@ -818,7 +822,7 @@ mod tests {
     #[pg_test]
     fn test_sum_finalizer() {
         Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None);
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
@@ -832,7 +836,9 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -859,7 +865,7 @@ mod tests {
     #[pg_test]
     fn test_sum_pipeline_folding() {
         Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None);
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
@@ -873,7 +879,9 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
             let output = client
                 .update(
@@ -907,7 +915,7 @@ mod tests {
     #[pg_test]
     fn test_average_finalizer() {
         Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None);
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
@@ -921,7 +929,9 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -951,7 +961,7 @@ mod tests {
     #[pg_test]
     fn test_average_pipeline_folding() {
         Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None);
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
@@ -965,7 +975,9 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
             let output = client
                 .update(
@@ -999,7 +1011,7 @@ mod tests {
     #[pg_test]
     fn test_num_vals_finalizer() {
         Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None);
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
@@ -1013,7 +1025,9 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -1043,7 +1057,7 @@ mod tests {
     #[pg_test]
     fn test_num_vals_pipeline_folding() {
         Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None);
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
@@ -1057,7 +1071,9 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
             let output = client
                 .update(
@@ -1091,7 +1107,7 @@ mod tests {
     #[pg_test]
     fn test_counter_agg_finalizer() {
         Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None);
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
@@ -1105,7 +1121,9 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -1171,7 +1189,7 @@ mod tests {
     #[pg_test]
     fn test_hyperloglog_finalizer() {
         Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None);
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
@@ -1185,7 +1203,9 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -1263,7 +1283,7 @@ mod tests {
     #[pg_test]
     fn test_percentile_agg_finalizer() {
         Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None);
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
@@ -1277,7 +1297,9 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -1324,7 +1346,7 @@ mod tests {
     #[pg_test]
     fn test_percentile_agg_pipeline_folding() {
         Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None);
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
@@ -1338,7 +1360,9 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
             let output = client
                 .update(

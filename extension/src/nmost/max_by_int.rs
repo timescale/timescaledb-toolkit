@@ -150,17 +150,21 @@ mod tests {
     #[pg_test]
     fn max_by_int_correctness() {
         Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None);
-            client.update("CREATE TABLE data(val INT8, category INT)", None, None);
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+            client
+                .update("CREATE TABLE data(val INT8, category INT)", None, None)
+                .unwrap();
 
             for i in 0..100 {
                 let i = (i * 83) % 100; // mess with the ordering just a little
 
-                client.update(
-                    &format!("INSERT INTO data VALUES ({}, {})", i, i % 4),
-                    None,
-                    None,
-                );
+                client
+                    .update(
+                        &format!("INSERT INTO data VALUES ({}, {})", i, i % 4),
+                        None,
+                        None,
+                    )
+                    .unwrap();
             }
 
             // Test into_values

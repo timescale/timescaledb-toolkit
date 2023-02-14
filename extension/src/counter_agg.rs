@@ -931,11 +931,13 @@ mod tests {
             // set search_path after defining our table so we don't pollute the wrong schema
             let stmt = "SELECT format('toolkit_experimental, %s',current_setting('search_path'))";
             let search_path = select_one!(client, stmt, String);
-            client.update(
-                &format!("SET LOCAL search_path TO {}", search_path),
-                None,
-                None,
-            );
+            client
+                .update(
+                    &format!("SET LOCAL search_path TO {}", search_path),
+                    None,
+                    None,
+                )
+                .unwrap();
             make_test_table(&mut client, "test");
 
             // NULL bounds are equivalent to none provided
@@ -980,7 +982,7 @@ mod tests {
             assert_relative_eq!(select_and_check_one!(client, stmt, f64), 20.0 / 120.0);
 
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)";
-            client.update(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             let stmt = "SELECT \
                 slope(counter_agg(ts, val)), \
@@ -1009,7 +1011,7 @@ mod tests {
             assert_eq!(zp, real_zp);
 
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:08:00+00', 30.0), ('2020-01-01 00:10:00+00', 30.0), ('2020-01-01 00:10:30+00', 10.0), ('2020-01-01 00:20:00+00', 40.0)";
-            client.update(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             let stmt = "SELECT \
                 num_elements(counter_agg(ts, val)), \
@@ -1044,12 +1046,14 @@ mod tests {
     #[pg_test]
     fn test_counter_io() {
         Spi::connect(|mut client| {
-            client.update(
-                "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
-                None,
-                None,
-            );
-            client.update("SET TIME ZONE 'UTC'", None, None);
+            client
+                .update(
+                    "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
             let stmt = "INSERT INTO test VALUES\
                 ('2020-01-01 00:00:00+00', 10.0),\
                 ('2020-01-01 00:01:00+00', 20.0),\
@@ -1060,7 +1064,7 @@ mod tests {
                 ('2020-01-01 00:06:00+00', 10.0),\
                 ('2020-01-01 00:07:00+00', 30.0),\
                 ('2020-01-01 00:08:00+00', 10.0)";
-            client.update(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             let expected = "(\
                 version:1,\
@@ -1310,9 +1314,10 @@ mod tests {
                 "CREATE TABLE test(time timestamptz, value double precision, bucket timestamptz)",
                 None,
                 None,
-            );
-            client.update(
-                r#"INSERT INTO test VALUES
+            ).unwrap();
+            client
+                .update(
+                    r#"INSERT INTO test VALUES
                 ('2020-1-1 10:00'::timestamptz, 10.0, '2020-1-1'::timestamptz),
                 ('2020-1-1 12:00'::timestamptz, 40.0, '2020-1-1'::timestamptz),
                 ('2020-1-1 16:00'::timestamptz, 20.0, '2020-1-1'::timestamptz),
@@ -1322,9 +1327,10 @@ mod tests {
                 ('2020-1-3 4:00'::timestamptz, 30.0, '2020-1-3'::timestamptz),
                 ('2020-1-3 12:00'::timestamptz, 0.0, '2020-1-3'::timestamptz), 
                 ('2020-1-3 16:00'::timestamptz, 35.0, '2020-1-3'::timestamptz)"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let mut deltas = client
                 .update(
@@ -1485,7 +1491,7 @@ mod tests {
                 "CREATE TABLE test(time timestamptz, value double precision, bucket timestamptz)",
                 None,
                 None,
-            );
+            ).unwrap();
             client
                 .update(
                     r#"INSERT INTO test VALUES
@@ -1692,7 +1698,7 @@ mod tests {
     fn first_and_last_time() {
         Spi::connect(|mut client| {
             make_test_table(&mut client, "test");
-            client.update("SET TIME ZONE 'UTC'", None, None);
+            client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
 
             assert_eq!(
                 select_one!(
@@ -1722,7 +1728,7 @@ mod tests {
     fn first_and_last_time_arrow_match() {
         Spi::connect(|mut client| {
             make_test_table(&mut client, "test");
-            client.update("SET TIME ZONE 'UTC'", None, None);
+            client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
 
             assert_eq!(
                 select_and_check_one!(
@@ -1761,84 +1767,102 @@ mod tests {
 #[cfg(any(test, feature = "pg_test"))]
 pub(crate) mod testing {
     pub fn decrease(client: &mut pgx::spi::SpiClient) {
-        client.update(
-            "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
-            None,
-            None,
-        );
-        client.update("SET TIME ZONE 'UTC'", None, None);
-        client.update(
-            r#"INSERT INTO test VALUES
+        client
+            .update(
+                "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+                None,
+                None,
+            )
+            .unwrap();
+        client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
+        client
+            .update(
+                r#"INSERT INTO test VALUES
                 ('2020-01-01 00:00:00+00', 30.0),
                 ('2020-01-01 00:07:00+00', 10.0)"#,
-            None,
-            None,
-        );
+                None,
+                None,
+            )
+            .unwrap();
     }
 
     pub fn increase(client: &mut pgx::spi::SpiClient) {
-        client.update(
-            "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
-            None,
-            None,
-        );
-        client.update("SET TIME ZONE 'UTC'", None, None);
-        client.update(
-            r#"INSERT INTO test VALUES
+        client
+            .update(
+                "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+                None,
+                None,
+            )
+            .unwrap();
+        client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
+        client
+            .update(
+                r#"INSERT INTO test VALUES
                 ('2020-01-01 00:00:00+00', 10.0),
                 ('2020-01-01 00:07:00+00', 30.0)"#,
-            None,
-            None,
-        );
+                None,
+                None,
+            )
+            .unwrap();
     }
 
     pub fn decrease_then_increase_to_same_value(client: &mut pgx::spi::SpiClient) {
-        client.update(
-            "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
-            None,
-            None,
-        );
-        client.update("SET TIME ZONE 'UTC'", None, None);
-        client.update(
-            r#"INSERT INTO test VALUES
+        client
+            .update(
+                "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+                None,
+                None,
+            )
+            .unwrap();
+        client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
+        client
+            .update(
+                r#"INSERT INTO test VALUES
                 ('2020-01-01 00:00:00+00', 30.0),
                 ('2020-01-01 00:07:00+00', 10.0),
                 ('2020-01-01 00:08:00+00', 30.0)"#,
-            None,
-            None,
-        );
+                None,
+                None,
+            )
+            .unwrap();
     }
 
     pub fn increase_then_decrease_to_same_value(client: &mut pgx::spi::SpiClient) {
-        client.update(
-            "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
-            None,
-            None,
-        );
-        client.update("SET TIME ZONE 'UTC'", None, None);
-        client.update(
-            r#"INSERT INTO test VALUES
+        client
+            .update(
+                "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+                None,
+                None,
+            )
+            .unwrap();
+        client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
+        client
+            .update(
+                r#"INSERT INTO test VALUES
                 ('2020-01-01 00:00:00+00', 10.0),
                 ('2020-01-01 00:07:00+00', 30.0),
                 ('2020-01-01 00:08:00+00', 10.0)"#,
-            None,
-            None,
-        );
+                None,
+                None,
+            )
+            .unwrap();
     }
 
     pub fn make_test_table(client: &mut pgx::spi::SpiClient, name: &str) {
-        client.update(
-            &format!(
-                "CREATE TABLE {}(ts timestamptz, val DOUBLE PRECISION)",
-                name
-            ),
-            None,
-            None,
-        );
+        client
+            .update(
+                &format!(
+                    "CREATE TABLE {}(ts timestamptz, val DOUBLE PRECISION)",
+                    name
+                ),
+                None,
+                None,
+            )
+            .unwrap();
         client.update(
                 &format!("INSERT INTO {} VALUES('2020-01-01 00:00:00+00', 10.0), ('2020-01-01 00:01:00+00', 20.0)", name),
                 None,
                 None,
-            );
+            ).unwrap();
     }
 }

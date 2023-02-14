@@ -203,7 +203,7 @@ mod tests {
         // Test our ASAP implementation against the reference implementation at http://www.futuredata.io.s3-website-us-west-2.amazonaws.com/asap/
         // The sample data is the first 100 points of the second sample data set.  Note that the dates are not important for this test.
         Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None);
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             let mut result = client.update(
                 "
                 SELECT value

@@ -1460,11 +1460,13 @@ mod tests {
     #[pg_test]
     fn test_stats_agg_text_io() {
         Spi::connect(|mut client| {
-            client.update(
-                "CREATE TABLE test_table (test_x DOUBLE PRECISION, test_y DOUBLE PRECISION)",
-                None,
-                None,
-            );
+            client
+                .update(
+                    "CREATE TABLE test_table (test_x DOUBLE PRECISION, test_y DOUBLE PRECISION)",
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let test = client
                 .update(
@@ -1478,7 +1480,9 @@ mod tests {
                 .unwrap();
             assert!(test.is_none());
 
-            client.update("INSERT INTO test_table VALUES (10, 10);", None, None);
+            client
+                .update("INSERT INTO test_table VALUES (10, 10);", None, None)
+                .unwrap();
 
             let test = client
                 .update(
@@ -1496,7 +1500,9 @@ mod tests {
                 "(version:1,n:1,sx:10,sx2:0,sx3:0,sx4:0,sy:10,sy2:0,sy3:0,sy4:0,sxy:0)"
             );
 
-            client.update("INSERT INTO test_table VALUES (20, 20);", None, None);
+            client
+                .update("INSERT INTO test_table VALUES (20, 20);", None, None)
+                .unwrap();
             let test = client
                 .update(
                     "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
@@ -1590,7 +1596,9 @@ mod tests {
                 expected
             );
 
-            client.update("INSERT INTO test_table VALUES ('NaN', 30);", None, None);
+            client
+                .update("INSERT INTO test_table VALUES ('NaN', 30);", None, None)
+                .unwrap();
             let test = client
                 .update(
                     "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
@@ -1604,7 +1612,9 @@ mod tests {
                 .unwrap();
             assert_eq!(test, "(version:1,n:3,sx:NaN,sx2:NaN,sx3:NaN,sx4:NaN,sy:60,sy2:200,sy3:0,sy4:20000,sxy:NaN)");
 
-            client.update("INSERT INTO test_table VALUES (40, 'Inf');", None, None);
+            client
+                .update("INSERT INTO test_table VALUES (40, 'Inf');", None, None)
+                .unwrap();
             let test = client
                 .update(
                     "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
@@ -1851,31 +1861,35 @@ mod tests {
 
     fn test_aggs(state: &mut TestState) {
         Spi::connect(|mut client| {
-            client.update(
-                "CREATE TABLE test_table (test_x DOUBLE PRECISION, test_y DOUBLE PRECISION)",
-                None,
-                None,
-            );
+            client
+                .update(
+                    "CREATE TABLE test_table (test_x DOUBLE PRECISION, test_y DOUBLE PRECISION)",
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            client.update(
-                &format!(
-                    "INSERT INTO test_table VALUES {}",
-                    state
-                        .x_values
-                        .iter()
-                        .zip(state.y_values.iter())
-                        .map(|(x, y)| "(".to_string()
-                            + &x.to_string()
-                            + ","
-                            + &y.to_string()
-                            + ")"
-                            + ",")
-                        .collect::<String>()
-                        .trim_end_matches(',')
-                ),
-                None,
-                None,
-            );
+            client
+                .update(
+                    &format!(
+                        "INSERT INTO test_table VALUES {}",
+                        state
+                            .x_values
+                            .iter()
+                            .zip(state.y_values.iter())
+                            .map(|(x, y)| "(".to_string()
+                                + &x.to_string()
+                                + ","
+                                + &y.to_string()
+                                + ")"
+                                + ",")
+                            .collect::<String>()
+                            .trim_end_matches(',')
+                    ),
+                    None,
+                    None,
+                )
+                .unwrap();
 
             // Definitions for allowed errors for different aggregates
             const NONE: f64 = 0.; // Exact match
@@ -2255,15 +2269,16 @@ mod tests {
                 false,
             );
 
-            client.update("DROP TABLE test_table", None, None);
+            client.update("DROP TABLE test_table", None, None).unwrap();
         });
     }
 
     #[pg_test]
     fn stats_agg_rolling() {
         Spi::connect(|mut client| {
-            client.update(
-                "
+            client
+                .update(
+                    "
 SET timezone TO 'UTC';
 CREATE TABLE prices(ts TIMESTAMPTZ, price FLOAT);
 INSERT INTO prices (
@@ -2279,9 +2294,10 @@ INSERT INTO prices (
         dates
 );
 ",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let mut vals = client.update(
                 "SELECT stddev(data.stats_agg) FROM (SELECT stats_agg(price) OVER (ORDER BY ts RANGE '50 minutes' PRECEDING) FROM prices) data",

@@ -1525,7 +1525,9 @@ mod tests {
     #[should_panic = "The start and interval parameters cannot be used for duration_in with"]
     fn duration_in_misuse_error() {
         Spi::connect(|mut client| {
-            client.update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
+            client
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .unwrap();
             assert_eq!(
                 "365 days 00:02:00",
                 select_one!(
@@ -1540,15 +1542,19 @@ mod tests {
     #[pg_test]
     fn one_state_one_change() {
         Spi::connect(|mut client| {
-            client.update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
-            client.update(
-                r#"INSERT INTO test VALUES
+            client
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .unwrap();
+            client
+                .update(
+                    r#"INSERT INTO test VALUES
                     ('2020-01-01 00:00:00+00', 'one'),
                     ('2020-12-31 00:02:00+00', 'end')
                 "#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
             assert_eq!(
                 "365 days 00:02:00",
                 select_one!(
@@ -1571,16 +1577,20 @@ mod tests {
     #[pg_test]
     fn two_states_two_changes() {
         Spi::connect(|mut client| {
-            client.update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
-            client.update(
-                r#"INSERT INTO test VALUES
+            client
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .unwrap();
+            client
+                .update(
+                    r#"INSERT INTO test VALUES
                     ('2020-01-01 00:00:00+00', 'one'),
                     ('2020-01-01 00:01:00+00', 'two'),
                     ('2020-12-31 00:02:00+00', 'end')
                 "#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             assert_eq!(
                 "00:01:00",
@@ -1604,17 +1614,21 @@ mod tests {
     #[pg_test]
     fn two_states_three_changes() {
         Spi::connect(|mut client| {
-            client.update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
-            client.update(
-                r#"INSERT INTO test VALUES
+            client
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .unwrap();
+            client
+                .update(
+                    r#"INSERT INTO test VALUES
                     ('2020-01-01 00:00:00+00', 'one'),
                     ('2020-01-01 00:01:00+00', 'two'),
                     ('2020-01-01 00:02:00+00', 'one'),
                     ('2020-12-31 00:02:00+00', 'end')
                 "#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             assert_eq!(
                 "365 days 00:01:00",
@@ -1655,17 +1669,21 @@ mod tests {
     #[pg_test]
     fn out_of_order_times() {
         Spi::connect(|mut client| {
-            client.update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
-            client.update(
-                r#"INSERT INTO test VALUES
+            client
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .unwrap();
+            client
+                .update(
+                    r#"INSERT INTO test VALUES
                     ('2020-01-01 00:00:00+00', 'one'),
                     ('2020-01-01 00:02:00+00', 'one'),
                     ('2020-01-01 00:01:00+00', 'two'),
                     ('2020-12-31 00:02:00+00', 'end')
                 "#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             assert_eq!(
                 "365 days 00:01:00",
@@ -1691,17 +1709,21 @@ mod tests {
         // TODO Do we care?  Could be that states are recorded not only when they change but
         // also at regular intervals even when they don't?
         Spi::connect(|mut client| {
-            client.update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
-            client.update(
-                r#"INSERT INTO test VALUES
+            client
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .unwrap();
+            client
+                .update(
+                    r#"INSERT INTO test VALUES
                     ('2020-01-01 00:00:00+00', 'one'),
                     ('2020-01-01 00:01:00+00', 'one'),
                     ('2020-01-01 00:02:00+00', 'two'),
                     ('2020-12-31 00:02:00+00', 'end')
                 "#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
             assert_eq!(
                 "00:02:00",
                 select_one!(
@@ -1724,16 +1746,20 @@ mod tests {
     #[pg_test]
     fn duration_in_two_states_two_changes() {
         Spi::connect(|mut client| {
-            client.update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
-            client.update(
-                r#"INSERT INTO test VALUES
+            client
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .unwrap();
+            client
+                .update(
+                    r#"INSERT INTO test VALUES
                     ('2020-01-01 00:00:00+00', 'one'),
                     ('2020-01-01 00:01:00+00', 'two'),
                     ('2020-12-31 00:02:00+00', 'end')
                 "#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
             assert_eq!(
                 "00:01:00",
                 select_one!(
@@ -1756,16 +1782,20 @@ mod tests {
     #[pg_test]
     fn same_state_twice_last() {
         Spi::connect(|mut client| {
-            client.update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
-            client.update(
-                r#"INSERT INTO test VALUES
+            client
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .unwrap();
+            client
+                .update(
+                    r#"INSERT INTO test VALUES
                     ('2020-01-01 00:00:00+00', 'one'),
                     ('2020-01-01 00:01:00+00', 'two'),
                     ('2020-01-01 00:02:00+00', 'two')
                 "#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
             assert_eq!(
                 "00:01:00",
                 select_one!(
@@ -1781,7 +1811,9 @@ mod tests {
     fn combine_using_muchos_data() {
         compact_state_agg::counters::reset();
         Spi::connect(|mut client| {
-            client.update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
+            client
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .unwrap();
             client.update(
                 r#"
 insert into test values ('2020-01-01 00:00:00+00', 'one');
@@ -1791,7 +1823,7 @@ insert into test select '2020-01-02 UTC'::timestamptz + make_interval(days=>v), 
                 "#,
                 None,
                 None,
-            );
+            ).unwrap();
             assert_eq!(
                 "2 days",
                 select_one!(
@@ -1816,15 +1848,19 @@ insert into test select '2020-01-02 UTC'::timestamptz + make_interval(days=>v), 
     fn combine_using_settings() {
         compact_state_agg::counters::reset();
         Spi::connect(|mut client| {
-            client.update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
-            client.update(
-                r#"INSERT INTO test VALUES
+            client
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .unwrap();
+            client
+                .update(
+                    r#"INSERT INTO test VALUES
                     ('2020-01-01 00:00:00+00', 'one'),
                     ('2020-01-03 00:00:00+00', 'two')
                 "#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
             assert_eq!(
                 "2 days",
                 select_one!(
@@ -1857,15 +1893,19 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
     #[pg_test]
     fn sample_query() {
         Spi::connect(|mut client| {
-            client.update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
-            client.update(
-                r#"INSERT INTO test VALUES
+            client
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .unwrap();
+            client
+                .update(
+                    r#"INSERT INTO test VALUES
                     ('2020-01-01 00:00:00+00', 'START'),
                     ('2020-01-01 00:01:00+00', 'ERROR'),
                     ('2020-01-01 00:02:00+00', 'STOPPED')"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
             assert_eq!(
                 client
                     .update(
@@ -1900,15 +1940,18 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
     #[pg_test]
     fn interpolated_duration() {
         Spi::connect(|mut client| {
-            client.update(
-                "SET TIME ZONE 'UTC';
+            client
+                .update(
+                    "SET TIME ZONE 'UTC';
                 CREATE TABLE inttest(time TIMESTAMPTZ, state TEXT, bucket INT);
                 CREATE TABLE inttest2(time TIMESTAMPTZ, state BIGINT, bucket INT);",
-                None,
-                None,
-            );
-            client.update(
-                r#"INSERT INTO inttest VALUES
+                    None,
+                    None,
+                )
+                .unwrap();
+            client
+                .update(
+                    r#"INSERT INTO inttest VALUES
                 ('2020-1-1 10:00'::timestamptz, 'one', 1),
                 ('2020-1-1 12:00'::timestamptz, 'two', 1), 
                 ('2020-1-1 16:00'::timestamptz, 'three', 1), 
@@ -1928,9 +1971,10 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                 ('2020-1-3 10:00'::timestamptz, 10001, 3), 
                 ('2020-1-3 12:00'::timestamptz, 10002, 3), 
                 ('2020-1-3 16:00'::timestamptz, 10003, 3);"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             // Interpolate time spent in state "three" each day
             let mut durations = client.update(
@@ -2042,46 +2086,54 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
     )]
     fn two_states_at_one_time() {
         Spi::connect(|mut client| {
-            client.update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None);
-            client.update(
-                r#"INSERT INTO test VALUES
+            client
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .unwrap();
+            client
+                .update(
+                    r#"INSERT INTO test VALUES
                         ('2020-01-01 00:00:00+00', 'START'),
                         ('2020-01-01 00:00:00+00', 'ERROR')"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
             client.update(
                 "SELECT toolkit_experimental.duration_in(toolkit_experimental.compact_state_agg(ts, state), 'one') FROM test",
                 None,
                 None,
-            );
+            ).unwrap();
             client.update(
                 "SELECT toolkit_experimental.duration_in(toolkit_experimental.state_agg(ts, state), 'one') FROM test",
                 None,
                 None,
-            );
+            ).unwrap();
         })
     }
 
     #[pg_test]
     fn interpolate_introduces_state() {
         Spi::connect(|mut client| {
-            client.update(
-                "CREATE TABLE states(time TIMESTAMPTZ, state TEXT, bucket INT)",
-                None,
-                None,
-            );
-            client.update(
-                r#"INSERT INTO states VALUES
+            client
+                .update(
+                    "CREATE TABLE states(time TIMESTAMPTZ, state TEXT, bucket INT)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client
+                .update(
+                    r#"INSERT INTO states VALUES
                 ('2020-1-1 10:00', 'starting', 1),
                 ('2020-1-1 10:30', 'running', 1),
                 ('2020-1-2 16:00', 'error', 2),
                 ('2020-1-3 18:30', 'starting', 3),
                 ('2020-1-3 19:30', 'running', 3),
                 ('2020-1-4 12:00', 'stopping', 4)"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let mut durations = client
                 .update(

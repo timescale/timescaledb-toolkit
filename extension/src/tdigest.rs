@@ -442,12 +442,16 @@ mod tests {
     #[pg_test]
     fn test_tdigest_aggregate() {
         Spi::connect(|mut client| {
-            client.update("CREATE TABLE test (data DOUBLE PRECISION)", None, None);
-            client.update(
-                "INSERT INTO test SELECT generate_series(0.01, 100, 0.01)",
-                None,
-                None,
-            );
+            client
+                .update("CREATE TABLE test (data DOUBLE PRECISION)", None, None)
+                .unwrap();
+            client
+                .update(
+                    "INSERT INTO test SELECT generate_series(0.01, 100, 0.01)",
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let sanity = client
                 .update("SELECT COUNT(*) FROM test", None, None)
@@ -457,12 +461,14 @@ mod tests {
                 .unwrap();
             assert_eq!(10000, sanity.unwrap());
 
-            client.update(
-                "CREATE VIEW digest AS \
+            client
+                .update(
+                    "CREATE VIEW digest AS \
                 SELECT tdigest(100, data) FROM test",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let (min, max, count) = client
                 .update(
@@ -674,12 +680,14 @@ mod tests {
     #[pg_test]
     fn test_tdigest_compound_agg() {
         Spi::connect(|mut client| {
-            client.update(
-                "CREATE TABLE new_test (device INTEGER, value DOUBLE PRECISION)",
-                None,
-                None,
-            );
-            client.update("INSERT INTO new_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
+            client
+                .update(
+                    "CREATE TABLE new_test (device INTEGER, value DOUBLE PRECISION)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client.update("INSERT INTO new_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None).unwrap();
 
             let sanity = client
                 .update("SELECT COUNT(*) FROM new_test", None, None)
@@ -689,30 +697,36 @@ mod tests {
                 .unwrap();
             assert_eq!(Some(1010), sanity);
 
-            client.update(
-                "CREATE VIEW digests AS \
+            client
+                .update(
+                    "CREATE VIEW digests AS \
                 SELECT device, tdigest(20, value) \
                 FROM new_test \
                 GROUP BY device",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            client.update(
-                "CREATE VIEW composite AS \
+            client
+                .update(
+                    "CREATE VIEW composite AS \
                 SELECT tdigest(tdigest) \
                 FROM digests",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            client.update(
-                "CREATE VIEW base AS \
+            client
+                .update(
+                    "CREATE VIEW base AS \
                 SELECT tdigest(20, value) \
                 FROM new_test",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let value = client
                 .update(

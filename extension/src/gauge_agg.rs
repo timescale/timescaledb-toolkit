@@ -710,12 +710,14 @@ mod tests {
     #[pg_test]
     fn round_trip() {
         Spi::connect(|mut client| {
-            client.update(
-                "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
-                None,
-                None,
-            );
-            client.update("SET TIME ZONE 'UTC'", None, None);
+            client
+                .update(
+                    "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
             let stmt = "INSERT INTO test VALUES\
                 ('2020-01-01 00:00:00+00', 10.0),\
                 ('2020-01-01 00:01:00+00', 20.0),\
@@ -726,7 +728,7 @@ mod tests {
                 ('2020-01-01 00:06:00+00', 10.0),\
                 ('2020-01-01 00:07:00+00', 30.0),\
                 ('2020-01-01 00:08:00+00', 10.0)";
-            client.update(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             let expected = "(\
                 version:1,\
@@ -913,22 +915,24 @@ mod tests {
     #[pg_test]
     fn rollup() {
         Spi::connect(|mut client| {
-            client.update(
-                "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
-                None,
-                None,
-            );
+            client
+                .update(
+                    "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+                    None,
+                    None,
+                )
+                .unwrap();
 
             // This tests GaugeSummary::single_value - the old first == last
             // check erroneously saw 21.0 == 21.0 and called it a single value.
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:00:00+00', 10.0), ('2020-01-01 00:01:00+00', 21.0), ('2020-01-01 00:01:00+00', 22.0), ('2020-01-01 00:01:00+00', 21.0)";
-            client.update(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)";
-            client.update(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:08:00+00', 30.0), ('2020-01-01 00:10:00+00', 30.0), ('2020-01-01 00:10:30+00', 10.0), ('2020-01-01 00:20:00+00', 40.0)";
-            client.update(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             //combine function works as expected
             let stmt = "SELECT toolkit_experimental.gauge_agg(ts, val) FROM test";
@@ -946,9 +950,10 @@ mod tests {
                 "CREATE TABLE test(time timestamptz, value double precision, bucket timestamptz)",
                 None,
                 None,
-            );
-            client.update(
-                r#"INSERT INTO test VALUES
+            ).unwrap();
+            client
+                .update(
+                    r#"INSERT INTO test VALUES
                 ('2020-1-1 10:00'::timestamptz, 10.0, '2020-1-1'::timestamptz),
                 ('2020-1-1 12:00'::timestamptz, 40.0, '2020-1-1'::timestamptz),
                 ('2020-1-1 16:00'::timestamptz, 20.0, '2020-1-1'::timestamptz),
@@ -958,9 +963,10 @@ mod tests {
                 ('2020-1-3 4:00'::timestamptz, 30.0, '2020-1-3'::timestamptz),
                 ('2020-1-3 12:00'::timestamptz, 0.0, '2020-1-3'::timestamptz), 
                 ('2020-1-3 16:00'::timestamptz, 35.0, '2020-1-3'::timestamptz)"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let mut deltas = client
                 .update(
@@ -1034,18 +1040,20 @@ mod tests {
                 "CREATE TABLE test(time timestamptz, value double precision, bucket timestamptz)",
                 None,
                 None,
-            );
-            client.update(
-                r#"INSERT INTO test VALUES
+            ).unwrap();
+            client
+                .update(
+                    r#"INSERT INTO test VALUES
                 ('2020-1-1 10:00'::timestamptz, 10.0, '2020-1-1'::timestamptz),
                 ('2020-1-1 12:00'::timestamptz, 40.0, '2020-1-1'::timestamptz),
                 ('2020-1-1 16:00'::timestamptz, 20.0, '2020-1-1'::timestamptz),
                 ('2020-1-2 0:00'::timestamptz, 15.0, '2020-1-2'::timestamptz),
                 ('2020-1-2 12:00'::timestamptz, 50.0, '2020-1-2'::timestamptz),
                 ('2020-1-2 20:00'::timestamptz, 25.0, '2020-1-2'::timestamptz)"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let mut deltas = client
                 .update(
@@ -1077,14 +1085,16 @@ mod tests {
     #[pg_test]
     fn no_results_on_null_input() {
         Spi::connect(|mut client| {
-            client.update(
-                "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
-                None,
-                None,
-            );
+            client
+                .update(
+                    "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let stmt = "INSERT INTO test VALUES (NULL, NULL)";
-            client.update(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             let stmt = "SELECT toolkit_experimental.gauge_agg(ts, val) FROM test";
             assert!(client

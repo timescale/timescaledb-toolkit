@@ -323,7 +323,7 @@ mod tests {
     #[pg_test]
     fn test_pipeline_lttb() {
         Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None);
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
@@ -337,13 +337,17 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
-            client.update(
-                "CREATE TABLE lttb_pipe (series timevector_tstz_f64)",
-                None,
-                None,
-            );
+            client
+                .update(
+                    "CREATE TABLE lttb_pipe (series timevector_tstz_f64)",
+                    None,
+                    None,
+                )
+                .unwrap();
             client.update(
                 "INSERT INTO lttb_pipe \
                 SELECT timevector(time, val) FROM ( \
@@ -354,7 +358,7 @@ mod tests {
                 ) bar",
                 None,
                 None
-            );
+            ).unwrap();
 
             let val = client
                 .update(
@@ -466,7 +470,7 @@ mod tests {
     #[pg_test]
     fn test_pipeline_folding() {
         Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None);
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
@@ -480,7 +484,9 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
             let output = client.update(
                 "EXPLAIN (verbose) SELECT timevector('2021-01-01'::timestamptz, 0.1) -> round() -> abs() -> round();",

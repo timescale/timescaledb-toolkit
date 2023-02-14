@@ -707,12 +707,16 @@ mod tests {
     #[pg_test]
     fn test_aggregate() {
         Spi::connect(|mut client| {
-            client.update("CREATE TABLE test (data DOUBLE PRECISION)", None, None);
-            client.update(
-                "INSERT INTO test SELECT generate_series(0.01, 100, 0.01)",
-                None,
-                None,
-            );
+            client
+                .update("CREATE TABLE test (data DOUBLE PRECISION)", None, None)
+                .unwrap();
+            client
+                .update(
+                    "INSERT INTO test SELECT generate_series(0.01, 100, 0.01)",
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let sanity = client
                 .update("SELECT COUNT(*) FROM test", None, None)
@@ -722,13 +726,15 @@ mod tests {
                 .unwrap();
             assert_eq!(Some(10000), sanity);
 
-            client.update(
-                "CREATE VIEW sketch AS \
+            client
+                .update(
+                    "CREATE VIEW sketch AS \
                 SELECT uddsketch(100, 0.05, data) \
                 FROM test",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let sanity = client
                 .update("SELECT COUNT(*) FROM sketch", None, None)
@@ -842,12 +848,14 @@ mod tests {
     #[pg_test]
     fn test_compound_agg() {
         Spi::connect(|mut client| {
-            client.update(
-                "CREATE TABLE new_test (device INTEGER, value DOUBLE PRECISION)",
-                None,
-                None,
-            );
-            client.update("INSERT INTO new_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
+            client
+                .update(
+                    "CREATE TABLE new_test (device INTEGER, value DOUBLE PRECISION)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client.update("INSERT INTO new_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None).unwrap();
 
             let sanity = client
                 .update("SELECT COUNT(*) FROM new_test", None, None)
@@ -857,30 +865,36 @@ mod tests {
                 .unwrap();
             assert_eq!(Some(1010), sanity);
 
-            client.update(
-                "CREATE VIEW sketches AS \
+            client
+                .update(
+                    "CREATE VIEW sketches AS \
                 SELECT device, uddsketch(20, 0.01, value) \
                 FROM new_test \
                 GROUP BY device",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            client.update(
-                "CREATE VIEW composite AS \
+            client
+                .update(
+                    "CREATE VIEW composite AS \
                 SELECT rollup(uddsketch) as uddsketch \
                 FROM sketches",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            client.update(
-                "CREATE VIEW base AS \
+            client
+                .update(
+                    "CREATE VIEW base AS \
                 SELECT uddsketch(20, 0.01, value) \
                 FROM new_test",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let (value, error) = client
                 .update(
@@ -919,12 +933,14 @@ mod tests {
     #[pg_test]
     fn test_percentile_agg() {
         Spi::connect(|mut client| {
-            client.update(
-                "CREATE TABLE pa_test (device INTEGER, value DOUBLE PRECISION)",
-                None,
-                None,
-            );
-            client.update("INSERT INTO pa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
+            client
+                .update(
+                    "CREATE TABLE pa_test (device INTEGER, value DOUBLE PRECISION)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client.update("INSERT INTO pa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None).unwrap();
 
             let sanity = client
                 .update("SELECT COUNT(*) FROM pa_test", None, None)
@@ -935,21 +951,25 @@ mod tests {
             assert_eq!(Some(1010), sanity);
 
             // use the default values for percentile_agg
-            client.update(
-                "CREATE VIEW uddsketch_test AS \
+            client
+                .update(
+                    "CREATE VIEW uddsketch_test AS \
                 SELECT uddsketch(200, 0.001, value) as approx \
                 FROM pa_test ",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            client.update(
-                "CREATE VIEW percentile_agg AS \
+            client
+                .update(
+                    "CREATE VIEW percentile_agg AS \
                 SELECT percentile_agg(value) as approx \
                 FROM pa_test",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let (value, error) = client
                 .update(
@@ -987,12 +1007,14 @@ mod tests {
     #[pg_test]
     fn test_approx_percentile_array() {
         Spi::connect(|mut client| {
-            client.update(
-                "CREATE TABLE paa_test (device INTEGER, value DOUBLE PRECISION)",
-                None,
-                None,
-            );
-            client.update("INSERT INTO paa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
+            client
+                .update(
+                    "CREATE TABLE paa_test (device INTEGER, value DOUBLE PRECISION)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client.update("INSERT INTO paa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None).unwrap();
 
             let sanity = client
                 .update("SELECT COUNT(*) FROM paa_test", None, None)
@@ -1002,21 +1024,25 @@ mod tests {
                 .unwrap();
             assert_eq!(Some(1010), sanity);
 
-            client.update(
-                "CREATE VIEW uddsketch_test AS \
+            client
+                .update(
+                    "CREATE VIEW uddsketch_test AS \
                 SELECT uddsketch(200, 0.001, value) as approx \
                 FROM paa_test ",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            client.update(
-                "CREATE VIEW percentile_agg AS \
+            client
+                .update(
+                    "CREATE VIEW percentile_agg AS \
                 SELECT percentile_agg(value) as approx \
                 FROM paa_test",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let (value, error) = client
                 .update(
@@ -1068,12 +1094,14 @@ mod tests {
     #[pg_test]
     fn test_approx_percentile_array_arrow() {
         Spi::connect(|mut client| {
-            client.update(
-                "CREATE TABLE paa_test (device INTEGER, value DOUBLE PRECISION)",
-                None,
-                None,
-            );
-            client.update("INSERT INTO paa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
+            client
+                .update(
+                    "CREATE TABLE paa_test (device INTEGER, value DOUBLE PRECISION)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client.update("INSERT INTO paa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None).unwrap();
 
             let sanity = client
                 .update("SELECT COUNT(*) FROM paa_test", None, None)
@@ -1083,21 +1111,25 @@ mod tests {
                 .unwrap();
             assert_eq!(Some(1010), sanity);
 
-            client.update(
-                "CREATE VIEW uddsketch_test AS \
+            client
+                .update(
+                    "CREATE VIEW uddsketch_test AS \
                 SELECT uddsketch(200, 0.001, value) as approx \
                 FROM paa_test ",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            client.update(
-                "CREATE VIEW percentile_agg AS \
+            client
+                .update(
+                    "CREATE VIEW percentile_agg AS \
                 SELECT percentile_agg(value) as approx \
                 FROM paa_test",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let (value, error) = client
                 .update(
@@ -1149,8 +1181,10 @@ mod tests {
     #[pg_test]
     fn uddsketch_io_test() {
         Spi::connect(|mut client| {
-            client.update("CREATE TABLE io_test (value DOUBLE PRECISION)", None, None);
-            client.update("INSERT INTO io_test VALUES (-1000), (-100), (-10), (-1), (-0.1), (-0.01), (-0.001), (0), (0.001), (0.01), (0.1), (1), (10), (100), (1000)", None, None);
+            client
+                .update("CREATE TABLE io_test (value DOUBLE PRECISION)", None, None)
+                .unwrap();
+            client.update("INSERT INTO io_test VALUES (-1000), (-100), (-10), (-1), (-0.1), (-0.01), (-0.001), (0), (0.001), (0.01), (0.1), (1), (10), (100), (1000)", None, None).unwrap();
 
             let sketch = client
                 .update(

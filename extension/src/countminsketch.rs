@@ -140,8 +140,10 @@ mod tests {
     #[pg_test]
     fn test_countminsketch() {
         Spi::connect(|mut client| {
-            client.update("CREATE TABLE test (data TEXT)", None, None);
-            client.update("INSERT INTO test SELECT generate_series(1, 100)::TEXT UNION ALL SELECT generate_series(1, 50)::TEXT", None, None);
+            client
+                .update("CREATE TABLE test (data TEXT)", None, None)
+                .unwrap();
+            client.update("INSERT INTO test SELECT generate_series(1, 100)::TEXT UNION ALL SELECT generate_series(1, 50)::TEXT", None, None).unwrap();
 
             let sanity = client
                 .update("SELECT COUNT(*) FROM test", None, None)
@@ -151,13 +153,15 @@ mod tests {
                 .unwrap();
             assert_eq!(Some(150), sanity);
 
-            client.update(
-                "CREATE VIEW sketch AS \
+            client
+                .update(
+                    "CREATE VIEW sketch AS \
                 SELECT toolkit_experimental.count_min_sketch(data, 0.01, 0.01) \
                 FROM test",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let sanity = client
                 .update("SELECT COUNT(*) FROM sketch", None, None)
@@ -228,8 +232,10 @@ mod tests {
     #[pg_test]
     fn countminsketch_io_test() {
         Spi::connect(|mut client| {
-            client.update("CREATE TABLE io_test (value TEXT)", None, None);
-            client.update("INSERT INTO io_test VALUES ('lorem'), ('ipsum'), ('dolor'), ('sit'), ('amet'), ('consectetur'), ('adipiscing'), ('elit')", None, None);
+            client
+                .update("CREATE TABLE io_test (value TEXT)", None, None)
+                .unwrap();
+            client.update("INSERT INTO io_test VALUES ('lorem'), ('ipsum'), ('dolor'), ('sit'), ('amet'), ('consectetur'), ('adipiscing'), ('elit')", None, None).unwrap();
 
             let sketch = client
                 .update(

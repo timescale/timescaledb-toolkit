@@ -491,7 +491,7 @@ mod tests {
             let delta = client
                 .update("SELECT count(*)  FROM results1 r1 FULL OUTER JOIN results2 r2 ON r1 = r2 WHERE r1 IS NULL OR r2 IS NULL;" , None, None)
                 .unwrap().first()
-                .get_one::<i32>().unwrap();
+                .get_one::<i64>().unwrap();
             assert_eq!(delta.unwrap(), 0);
         })
     }

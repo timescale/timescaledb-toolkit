@@ -760,7 +760,7 @@ mod tests {
                 ("now()", "1.0", "1.0", "NULL", "1.0", "1.0"),
                 ("now()", "1.0", "1.0", "1.0", "NULL", "1.0"),
             ] {
-                let stmt = format!("SELECT candlestick({t}, {o}, {h}, {l}, {c}, {v})");
+                let stmt = format!("SELECT candlestick({t}, {o}, {h}, {l}, {c}, {v})::TEXT");
                 let output = select_one!(client, &stmt, String);
                 assert_eq!(output, None);
             }
@@ -775,7 +775,7 @@ mod tests {
                 ("NULL", "1.0", "1.0"),
                 ("now()", "NULL", "1.0"),
             ] {
-                let stmt = format!("SELECT candlestick_agg({ts}, {price}, {vol})");
+                let stmt = format!("SELECT candlestick_agg({ts}, {price}, {vol})::text");
                 let output = select_one!(client, &stmt, String);
                 assert_eq!(output, None);
             }

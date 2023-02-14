@@ -1246,7 +1246,7 @@ mod tests {
                 )
                 .unwrap()
                 .first()
-                .get_one::<i32>()
+                .get_one::<i64>()
                 .unwrap()
                 .unwrap();
             assert_eq!(val, 7);

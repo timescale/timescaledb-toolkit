@@ -929,6 +929,7 @@ mod tests {
     fn test_counter_aggregate() {
         Spi::connect(|mut client| {
             // set search_path after defining our table so we don't pollute the wrong schema
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             let stmt = "SELECT format('toolkit_experimental, %s',current_setting('search_path'))";
             let search_path = select_one!(client, stmt, String);
             client
@@ -1003,12 +1004,11 @@ mod tests {
             assert_relative_eq!(select_and_check_one!(client, stmt, f64), 1.0);
 
             let stmt = "SELECT \
-                counter_zero_time(counter_agg(ts, val)), \
-                counter_agg(ts, val)->counter_zero_time() \
+                counter_zero_time(counter_agg(ts, val))::TEXT, \
+                (counter_agg(ts, val)->counter_zero_time())::TEXT \
             FROM test";
-            let zp = select_and_check_one!(client, stmt, i64);
-            let real_zp = select_one!(client, "SELECT '2019-12-31 23:59:00+00'::timestamptz", i64);
-            assert_eq!(zp, real_zp);
+            let zp = select_and_check_one!(client, stmt, String);
+            assert_eq!(&zp, "2019-12-31 23:59:00+00");
 
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:08:00+00', 30.0), ('2020-01-01 00:10:00+00', 30.0), ('2020-01-01 00:10:30+00', 10.0), ('2020-01-01 00:20:00+00', 40.0)";
             client.update(stmt, None, None).unwrap();
@@ -1624,8 +1624,8 @@ mod tests {
                 select_and_check_one!(
                     client,
                     "SELECT \
-                       num_resets(counter_agg(ts, val)), \
-                       counter_agg(ts, val) -> num_resets() \
+                       num_resets(counter_agg(ts, val))::float, \
+                       (counter_agg(ts, val) -> num_resets())::float \
                      FROM test",
                     f64
                 ),

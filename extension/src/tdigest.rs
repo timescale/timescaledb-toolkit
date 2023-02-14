@@ -457,7 +457,7 @@ mod tests {
                 .update("SELECT COUNT(*) FROM test", None, None)
                 .unwrap()
                 .first()
-                .get_one::<i32>()
+                .get_one::<i64>()
                 .unwrap();
             assert_eq!(10000, sanity.unwrap());
 
@@ -693,7 +693,7 @@ mod tests {
                 .update("SELECT COUNT(*) FROM new_test", None, None)
                 .unwrap()
                 .first()
-                .get_one::<i32>()
+                .get_one::<i64>()
                 .unwrap();
             assert_eq!(Some(1010), sanity);
 

@@ -523,7 +523,7 @@ mod tests {
                 )
                 .unwrap()
                 .first()
-                .get_two::<i32, i32>()
+                .get_two::<i64, i64>()
                 .unwrap();
             assert_eq!(count, Some(132));
             assert_eq!(count, arrow_count);
@@ -536,7 +536,7 @@ mod tests {
                 )
                 .unwrap()
                 .first()
-                .get_one::<i32>()
+                .get_one::<i64>()
                 .unwrap();
             assert_eq!(count2, count);
         });
@@ -604,7 +604,7 @@ mod tests {
                 )
                 .unwrap()
                 .first()
-                .get_two::<i32, i32>()
+                .get_two::<i64, i64>()
                 .unwrap();
             assert_eq!(count, Some(100));
             assert_eq!(count, arrow_count);
@@ -617,7 +617,7 @@ mod tests {
                 )
                 .unwrap()
                 .first()
-                .get_one::<i32>()
+                .get_one::<i64>()
                 .unwrap();
             assert_eq!(count2, count);
         });
@@ -744,7 +744,7 @@ mod tests {
                 )
                 .unwrap()
                 .first()
-                .get_one::<i32>()
+                .get_one::<i64>()
                 .unwrap();
             assert_eq!(count, Some(96));
 
@@ -756,7 +756,7 @@ mod tests {
                 )
                 .unwrap()
                 .first()
-                .get_one::<i32>()
+                .get_one::<i64>()
                 .unwrap();
             assert_eq!(count2, count);
         });
@@ -811,7 +811,7 @@ mod tests {
                 )
                 .unwrap()
                 .first()
-                .get_one::<i32>()
+                .get_one::<i64>()
                 .unwrap();
             assert_eq!(count, Some(111));
 
@@ -823,7 +823,7 @@ mod tests {
                 )
                 .unwrap()
                 .first()
-                .get_one::<i32>()
+                .get_one::<i64>()
                 .unwrap();
             assert_eq!(count2, count);
         });

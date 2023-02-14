@@ -1740,12 +1740,13 @@ mod tests {
         allowed_diff: f64,
         do_moving_agg: bool,
     ) {
-        let (pg_result, pg_moving_agg_result) = client
-            .update(pg_cmd, None, None)
-            .unwrap()
-            .first()
-            .get_two::<f64, f64>()
-            .unwrap();
+        warning!("pg_cmd={} ; tk_cmd={}", pg_cmd, tk_cmd);
+        let pg_row = client.update(pg_cmd, None, None).unwrap().first();
+        let (pg_result, pg_moving_agg_result) = if do_moving_agg {
+            pg_row.get_two::<f64, f64>().unwrap()
+        } else {
+            (pg_row.get_one::<f64>().unwrap(), None)
+        };
         let pg_result = pg_result.unwrap();
 
         let (tk_result, arrow_result, tk_moving_agg_result) = client
@@ -1794,7 +1795,7 @@ mod tests {
     }
 
     fn pg1d_aggx(agg: &str) -> String {
-        format!("SELECT {agg}(test_x), (SELECT {agg}(test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3) FROM test_table", agg = agg)
+        format!("SELECT {agg}(test_x)::float, (SELECT {agg}(test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3)::float FROM test_table", agg = agg)
     }
 
     fn pg1d_aggy(agg: &str) -> String {
@@ -1802,15 +1803,15 @@ mod tests {
     }
 
     fn pg2d_agg(agg: &str) -> String {
-        format!("SELECT {agg}(test_y, test_x), (SELECT {agg}(test_y, test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3) FROM test_table", agg = agg)
+        format!("SELECT {agg}(test_y, test_x)::float, (SELECT {agg}(test_y, test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3)::float FROM test_table", agg = agg)
     }
 
     fn tk1d_agg(agg: &str) -> String {
         format!(
             "SELECT \
-            {agg}(stats_agg(test_x)), \
-            stats_agg(test_x)->{agg}(), \
-            {agg}((SELECT stats_agg(test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3)) \
+            {agg}(stats_agg(test_x))::float, \
+            (stats_agg(test_x)->{agg}())::float, \
+            {agg}((SELECT stats_agg(test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3))::float \
         FROM test_table",
             agg = agg
         )
@@ -1831,9 +1832,9 @@ mod tests {
     fn tk2d_agg(agg: &str) -> String {
         format!(
             "SELECT \
-            {agg}(stats_agg(test_y, test_x)), \
-            stats_agg(test_y, test_x)->{agg}(), \
-            {agg}((SELECT stats_agg(test_y, test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3)) \
+            {agg}(stats_agg(test_y, test_x))::float, \
+            (stats_agg(test_y, test_x)->{agg}())::float, \
+            {agg}((SELECT stats_agg(test_y, test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3))::float \
         FROM test_table",
             agg = agg
         )

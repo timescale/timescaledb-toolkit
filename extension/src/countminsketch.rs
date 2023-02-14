@@ -149,7 +149,7 @@ mod tests {
                 .update("SELECT COUNT(*) FROM test", None, None)
                 .unwrap()
                 .first()
-                .get_one::<i32>()
+                .get_one::<i64>()
                 .unwrap();
             assert_eq!(Some(150), sanity);
 
@@ -167,7 +167,7 @@ mod tests {
                 .update("SELECT COUNT(*) FROM sketch", None, None)
                 .unwrap()
                 .first()
-                .get_one::<i32>()
+                .get_one::<i64>()
                 .unwrap();
             assert!(sanity.unwrap_or(0) > 0);
 
@@ -183,7 +183,7 @@ mod tests {
                 )
                 .unwrap()
                 .first()
-                .get_three::<i32, i32, i32>()
+                .get_three::<i64, i64, i64>()
                 .unwrap();
 
             // 0.01 => error param to the sketch, 150 => number of items added to the sketch
@@ -214,7 +214,7 @@ mod tests {
                     None,
                 )
                 .unwrap().first()
-                .get_one::<i32>().unwrap();
+                .get_one::<i64>().unwrap();
 
             let expected = 2;
             // 0.01 => error param to the sketch, 200 => number of items added to the sketch
@@ -290,7 +290,7 @@ mod tests {
                     None,
                 )
                 .unwrap().first()
-                .get_one::<String>().unwrap();
+                .get_one::<i64>().unwrap();
             assert_eq!(output, None)
         })
     }

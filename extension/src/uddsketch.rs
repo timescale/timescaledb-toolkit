@@ -722,7 +722,7 @@ mod tests {
                 .update("SELECT COUNT(*) FROM test", None, None)
                 .unwrap()
                 .first()
-                .get_one::<i32>()
+                .get_one::<i64>()
                 .unwrap();
             assert_eq!(Some(10000), sanity);
 
@@ -740,7 +740,7 @@ mod tests {
                 .update("SELECT COUNT(*) FROM sketch", None, None)
                 .unwrap()
                 .first()
-                .get_one::<i32>()
+                .get_one::<i64>()
                 .unwrap();
             assert!(sanity.unwrap_or(0) > 0);
 
@@ -861,7 +861,7 @@ mod tests {
                 .update("SELECT COUNT(*) FROM new_test", None, None)
                 .unwrap()
                 .first()
-                .get_one::<i32>()
+                .get_one::<i64>()
                 .unwrap();
             assert_eq!(Some(1010), sanity);
 
@@ -946,7 +946,7 @@ mod tests {
                 .update("SELECT COUNT(*) FROM pa_test", None, None)
                 .unwrap()
                 .first()
-                .get_one::<i32>()
+                .get_one::<i64>()
                 .unwrap();
             assert_eq!(Some(1010), sanity);
 
@@ -1020,7 +1020,7 @@ mod tests {
                 .update("SELECT COUNT(*) FROM paa_test", None, None)
                 .unwrap()
                 .first()
-                .get_one::<i32>()
+                .get_one::<i64>()
                 .unwrap();
             assert_eq!(Some(1010), sanity);
 
@@ -1107,7 +1107,7 @@ mod tests {
                 .update("SELECT COUNT(*) FROM paa_test", None, None)
                 .unwrap()
                 .first()
-                .get_one::<i32>()
+                .get_one::<i64>()
                 .unwrap();
             assert_eq!(Some(1010), sanity);
 
@@ -1226,9 +1226,6 @@ mod tests {
                     None,
                     None,
                 )
-                .unwrap()
-                .first()
-                .get_one::<String>()
                 .unwrap();
 
             for cmd in [

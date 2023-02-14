@@ -915,6 +915,22 @@ mod tests {
     #[pg_test]
     fn rollup() {
         Spi::connect(|mut client| {
+            // needed so that GaugeSummary type can be resolved
+            let sp = client
+                .update(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .unwrap()
+                .first()
+                .get_one::<String>()
+                .unwrap()
+                .unwrap();
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
+
             client
                 .update(
                     "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
@@ -935,9 +951,9 @@ mod tests {
             client.update(stmt, None, None).unwrap();
 
             //combine function works as expected
-            let stmt = "SELECT toolkit_experimental.gauge_agg(ts, val) FROM test";
+            let stmt = "SELECT gauge_agg(ts, val) FROM test";
             let a = select_one!(client, stmt, GaugeSummary);
-            let stmt = "WITH t as (SELECT date_trunc('minute', ts), toolkit_experimental.gauge_agg(ts, val) as agg FROM test group by 1 ) SELECT toolkit_experimental.rollup(agg) FROM t";
+            let stmt = "WITH t as (SELECT date_trunc('minute', ts), gauge_agg(ts, val) as agg FROM test group by 1 ) SELECT rollup(agg) FROM t";
             let b = select_one!(client, stmt, GaugeSummary);
             assert_close_enough(&a.into(), &b.into());
         });
@@ -1085,6 +1101,22 @@ mod tests {
     #[pg_test]
     fn no_results_on_null_input() {
         Spi::connect(|mut client| {
+            // needed so that GaugeSummary type can be resolved
+            let sp = client
+                .update(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .unwrap()
+                .first()
+                .get_one::<String>()
+                .unwrap()
+                .unwrap();
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
+
             client
                 .update(
                     "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",

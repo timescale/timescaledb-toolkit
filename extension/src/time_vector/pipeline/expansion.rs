@@ -174,12 +174,12 @@ mod tests {
 
     #[pg_test]
     fn test_unnest_finalizer() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -189,7 +189,7 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -200,7 +200,7 @@ mod tests {
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)) as v(time, value)";
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT array_agg(val)::TEXT \
                     FROM (SELECT series -> unnest() as val FROM ({}) s) t",
@@ -219,12 +219,12 @@ mod tests {
 
     #[pg_test]
     fn test_series_finalizer() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -234,7 +234,7 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -245,7 +245,7 @@ mod tests {
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 31.0)) as v(time, value)";
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> materialize())::TEXT FROM ({}) s",
                         create_series
@@ -272,12 +272,12 @@ mod tests {
 
     #[pg_test]
     fn test_force_materialize() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -287,12 +287,12 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             // `-> materialize()` should force materialization, but otherwise the
             // pipeline-folding optimization should proceed
             let output = client
-                .select(
+                .update(
                     "EXPLAIN (verbose) SELECT \
                 timevector('2021-01-01'::timestamptz, 0.1) \
                 -> round() -> abs() \

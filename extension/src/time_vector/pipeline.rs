@@ -322,12 +322,12 @@ mod tests {
 
     #[pg_test]
     fn test_pipeline_lttb() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -337,14 +337,14 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
-            client.select(
+            client.update(
                 "CREATE TABLE lttb_pipe (series timevector_tstz_f64)",
                 None,
                 None,
             );
-            client.select(
+            client.update(
                 "INSERT INTO lttb_pipe \
                 SELECT timevector(time, val) FROM ( \
                     SELECT \
@@ -357,7 +357,7 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     "SELECT (series -> lttb(17))::TEXT FROM lttb_pipe",
                     None,
                     None,
@@ -390,7 +390,7 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     "SELECT (series -> lttb(8))::TEXT FROM lttb_pipe",
                     None,
                     None,
@@ -414,7 +414,7 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     "SELECT (series -> lttb(8) -> lttb(8))::TEXT FROM lttb_pipe",
                     None,
                     None,
@@ -438,7 +438,7 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     "SELECT (series -> (lttb(8) -> lttb(8) -> lttb(8)))::TEXT FROM lttb_pipe",
                     None,
                     None,
@@ -465,12 +465,12 @@ mod tests {
 
     #[pg_test]
     fn test_pipeline_folding() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -480,9 +480,9 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
-            let output = client.select(
+            let output = client.update(
                 "EXPLAIN (verbose) SELECT timevector('2021-01-01'::timestamptz, 0.1) -> round() -> abs() -> round();",
                 None,
                 None

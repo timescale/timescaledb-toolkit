@@ -293,12 +293,12 @@ mod tests {
 
     #[pg_test]
     fn test_simple_arith_binops() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -308,7 +308,7 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -319,7 +319,7 @@ mod tests {
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)) as v(time, value)";
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> add(1.0))::TEXT FROM ({}) s",
                         create_series
@@ -343,7 +343,7 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> sub(3.0))::TEXT FROM ({}) s",
                         create_series
@@ -367,7 +367,7 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> mul(2.0))::TEXT FROM ({}) s",
                         create_series
@@ -391,7 +391,7 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> div(5.0))::TEXT FROM ({}) s",
                         create_series
@@ -415,7 +415,7 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> mod(5.0))::TEXT FROM ({}) s",
                         create_series
@@ -439,7 +439,7 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> power(2.0))::TEXT FROM ({}) s",
                         create_series
@@ -463,7 +463,7 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> logn(10.0))::TEXT FROM ({}) s",
                         create_series
@@ -490,12 +490,12 @@ mod tests {
 
     #[pg_test]
     fn test_simple_arith_unaryops() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -505,7 +505,7 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -516,7 +516,7 @@ mod tests {
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.3)) as v(time, value)";
 
             let val = client
-                .select(
+                .update(
                     &format!("SELECT (series -> abs())::TEXT FROM ({}) s", create_series),
                     None,
                     None,
@@ -537,7 +537,7 @@ mod tests {
             );
 
             // TODO re-enable once made stable
-            // let val = client.select(
+            // let val = client.update(
             //     &format!("SELECT (series -> cbrt())::TEXT FROM ({}) s", create_series),
             //     None,
             //     None
@@ -553,7 +553,7 @@ mod tests {
             // ]");
 
             let val = client
-                .select(
+                .update(
                     &format!("SELECT (series -> ceil())::TEXT FROM ({}) s", create_series),
                     None,
                     None,
@@ -574,7 +574,7 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> floor())::TEXT FROM ({}) s",
                         create_series
@@ -600,7 +600,7 @@ mod tests {
             // TODO why are there `null`s here?
             // Josh - likely JSON can't represent nans correctly...
             // TODO re-enable once made stable
-            // let val = client.select(
+            // let val = client.update(
             //     &format!("SELECT (series -> ln())::TEXT FROM ({}) s", create_series),
             //     None,
             //     None
@@ -616,7 +616,7 @@ mod tests {
             // ]");
 
             // TODO re-enable once made stable
-            // let val = client.select(
+            // let val = client.update(
             //     &format!("SELECT (series -> log10())::TEXT FROM ({}) s", create_series),
             //     None,
             //     None
@@ -632,7 +632,7 @@ mod tests {
             // ]");
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> round())::TEXT FROM ({}) s",
                         create_series
@@ -656,7 +656,7 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     &format!("SELECT (series -> sign())::TEXT FROM ({}) s", create_series),
                     None,
                     None,
@@ -677,7 +677,7 @@ mod tests {
             );
 
             // TODO re-enable once made stable
-            // let val = client.select(
+            // let val = client.update(
             //     &format!("SELECT (series -> sqrt())::TEXT FROM ({}) s", create_series),
             //     None,
             //     None
@@ -693,7 +693,7 @@ mod tests {
             // ]");
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> trunc())::TEXT FROM ({}) s",
                         create_series

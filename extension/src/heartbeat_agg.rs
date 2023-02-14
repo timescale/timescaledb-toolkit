@@ -582,12 +582,12 @@ mod tests {
 
     #[pg_test]
     pub fn test_heartbeat_agg() {
-        Spi::connect(|client| {
-            client.select("SET TIMEZONE to UTC", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET TIMEZONE to UTC", None, None);
 
-            client.select("CREATE TABLE liveness(heartbeat TIMESTAMPTZ)", None, None);
+            client.update("CREATE TABLE liveness(heartbeat TIMESTAMPTZ)", None, None);
 
-            client.select(
+            client.update(
                 "INSERT INTO liveness VALUES
                 ('01-01-2020 0:2:20 UTC'),
                 ('01-01-2020 0:10 UTC'),
@@ -614,7 +614,7 @@ mod tests {
                 None,
             );
 
-            let mut result = client.select(
+            let mut result = client.update(
                 "SELECT toolkit_experimental.live_ranges(toolkit_experimental.heartbeat_agg(heartbeat, '01-01-2020 UTC', '2h', '10m'))::TEXT
                 FROM liveness", None, None).unwrap();
 
@@ -648,7 +648,7 @@ mod tests {
             );
             assert!(result.next().is_none());
 
-            let mut result = client.select(
+            let mut result = client.update(
                 "SELECT toolkit_experimental.dead_ranges(toolkit_experimental.heartbeat_agg(heartbeat, '01-01-2020 UTC', '2h', '10m'))::TEXT
                 FROM liveness", None, None).unwrap();
 
@@ -682,18 +682,18 @@ mod tests {
             );
             assert!(result.next().is_none());
 
-            let result = client.select(
+            let result = client.update(
                 "SELECT toolkit_experimental.uptime(toolkit_experimental.heartbeat_agg(heartbeat, '01-01-2020 UTC', '2h', '10m'))::TEXT
                 FROM liveness", None, None).unwrap().first().get_one::<String>().unwrap().unwrap();
             assert_eq!("01:54:09", result);
 
-            let result = client.select(
+            let result = client.update(
                 "SELECT toolkit_experimental.downtime(toolkit_experimental.heartbeat_agg(heartbeat, '01-01-2020 UTC', '2h', '10m'))::TEXT
                 FROM liveness", None, None).unwrap().first().get_one::<String>().unwrap().unwrap();
             assert_eq!("00:05:51", result);
 
             let (result1, result2, result3) =
-                client.select(
+                client.update(
                     "WITH agg AS (SELECT toolkit_experimental.heartbeat_agg(heartbeat, '01-01-2020 UTC', '2h', '10m') AS agg FROM liveness)
                     SELECT toolkit_experimental.live_at(agg, '01-01-2020 00:01:00 UTC')::TEXT, 
                     toolkit_experimental.live_at(agg, '01-01-2020 00:05:00 UTC')::TEXT,
@@ -702,7 +702,7 @@ mod tests {
                 .get_three::<String, String, String>().unwrap();
 
             let (result4, result5) =
-                client.select(
+                client.update(
                     "WITH agg AS (SELECT toolkit_experimental.heartbeat_agg(heartbeat, '01-01-2020 UTC', '2h', '10m') AS agg FROM liveness)
                     SELECT toolkit_experimental.live_at(agg, '01-01-2020 01:38:00 UTC')::TEXT,
                     toolkit_experimental.live_at(agg, '01-01-2020 02:01:00 UTC')::TEXT FROM agg", None, None)
@@ -719,16 +719,16 @@ mod tests {
 
     #[pg_test]
     pub fn test_heartbeat_rollup() {
-        Spi::connect(|client| {
-            client.select("SET TIMEZONE to UTC", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET TIMEZONE to UTC", None, None);
 
-            client.select(
+            client.update(
                 "CREATE TABLE heartbeats(time timestamptz, batch timestamptz)",
                 None,
                 None,
             );
 
-            client.select(
+            client.update(
                 "INSERT INTO heartbeats VALUES
                     ('01-01-2020 3:02:20 UTC'::timestamptz, '01-01-2020 3:00:00 UTC'::timestamptz),
                     ('01-01-2020 3:03:10 UTC'::timestamptz, '01-01-2020 3:00:00 UTC'::timestamptz),
@@ -747,7 +747,7 @@ mod tests {
             );
 
             let result = client
-                .select(
+                .update(
                     "WITH aggs AS (
                     SELECT toolkit_experimental.heartbeat_agg(time, batch, '1h', '1m')
                     FROM heartbeats 
@@ -767,16 +767,16 @@ mod tests {
 
     #[pg_test]
     pub fn test_heartbeat_combining_rollup() {
-        Spi::connect(|client| {
-            client.select("SET TIMEZONE to UTC", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET TIMEZONE to UTC", None, None);
 
-            client.select(
+            client.update(
                 "CREATE TABLE aggs(agg toolkit_experimental.heartbeatagg)",
                 None,
                 None,
             );
 
-            client.select(
+            client.update(
                 "INSERT INTO aggs SELECT toolkit_experimental.heartbeat_agg(hb, '01-01-2020 UTC', '1h', '10m')
                 FROM (VALUES
                     ('01-01-2020 0:2:20 UTC'::timestamptz),
@@ -791,7 +791,7 @@ mod tests {
                     None,
                 );
 
-            client.select(
+            client.update(
                 "INSERT INTO aggs SELECT toolkit_experimental.heartbeat_agg(hb, '01-01-2020 0:30 UTC', '1h', '10m')
                     FROM (VALUES
                     ('01-01-2020 0:35 UTC'::timestamptz),
@@ -804,7 +804,7 @@ mod tests {
                     None,
                 );
 
-            client.select(
+            client.update(
                 "INSERT INTO aggs SELECT toolkit_experimental.heartbeat_agg(hb, '01-01-2020 1:00 UTC', '1h', '10m')
                 FROM (VALUES
                     ('01-01-2020 1:00 UTC'::timestamptz),
@@ -820,7 +820,7 @@ mod tests {
                     None,
                 ).unwrap();
 
-            let mut result = client.select(
+            let mut result = client.update(
                 "SELECT toolkit_experimental.dead_ranges(toolkit_experimental.rollup(agg))::TEXT
                 FROM aggs",
                 None,
@@ -861,16 +861,16 @@ mod tests {
 
     #[pg_test]
     pub fn test_heartbeat_agg_interpolation() {
-        Spi::connect(|client| {
-            client.select("SET TIMEZONE to UTC", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET TIMEZONE to UTC", None, None);
 
-            client.select(
+            client.update(
                 "CREATE TABLE liveness(heartbeat TIMESTAMPTZ, start TIMESTAMPTZ)",
                 None,
                 None,
             );
 
-            client.select(
+            client.update(
                 "INSERT INTO liveness VALUES
                 ('01-01-2020 0:2:20 UTC', '01-01-2020 0:0 UTC'),
                 ('01-01-2020 0:10 UTC', '01-01-2020 0:0 UTC'),
@@ -897,7 +897,7 @@ mod tests {
                 None,
             );
 
-            let mut result = client.select(
+            let mut result = client.update(
                 "WITH s AS (
                     SELECT start,
                         toolkit_experimental.heartbeat_agg(heartbeat, start, '30m', '10m') AS agg 
@@ -939,7 +939,7 @@ mod tests {
             );
             assert!(result.next().is_none());
 
-            let mut result = client.select(
+            let mut result = client.update(
                 "WITH s AS (
                     SELECT start,
                         toolkit_experimental.heartbeat_agg(heartbeat, start, '30m', '10m') AS agg 
@@ -994,7 +994,7 @@ mod tests {
             );
             assert!(result.next().is_none());
 
-            let mut result = client.select(
+            let mut result = client.update(
                 "WITH s AS (
                     SELECT start,
                         toolkit_experimental.heartbeat_agg(heartbeat, start, '30m', '10m') AS agg 

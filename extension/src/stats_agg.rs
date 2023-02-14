@@ -1408,7 +1408,7 @@ pub fn as_method(method: &str) -> Option<Method> {
 //     macro_rules! select_one {
 //         ($client:expr, $stmt:expr, $type:ty) => {
 //             $client
-//                 .select($stmt, None, None)
+//                 .update($stmt, None, None)
 //                 .first()
 //                 .get_one::<$type>()
 //                 .unwrap()
@@ -1435,7 +1435,7 @@ pub fn as_method(method: &str) -> Option<Method> {
 
 //     // #[pg_test]
 //     // fn test_combine_aggregate(){
-//     //     Spi::connect(|client| {
+//     //     Spi::connect(|mut client| {
 
 //     //     });
 //     // }
@@ -1459,15 +1459,15 @@ mod tests {
 
     #[pg_test]
     fn test_stats_agg_text_io() {
-        Spi::connect(|client| {
-            client.select(
+        Spi::connect(|mut client| {
+            client.update(
                 "CREATE TABLE test_table (test_x DOUBLE PRECISION, test_y DOUBLE PRECISION)",
                 None,
                 None,
             );
 
             let test = client
-                .select(
+                .update(
                     "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
                     None,
                     None,
@@ -1478,10 +1478,10 @@ mod tests {
                 .unwrap();
             assert!(test.is_none());
 
-            client.select("INSERT INTO test_table VALUES (10, 10);", None, None);
+            client.update("INSERT INTO test_table VALUES (10, 10);", None, None);
 
             let test = client
-                .select(
+                .update(
                     "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
                     None,
                     None,
@@ -1496,9 +1496,9 @@ mod tests {
                 "(version:1,n:1,sx:10,sx2:0,sx3:0,sx4:0,sy:10,sy2:0,sy3:0,sy4:0,sxy:0)"
             );
 
-            client.select("INSERT INTO test_table VALUES (20, 20);", None, None);
+            client.update("INSERT INTO test_table VALUES (20, 20);", None, None);
             let test = client
-                .select(
+                .update(
                     "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
                     None,
                     None,
@@ -1515,7 +1515,7 @@ mod tests {
             // Test a few functions to see that the text serialized object behave the same as the constructed one
             assert_eq!(
                 client
-                    .select(
+                    .update(
                         "SELECT skewness_x(stats_agg(test_y, test_x)) FROM test_table",
                         None,
                         None
@@ -1524,7 +1524,7 @@ mod tests {
                     .first()
                     .get_one::<f64>(),
                 client
-                    .select(
+                    .update(
                         &format!("SELECT skewness_x('{}'::StatsSummary2D)", expected),
                         None,
                         None
@@ -1535,7 +1535,7 @@ mod tests {
             );
             assert_eq!(
                 client
-                    .select(
+                    .update(
                         "SELECT kurtosis_y(stats_agg(test_y, test_x)) FROM test_table",
                         None,
                         None
@@ -1544,7 +1544,7 @@ mod tests {
                     .first()
                     .get_one::<f64>(),
                 client
-                    .select(
+                    .update(
                         &format!("SELECT kurtosis_y('{}'::StatsSummary2D)", expected),
                         None,
                         None
@@ -1555,7 +1555,7 @@ mod tests {
             );
             assert_eq!(
                 client
-                    .select(
+                    .update(
                         "SELECT covariance(stats_agg(test_y, test_x)) FROM test_table",
                         None,
                         None
@@ -1564,7 +1564,7 @@ mod tests {
                     .first()
                     .get_one::<f64>(),
                 client
-                    .select(
+                    .update(
                         &format!("SELECT covariance('{}'::StatsSummary2D)", expected),
                         None,
                         None
@@ -1577,7 +1577,7 @@ mod tests {
             // Test text round trip
             assert_eq!(
                 client
-                    .select(
+                    .update(
                         &format!("SELECT '{}'::StatsSummary2D::TEXT", expected),
                         None,
                         None
@@ -1590,9 +1590,9 @@ mod tests {
                 expected
             );
 
-            client.select("INSERT INTO test_table VALUES ('NaN', 30);", None, None);
+            client.update("INSERT INTO test_table VALUES ('NaN', 30);", None, None);
             let test = client
-                .select(
+                .update(
                     "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
                     None,
                     None,
@@ -1604,9 +1604,9 @@ mod tests {
                 .unwrap();
             assert_eq!(test, "(version:1,n:3,sx:NaN,sx2:NaN,sx3:NaN,sx4:NaN,sy:60,sy2:200,sy3:0,sy4:20000,sxy:NaN)");
 
-            client.select("INSERT INTO test_table VALUES (40, 'Inf');", None, None);
+            client.update("INSERT INTO test_table VALUES (40, 'Inf');", None, None);
             let test = client
-                .select(
+                .update(
                     "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
                     None,
                     None,
@@ -1724,14 +1724,14 @@ mod tests {
     #[allow(clippy::float_cmp)]
     fn check_agg_equivalence(
         state: &TestState,
-        client: &pgx::spi::SpiClient,
+        client: &mut pgx::spi::SpiClient,
         pg_cmd: &str,
         tk_cmd: &str,
         allowed_diff: f64,
         do_moving_agg: bool,
     ) {
         let (pg_result, pg_moving_agg_result) = client
-            .select(pg_cmd, None, None)
+            .update(pg_cmd, None, None)
             .unwrap()
             .first()
             .get_two::<f64, f64>()
@@ -1739,7 +1739,7 @@ mod tests {
         let pg_result = pg_result.unwrap();
 
         let (tk_result, arrow_result, tk_moving_agg_result) = client
-            .select(tk_cmd, None, None)
+            .update(tk_cmd, None, None)
             .unwrap()
             .first()
             .get_three::<f64, f64, f64>()
@@ -1850,14 +1850,14 @@ mod tests {
     }
 
     fn test_aggs(state: &mut TestState) {
-        Spi::connect(|client| {
-            client.select(
+        Spi::connect(|mut client| {
+            client.update(
                 "CREATE TABLE test_table (test_x DOUBLE PRECISION, test_y DOUBLE PRECISION)",
                 None,
                 None,
             );
 
-            client.select(
+            client.update(
                 &format!(
                     "INSERT INTO test_table VALUES {}",
                     state
@@ -1886,7 +1886,7 @@ mod tests {
 
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggx("avg"),
                 &tk1d_agg("average"),
                 NONE,
@@ -1894,7 +1894,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggx("sum"),
                 &tk1d_agg("sum"),
                 NONE,
@@ -1902,7 +1902,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggx("count"),
                 &tk1d_agg("num_vals"),
                 NONE,
@@ -1910,7 +1910,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggx("stddev"),
                 &tk1d_agg("stddev"),
                 EPS2,
@@ -1918,7 +1918,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggx("stddev_pop"),
                 &tk1d_agg_arg("stddev", "population"),
                 EPS2,
@@ -1926,7 +1926,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggx("stddev_samp"),
                 &tk1d_agg_arg("stddev", "sample"),
                 EPS2,
@@ -1934,7 +1934,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggx("variance"),
                 &tk1d_agg("variance"),
                 EPS3,
@@ -1942,7 +1942,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggx("var_pop"),
                 &tk1d_agg_arg("variance", "population"),
                 EPS3,
@@ -1950,7 +1950,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggx("var_samp"),
                 &tk1d_agg_arg("variance", "sample"),
                 EPS3,
@@ -1959,7 +1959,7 @@ mod tests {
 
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg2d_agg("regr_avgx"),
                 &tk2d_agg("average_x"),
                 NONE,
@@ -1967,7 +1967,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg2d_agg("regr_avgy"),
                 &tk2d_agg("average_y"),
                 NONE,
@@ -1975,7 +1975,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggx("sum"),
                 &tk2d_agg("sum_x"),
                 NONE,
@@ -1983,7 +1983,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggy("sum"),
                 &tk2d_agg("sum_y"),
                 NONE,
@@ -1991,7 +1991,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggx("stddev"),
                 &tk2d_agg("stddev_x"),
                 EPS2,
@@ -1999,7 +1999,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggy("stddev"),
                 &tk2d_agg("stddev_y"),
                 EPS2,
@@ -2007,7 +2007,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggx("stddev_pop"),
                 &tk2d_agg_arg("stddev_x", "population"),
                 EPS2,
@@ -2015,7 +2015,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggy("stddev_pop"),
                 &tk2d_agg_arg("stddev_y", "population"),
                 EPS2,
@@ -2023,7 +2023,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggx("stddev_samp"),
                 &tk2d_agg_arg("stddev_x", "sample"),
                 EPS2,
@@ -2031,7 +2031,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggy("stddev_samp"),
                 &tk2d_agg_arg("stddev_y", "sample"),
                 EPS2,
@@ -2039,7 +2039,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggx("variance"),
                 &tk2d_agg("variance_x"),
                 EPS3,
@@ -2047,7 +2047,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggy("variance"),
                 &tk2d_agg("variance_y"),
                 EPS3,
@@ -2055,7 +2055,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggx("var_pop"),
                 &tk2d_agg_arg("variance_x", "population"),
                 EPS3,
@@ -2063,7 +2063,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggy("var_pop"),
                 &tk2d_agg_arg("variance_y", "population"),
                 EPS3,
@@ -2071,7 +2071,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggx("var_samp"),
                 &tk2d_agg_arg("variance_x", "sample"),
                 EPS3,
@@ -2079,7 +2079,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg1d_aggy("var_samp"),
                 &tk2d_agg_arg("variance_y", "sample"),
                 EPS3,
@@ -2087,7 +2087,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg2d_agg("regr_count"),
                 &tk2d_agg("num_vals"),
                 NONE,
@@ -2096,7 +2096,7 @@ mod tests {
 
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg2d_agg("regr_slope"),
                 &tk2d_agg("slope"),
                 EPS1,
@@ -2104,7 +2104,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg2d_agg("corr"),
                 &tk2d_agg("corr"),
                 EPS1,
@@ -2112,7 +2112,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg2d_agg("regr_intercept"),
                 &tk2d_agg("intercept"),
                 EPS1,
@@ -2123,7 +2123,7 @@ mod tests {
             {
                 let query = tk2d_agg("x_intercept");
                 let (result, arrow_result) = client
-                    .select(&query, None, None)
+                    .update(&query, None, None)
                     .unwrap()
                     .first()
                     .get_two::<f64, f64>()
@@ -2133,7 +2133,7 @@ mod tests {
 
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg2d_agg("regr_r2"),
                 &tk2d_agg("determination_coeff"),
                 EPS1,
@@ -2141,7 +2141,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg2d_agg("covar_pop"),
                 &tk2d_agg_arg("covariance", "population"),
                 BILLIONTH,
@@ -2149,7 +2149,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg2d_agg("covar_samp"),
                 &tk2d_agg_arg("covariance", "sample"),
                 BILLIONTH,
@@ -2159,7 +2159,7 @@ mod tests {
             // Skewness and kurtosis don't have aggregate functions in postgres, but we can compute them
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg_moment_pop_query(3, "test_x"),
                 &tk1d_agg_arg("skewness", "population"),
                 BILLIONTH,
@@ -2167,7 +2167,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg_moment_pop_query(3, "test_x"),
                 &tk2d_agg_arg("skewness_x", "population"),
                 BILLIONTH,
@@ -2175,7 +2175,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg_moment_pop_query(3, "test_y"),
                 &tk2d_agg_arg("skewness_y", "population"),
                 BILLIONTH,
@@ -2183,7 +2183,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg_moment_pop_query(4, "test_x"),
                 &tk1d_agg_arg("kurtosis", "population"),
                 BILLIONTH,
@@ -2191,7 +2191,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg_moment_pop_query(4, "test_x"),
                 &tk2d_agg_arg("kurtosis_x", "population"),
                 BILLIONTH,
@@ -2199,7 +2199,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg_moment_pop_query(4, "test_y"),
                 &tk2d_agg_arg("kurtosis_y", "population"),
                 BILLIONTH,
@@ -2208,7 +2208,7 @@ mod tests {
 
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg_moment_samp_query(3, "test_x"),
                 &tk1d_agg_arg("skewness", "sample"),
                 BILLIONTH,
@@ -2216,7 +2216,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg_moment_samp_query(3, "test_x"),
                 &tk2d_agg_arg("skewness_x", "sample"),
                 BILLIONTH,
@@ -2224,7 +2224,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg_moment_samp_query(3, "test_y"),
                 &tk2d_agg_arg("skewness_y", "sample"),
                 BILLIONTH,
@@ -2232,7 +2232,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg_moment_samp_query(4, "test_x"),
                 &tk1d_agg_arg("kurtosis", "sample"),
                 BILLIONTH,
@@ -2240,7 +2240,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg_moment_samp_query(4, "test_x"),
                 &tk2d_agg_arg("kurtosis_x", "sample"),
                 BILLIONTH,
@@ -2248,21 +2248,21 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &client,
+                &mut client,
                 &pg_moment_samp_query(4, "test_y"),
                 &tk2d_agg_arg("kurtosis_y", "sample"),
                 BILLIONTH,
                 false,
             );
 
-            client.select("DROP TABLE test_table", None, None);
+            client.update("DROP TABLE test_table", None, None);
         });
     }
 
     #[pg_test]
     fn stats_agg_rolling() {
-        Spi::connect(|client| {
-            client.select(
+        Spi::connect(|mut client| {
+            client.update(
                 "
 SET timezone TO 'UTC';
 CREATE TABLE prices(ts TIMESTAMPTZ, price FLOAT);
@@ -2283,7 +2283,7 @@ INSERT INTO prices (
                 None,
             );
 
-            let mut vals = client.select(
+            let mut vals = client.update(
                 "SELECT stddev(data.stats_agg) FROM (SELECT stats_agg(price) OVER (ORDER BY ts RANGE '50 minutes' PRECEDING) FROM prices) data",
                 None, None
             ).unwrap();
@@ -2295,7 +2295,7 @@ INSERT INTO prices (
             assert!(vals.next().unwrap()[1].value::<f64>().unwrap().is_some());
             assert!(vals.next().unwrap()[1].value::<f64>().unwrap().is_some());
 
-            let mut vals = client.select(
+            let mut vals = client.update(
                 "SELECT slope(data.stats_agg) FROM (SELECT stats_agg((EXTRACT(minutes FROM ts)), price) OVER (ORDER BY ts RANGE '50 minutes' PRECEDING) FROM prices) data;",
                 None, None
             ).unwrap();

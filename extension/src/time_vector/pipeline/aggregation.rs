@@ -722,12 +722,12 @@ mod tests {
 
     #[pg_test]
     fn test_stats_agg_finalizer() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -737,7 +737,7 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -748,7 +748,7 @@ mod tests {
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)) as v(time, value)";
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> stats_agg())::TEXT FROM ({}) s",
                         create_series
@@ -769,12 +769,12 @@ mod tests {
 
     #[pg_test]
     fn test_stats_agg_pipeline_folding() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -784,10 +784,10 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             let output = client
-                .select(
+                .update(
                     "EXPLAIN (verbose) SELECT \
                 timevector('1930-04-05'::timestamptz, 123.0) \
                 -> ceil() -> abs() -> floor() \
@@ -817,12 +817,12 @@ mod tests {
 
     #[pg_test]
     fn test_sum_finalizer() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -832,7 +832,7 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -843,7 +843,7 @@ mod tests {
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)) as v(time, value)";
 
             let val = client
-                .select(
+                .update(
                     &format!("SELECT (series -> sum())::TEXT FROM ({}) s", create_series),
                     None,
                     None,
@@ -858,12 +858,12 @@ mod tests {
 
     #[pg_test]
     fn test_sum_pipeline_folding() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -873,10 +873,10 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             let output = client
-                .select(
+                .update(
                     "EXPLAIN (verbose) SELECT \
                 timevector('1930-04-05'::timestamptz, 123.0) \
                 -> ceil() -> abs() -> floor() \
@@ -906,12 +906,12 @@ mod tests {
 
     #[pg_test]
     fn test_average_finalizer() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -921,7 +921,7 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -932,7 +932,7 @@ mod tests {
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)) as v(time, value)";
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> average())::TEXT FROM ({}) s",
                         create_series
@@ -950,12 +950,12 @@ mod tests {
 
     #[pg_test]
     fn test_average_pipeline_folding() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -965,10 +965,10 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             let output = client
-                .select(
+                .update(
                     "EXPLAIN (verbose) SELECT \
                 timevector('1930-04-05'::timestamptz, 123.0) \
                 -> ceil() -> abs() -> floor() \
@@ -998,12 +998,12 @@ mod tests {
 
     #[pg_test]
     fn test_num_vals_finalizer() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -1013,7 +1013,7 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -1024,7 +1024,7 @@ mod tests {
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)) as v(time, value)";
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> num_vals())::TEXT FROM ({}) s",
                         create_series
@@ -1042,12 +1042,12 @@ mod tests {
 
     #[pg_test]
     fn test_num_vals_pipeline_folding() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -1057,10 +1057,10 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             let output = client
-                .select(
+                .update(
                     "EXPLAIN (verbose) SELECT \
                 timevector('1930-04-05'::timestamptz, 123.0) \
                 -> ceil() -> abs() -> floor() \
@@ -1090,12 +1090,12 @@ mod tests {
 
     #[pg_test]
     fn test_counter_agg_finalizer() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -1105,7 +1105,7 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -1116,7 +1116,7 @@ mod tests {
                 ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)) as v(time, value)";
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> sort() -> counter_agg())::TEXT FROM ({}) s",
                         create_series
@@ -1130,7 +1130,7 @@ mod tests {
                 .unwrap();
             assert_eq!(val.unwrap(), "(version:1,stats:(n:5,sx:3156624000,sx2:74649600000,sx3:0,sx4:1894671345254400000000,sy:215,sy2:2280,sy3:6720.000000000007,sy4:1788960,sxy:12960000),first:(ts:\"2020-01-01 00:00:00+00\",val:15),second:(ts:\"2020-01-02 00:00:00+00\",val:25),penultimate:(ts:\"2020-01-04 00:00:00+00\",val:10),last:(ts:\"2020-01-05 00:00:00+00\",val:30),reset_sum:45,num_resets:2,num_changes:4,bounds:(is_present:0,has_left:0,has_right:0,padding:(0,0,0,0,0),left:None,right:None))");
 
-            let val = client.select(
+            let val = client.update(
                 &format!("SELECT series -> sort() -> counter_agg() -> with_bounds('[2020-01-01 UTC, 2020-02-01 UTC)') -> extrapolated_delta('prometheus') FROM ({}) s", create_series),
                 None,
                 None
@@ -1140,7 +1140,7 @@ mod tests {
             assert!((val - 67.5).abs() < f64::EPSILON);
 
             let output = client
-                .select(
+                .update(
                     "EXPLAIN (verbose) SELECT \
                 timevector('1930-04-05'::timestamptz, 123.0) \
                 -> ceil() -> abs() -> floor() \
@@ -1170,12 +1170,12 @@ mod tests {
 
     #[pg_test]
     fn test_hyperloglog_finalizer() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -1185,7 +1185,7 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -1201,7 +1201,7 @@ mod tests {
                 ('2020-01-10 UTC'::TIMESTAMPTZ, 5.0)) as v(time, value)";
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> hyperloglog(100))::TEXT FROM ({}) s",
                         create_series
@@ -1216,7 +1216,7 @@ mod tests {
             assert_eq!(val.unwrap(), "(version:1,log:Sparse(num_compressed:7,element_type:FLOAT8,collation:None,compressed_bytes:28,precision:7,compressed:[136,188,20,7,8,30,244,43,72,69,89,2,72,255,97,27,72,83,248,27,200,110,35,5,8,37,85,12]))");
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT series -> hyperloglog(100) -> distinct_count() FROM ({}) s",
                         create_series
@@ -1232,7 +1232,7 @@ mod tests {
             assert_eq!(val, 7);
 
             let output = client
-                .select(
+                .update(
                     "EXPLAIN (verbose) SELECT \
                 timevector('1930-04-05'::timestamptz, 123.0) \
                 -> ceil() -> abs() -> floor() \
@@ -1262,12 +1262,12 @@ mod tests {
 
     #[pg_test]
     fn test_percentile_agg_finalizer() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -1277,7 +1277,7 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -1288,7 +1288,7 @@ mod tests {
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)) as v(time, value)";
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> percentile_agg())::TEXT FROM ({}) s",
                         create_series
@@ -1323,12 +1323,12 @@ mod tests {
 
     #[pg_test]
     fn test_percentile_agg_pipeline_folding() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -1338,10 +1338,10 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             let output = client
-                .select(
+                .update(
                     "EXPLAIN (verbose) SELECT \
                 timevector('1930-04-05'::timestamptz, 123.0) \
                 -> ceil() -> abs() -> floor() \

@@ -528,14 +528,14 @@ mod tests {
 
     #[pg_test]
     pub fn test_unnest() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
-            client.select(
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
+            client.update(
                 "CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION)",
                 None,
                 None,
             );
-            client.select(
+            client.update(
                 r#"INSERT INTO data VALUES
                     ('2020-1-1', 30.0),
                     ('2020-1-2', 45.0),
@@ -547,7 +547,7 @@ mod tests {
             );
 
             let mut unnest = client
-                .select(
+                .update(
                     "SELECT unnest(timevector(time, value))::TEXT FROM data",
                     None,
                     None,
@@ -580,14 +580,14 @@ mod tests {
 
     #[pg_test]
     pub fn test_format_timevector() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
-            client.select(
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
+            client.update(
                 "CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION)",
                 None,
                 None,
             );
-            client.select(
+            client.update(
                 r#"INSERT INTO data VALUES
                     ('2020-1-1', 30.0),
                     ('2020-1-2', 45.0),
@@ -599,7 +599,7 @@ mod tests {
             );
 
             let test_plotly_template = client
-                .select(
+                .update(
                     "SELECT toolkit_experimental.to_plotly(timevector(time, value)) FROM data",
                     None,
                     None,
@@ -613,7 +613,7 @@ mod tests {
             assert_eq!(test_plotly_template,
 "{\"times\": [\"2020-01-01 00:00:00+00\",\"2020-01-02 00:00:00+00\",\"2020-01-03 00:00:00+00\",\"2020-01-04 00:00:00+00\",\"2020-01-05 00:00:00+00\"], \"vals\": [\"30\",\"45\",\"null\",\"55.5\",\"10\"]}"
 		     );
-            let test_paired_timevals_template = client.select(
+            let test_paired_timevals_template = client.update(
                 "SELECT toolkit_experimental.to_text(timevector(time, value),'{{TIMEVALS}}') FROM data",
                 None,
                 None,
@@ -626,7 +626,7 @@ mod tests {
             );
 
             let test_user_supplied_template = client
-                .select(
+                .update(
                     "SELECT toolkit_experimental.to_text(timevector(time,value), '{\"times\": {{ TIMES }}, \"vals\": {{ VALUES }}}') FROM data",
                     None,
                     None,
@@ -637,7 +637,7 @@ mod tests {
             assert_eq!(
                 test_user_supplied_template,"{\"times\": [2020-01-01 00:00:00+00, 2020-01-02 00:00:00+00, 2020-01-03 00:00:00+00, 2020-01-04 00:00:00+00, 2020-01-05 00:00:00+00], \"vals\": [30, 45, null, 55.5, 10]}"
             );
-            let test_user_supplied_json_template = client.select(
+            let test_user_supplied_json_template = client.update(
                 "SELECT toolkit_experimental.to_text(timevector(time, value),'{\"times\": {{ TIMES | json_encode() | safe  }}, \"vals\": {{ VALUES | json_encode() | safe }}}') FROM data",
                 None,
                 None,
@@ -655,14 +655,14 @@ mod tests {
     #[should_panic = "All values in the series must be finite"]
     #[pg_test]
     pub fn test_format_timevector_panics_on_infinities() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
-            client.select(
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
+            client.update(
                 "CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION)",
                 None,
                 None,
             );
-            client.select(
+            client.update(
                 r#"INSERT INTO data VALUES
                     ('2020-1-1', 30.0),
                     ('2020-1-2', 45.0),
@@ -675,7 +675,7 @@ mod tests {
             );
 
             let test_plotly_template = client
-                .select(
+                .update(
                     "SELECT toolkit_experimental.to_plotly(timevector(time, value)) FROM data",
                     None,
                     None,
@@ -693,14 +693,14 @@ mod tests {
 
     #[pg_test]
     pub fn timevector_io() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
-            client.select(
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
+            client.update(
                 "CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION)",
                 None,
                 None,
             );
-            client.select(
+            client.update(
                 r#"INSERT INTO data VALUES
                     ('2020-1-1', 30.0),
                     ('2020-1-2', 45.0),
@@ -712,7 +712,7 @@ mod tests {
             );
 
             let tvec = client
-                .select("SELECT timevector(time,value)::TEXT FROM data", None, None)
+                .update("SELECT timevector(time,value)::TEXT FROM data", None, None)
                 .unwrap()
                 .first()
                 .get_one::<String>()
@@ -723,7 +723,7 @@ mod tests {
             assert_eq!(tvec, expected);
 
             let mut unnest = client
-                .select(
+                .update(
                     &format!("SELECT unnest('{}'::timevector_tstz_f64)::TEXT", expected),
                     None,
                     None,
@@ -756,14 +756,14 @@ mod tests {
 
     #[pg_test]
     pub fn test_arrow_equivalence() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
-            client.select(
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
+            client.update(
                 "CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION)",
                 None,
                 None,
             );
-            client.select(
+            client.update(
                 r#"INSERT INTO data VALUES
                     ('1-1-2020', 30.0),
                     ('1-2-2020', 45.0),
@@ -775,14 +775,14 @@ mod tests {
             );
 
             let mut func = client
-                .select(
+                .update(
                     "SELECT unnest(timevector(time, value))::TEXT FROM data",
                     None,
                     None,
                 )
                 .unwrap();
             let mut op = client
-                .select(
+                .update(
                     "SELECT (timevector(time, value) -> unnest())::TEXT FROM data",
                     None,
                     None,
@@ -803,14 +803,14 @@ mod tests {
 
     #[pg_test]
     pub fn test_rollup() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
-            client.select(
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
+            client.update(
                 "CREATE TABLE data(time TIMESTAMPTZ, value DOUBLE PRECISION, bucket INTEGER)",
                 None,
                 None,
             );
-            client.select(
+            client.update(
                 r#"INSERT INTO data VALUES
                     ('2020-1-1', 30.0, 1),
                     ('2020-1-2', 45.0, 1),
@@ -825,7 +825,7 @@ mod tests {
             );
 
             let mut unnest = client
-                .select(
+                .update(
                     "SELECT unnest(rollup(tvec))::TEXT
                         FROM (
                             SELECT timevector(time, value) AS tvec
@@ -876,31 +876,31 @@ mod tests {
 
     #[pg_test]
     fn test_rollup_preserves_nulls_flag() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
-            client.select(
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
+            client.update(
                 "CREATE TABLE tvecs (vector Timevector_TSTZ_F64)",
                 None,
                 None,
             );
-            client.select(
+            client.update(
                 "INSERT INTO tvecs SELECT timevector('2020-1-1', 20)",
                 None,
                 None,
             );
-            client.select(
+            client.update(
                 "INSERT INTO tvecs SELECT timevector('2020-1-2', 30)",
                 None,
                 None,
             );
-            client.select(
+            client.update(
                 "INSERT INTO tvecs SELECT timevector('2020-1-3', 15)",
                 None,
                 None,
             );
 
             let tvec = client
-                .select("SELECT rollup(vector)::TEXT FROM tvecs", None, None)
+                .update("SELECT rollup(vector)::TEXT FROM tvecs", None, None)
                 .unwrap()
                 .first()
                 .get_one::<String>()
@@ -909,13 +909,13 @@ mod tests {
             let expected = r#"(version:1,num_points:3,flags:1,internal_padding:(0,0,0),points:[(ts:"2020-01-01 00:00:00+00",val:20),(ts:"2020-01-02 00:00:00+00",val:30),(ts:"2020-01-03 00:00:00+00",val:15)],null_val:[0])"#;
             assert_eq!(tvec, expected);
 
-            client.select(
+            client.update(
                 "INSERT INTO tvecs SELECT timevector('2019-1-4', NULL)",
                 None,
                 None,
             );
             let tvec = client
-                .select("SELECT rollup(vector)::TEXT FROM tvecs", None, None)
+                .update("SELECT rollup(vector)::TEXT FROM tvecs", None, None)
                 .unwrap()
                 .first()
                 .get_one::<String>()
@@ -928,11 +928,11 @@ mod tests {
 
     #[pg_test]
     fn test_asof_join() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
 
             let mut result = client
-                .select(
+                .update(
                     "WITH s as (
                     SELECT timevector(time, value) AS v1 FROM
                     (VALUES 
@@ -972,10 +972,10 @@ mod tests {
 
     #[pg_test(error = "both timevectors must be populated for an asof join")]
     fn test_asof_none() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
 
-            client.select(
+            client.update(
                 "WITH s as (
                     SELECT timevector(now(), 0) -> toolkit_experimental.filter($$ $value != 0 $$) AS empty),
                     t as (
@@ -992,10 +992,10 @@ mod tests {
 
     #[pg_test(error = "both timevectors must be populated for an asof join")]
     fn test_none_asof() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
 
-            client.select(
+            client.update(
                 "WITH s as (
                     SELECT timevector(now(), 0) -> toolkit_experimental.filter($$ $value != 0 $$) AS empty),
                     t as (

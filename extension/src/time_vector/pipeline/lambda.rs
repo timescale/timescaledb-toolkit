@@ -444,7 +444,7 @@ mod tests {
     macro_rules! trace_lambda {
         ($client: expr, $expr:literal) => {
             $client
-                .select(
+                .update(
                     concat!("SELECT trace_lambda($$ ", $expr, " $$, '2021-01-01', 2.0)"),
                     None,
                     None,
@@ -458,7 +458,7 @@ mod tests {
     macro_rules! point_lambda {
         ($client: expr, $expr:literal) => {
             $client
-                .select(
+                .update(
                     concat!(
                         "SELECT point_lambda($$ ",
                         $expr,
@@ -478,7 +478,7 @@ mod tests {
     macro_rules! interval_lambda {
         ($client: expr, $expr:literal) => {
             $client
-                .select(
+                .update(
                     concat!(
                         "SELECT interval_lambda($$ ",
                         $expr,
@@ -498,7 +498,7 @@ mod tests {
     macro_rules! f64_lambda {
         ($client: expr, $expr:literal) => {
             $client
-                .select(
+                .update(
                     concat!("SELECT f64_lambda($$ ", $expr, " $$, now(), 2.0)"),
                     None,
                     None,
@@ -514,7 +514,7 @@ mod tests {
     macro_rules! bool_lambda {
         ($client: expr, $expr:literal) => {
             $client
-                .select(
+                .update(
                     concat!("SELECT bool_lambda($$ ", $expr, " $$, now(), 2.0)::text"),
                     None,
                     None,
@@ -553,12 +553,12 @@ mod tests {
 
     #[pg_test]
     fn test_lambda_general() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -568,17 +568,17 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select(
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(
                 "SELECT $$ let $1 = 1.0; 2.0, $1 $$::toolkit_experimental.lambda",
                 None,
                 None,
             );
-            // client.select("SELECT $$ '1 day'i $$::toolkit_experimental.lambda", None, None);
-            // client.select("SELECT $$ '2020-01-01't $$::toolkit_experimental.lambda", None, None);
+            // client.update("SELECT $$ '1 day'i $$::toolkit_experimental.lambda", None, None);
+            // client.update("SELECT $$ '2020-01-01't $$::toolkit_experimental.lambda", None, None);
 
             let res = client
-                .select("SELECT f64_lambda($$ 1.0 $$, now(), 0.0)::text", None, None)
+                .update("SELECT f64_lambda($$ 1.0 $$, now(), 0.0)::text", None, None)
                 .unwrap()
                 .first()
                 .get_one::<String>()
@@ -586,7 +586,7 @@ mod tests {
             assert_eq!(&*res.unwrap(), "1");
 
             let res = client
-                .select(
+                .update(
                     "SELECT f64_lambda($$ 1.0 + 1.0 $$, now(), 0.0)::text",
                     None,
                     None,
@@ -598,7 +598,7 @@ mod tests {
             assert_eq!(&*res.unwrap(), "2");
 
             let res = client
-                .select(
+                .update(
                     "SELECT f64_lambda($$ 1.0 - 1.0 $$, now(), 0.0)::text",
                     None,
                     None,
@@ -610,7 +610,7 @@ mod tests {
             assert_eq!(&*res.unwrap(), "0");
 
             let res = client
-                .select(
+                .update(
                     "SELECT f64_lambda($$ 2.0 * 3.0 $$, now(), 0.0)::text",
                     None,
                     None,
@@ -622,7 +622,7 @@ mod tests {
             assert_eq!(&*res.unwrap(), "6");
 
             let res = client
-                .select(
+                .update(
                     "SELECT f64_lambda($$ $value + 3.0 $$, now(), 2.0)::text",
                     None,
                     None,
@@ -634,7 +634,7 @@ mod tests {
             assert_eq!(&*res.unwrap(), "5");
 
             let res = client
-                .select(
+                .update(
                     "SELECT f64_lambda($$ 3.0 - 1.0 * 3.0 $$, now(), 2.0)::text",
                     None,
                     None,
@@ -652,7 +652,7 @@ mod tests {
             bool_lambda_eq!(client, "2.0 != 3.0 and (1 = 1)", "true");
 
             let res = client
-                .select(
+                .update(
                     "SELECT ttz_lambda($$ '2020-11-22 13:00:01't $$, now(), 2.0)::text",
                     None,
                     None,
@@ -664,7 +664,7 @@ mod tests {
             assert_eq!(&*res.unwrap(), "2020-11-22 13:00:01+00");
 
             let res = client
-                .select(
+                .update(
                     "SELECT ttz_lambda($$ $time $$, '1930-01-12 14:20:21', 2.0)::text",
                     None,
                     None,
@@ -676,7 +676,7 @@ mod tests {
             assert_eq!(&*res.unwrap(), "1930-01-12 14:20:21+00");
 
             let res = client
-                .select(
+                .update(
                     "SELECT ttz_lambda($$ '2020-11-22 13:00:01't - '1 day'i $$, now(), 2.0)::text",
                     None,
                     None,
@@ -688,7 +688,7 @@ mod tests {
             assert_eq!(&*res.unwrap(), "2020-11-21 13:00:01+00");
 
             let res = client
-                .select(
+                .update(
                     "SELECT ttz_lambda($$ '2020-11-22 13:00:01't + '1 day'i $$, now(), 2.0)::text",
                     None,
                     None,
@@ -715,12 +715,12 @@ mod tests {
 
     #[pg_test]
     fn test_lambda_comparison() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -730,7 +730,7 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             bool_lambda_eq!(client, "2.0 <  3.0", "true");
             bool_lambda_eq!(client, "2.0 <= 3.0", "true");
@@ -765,12 +765,12 @@ mod tests {
 
     #[pg_test]
     fn test_lambda_function() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -780,7 +780,7 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             f64_lambda_eq!(client, "pi()", std::f64::consts::PI);
 
@@ -814,12 +814,12 @@ mod tests {
 
     #[pg_test]
     fn test_lambda_unary() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -829,7 +829,7 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             f64_lambda_eq!(client, "-(2.0)", -2.0f64);
             f64_lambda_eq!(client, "-(-2.0)", 2.0f64);
@@ -845,12 +845,12 @@ mod tests {
 
     #[pg_test]
     fn test_lambda_interval_ops() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -860,7 +860,7 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             interval_lambda_eq!(client, "'1 day'i + '1 day'i", "2 days");
             interval_lambda_eq!(client, "'1 day'i + '1 week'i", "8 days");
@@ -874,12 +874,12 @@ mod tests {
 
     #[pg_test]
     fn test_lambda_variable() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -889,7 +889,7 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
             f64_lambda_eq!(client, "let $foo = 2.0; $foo", 2.0);
             f64_lambda_eq!(client, "let $foo = -2.0; $foo", -2.0);

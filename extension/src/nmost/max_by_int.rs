@@ -149,14 +149,14 @@ mod tests {
 
     #[pg_test]
     fn max_by_int_correctness() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
-            client.select("CREATE TABLE data(val INT8, category INT)", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
+            client.update("CREATE TABLE data(val INT8, category INT)", None, None);
 
             for i in 0..100 {
                 let i = (i * 83) % 100; // mess with the ordering just a little
 
-                client.select(
+                client.update(
                     &format!("INSERT INTO data VALUES ({}, {})", i, i % 4),
                     None,
                     None,
@@ -165,7 +165,7 @@ mod tests {
 
             // Test into_values
             let mut result =
-                client.select("SELECT toolkit_experimental.into_values(toolkit_experimental.max_n_by(val, data, 3), NULL::data)::TEXT from data",
+                client.update("SELECT toolkit_experimental.into_values(toolkit_experimental.max_n_by(val, data, 3), NULL::data)::TEXT from data",
                     None, None,
                 ).unwrap();
             assert_eq!(
@@ -184,7 +184,7 @@ mod tests {
 
             // Test rollup
             let mut result =
-                client.select(
+                client.update(
                     "WITH aggs as (SELECT category, toolkit_experimental.max_n_by(val, data, 5) as agg from data GROUP BY category)
                         SELECT toolkit_experimental.into_values(toolkit_experimental.rollup(agg), NULL::data)::TEXT FROM aggs",
                         None, None,

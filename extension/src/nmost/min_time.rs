@@ -185,9 +185,9 @@ mod tests {
 
     #[pg_test]
     fn min_time_correctness() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
-            client.select(
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
+            client.update(
                 "CREATE TABLE data(val TIMESTAMPTZ, category INT)",
                 None,
                 None,
@@ -196,7 +196,7 @@ mod tests {
             for i in 0..100 {
                 let i = (i * 83) % 100; // mess with the ordering just a little
 
-                client.select(
+                client.update(
                     &format!("INSERT INTO data VALUES ('2020-1-1 UTC'::timestamptz + {} * '1d'::interval, {})", i, i % 4),
                     None,
                     None,
@@ -205,14 +205,14 @@ mod tests {
 
             // Test into_array
             let result =
-                client.select("SELECT toolkit_experimental.into_array(toolkit_experimental.min_n(val, 5))::TEXT from data",
+                client.update("SELECT toolkit_experimental.into_array(toolkit_experimental.min_n(val, 5))::TEXT from data",
                     None, None,
                 ).unwrap().first().get_one::<&str>().unwrap();
             assert_eq!(result.unwrap(), "{\"2020-01-01 00:00:00+00\",\"2020-01-02 00:00:00+00\",\"2020-01-03 00:00:00+00\",\"2020-01-04 00:00:00+00\",\"2020-01-05 00:00:00+00\"}");
 
             // Test into_values
             let mut result =
-                client.select("SELECT toolkit_experimental.into_values(toolkit_experimental.min_n(val, 3))::TEXT from data",
+                client.update("SELECT toolkit_experimental.into_values(toolkit_experimental.min_n(val, 3))::TEXT from data",
                     None, None,
                 ).unwrap();
             assert_eq!(
@@ -231,7 +231,7 @@ mod tests {
 
             // Test rollup
             let result =
-                client.select(
+                client.update(
                     "WITH aggs as (SELECT category, toolkit_experimental.min_n(val, 5) as agg from data GROUP BY category)
                         SELECT toolkit_experimental.into_array(toolkit_experimental.rollup(agg))::TEXT FROM aggs",
                         None, None,

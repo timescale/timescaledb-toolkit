@@ -64,12 +64,12 @@ mod tests {
 
     #[pg_test]
     fn test_pipeline_filter_lambda() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
@@ -79,14 +79,14 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client.update(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
-            client.select(
+            client.update(
                 "CREATE TABLE series(time timestamptz, value double precision)",
                 None,
                 None,
             );
-            client.select(
+            client.update(
                 "INSERT INTO series \
                     VALUES \
                     ('2020-01-04 UTC'::TIMESTAMPTZ, 25.0), \
@@ -99,7 +99,7 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     "SELECT (timevector(time, value))::TEXT FROM series",
                     None,
                     None,
@@ -119,7 +119,7 @@ mod tests {
             ],null_val:[0])"
             );
 
-            let val = client.select(
+            let val = client.update(
                 "SELECT (timevector(time, value) -> filter($$ $time != '2020-01-05't and ($value = 10 or $value = 20) $$))::TEXT FROM series",
                 None,
                 None

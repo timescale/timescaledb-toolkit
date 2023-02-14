@@ -441,23 +441,23 @@ mod tests {
 
     #[pg_test]
     fn test_tdigest_aggregate() {
-        Spi::connect(|client| {
-            client.select("CREATE TABLE test (data DOUBLE PRECISION)", None, None);
-            client.select(
+        Spi::connect(|mut client| {
+            client.update("CREATE TABLE test (data DOUBLE PRECISION)", None, None);
+            client.update(
                 "INSERT INTO test SELECT generate_series(0.01, 100, 0.01)",
                 None,
                 None,
             );
 
             let sanity = client
-                .select("SELECT COUNT(*) FROM test", None, None)
+                .update("SELECT COUNT(*) FROM test", None, None)
                 .unwrap()
                 .first()
                 .get_one::<i32>()
                 .unwrap();
             assert_eq!(10000, sanity.unwrap());
 
-            client.select(
+            client.update(
                 "CREATE VIEW digest AS \
                 SELECT tdigest(100, data) FROM test",
                 None,
@@ -465,7 +465,7 @@ mod tests {
             );
 
             let (min, max, count) = client
-                .select(
+                .update(
                     "SELECT \
                     min_val(tdigest), \
                     max_val(tdigest), \
@@ -484,7 +484,7 @@ mod tests {
             apx_eql(count.unwrap(), 10000.0, 0.000001);
 
             let (min2, max2, count2) = client
-                .select(
+                .update(
                     "SELECT \
                     tdigest->min_val(), \
                     tdigest->max_val(), \
@@ -503,7 +503,7 @@ mod tests {
             assert_eq!(count2, count);
 
             let (mean, mean2) = client
-                .select(
+                .update(
                     "SELECT \
                     mean(tdigest), \
                     tdigest -> mean()
@@ -524,7 +524,7 @@ mod tests {
                 let quantile = value / 100.0;
 
                 let (est_val, est_quant) = client
-                    .select(
+                    .update(
                         &format!(
                             "SELECT
                             approx_percentile({}, tdigest), \
@@ -549,7 +549,7 @@ mod tests {
                 }
 
                 let (est_val2, est_quant2) = client
-                    .select(
+                    .update(
                         &format!(
                             "SELECT
                             tdigest->approx_percentile({}), \
@@ -572,9 +572,9 @@ mod tests {
 
     #[pg_test]
     fn test_tdigest_small_count() {
-        Spi::connect(|client| {
+        Spi::connect(|mut client| {
             let estimate = client
-                .select(
+                .update(
                     "SELECT \
                     approx_percentile(\
                         0.99, \
@@ -607,9 +607,9 @@ mod tests {
 
     #[pg_test]
     fn test_tdigest_io() {
-        Spi::connect(|client| {
+        Spi::connect(|mut client| {
             let output = client
-                .select(
+                .update(
                     "SELECT \
                 tdigest(100, data)::text \
                 FROM generate_series(1, 100) data;",
@@ -626,7 +626,7 @@ mod tests {
             assert_eq!(output, Some(expected.into()));
 
             let estimate = client
-                .select(
+                .update(
                     &format!("SELECT approx_percentile(0.90, '{}'::tdigest)", expected),
                     None,
                     None,
@@ -673,23 +673,23 @@ mod tests {
 
     #[pg_test]
     fn test_tdigest_compound_agg() {
-        Spi::connect(|client| {
-            client.select(
+        Spi::connect(|mut client| {
+            client.update(
                 "CREATE TABLE new_test (device INTEGER, value DOUBLE PRECISION)",
                 None,
                 None,
             );
-            client.select("INSERT INTO new_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
+            client.update("INSERT INTO new_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
 
             let sanity = client
-                .select("SELECT COUNT(*) FROM new_test", None, None)
+                .update("SELECT COUNT(*) FROM new_test", None, None)
                 .unwrap()
                 .first()
                 .get_one::<i32>()
                 .unwrap();
             assert_eq!(Some(1010), sanity);
 
-            client.select(
+            client.update(
                 "CREATE VIEW digests AS \
                 SELECT device, tdigest(20, value) \
                 FROM new_test \
@@ -698,7 +698,7 @@ mod tests {
                 None,
             );
 
-            client.select(
+            client.update(
                 "CREATE VIEW composite AS \
                 SELECT tdigest(tdigest) \
                 FROM digests",
@@ -706,7 +706,7 @@ mod tests {
                 None,
             );
 
-            client.select(
+            client.update(
                 "CREATE VIEW base AS \
                 SELECT tdigest(20, value) \
                 FROM new_test",
@@ -715,7 +715,7 @@ mod tests {
             );
 
             let value = client
-                .select(
+                .update(
                     "SELECT \
                     approx_percentile(0.9, tdigest) \
                     FROM base",
@@ -728,7 +728,7 @@ mod tests {
                 .unwrap();
 
             let test_value = client
-                .select(
+                .update(
                     "SELECT \
                 approx_percentile(0.9, tdigest) \
                     FROM composite",

@@ -172,14 +172,14 @@ mod tests {
 
     #[pg_test]
     fn min_int_correctness() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
-            client.select("CREATE TABLE data(val INT8, category INT)", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
+            client.update("CREATE TABLE data(val INT8, category INT)", None, None);
 
             for i in 0..100 {
                 let i = (i * 83) % 100; // mess with the ordering just a little
 
-                client.select(
+                client.update(
                     &format!("INSERT INTO data VALUES ({}, {})", i, i % 4),
                     None,
                     None,
@@ -188,14 +188,14 @@ mod tests {
 
             // Test into_array
             let result =
-                client.select("SELECT toolkit_experimental.into_array(toolkit_experimental.min_n(val, 5)) from data",
+                client.update("SELECT toolkit_experimental.into_array(toolkit_experimental.min_n(val, 5)) from data",
                     None, None,
                 ).unwrap().first().get_one::<Vec<i64>>().unwrap();
             assert_eq!(result.unwrap(), vec![0, 1, 2, 3, 4]);
 
             // Test into_values
             let mut result =
-                client.select("SELECT toolkit_experimental.into_values(toolkit_experimental.min_n(val, 3))::TEXT from data",
+                client.update("SELECT toolkit_experimental.into_values(toolkit_experimental.min_n(val, 3))::TEXT from data",
                     None, None,
                 ).unwrap();
             assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("0"));
@@ -205,7 +205,7 @@ mod tests {
 
             // Test rollup
             let result =
-                client.select(
+                client.update(
                     "WITH aggs as (SELECT category, toolkit_experimental.min_n(val, 5) as agg from data GROUP BY category)
                         SELECT toolkit_experimental.into_array(toolkit_experimental.rollup(agg)) FROM aggs",
                         None, None,

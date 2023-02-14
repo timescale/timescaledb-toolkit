@@ -435,23 +435,23 @@ mod tests {
 
     #[pg_test]
     fn test_lttb_equivalence() {
-        Spi::connect(|client| {
-            client.select(
+        Spi::connect(|mut client| {
+            client.update(
                 "CREATE TABLE test(time TIMESTAMPTZ, value DOUBLE PRECISION);",
                 None,
                 None,
             );
-            client.select(
+            client.update(
                 "INSERT INTO test
                 SELECT time, value
                 FROM toolkit_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, NULL);", None, None);
 
-            client.select(
+            client.update(
                 "CREATE TABLE results1(time TIMESTAMPTZ, value DOUBLE PRECISION);",
                 None,
                 None,
             );
-            client.select(
+            client.update(
                 "INSERT INTO results1
                 SELECT time, value
                 FROM unnest(
@@ -461,12 +461,12 @@ mod tests {
                 None,
             );
 
-            client.select(
+            client.update(
                 "CREATE TABLE results2(time TIMESTAMPTZ, value DOUBLE PRECISION);",
                 None,
                 None,
             );
-            client.select(
+            client.update(
                 "INSERT INTO results2
                 SELECT time, value
                 FROM unnest(
@@ -479,7 +479,7 @@ mod tests {
             );
 
             let delta = client
-                .select("SELECT count(*)  FROM results1 r1 FULL OUTER JOIN results2 r2 ON r1 = r2 WHERE r1 IS NULL OR r2 IS NULL;" , None, None)
+                .update("SELECT count(*)  FROM results1 r1 FULL OUTER JOIN results2 r2 ON r1 = r2 WHERE r1 IS NULL OR r2 IS NULL;" , None, None)
                 .unwrap().first()
                 .get_one::<i32>().unwrap();
             assert_eq!(delta.unwrap(), 0);
@@ -488,10 +488,10 @@ mod tests {
 
     #[pg_test]
     fn test_lttb_result() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             let mut result = client
-                .select(
+                .update(
                     r#"SELECT unnest(lttb(ts, val, 5))::TEXT
                 FROM (VALUES
                     ('2020-1-1'::timestamptz, 10),
@@ -537,10 +537,10 @@ mod tests {
 
     #[pg_test]
     fn test_gp_lttb() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             let mut result = client
-                .select(
+                .update(
                     r#"SELECT unnest(toolkit_experimental.gp_lttb(ts, val, 7))::TEXT
                 FROM (VALUES
                     ('2020-1-1'::timestamptz, 10),
@@ -594,10 +594,10 @@ mod tests {
 
     #[pg_test]
     fn test_gp_lttb_with_gap() {
-        Spi::connect(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None);
             let mut result = client
-                .select(
+                .update(
                     r#"SELECT unnest(toolkit_experimental.gp_lttb(ts, val, '36hr', 5))::TEXT
                 FROM (VALUES
                     ('2020-1-1'::timestamptz, 10),

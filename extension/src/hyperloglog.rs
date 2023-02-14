@@ -961,9 +961,9 @@ mod tests {
                 )
                 .unwrap()
                 .first()
-                .get_two::<i32, i32>()
+                .get_two::<f64, f64>()
                 .unwrap();
-            assert_eq!(Some(-788581389), count);
+            assert_eq!(Some(0.18384776310850234), count);
             assert_eq!(count, arrow_count);
         });
     }

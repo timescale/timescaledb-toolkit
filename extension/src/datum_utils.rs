@@ -296,7 +296,7 @@ impl<'a> Serialize for DatumStore<'a> {
         let mut writer = TextSerializableDatumWriter::from_oid(self.type_oid.0);
         let count = self.iter().count();
         let mut seq = serializer.serialize_seq(Some(count + 1))?;
-        seq.serialize_element(&self.type_oid.0)?;
+        seq.serialize_element(&self.type_oid.0.as_u32())?;
         for element in self.iter() {
             seq.serialize_element(&writer.make_serializable(element))?;
         }
@@ -322,7 +322,8 @@ impl<'a, 'de> Deserialize<'de> for DatumStore<'a> {
             where
                 A: SeqAccess<'de>,
             {
-                let oid = seq.next_element::<Oid>().unwrap().unwrap(); // TODO: error handling
+                let oid =
+                    unsafe { Oid::from_u32_unchecked(seq.next_element::<u32>().unwrap().unwrap()) }; // TODO: error handling
 
                 // TODO separate human-readable and binary forms
                 let mut reader = DatumFromSerializedTextReader::from_oid(oid);

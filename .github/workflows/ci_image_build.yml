@@ -5,6 +5,7 @@ on:
     paths:
       - 'docker/ci/**'
       - '.github/workflows/ci_image_build.yml'
+      - 'tools/dependencies.sh'
   workflow_dispatch:
     inputs:
       tag-base:

@@ -321,8 +321,7 @@ mod tests {
 
     use super::{PgTypId, ShortTypeId};
     use pgx::{
-        pg_guard,
-        pg_sys::{self, BOOLOID, CHAROID, CIRCLEOID},
+        pg_sys::{BOOLOID, CHAROID, CIRCLEOID},
         pg_test,
     };
 

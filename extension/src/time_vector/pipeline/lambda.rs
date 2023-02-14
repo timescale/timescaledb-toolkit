@@ -449,7 +449,8 @@ mod tests {
                     None,
                     None,
                 )
-                .map(|r| r.by_ordinal(1).unwrap().value::<String>().unwrap())
+                .unwrap()
+                .map(|r| r.get::<String>(1).unwrap().unwrap())
                 .collect()
         };
     }
@@ -466,8 +467,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap()
         };
     }
@@ -484,8 +487,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap()
         };
     }
@@ -498,8 +503,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<f64>()
+                .unwrap()
                 .unwrap()
         };
     }
@@ -512,8 +519,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap()
         };
     }
@@ -554,8 +563,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
             client.select(
@@ -568,8 +579,10 @@ mod tests {
 
             let res = client
                 .select("SELECT f64_lambda($$ 1.0 $$, now(), 0.0)::text", None, None)
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(&*res.unwrap(), "1");
 
             let res = client
@@ -578,8 +591,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(&*res.unwrap(), "2");
 
             let res = client
@@ -588,8 +603,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(&*res.unwrap(), "0");
 
             let res = client
@@ -598,8 +615,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(&*res.unwrap(), "6");
 
             let res = client
@@ -608,8 +627,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(&*res.unwrap(), "5");
 
             let res = client
@@ -618,8 +639,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(&*res.unwrap(), "0");
 
             bool_lambda_eq!(client, "3.0 = 3.0", "true");
@@ -634,8 +657,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(&*res.unwrap(), "2020-11-22 13:00:01+00");
 
             let res = client
@@ -644,8 +669,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(&*res.unwrap(), "1930-01-12 14:20:21+00");
 
             let res = client
@@ -654,8 +681,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(&*res.unwrap(), "2020-11-21 13:00:01+00");
 
             let res = client
@@ -664,8 +693,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(&*res.unwrap(), "2020-11-23 13:00:01+00");
 
             point_lambda_eq!(
@@ -694,8 +725,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -742,8 +775,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -789,8 +824,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -818,8 +855,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -845,8 +884,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 

@@ -1412,6 +1412,7 @@ pub fn as_method(method: &str) -> Option<Method> {
 //                 .first()
 //                 .get_one::<$type>()
 //                 .unwrap()
+//                 .unwrap()
 //         };
 //     }
 
@@ -1471,8 +1472,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert!(test.is_none());
 
             client.select("INSERT INTO test_table VALUES (10, 10);", None, None);
@@ -1483,8 +1486,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             assert_eq!(
                 test,
@@ -1498,8 +1503,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             let expected =
                 "(version:1,n:2,sx:30,sx2:50,sx3:0,sx4:1250,sy:30,sy2:50,sy3:0,sy4:1250,sxy:50)";
@@ -1513,6 +1520,7 @@ mod tests {
                         None,
                         None
                     )
+                    .unwrap()
                     .first()
                     .get_one::<f64>(),
                 client
@@ -1521,6 +1529,7 @@ mod tests {
                         None,
                         None
                     )
+                    .unwrap()
                     .first()
                     .get_one::<f64>()
             );
@@ -1531,6 +1540,7 @@ mod tests {
                         None,
                         None
                     )
+                    .unwrap()
                     .first()
                     .get_one::<f64>(),
                 client
@@ -1539,6 +1549,7 @@ mod tests {
                         None,
                         None
                     )
+                    .unwrap()
                     .first()
                     .get_one::<f64>()
             );
@@ -1549,6 +1560,7 @@ mod tests {
                         None,
                         None
                     )
+                    .unwrap()
                     .first()
                     .get_one::<f64>(),
                 client
@@ -1557,6 +1569,7 @@ mod tests {
                         None,
                         None
                     )
+                    .unwrap()
                     .first()
                     .get_one::<f64>()
             );
@@ -1569,8 +1582,10 @@ mod tests {
                         None,
                         None
                     )
+                    .unwrap()
                     .first()
                     .get_one::<String>()
+                    .unwrap()
                     .unwrap(),
                 expected
             );
@@ -1582,8 +1597,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             assert_eq!(test, "(version:1,n:3,sx:NaN,sx2:NaN,sx3:NaN,sx4:NaN,sy:60,sy2:200,sy3:0,sy4:20000,sxy:NaN)");
 
@@ -1594,8 +1611,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             assert_eq!(test, "(version:1,n:4,sx:NaN,sx2:NaN,sx3:NaN,sx4:NaN,sy:inf,sy2:NaN,sy3:NaN,sy4:NaN,sxy:NaN)");
         });
@@ -1705,7 +1724,7 @@ mod tests {
     #[allow(clippy::float_cmp)]
     fn check_agg_equivalence(
         state: &TestState,
-        client: &SpiClient,
+        client: &pgx::spi::SpiClient,
         pg_cmd: &str,
         tk_cmd: &str,
         allowed_diff: f64,
@@ -1713,14 +1732,18 @@ mod tests {
     ) {
         let (pg_result, pg_moving_agg_result) = client
             .select(pg_cmd, None, None)
+            .unwrap()
             .first()
-            .get_two::<f64, f64>();
+            .get_two::<f64, f64>()
+            .unwrap();
         let pg_result = pg_result.unwrap();
 
         let (tk_result, arrow_result, tk_moving_agg_result) = client
             .select(tk_cmd, None, None)
+            .unwrap()
             .first()
-            .get_three::<f64, f64, f64>();
+            .get_three::<f64, f64, f64>()
+            .unwrap();
         let (tk_result, arrow_result) = (tk_result.unwrap(), arrow_result.unwrap());
         assert_eq!(tk_result, arrow_result, "Arrow didn't match in {}", tk_cmd);
 
@@ -2101,8 +2124,10 @@ mod tests {
                 let query = tk2d_agg("x_intercept");
                 let (result, arrow_result) = client
                     .select(&query, None, None)
+                    .unwrap()
                     .first()
-                    .get_two::<f64, f64>();
+                    .get_two::<f64, f64>()
+                    .unwrap();
                 assert_eq!(result, arrow_result, "Arrow didn't match in {}", query);
             }
 
@@ -2261,18 +2286,22 @@ INSERT INTO prices (
             let mut vals = client.select(
                 "SELECT stddev(data.stats_agg) FROM (SELECT stats_agg(price) OVER (ORDER BY ts RANGE '50 minutes' PRECEDING) FROM prices) data",
                 None, None
-            );
-            assert!(vals.next().unwrap()[1].value::<f64>().unwrap().is_nan());
-            assert!(vals.next().unwrap()[1].value::<f64>().is_some());
-            assert!(vals.next().unwrap()[1].value::<f64>().is_some());
+            ).unwrap();
+            assert!(vals.next().unwrap()[1]
+                .value::<f64>()
+                .unwrap()
+                .unwrap()
+                .is_nan());
+            assert!(vals.next().unwrap()[1].value::<f64>().unwrap().is_some());
+            assert!(vals.next().unwrap()[1].value::<f64>().unwrap().is_some());
 
             let mut vals = client.select(
                 "SELECT slope(data.stats_agg) FROM (SELECT stats_agg((EXTRACT(minutes FROM ts)), price) OVER (ORDER BY ts RANGE '50 minutes' PRECEDING) FROM prices) data;",
                 None, None
-            );
-            assert!(vals.next().unwrap()[1].value::<f64>().is_none()); // trendline is zero initially
-            assert!(vals.next().unwrap()[1].value::<f64>().is_some());
-            assert!(vals.next().unwrap()[1].value::<f64>().is_some());
+            ).unwrap();
+            assert!(vals.next().unwrap()[1].value::<f64>().unwrap().is_none()); // trendline is zero initially
+            assert!(vals.next().unwrap()[1].value::<f64>().unwrap().is_some());
+            assert!(vals.next().unwrap()[1].value::<f64>().unwrap().is_some());
         });
     }
 }

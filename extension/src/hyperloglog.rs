@@ -491,8 +491,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
 
             let expected = "(\
                 version:1,\
@@ -519,8 +521,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<i32, i32>();
+                .get_two::<i32, i32>()
+                .unwrap();
             assert_eq!(count, Some(132));
             assert_eq!(count, arrow_count);
 
@@ -530,8 +534,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i32>()
+                .unwrap();
             assert_eq!(count2, count);
         });
     }
@@ -548,8 +554,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
 
             let expected = "(\
                 version:1,\
@@ -594,8 +602,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<i32, i32>();
+                .get_two::<i32, i32>()
+                .unwrap();
             assert_eq!(count, Some(100));
             assert_eq!(count, arrow_count);
 
@@ -605,8 +615,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i32>()
+                .unwrap();
             assert_eq!(count2, count);
         });
     }
@@ -702,8 +714,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
 
             let expected = "(\
                 version:1,\
@@ -728,8 +742,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i32>()
+                .unwrap();
             assert_eq!(count, Some(96));
 
             let count2 = client
@@ -738,8 +754,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i32>()
+                .unwrap();
             assert_eq!(count2, count);
         });
     }
@@ -757,8 +775,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
 
             let default_collation = ron::to_string(&PgCollationId(
                 crate::serialization::collations::DEFAULT_COLLATION_OID,
@@ -789,8 +809,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i32>()
+                .unwrap();
             assert_eq!(count, Some(111));
 
             let count2 = client
@@ -799,8 +821,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i32>()
+                .unwrap();
             assert_eq!(count2, count);
         });
     }
@@ -818,8 +842,10 @@ mod tests {
                         None,
                         None,
                     )
+                    .unwrap()
                     .first()
                     .get_one::<String>()
+                    .unwrap()
                     .unwrap();
 
                 let text = client
@@ -835,8 +861,10 @@ mod tests {
                         None,
                         None,
                     )
+                    .unwrap()
                     .first()
-                    .get_one::<String>();
+                    .get_one::<String>()
+                    .unwrap();
 
                 assert_eq!(text.unwrap(), expected);
             }
@@ -851,7 +879,12 @@ mod tests {
                         (SELECT hyperloglog(32, v::text) \
                          FROM generate_series(50, 150) v)\
                     ) q";
-                let count = client.select(query, None, None).first().get_one::<i64>();
+                let count = client
+                    .select(query, None, None)
+                    .unwrap()
+                    .first()
+                    .get_one::<i64>()
+                    .unwrap();
 
                 assert_eq!(count, Some(153));
             }
@@ -863,8 +896,10 @@ mod tests {
         Spi::connect(|client| {
             let output = client
                 .select("SELECT hyperloglog(32, null::int)::TEXT", None, None)
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(output, None)
         })
     }
@@ -876,8 +911,10 @@ mod tests {
         Spi::connect(|client| {
             let output = client
                 .select("SELECT hyperloglog(2, 'foo'::text)::TEXT", None, None)
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(output, None)
         })
     }
@@ -887,8 +924,10 @@ mod tests {
         Spi::connect(|client| {
             let output = client
                 .select("SELECT hyperloglog(16, 'foo'::text)::TEXT", None, None)
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert!(output.is_some())
         })
     }
@@ -898,8 +937,10 @@ mod tests {
         Spi::connect(|client| {
             let output = client
                 .select("SELECT hyperloglog(262144, 'foo'::text)::TEXT", None, None)
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert!(output.is_some())
         })
     }
@@ -918,8 +959,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<i32, i32>();
+                .get_two::<i32, i32>()
+                .unwrap();
             assert_eq!(Some(-788581389), count);
             assert_eq!(count, arrow_count);
         });
@@ -947,8 +990,10 @@ mod tests {
 
                 let estimate = client
                     .select(&query, None, None)
+                    .unwrap()
                     .first()
                     .get_one::<i64>()
+                    .unwrap()
                     .unwrap();
 
                 let error = (estimate as f64 / cardinality as f64).abs() - 1.;
@@ -964,8 +1009,10 @@ mod tests {
         Spi::connect(|client| {
             let output = client
                 .select("SELECT hyperloglog(262145, 'foo'::text)::TEXT", None, None)
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(output, None)
         })
     }

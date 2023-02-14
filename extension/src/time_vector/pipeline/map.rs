@@ -263,8 +263,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -291,8 +293,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -309,8 +313,8 @@ mod tests {
                 None,
                 None
             )
-                .first()
-                .get_one::<String>();
+                .unwrap().first()
+                .get_one::<String>().unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -336,8 +340,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -364,8 +370,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -392,8 +400,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(val.unwrap(), expected);
 
             let val = client
@@ -404,8 +414,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(val.unwrap(), expected);
         });
     }
@@ -422,8 +434,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -450,8 +464,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -475,8 +491,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -502,8 +520,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -530,8 +550,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -559,8 +581,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:1,flags:1,internal_padding:(0,0,0),points:[\
@@ -583,8 +607,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
             client.select(
@@ -615,8 +641,8 @@ mod tests {
                     None,
                     None,
                 )
-                .first()
-                .get_one::<String>();
+                .unwrap().first()
+                .get_one::<String>().unwrap();
         });
     }
 
@@ -633,8 +659,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
             client.select(
@@ -664,8 +692,8 @@ mod tests {
                     None,
                     None,
                 )
-                .first()
-                .get_one::<String>();
+                .unwrap().first()
+                .get_one::<String>().unwrap();
         });
     }
 
@@ -681,8 +709,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -709,8 +739,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -744,8 +776,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<String, String>();
+                .get_two::<String, String>()
+                .unwrap();
             let one = "\
             (\
                 version:1,\
@@ -780,8 +814,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<String, String>();
+                .get_two::<String, String>()
+                .unwrap();
             assert_eq!((&*a.unwrap(), &*b.unwrap()), (one, two));
         });
     }

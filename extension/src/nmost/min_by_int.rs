@@ -154,10 +154,19 @@ mod tests {
             let mut result =
                 client.select("SELECT toolkit_experimental.into_values(toolkit_experimental.min_n_by(val, data, 3), NULL::data)::TEXT from data",
                     None, None,
-                );
-            assert_eq!(result.next().unwrap()[1].value(), Some("(0,\"(0,0)\")"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(1,\"(1,1)\")"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(2,\"(2,2)\")"));
+                ).unwrap();
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(0,\"(0,0)\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(1,\"(1,1)\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(2,\"(2,2)\")")
+            );
             assert!(result.next().is_none());
 
             // Test rollup
@@ -166,12 +175,27 @@ mod tests {
                     "WITH aggs as (SELECT category, toolkit_experimental.min_n_by(val, data, 5) as agg from data GROUP BY category)
                         SELECT toolkit_experimental.into_values(toolkit_experimental.rollup(agg), NULL::data)::TEXT FROM aggs",
                         None, None,
-                    );
-            assert_eq!(result.next().unwrap()[1].value(), Some("(0,\"(0,0)\")"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(1,\"(1,1)\")"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(2,\"(2,2)\")"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(3,\"(3,3)\")"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(4,\"(4,0)\")"));
+                    ).unwrap();
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(0,\"(0,0)\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(1,\"(1,1)\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(2,\"(2,2)\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(3,\"(3,3)\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(4,\"(4,0)\")")
+            );
             assert!(result.next().is_none());
         })
     }

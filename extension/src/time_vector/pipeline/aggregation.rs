@@ -732,8 +732,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -754,8 +756,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,n:5,sx:100,sx2:250,sx3:0,sx4:21250)"
@@ -775,8 +779,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -789,11 +795,13 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .nth(1)
                 .unwrap()
-                .by_ordinal(1)
+                .get_datum_by_ordinal(1)
                 .unwrap()
                 .value::<String>()
+                .unwrap()
                 .unwrap();
             assert_eq!(output.trim(), "Output: (\
                 arrow_run_pipeline_then_stats_agg(\
@@ -819,8 +827,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -838,8 +848,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(val.unwrap(), "100");
         });
     }
@@ -856,8 +868,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -870,11 +884,13 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .nth(1)
                 .unwrap()
-                .by_ordinal(1)
+                .get_datum_by_ordinal(1)
                 .unwrap()
                 .value::<String>()
+                .unwrap()
                 .unwrap();
             assert_eq!(output.trim(), "Output: \
                 arrow_pipeline_then_sum(\
@@ -900,8 +916,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -922,8 +940,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(val.unwrap(), "20");
         });
     }
@@ -940,8 +960,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -954,11 +976,13 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .nth(1)
                 .unwrap()
-                .by_ordinal(1)
+                .get_datum_by_ordinal(1)
                 .unwrap()
                 .value::<String>()
+                .unwrap()
                 .unwrap();
             assert_eq!(output.trim(), "Output: \
                 arrow_pipeline_then_average(\
@@ -984,8 +1008,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -1006,8 +1032,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(val.unwrap(), "5");
         });
     }
@@ -1024,8 +1052,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -1038,11 +1068,13 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .nth(1)
                 .unwrap()
-                .by_ordinal(1)
+                .get_datum_by_ordinal(1)
                 .unwrap()
                 .value::<String>()
+                .unwrap()
                 .unwrap();
             assert_eq!(output.trim(), "Output: \
                 arrow_pipeline_then_num_vals(\
@@ -1068,8 +1100,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -1090,8 +1124,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(val.unwrap(), "(version:1,stats:(n:5,sx:3156624000,sx2:74649600000,sx3:0,sx4:1894671345254400000000,sy:215,sy2:2280,sy3:6720.000000000007,sy4:1788960,sxy:12960000),first:(ts:\"2020-01-01 00:00:00+00\",val:15),second:(ts:\"2020-01-02 00:00:00+00\",val:25),penultimate:(ts:\"2020-01-04 00:00:00+00\",val:10),last:(ts:\"2020-01-05 00:00:00+00\",val:30),reset_sum:45,num_resets:2,num_changes:4,bounds:(is_present:0,has_left:0,has_right:0,padding:(0,0,0,0,0),left:None,right:None))");
 
             let val = client.select(
@@ -1099,8 +1135,8 @@ mod tests {
                 None,
                 None
             )
-                .first()
-                .get_one::<f64>().unwrap();
+                .unwrap().first()
+                .get_one::<f64>().unwrap().unwrap();
             assert!((val - 67.5).abs() < f64::EPSILON);
 
             let output = client
@@ -1112,11 +1148,13 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .nth(1)
                 .unwrap()
-                .by_ordinal(1)
+                .get_datum_by_ordinal(1)
                 .unwrap()
                 .value::<String>()
+                .unwrap()
                 .unwrap();
             assert_eq!(output.trim(), "Output: \
                 arrow_run_pipeline_then_counter_agg(\
@@ -1142,8 +1180,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -1169,8 +1209,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(val.unwrap(), "(version:1,log:Sparse(num_compressed:7,element_type:FLOAT8,collation:None,compressed_bytes:28,precision:7,compressed:[136,188,20,7,8,30,244,43,72,69,89,2,72,255,97,27,72,83,248,27,200,110,35,5,8,37,85,12]))");
 
             let val = client
@@ -1182,8 +1224,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<i32>()
+                .unwrap()
                 .unwrap();
             assert_eq!(val, 7);
 
@@ -1196,11 +1240,13 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .nth(1)
                 .unwrap()
-                .by_ordinal(1)
+                .get_datum_by_ordinal(1)
                 .unwrap()
                 .value::<String>()
+                .unwrap()
                 .unwrap();
             assert_eq!(output.trim(), "Output: \
                 arrow_run_pipeline_then_hyperloglog(\
@@ -1226,8 +1272,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -1248,8 +1296,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,\
@@ -1283,8 +1333,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -1297,11 +1349,13 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .nth(1)
                 .unwrap()
-                .by_ordinal(1)
+                .get_datum_by_ordinal(1)
                 .unwrap()
                 .value::<String>()
+                .unwrap()
                 .unwrap();
             assert_eq!(output.trim(), "Output: \
                 arrow_run_pipeline_then_percentile_agg(\

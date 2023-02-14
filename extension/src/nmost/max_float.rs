@@ -208,7 +208,7 @@ mod tests {
             let result =
                 client.select("SELECT toolkit_experimental.into_array(toolkit_experimental.max_n(val, 5)) from data",
                     None, None,
-                ).first().get_one::<Vec<f64>>();
+                ).unwrap().first().get_one::<Vec<f64>>().unwrap();
             assert_eq!(
                 result.unwrap(),
                 vec![99. / 128., 98. / 128., 97. / 128., 96. / 128., 95. / 128.]
@@ -218,10 +218,16 @@ mod tests {
             let mut result =
                 client.select("SELECT toolkit_experimental.into_values(toolkit_experimental.max_n(val, 3))::TEXT from data",
                     None, None,
-                );
-            assert_eq!(result.next().unwrap()[1].value(), Some("0.7734375"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("0.765625"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("0.7578125"));
+                ).unwrap();
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("0.7734375")
+            );
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("0.765625"));
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("0.7578125")
+            );
             assert!(result.next().is_none());
 
             // Test rollup
@@ -230,7 +236,7 @@ mod tests {
                     "WITH aggs as (SELECT category, toolkit_experimental.max_n(val, 5) as agg from data GROUP BY category)
                         SELECT toolkit_experimental.into_array(toolkit_experimental.rollup(agg)) FROM aggs",
                         None, None,
-                    ).first().get_one::<Vec<f64>>();
+                    ).unwrap().first().get_one::<Vec<f64>>().unwrap();
             assert_eq!(
                 result.unwrap(),
                 vec![99. / 128., 98. / 128., 97. / 128., 96. / 128., 95. / 128.]

@@ -699,8 +699,10 @@ mod tests {
         ($client:expr, $stmt:expr, $type:ty) => {
             $client
                 .select($stmt, None, None)
+                .unwrap()
                 .first()
                 .get_one::<$type>()
+                .unwrap()
                 .unwrap()
         };
     }
@@ -960,8 +962,9 @@ mod tests {
                 None,
             );
 
-            let mut deltas = client.select(
-                r#"SELECT
+            let mut deltas = client
+                .select(
+                    r#"SELECT
                 toolkit_experimental.interpolated_delta(
                     agg,
                     bucket,
@@ -974,19 +977,21 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             // Day 1, start at 10, interpolated end of day is 16
-            assert_eq!(deltas.next().unwrap()[1].value(), Some(16. - 10.));
+            assert_eq!(deltas.next().unwrap()[1].value().unwrap(), Some(16. - 10.));
             // Day 2, interpolated start is 16, interpolated end is 27.5
-            assert_eq!(deltas.next().unwrap()[1].value(), Some(27.5 - 16.));
+            assert_eq!(deltas.next().unwrap()[1].value().unwrap(), Some(27.5 - 16.));
             // Day 3, interpolated start is 27.5, end is 35
-            assert_eq!(deltas.next().unwrap()[1].value(), Some(35. - 27.5));
+            assert_eq!(deltas.next().unwrap()[1].value().unwrap(), Some(35. - 27.5));
 
-            let mut rates = client.select(
-                r#"SELECT
+            let mut rates = client
+                .select(
+                    r#"SELECT
                 toolkit_experimental.interpolated_rate(
                     agg,
                     bucket,
@@ -999,23 +1004,24 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             // Day 1, 14 hours (rate is per second)
             assert_eq!(
-                rates.next().unwrap()[1].value(),
+                rates.next().unwrap()[1].value().unwrap(),
                 Some((16. - 10.) / (14. * 60. * 60.))
             );
             // Day 2, 24 hours
             assert_eq!(
-                rates.next().unwrap()[1].value(),
+                rates.next().unwrap()[1].value().unwrap(),
                 Some((27.5 - 16.) / (24. * 60. * 60.))
             );
             // Day 3, 16 hours
             assert_eq!(
-                rates.next().unwrap()[1].value(),
+                rates.next().unwrap()[1].value().unwrap(),
                 Some((35. - 27.5) / (16. * 60. * 60.))
             );
         });
@@ -1041,8 +1047,9 @@ mod tests {
                 None,
             );
 
-            let mut deltas = client.select(
-                r#"SELECT
+            let mut deltas = client
+                .select(
+                    r#"SELECT
                 toolkit_experimental.interpolated_delta(
                     agg,
                     bucket,
@@ -1055,13 +1062,14 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
             // Day 1, start at 10, interpolated end of day is 15 (after reset)
-            assert_eq!(deltas.next().unwrap()[1].value(), Some(15. - 10.));
+            assert_eq!(deltas.next().unwrap()[1].value().unwrap(), Some(15. - 10.));
             // Day 2, start is 15, end is 25
-            assert_eq!(deltas.next().unwrap()[1].value(), Some(25. - 15.));
+            assert_eq!(deltas.next().unwrap()[1].value().unwrap(), Some(25. - 15.));
             assert!(deltas.next().is_none());
         });
     }
@@ -1081,8 +1089,10 @@ mod tests {
             let stmt = "SELECT toolkit_experimental.gauge_agg(ts, val) FROM test";
             assert!(client
                 .select(stmt, None, None)
+                .unwrap()
                 .first()
                 .get_one::<GaugeSummary>()
+                .unwrap()
                 .is_none());
         });
     }

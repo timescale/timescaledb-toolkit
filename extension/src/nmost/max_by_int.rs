@@ -167,10 +167,19 @@ mod tests {
             let mut result =
                 client.select("SELECT toolkit_experimental.into_values(toolkit_experimental.max_n_by(val, data, 3), NULL::data)::TEXT from data",
                     None, None,
-                );
-            assert_eq!(result.next().unwrap()[1].value(), Some("(99,\"(99,3)\")"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(98,\"(98,2)\")"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(97,\"(97,1)\")"));
+                ).unwrap();
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(99,\"(99,3)\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(98,\"(98,2)\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(97,\"(97,1)\")")
+            );
             assert!(result.next().is_none());
 
             // Test rollup
@@ -179,12 +188,27 @@ mod tests {
                     "WITH aggs as (SELECT category, toolkit_experimental.max_n_by(val, data, 5) as agg from data GROUP BY category)
                         SELECT toolkit_experimental.into_values(toolkit_experimental.rollup(agg), NULL::data)::TEXT FROM aggs",
                         None, None,
-                    );
-            assert_eq!(result.next().unwrap()[1].value(), Some("(99,\"(99,3)\")"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(98,\"(98,2)\")"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(97,\"(97,1)\")"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(96,\"(96,0)\")"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(95,\"(95,3)\")"));
+                    ).unwrap();
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(99,\"(99,3)\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(98,\"(98,2)\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(97,\"(97,1)\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(96,\"(96,0)\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(95,\"(95,3)\")")
+            );
             assert!(result.next().is_none());
         })
     }

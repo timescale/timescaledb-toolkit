@@ -1513,8 +1513,10 @@ mod tests {
         ($client:expr, $stmt:expr, $type:ty) => {
             $client
                 .select($stmt, None, None)
+                .unwrap()
                 .first()
                 .get_one::<$type>()
+                .unwrap()
                 .unwrap()
         };
     }
@@ -1874,8 +1876,8 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                         None,
                         None,
                     )
-                    .first()
-                    .get_three::<&str, &str, &str>(),
+                    .unwrap().first()
+                    .get_three::<&str, &str, &str>().unwrap(),
                 (Some("00:01:00"), Some("00:01:00"), Some("00:00:00"))
             );
             assert_eq!(
@@ -1888,8 +1890,8 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                         None,
                         None,
                     )
-                    .first()
-                    .get_three::<&str, &str, &str>(),
+                    .unwrap().first()
+                    .get_three::<&str, &str, &str>().unwrap(),
                 (Some("00:01:00"), Some("00:01:00"), Some("00:00:00"))
             );
         })
@@ -1946,14 +1948,23 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                 ORDER BY bucket"#,
                 None,
                 None,
-            );
+            ).unwrap();
 
             // Day 1, in "three" from "16:00" to end of day
-            assert_eq!(durations.next().unwrap()[1].value(), Some("08:00:00"));
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("08:00:00")
+            );
             // Day 2, in "three" from start of day to "2:00" and "20:00" to end of day
-            assert_eq!(durations.next().unwrap()[1].value(), Some("06:00:00"));
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("06:00:00")
+            );
             // Day 3, in "three" from start of day to end
-            assert_eq!(durations.next().unwrap()[1].value(), Some("18:00:00"));
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("18:00:00")
+            );
             assert!(durations.next().is_none());
 
             let mut durations = client.select(
@@ -1971,14 +1982,23 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                 ORDER BY bucket"#,
                 None,
                 None,
-            );
+            ).unwrap();
 
             // Day 1, in "three" from "16:00" to end of day
-            assert_eq!(durations.next().unwrap()[1].value(), Some("08:00:00"));
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("08:00:00")
+            );
             // Day 2, in "three" from start of day to "2:00" and "20:00" to end of day
-            assert_eq!(durations.next().unwrap()[1].value(), Some("06:00:00"));
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("06:00:00")
+            );
             // Day 3, in "three" from start of day to end
-            assert_eq!(durations.next().unwrap()[1].value(), Some("18:00:00"));
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("18:00:00")
+            );
             assert!(durations.next().is_none());
 
             let mut durations = client.select(
@@ -1996,14 +2016,23 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                 ORDER BY bucket"#,
                 None,
                 None,
-            );
+            ).unwrap();
 
             // Day 1, in "three" from "16:00" to end of day
-            assert_eq!(durations.next().unwrap()[1].value(), Some("08:00:00"));
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("08:00:00")
+            );
             // Day 2, in "three" from start of day to "2:00" and "20:00" to end of day
-            assert_eq!(durations.next().unwrap()[1].value(), Some("06:00:00"));
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("06:00:00")
+            );
             // Day 3, in "three" from start of day to end
-            assert_eq!(durations.next().unwrap()[1].value(), Some("18:00:00"));
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("18:00:00")
+            );
             assert!(durations.next().is_none());
         });
     }
@@ -2054,8 +2083,9 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                 None,
             );
 
-            let mut durations = client.select(
-                r#"SELECT 
+            let mut durations = client
+                .select(
+                    r#"SELECT 
                 toolkit_experimental.interpolated_duration_in(
                     agg,
                     'running',
@@ -2067,17 +2097,31 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
+                    None,
+                    None,
+                )
+                .unwrap();
+
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("13:30:00")
+            );
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("16:00:00")
+            );
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("04:30:00")
+            );
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("12:00:00")
             );
 
-            assert_eq!(durations.next().unwrap()[1].value(), Some("13:30:00"));
-            assert_eq!(durations.next().unwrap()[1].value(), Some("16:00:00"));
-            assert_eq!(durations.next().unwrap()[1].value(), Some("04:30:00"));
-            assert_eq!(durations.next().unwrap()[1].value(), Some("12:00:00"));
-
-            let mut durations = client.select(
-                r#"SELECT 
+            let mut durations = client
+                .select(
+                    r#"SELECT 
                 toolkit_experimental.interpolated_duration_in(
                     agg,
                     'running',
@@ -2089,14 +2133,27 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            assert_eq!(durations.next().unwrap()[1].value(), Some("13:30:00"));
-            assert_eq!(durations.next().unwrap()[1].value(), Some("16:00:00"));
-            assert_eq!(durations.next().unwrap()[1].value(), Some("04:30:00"));
-            assert_eq!(durations.next().unwrap()[1].value(), Some("12:00:00"));
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("13:30:00")
+            );
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("16:00:00")
+            );
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("04:30:00")
+            );
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("12:00:00")
+            );
         })
     }
 }

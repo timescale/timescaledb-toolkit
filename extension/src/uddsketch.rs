@@ -716,8 +716,10 @@ mod tests {
 
             let sanity = client
                 .select("SELECT COUNT(*) FROM test", None, None)
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i32>()
+                .unwrap();
             assert_eq!(Some(10000), sanity);
 
             client.select(
@@ -730,8 +732,10 @@ mod tests {
 
             let sanity = client
                 .select("SELECT COUNT(*) FROM sketch", None, None)
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i32>()
+                .unwrap();
             assert!(sanity.unwrap_or(0) > 0);
 
             let (mean, count) = client
@@ -743,8 +747,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<f64, f64>();
+                .get_two::<f64, f64>()
+                .unwrap();
 
             apx_eql(mean.unwrap(), 50.005, 0.0001);
             apx_eql(count.unwrap(), 10000.0, 0.000001);
@@ -758,8 +764,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<f64, f64>();
+                .get_two::<f64, f64>()
+                .unwrap();
             assert_eq!(mean, mean2);
             assert_eq!(count, count2);
 
@@ -772,8 +780,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<f64, f64>();
+                .get_two::<f64, f64>()
+                .unwrap();
 
             apx_eql(error.unwrap(), 0.05, 0.0001);
             assert_eq!(error, error2);
@@ -794,8 +804,10 @@ mod tests {
                         None,
                         None,
                     )
+                    .unwrap()
                     .first()
-                    .get_two::<f64, f64>();
+                    .get_two::<f64, f64>()
+                    .unwrap();
 
                 if i == 0 {
                     pct_eql(est_val.unwrap(), 0.01, 1.0);
@@ -817,8 +829,10 @@ mod tests {
                         None,
                         None,
                     )
+                    .unwrap()
                     .first()
-                    .get_two::<f64, f64>();
+                    .get_two::<f64, f64>()
+                    .unwrap();
                 assert_eq!(est_val, est_val2);
                 assert_eq!(est_quant, est_quant2);
             }
@@ -837,8 +851,10 @@ mod tests {
 
             let sanity = client
                 .select("SELECT COUNT(*) FROM new_test", None, None)
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i32>()
+                .unwrap();
             assert_eq!(Some(1010), sanity);
 
             client.select(
@@ -875,8 +891,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<f64, f64>();
+                .get_two::<f64, f64>()
+                .unwrap();
 
             let (test_value, test_error) = client
                 .select(
@@ -887,8 +905,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<f64, f64>();
+                .get_two::<f64, f64>()
+                .unwrap();
 
             apx_eql(test_value.unwrap(), value.unwrap(), 0.0001);
             apx_eql(test_error.unwrap(), error.unwrap(), 0.000001);
@@ -908,8 +928,10 @@ mod tests {
 
             let sanity = client
                 .select("SELECT COUNT(*) FROM pa_test", None, None)
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i32>()
+                .unwrap();
             assert_eq!(Some(1010), sanity);
 
             // use the default values for percentile_agg
@@ -938,8 +960,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<f64, f64>();
+                .get_two::<f64, f64>()
+                .unwrap();
 
             let (test_value, test_error) = client
                 .select(
@@ -950,8 +974,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<f64, f64>();
+                .get_two::<f64, f64>()
+                .unwrap();
 
             apx_eql(test_value.unwrap(), value.unwrap(), 0.0001);
             apx_eql(test_error.unwrap(), error.unwrap(), 0.000001);
@@ -970,8 +996,10 @@ mod tests {
 
             let sanity = client
                 .select("SELECT COUNT(*) FROM paa_test", None, None)
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i32>()
+                .unwrap();
             assert_eq!(Some(1010), sanity);
 
             client.select(
@@ -999,8 +1027,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<Vec<f64>, f64>();
+                .get_two::<Vec<f64>, f64>()
+                .unwrap();
 
             let (test_value, test_error) = client
                 .select(
@@ -1011,8 +1041,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<Vec<f64>, f64>();
+                .get_two::<Vec<f64>, f64>()
+                .unwrap();
             assert!(
                 test_value
                     .as_ref()
@@ -1045,8 +1077,10 @@ mod tests {
 
             let sanity = client
                 .select("SELECT COUNT(*) FROM paa_test", None, None)
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i32>()
+                .unwrap();
             assert_eq!(Some(1010), sanity);
 
             client.select(
@@ -1074,8 +1108,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<Vec<f64>, f64>();
+                .get_two::<Vec<f64>, f64>()
+                .unwrap();
 
             let (test_value_arrow, test_error_arrow) = client
                 .select(
@@ -1085,8 +1121,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<Vec<f64>, f64>();
+                .get_two::<Vec<f64>, f64>()
+                .unwrap();
 
             assert!(
                 test_value_arrow
@@ -1120,8 +1158,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
 
             let expected = "(\
                 version:1,\
@@ -1152,8 +1192,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
 
             for cmd in [
                 "mean(",
@@ -1170,13 +1212,17 @@ mod tests {
 
                 let expected = client
                     .select(&sql1, None, None)
+                    .unwrap()
                     .first()
                     .get_one::<f64>()
+                    .unwrap()
                     .unwrap();
                 let test = client
                     .select(&sql2, None, None)
+                    .unwrap()
                     .first()
                     .get_one::<f64>()
+                    .unwrap()
                     .unwrap();
 
                 assert!((expected - test).abs() < f64::EPSILON);
@@ -1218,8 +1264,10 @@ mod tests {
         Spi::connect(|client| {
             let output = client
                 .select("SELECT uddsketch(20, 0.01, NULL)::TEXT", None, None)
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(output, None)
         })
     }

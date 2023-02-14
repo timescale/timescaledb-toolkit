@@ -28,8 +28,14 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .filter_map(|row| {
-                    let val: String = row.by_ordinal(1).unwrap().value().unwrap();
+                    let val: String = row
+                        .get_datum_by_ordinal(1)
+                        .unwrap()
+                        .value()
+                        .unwrap()
+                        .unwrap();
 
                     if let Some(schema) = val.strip_prefix("schema ") {
                         // the only schemas we should define are

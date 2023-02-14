@@ -171,14 +171,17 @@ mod tests {
             let mut result =
                 client.select("SELECT toolkit_experimental.into_values(toolkit_experimental.min_n_by(val, data, 3), NULL::data)::TEXT from data",
                     None, None,
-                );
-            assert_eq!(result.next().unwrap()[1].value(), Some("(0,\"(0,0)\")"));
+                ).unwrap();
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(0,\"(0,0)\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(0.0078125,\"(0.0078125,1)\")")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(0.015625,\"(0.015625,2)\")")
             );
             assert!(result.next().is_none());
@@ -189,22 +192,25 @@ mod tests {
                     "WITH aggs as (SELECT category, toolkit_experimental.min_n_by(val, data, 5) as agg from data GROUP BY category)
                         SELECT toolkit_experimental.into_values(toolkit_experimental.rollup(agg), NULL::data)::TEXT FROM aggs",
                         None, None,
-                    );
-            assert_eq!(result.next().unwrap()[1].value(), Some("(0,\"(0,0)\")"));
+                    ).unwrap();
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(0,\"(0,0)\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(0.0078125,\"(0.0078125,1)\")")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(0.015625,\"(0.015625,2)\")")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(0.0234375,\"(0.0234375,3)\")")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(0.03125,\"(0.03125,0)\")")
             );
             assert!(result.next().is_none());

@@ -546,30 +546,32 @@ mod tests {
                 None,
             );
 
-            let mut unnest = client.select(
-                "SELECT unnest(timevector(time, value))::TEXT FROM data",
-                None,
-                None,
-            );
+            let mut unnest = client
+                .select(
+                    "SELECT unnest(timevector(time, value))::TEXT FROM data",
+                    None,
+                    None,
+                )
+                .unwrap();
 
             assert_eq!(
-                unnest.next().unwrap()[1].value(),
+                unnest.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-01 00:00:00+00\",30)")
             );
             assert_eq!(
-                unnest.next().unwrap()[1].value(),
+                unnest.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-02 00:00:00+00\",45)")
             );
             assert_eq!(
-                unnest.next().unwrap()[1].value(),
+                unnest.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-03 00:00:00+00\",NaN)")
             );
             assert_eq!(
-                unnest.next().unwrap()[1].value(),
+                unnest.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-04 00:00:00+00\",55.5)")
             );
             assert_eq!(
-                unnest.next().unwrap()[1].value(),
+                unnest.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-05 00:00:00+00\",10)")
             );
             assert!(unnest.next().is_none());
@@ -602,8 +604,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
 
             assert_eq!(test_plotly_template,
@@ -613,8 +617,8 @@ mod tests {
                 "SELECT toolkit_experimental.to_text(timevector(time, value),'{{TIMEVALS}}') FROM data",
                 None,
                 None,
-            ).first()
-                .get_one::<String>()
+            ).unwrap().first()
+                .get_one::<String>().unwrap()
                 .unwrap();
 
             assert_eq!(
@@ -627,8 +631,8 @@ mod tests {
                     None,
                     None,
                 )
-                .first()
-                .get_one::<String>()
+                .unwrap().first()
+                .get_one::<String>().unwrap()
                 .unwrap();
             assert_eq!(
                 test_user_supplied_template,"{\"times\": [2020-01-01 00:00:00+00, 2020-01-02 00:00:00+00, 2020-01-03 00:00:00+00, 2020-01-04 00:00:00+00, 2020-01-05 00:00:00+00], \"vals\": [30, 45, null, 55.5, 10]}"
@@ -637,8 +641,8 @@ mod tests {
                 "SELECT toolkit_experimental.to_text(timevector(time, value),'{\"times\": {{ TIMES | json_encode() | safe  }}, \"vals\": {{ VALUES | json_encode() | safe }}}') FROM data",
                 None,
                 None,
-            ).first()
-                .get_one::<String>()
+            ).unwrap().first()
+                .get_one::<String>().unwrap()
                 .unwrap();
 
             assert_eq!(
@@ -676,8 +680,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
 
             assert_eq!(test_plotly_template,"{\"times\": [\n  \"2020-01-01 00:00:00+00\",\n  \"2020-01-02 00:00:00+00\",\n  \"2020-01-03 00:00:00+00\",\n  \"2020-01-04 00:00:00+00\",\n  \"2020-01-05 00:00:00+00\"\n], \"vals\": [\n  \"30\",\n  \"45\",\n  \"null\",\n  \"55.5\",\n  \"10\"\n]}"
@@ -707,37 +713,41 @@ mod tests {
 
             let tvec = client
                 .select("SELECT timevector(time,value)::TEXT FROM data", None, None)
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             let expected = r#"(version:1,num_points:5,flags:3,internal_padding:(0,0,0),points:[(ts:"2020-01-01 00:00:00+00",val:30),(ts:"2020-01-02 00:00:00+00",val:45),(ts:"2020-01-03 00:00:00+00",val:NaN),(ts:"2020-01-04 00:00:00+00",val:55.5),(ts:"2020-01-05 00:00:00+00",val:10)],null_val:[4])"#;
 
             assert_eq!(tvec, expected);
 
-            let mut unnest = client.select(
-                &format!("SELECT unnest('{}'::timevector_tstz_f64)::TEXT", expected),
-                None,
-                None,
-            );
+            let mut unnest = client
+                .select(
+                    &format!("SELECT unnest('{}'::timevector_tstz_f64)::TEXT", expected),
+                    None,
+                    None,
+                )
+                .unwrap();
 
             assert_eq!(
-                unnest.next().unwrap()[1].value(),
+                unnest.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-01 00:00:00+00\",30)")
             );
             assert_eq!(
-                unnest.next().unwrap()[1].value(),
+                unnest.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-02 00:00:00+00\",45)")
             );
             assert_eq!(
-                unnest.next().unwrap()[1].value(),
+                unnest.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-03 00:00:00+00\",NaN)")
             );
             assert_eq!(
-                unnest.next().unwrap()[1].value(),
+                unnest.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-04 00:00:00+00\",55.5)")
             );
             assert_eq!(
-                unnest.next().unwrap()[1].value(),
+                unnest.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-05 00:00:00+00\",10)")
             );
             assert!(unnest.next().is_none());
@@ -764,16 +774,20 @@ mod tests {
                 None,
             );
 
-            let mut func = client.select(
-                "SELECT unnest(timevector(time, value))::TEXT FROM data",
-                None,
-                None,
-            );
-            let mut op = client.select(
-                "SELECT (timevector(time, value) -> unnest())::TEXT FROM data",
-                None,
-                None,
-            );
+            let mut func = client
+                .select(
+                    "SELECT unnest(timevector(time, value))::TEXT FROM data",
+                    None,
+                    None,
+                )
+                .unwrap();
+            let mut op = client
+                .select(
+                    "SELECT (timevector(time, value) -> unnest())::TEXT FROM data",
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let mut test = true;
             while test {
@@ -810,48 +824,50 @@ mod tests {
                 None,
             );
 
-            let mut unnest = client.select(
-                "SELECT unnest(rollup(tvec))::TEXT
+            let mut unnest = client
+                .select(
+                    "SELECT unnest(rollup(tvec))::TEXT
                         FROM (
                             SELECT timevector(time, value) AS tvec
                             FROM data 
                             GROUP BY bucket 
                             ORDER BY bucket
                         ) s",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             assert_eq!(
-                unnest.next().unwrap()[1].value(),
+                unnest.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-01 00:00:00+00\",30)")
             );
             assert_eq!(
-                unnest.next().unwrap()[1].value(),
+                unnest.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-02 00:00:00+00\",45)")
             );
             assert_eq!(
-                unnest.next().unwrap()[1].value(),
+                unnest.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-03 00:00:00+00\",NaN)")
             );
             assert_eq!(
-                unnest.next().unwrap()[1].value(),
+                unnest.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-04 00:00:00+00\",55.5)")
             );
             assert_eq!(
-                unnest.next().unwrap()[1].value(),
+                unnest.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-05 00:00:00+00\",10)")
             );
             assert_eq!(
-                unnest.next().unwrap()[1].value(),
+                unnest.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-06 00:00:00+00\",13)")
             );
             assert_eq!(
-                unnest.next().unwrap()[1].value(),
+                unnest.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-07 00:00:00+00\",71)")
             );
             assert_eq!(
-                unnest.next().unwrap()[1].value(),
+                unnest.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-08 00:00:00+00\",0)")
             );
             assert!(unnest.next().is_none());
@@ -885,8 +901,10 @@ mod tests {
 
             let tvec = client
                 .select("SELECT rollup(vector)::TEXT FROM tvecs", None, None)
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             let expected = r#"(version:1,num_points:3,flags:1,internal_padding:(0,0,0),points:[(ts:"2020-01-01 00:00:00+00",val:20),(ts:"2020-01-02 00:00:00+00",val:30),(ts:"2020-01-03 00:00:00+00",val:15)],null_val:[0])"#;
             assert_eq!(tvec, expected);
@@ -898,8 +916,10 @@ mod tests {
             );
             let tvec = client
                 .select("SELECT rollup(vector)::TEXT FROM tvecs", None, None)
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             let expected = r#"(version:1,num_points:4,flags:2,internal_padding:(0,0,0),points:[(ts:"2020-01-01 00:00:00+00",val:20),(ts:"2020-01-02 00:00:00+00",val:30),(ts:"2020-01-03 00:00:00+00",val:15),(ts:"2019-01-04 00:00:00+00",val:NaN)],null_val:[8])"#;
             assert_eq!(tvec, expected);
@@ -911,8 +931,9 @@ mod tests {
         Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
 
-            let mut result = client.select(
-                "WITH s as (
+            let mut result = client
+                .select(
+                    "WITH s as (
                     SELECT timevector(time, value) AS v1 FROM
                     (VALUES 
                         ('2022-10-1 1:00 UTC'::TIMESTAMPTZ, 20.0),
@@ -928,20 +949,21 @@ mod tests {
                     ) as v(time, value))
                 SELECT (v1 -> toolkit_experimental.asof(v2))::TEXT
                 FROM s, t;",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(,15,\"2022-10-01 00:30:00+00\")")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(30,45,\"2022-10-01 02:00:00+00\")")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(40,60,\"2022-10-01 03:30:00+00\")")
             );
             assert!(result.next().is_none());

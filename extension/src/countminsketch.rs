@@ -145,8 +145,10 @@ mod tests {
 
             let sanity = client
                 .select("SELECT COUNT(*) FROM test", None, None)
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i32>()
+                .unwrap();
             assert_eq!(Some(150), sanity);
 
             client.select(
@@ -159,8 +161,10 @@ mod tests {
 
             let sanity = client
                 .select("SELECT COUNT(*) FROM sketch", None, None)
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i32>()
+                .unwrap();
             assert!(sanity.unwrap_or(0) > 0);
 
             let (col1, col2, col3) = client
@@ -173,8 +177,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_three::<i32, i32, i32>();
+                .get_three::<i32, i32, i32>()
+                .unwrap();
 
             // 0.01 => error param to the sketch, 150 => number of items added to the sketch
             let err_margin = 0.01 * 150.0;
@@ -203,8 +209,8 @@ mod tests {
                     None,
                     None,
                 )
-                .first()
-                .get_one::<i32>();
+                .unwrap().first()
+                .get_one::<i32>().unwrap();
 
             let expected = 2;
             // 0.01 => error param to the sketch, 200 => number of items added to the sketch
@@ -231,8 +237,8 @@ mod tests {
                     None,
                     None,
                 )
-                .first()
-                .get_one::<String>();
+                .unwrap().first()
+                .get_one::<String>().unwrap();
 
             let expected = "(\
                 version:1,\
@@ -260,8 +266,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(output, None)
         })
     }
@@ -275,8 +283,8 @@ mod tests {
                     None,
                     None,
                 )
-                .first()
-                .get_one::<String>();
+                .unwrap().first()
+                .get_one::<String>().unwrap();
             assert_eq!(output, None)
         })
     }

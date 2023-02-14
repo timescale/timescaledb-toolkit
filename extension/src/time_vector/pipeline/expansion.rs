@@ -184,8 +184,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -207,8 +209,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(val.unwrap(), "{\"(\\\"2020-01-04 00:00:00+00\\\",25)\",\"(\\\"2020-01-01 00:00:00+00\\\",10)\",\"(\\\"2020-01-03 00:00:00+00\\\",20)\",\"(\\\"2020-01-02 00:00:00+00\\\",15)\",\"(\\\"2020-01-05 00:00:00+00\\\",30)\"}");
         });
     }
@@ -225,8 +229,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -247,8 +253,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -274,8 +282,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -291,11 +301,13 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .nth(1)
                 .unwrap()
-                .by_ordinal(1)
+                .get_datum_by_ordinal(1)
                 .unwrap()
                 .value::<String>()
+                .unwrap()
                 .unwrap();
             assert_eq!(output.trim(), "Output: \
                 arrow_run_pipeline(\

@@ -886,8 +886,10 @@ mod tests {
         ($client:expr, $stmt:expr, $type:ty) => {
             $client
                 .select($stmt, None, None)
+                .unwrap()
                 .first()
                 .get_one::<$type>()
+                .unwrap()
                 .unwrap()
         };
     }
@@ -896,8 +898,10 @@ mod tests {
         ($client:expr, $stmt:expr, $type:ty) => {{
             let (a, b) = $client
                 .select($stmt, None, None)
+                .unwrap()
                 .first()
-                .get_two::<$type, $type>();
+                .get_two::<$type, $type>()
+                .unwrap();
             assert_eq!(a, b);
             a.unwrap()
         }};
@@ -1322,8 +1326,9 @@ mod tests {
                 None,
             );
 
-            let mut deltas = client.select(
-                r#"SELECT
+            let mut deltas = client
+                .select(
+                    r#"SELECT
                 toolkit_experimental.interpolated_delta(
                     agg,
                     bucket,
@@ -1336,24 +1341,32 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             // Day 1, start at 10, interpolated end of day is 10 (after reset), reset at 40 and 20
             assert_eq!(
-                deltas.next().unwrap()[1].value(),
+                deltas.next().unwrap()[1].value().unwrap(),
                 Some(10. + 40. + 20. - 10.)
             );
             // Day 2, interpolated start is 10, interpolated end is 27.5, reset at 50
-            assert_eq!(deltas.next().unwrap()[1].value(), Some(27.5 + 50. - 10.));
+            assert_eq!(
+                deltas.next().unwrap()[1].value().unwrap(),
+                Some(27.5 + 50. - 10.)
+            );
             // Day 3, interpolated start is 27.5, end is 35, reset at 30
-            assert_eq!(deltas.next().unwrap()[1].value(), Some(35. + 30. - 27.5));
+            assert_eq!(
+                deltas.next().unwrap()[1].value().unwrap(),
+                Some(35. + 30. - 27.5)
+            );
             assert!(deltas.next().is_none());
 
             // test that the non experimental version also returns the same result
-            let mut deltas = client.select(
-                r#"SELECT
+            let mut deltas = client
+                .select(
+                    r#"SELECT
                 interpolated_delta(
                     agg,
                     bucket,
@@ -1366,23 +1379,31 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             // Day 1, start at 10, interpolated end of day is 10 (after reset), reset at 40 and 20
             assert_eq!(
-                deltas.next().unwrap()[1].value(),
+                deltas.next().unwrap()[1].value().unwrap(),
                 Some(10. + 40. + 20. - 10.)
             );
             // Day 2, interpolated start is 10, interpolated end is 27.5, reset at 50
-            assert_eq!(deltas.next().unwrap()[1].value(), Some(27.5 + 50. - 10.));
+            assert_eq!(
+                deltas.next().unwrap()[1].value().unwrap(),
+                Some(27.5 + 50. - 10.)
+            );
             // Day 3, interpolated start is 27.5, end is 35, reset at 30
-            assert_eq!(deltas.next().unwrap()[1].value(), Some(35. + 30. - 27.5));
+            assert_eq!(
+                deltas.next().unwrap()[1].value().unwrap(),
+                Some(35. + 30. - 27.5)
+            );
             assert!(deltas.next().is_none());
 
-            let mut rates = client.select(
-                r#"SELECT
+            let mut rates = client
+                .select(
+                    r#"SELECT
                 toolkit_experimental.interpolated_rate(
                     agg,
                     bucket,
@@ -1395,30 +1416,32 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             // Day 1, 14 hours (rate is per second)
             assert_eq!(
-                rates.next().unwrap()[1].value(),
+                rates.next().unwrap()[1].value().unwrap(),
                 Some((10. + 40. + 20. - 10.) / (14. * 60. * 60.))
             );
             // Day 2, 24 hours
             assert_eq!(
-                rates.next().unwrap()[1].value(),
+                rates.next().unwrap()[1].value().unwrap(),
                 Some((27.5 + 50. - 10.) / (24. * 60. * 60.))
             );
             // Day 3, 16 hours
             assert_eq!(
-                rates.next().unwrap()[1].value(),
+                rates.next().unwrap()[1].value().unwrap(),
                 Some((35. + 30. - 27.5) / (16. * 60. * 60.))
             );
 
             // test that the non experimental version also returns the same result
             assert!(rates.next().is_none());
-            let mut rates = client.select(
-                r#"SELECT
+            let mut rates = client
+                .select(
+                    r#"SELECT
                 interpolated_rate(
                     agg,
                     bucket,
@@ -1431,23 +1454,24 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             // Day 1, 14 hours (rate is per second)
             assert_eq!(
-                rates.next().unwrap()[1].value(),
+                rates.next().unwrap()[1].value().unwrap(),
                 Some((10. + 40. + 20. - 10.) / (14. * 60. * 60.))
             );
             // Day 2, 24 hours
             assert_eq!(
-                rates.next().unwrap()[1].value(),
+                rates.next().unwrap()[1].value().unwrap(),
                 Some((27.5 + 50. - 10.) / (24. * 60. * 60.))
             );
             // Day 3, 16 hours
             assert_eq!(
-                rates.next().unwrap()[1].value(),
+                rates.next().unwrap()[1].value().unwrap(),
                 Some((35. + 30. - 27.5) / (16. * 60. * 60.))
             );
             assert!(rates.next().is_none());
@@ -1462,20 +1486,23 @@ mod tests {
                 None,
                 None,
             );
-            client.select(
-                r#"INSERT INTO test VALUES
+            client
+                .select(
+                    r#"INSERT INTO test VALUES
                 ('2020-1-1 10:00'::timestamptz, 10.0, '2020-1-1'::timestamptz),
                 ('2020-1-1 12:00'::timestamptz, 40.0, '2020-1-1'::timestamptz),
                 ('2020-1-1 16:00'::timestamptz, 20.0, '2020-1-1'::timestamptz),
                 ('2020-1-2 0:00'::timestamptz, 15.0, '2020-1-2'::timestamptz),
                 ('2020-1-2 12:00'::timestamptz, 50.0, '2020-1-2'::timestamptz),
                 ('2020-1-2 20:00'::timestamptz, 25.0, '2020-1-2'::timestamptz)"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            let mut deltas = client.select(
-                r#"SELECT
+            let mut deltas = client
+                .select(
+                    r#"SELECT
                 toolkit_experimental.interpolated_delta(
                     agg,
                     bucket,
@@ -1488,16 +1515,20 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
             // Day 1, start at 10, interpolated end of day is 15 (after reset), reset at 40 and 20
             assert_eq!(
-                deltas.next().unwrap()[1].value(),
+                deltas.next().unwrap()[1].value().unwrap(),
                 Some(15. + 40. + 20. - 10.)
             );
             // Day 2, start is 15, end is 25, reset at 50
-            assert_eq!(deltas.next().unwrap()[1].value(), Some(25. + 50. - 15.));
+            assert_eq!(
+                deltas.next().unwrap()[1].value().unwrap(),
+                Some(25. + 50. - 15.)
+            );
             assert!(deltas.next().is_none());
         });
     }
@@ -1729,7 +1760,7 @@ mod tests {
 
 #[cfg(any(test, feature = "pg_test"))]
 pub(crate) mod testing {
-    pub fn decrease(client: &pgx::SpiClient) {
+    pub fn decrease(client: &pgx::spi::SpiClient) {
         client.select(
             "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
             None,
@@ -1745,7 +1776,7 @@ pub(crate) mod testing {
         );
     }
 
-    pub fn increase(client: &pgx::SpiClient) {
+    pub fn increase(client: &pgx::spi::SpiClient) {
         client.select(
             "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
             None,
@@ -1761,7 +1792,7 @@ pub(crate) mod testing {
         );
     }
 
-    pub fn decrease_then_increase_to_same_value(client: &pgx::SpiClient) {
+    pub fn decrease_then_increase_to_same_value(client: &pgx::spi::SpiClient) {
         client.select(
             "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
             None,
@@ -1778,7 +1809,7 @@ pub(crate) mod testing {
         );
     }
 
-    pub fn increase_then_decrease_to_same_value(client: &pgx::SpiClient) {
+    pub fn increase_then_decrease_to_same_value(client: &pgx::spi::SpiClient) {
         client.select(
             "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
             None,
@@ -1795,7 +1826,7 @@ pub(crate) mod testing {
         );
     }
 
-    pub fn make_test_table(client: &pgx::SpiClient, name: &str) {
+    pub fn make_test_table(client: &pgx::spi::SpiClient, name: &str) {
         client.select(
             &format!(
                 "CREATE TABLE {}(ts timestamptz, val DOUBLE PRECISION)",

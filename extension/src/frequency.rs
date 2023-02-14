@@ -1694,8 +1694,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -1711,14 +1713,14 @@ mod tests {
             }
 
             let test = client.select("SELECT freq_agg(0.015, s.data)::TEXT FROM (SELECT data FROM test ORDER BY time) s", None, None)
-                .first()
-                .get_one::<String>().unwrap();
+                .unwrap().first()
+                .get_one::<String>().unwrap().unwrap();
             let expected = "(version:1,num_values:67,topn:0,values_seen:5050,freq_param:0.015,counts:[100,99,98,97,96,95,94,93,92,91,90,89,88,87,86,85,84,83,82,81,80,79,78,77,76,75,74,73,72,71,70,69,68,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67],overcounts:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66],datums:[99,98,97,96,95,94,93,92,91,90,89,88,87,86,85,84,83,82,81,80,79,78,77,76,75,74,73,72,71,70,69,68,67,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66])";
             assert_eq!(test, expected);
 
             let test = client.select("SELECT raw_freq_agg(0.015, s.data)::TEXT FROM (SELECT data FROM test ORDER BY time) s", None, None)
-                .first()
-                .get_one::<String>().unwrap();
+                .unwrap().first()
+                .get_one::<String>().unwrap().unwrap();
             let expected = "(version:1,type_oid:23,num_values:67,values_seen:5050,freq_param:0.015,topn:0,counts:[100,99,98,97,96,95,94,93,92,91,90,89,88,87,86,85,84,83,82,81,80,79,78,77,76,75,74,73,72,71,70,69,68,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67],overcounts:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66],datums:[23,\"99\",\"98\",\"97\",\"96\",\"95\",\"94\",\"93\",\"92\",\"91\",\"90\",\"89\",\"88\",\"87\",\"86\",\"85\",\"84\",\"83\",\"82\",\"81\",\"80\",\"79\",\"78\",\"77\",\"76\",\"75\",\"74\",\"73\",\"72\",\"71\",\"70\",\"69\",\"68\",\"67\",\"33\",\"34\",\"35\",\"36\",\"37\",\"38\",\"39\",\"40\",\"41\",\"42\",\"43\",\"44\",\"45\",\"46\",\"47\",\"48\",\"49\",\"50\",\"51\",\"52\",\"53\",\"54\",\"55\",\"56\",\"57\",\"58\",\"59\",\"60\",\"61\",\"62\",\"63\",\"64\",\"65\",\"66\"])";
             assert_eq!(test, expected);
         });
@@ -1734,8 +1736,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -1751,8 +1755,8 @@ mod tests {
             }
 
             let test = client.select("SELECT topn_agg(10, s.data)::TEXT FROM (SELECT data FROM test ORDER BY time) s", None, None)
-                .first()
-                .get_one::<String>().unwrap();
+                .unwrap().first()
+                .get_one::<String>().unwrap().unwrap();
             let expected = "(version:1,num_values:110,topn:10,values_seen:20100,freq_param:1.1,counts:[200,199,198,197,196,195,194,193,192,191,190,189,188,187,186,185,184,183,182,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181],overcounts:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180],datums:[199,198,197,196,195,194,193,192,191,190,189,188,187,186,185,184,183,182,181,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180])";
             assert_eq!(test, expected);
         });
@@ -1972,7 +1976,7 @@ mod tests {
     }
 
     // Setup environment and create table 'test' with some aggregates in table 'aggs'
-    fn setup_with_test_table(client: &SpiClient) {
+    fn setup_with_test_table(client: &pgx::spi::SpiClient) {
         // using the search path trick for this test to make it easier to stabilize later on
         let sp = client
             .select(
@@ -1980,8 +1984,10 @@ mod tests {
                 None,
                 None,
             )
+            .unwrap()
             .first()
             .get_one::<String>()
+            .unwrap()
             .unwrap();
         client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -2022,6 +2028,7 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .count();
             assert_eq!(rows, 5);
             let rows = client
@@ -2030,6 +2037,7 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .count();
             assert_eq!(rows, 5);
 
@@ -2040,6 +2048,7 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .count();
             assert_eq!(rows, 3);
 
@@ -2050,6 +2059,7 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .count();
             assert_eq!(rows, 4);
         });
@@ -2067,6 +2077,7 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .count();
         });
     }
@@ -2081,6 +2092,7 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .count();
         });
     }
@@ -2097,6 +2109,7 @@ mod tests {
                         None,
                         None
                     )
+                    .unwrap()
                     .count(),
             );
         });
@@ -2113,6 +2126,7 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .count();
             assert_eq!(rows, 13);
             let rows = client
@@ -2121,6 +2135,7 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .count();
             assert_eq!(rows, 20);
             let rows = client
@@ -2129,6 +2144,7 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .count();
             assert_eq!(rows, 20);
         });
@@ -2141,34 +2157,34 @@ mod tests {
 
             // simple tests
             let (min, max) = client.select("SELECT min_frequency(agg, 3), max_frequency(agg, 3) FROM aggs WHERE name = 'freq_2'", None, None)
-                .first()
-                .get_two::<f64,f64>();
+                .unwrap().first()
+                .get_two::<f64,f64>().unwrap();
             assert_eq!(min.unwrap(), 0.01904761904761905);
             assert_eq!(max.unwrap(), 0.01904761904761905);
 
             let (min, max) = client.select("SELECT min_frequency(agg, 11), max_frequency(agg, 11) FROM aggs WHERE name = 'topn_default'", None, None)
-                .first()
-                .get_two::<f64,f64>();
+                .unwrap().first()
+                .get_two::<f64,f64>().unwrap();
             assert_eq!(min.unwrap(), 0.05714285714285714);
             assert_eq!(max.unwrap(), 0.05714285714285714);
 
             // missing value
             let (min, max) = client.select("SELECT min_frequency(agg, 3), max_frequency(agg, 3) FROM aggs WHERE name = 'freq_8'", None, None)
-                .first()
-                .get_two::<f64,f64>();
+                .unwrap().first()
+                .get_two::<f64,f64>().unwrap();
             assert_eq!(min.unwrap(), 0.);
             assert_eq!(max.unwrap(), 0.);
 
             let (min, max) = client.select("SELECT min_frequency(agg, 20), max_frequency(agg, 20) FROM aggs WHERE name = 'topn_2'", None, None)
-                .first()
-                .get_two::<f64,f64>();
+                .unwrap().first()
+                .get_two::<f64,f64>().unwrap();
             assert_eq!(min.unwrap(), 0.);
             assert_eq!(max.unwrap(), 0.);
 
             // noisy value
             let (min, max) = client.select("SELECT min_frequency(agg, 8), max_frequency(agg, 8) FROM aggs WHERE name = 'topn_1.5'", None, None)
-                .first()
-                .get_two::<f64,f64>();
+                .unwrap().first()
+                .get_two::<f64,f64>().unwrap();
             assert_eq!(min.unwrap(), 0.004761904761904762);
             assert_eq!(max.unwrap(), 0.05238095238095238);
         });
@@ -2214,36 +2230,36 @@ mod tests {
                 "WITH aggs AS (SELECT bucket, toolkit_experimental.raw_topn_agg(5, raw_data) as raw_agg FROM test GROUP BY bucket)
                 SELECT toolkit_experimental.topn(toolkit_experimental.rollup(raw_agg), NULL::DOUBLE PRECISION)::TEXT from aggs",
                 None, None
-            );
-            assert_eq!(result.next().unwrap()[1].value(), Some("1"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("2"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("3"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("4"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("5"));
+            ).unwrap();
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("1"));
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("2"));
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("3"));
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("4"));
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("5"));
             assert!(result.next().is_none());
 
             let mut result = client.select(
                 "WITH aggs AS (SELECT bucket, toolkit_experimental.topn_agg(5, int_data) as int_agg FROM test GROUP BY bucket)
                 SELECT toolkit_experimental.topn(toolkit_experimental.rollup(int_agg))::TEXT from aggs",
                 None, None
-            );
-            assert_eq!(result.next().unwrap()[1].value(), Some("1"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("2"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("3"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("4"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("5"));
+            ).unwrap();
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("1"));
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("2"));
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("3"));
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("4"));
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("5"));
             assert!(result.next().is_none());
 
             let mut result = client.select(
                 "WITH aggs AS (SELECT bucket, toolkit_experimental.topn_agg(5, text_data) as text_agg FROM test GROUP BY bucket)
                 SELECT toolkit_experimental.topn(toolkit_experimental.rollup(text_agg))::TEXT from aggs",
                 None, None
-            );
-            assert_eq!(result.next().unwrap()[1].value(), Some("1"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("2"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("3"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("4"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("5"));
+            ).unwrap();
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("1"));
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("2"));
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("3"));
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("4"));
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("5"));
             assert!(result.next().is_none());
         });
     }

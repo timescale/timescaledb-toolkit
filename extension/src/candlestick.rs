@@ -531,15 +531,22 @@ mod tests {
 
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {
-            $client.select($stmt, None, None).first().get_one::<$type>()
+            $client
+                .select($stmt, None, None)
+                .unwrap()
+                .first()
+                .get_one::<$type>()
+                .unwrap()
         };
     }
     macro_rules! select_two {
         ($client:expr, $stmt:expr, $type1:ty, $type2:ty) => {
             $client
                 .select($stmt, None, None)
+                .unwrap()
                 .first()
                 .get_two::<$type1, $type2>()
+                .unwrap()
         };
     }
 
@@ -806,7 +813,7 @@ mod tests {
                                      ('2022-08-02 00:00:00+00'::timestamptz, 9.0, 12.0, 3.0, 6.0, 1.0)
                           ) AS v(ts, open, high, low, close, volume)"#;
 
-            let mut candlesticks = client.select(stmt, None, None);
+            let mut candlesticks = client.select(stmt, None, None).unwrap();
 
             let expected = "(\
                             version:1,\
@@ -817,7 +824,10 @@ mod tests {
                             volume:Transaction(vol:1,vwap:0)\
                             )";
 
-            assert_eq!(Some(expected), candlesticks.next().unwrap()[1].value());
+            assert_eq!(
+                Some(expected),
+                candlesticks.next().unwrap()[1].value().unwrap()
+            );
 
             let expected = "(\
                             version:1,\
@@ -828,7 +838,10 @@ mod tests {
                             volume:Transaction(vol:1,vwap:7)\
                             )";
 
-            assert_eq!(Some(expected), candlesticks.next().unwrap()[1].value());
+            assert_eq!(
+                Some(expected),
+                candlesticks.next().unwrap()[1].value().unwrap()
+            );
         });
     }
 

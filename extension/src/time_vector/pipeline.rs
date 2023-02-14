@@ -332,8 +332,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -360,8 +362,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:17,flags:1,internal_padding:(0,0,0),points:[\
@@ -391,8 +395,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:8,flags:1,internal_padding:(0,0,0),points:[\
@@ -413,8 +419,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:8,flags:1,internal_padding:(0,0,0),points:[\
@@ -435,8 +443,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:8,flags:1,internal_padding:(0,0,0),points:[\
@@ -465,8 +475,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
 
@@ -474,10 +486,10 @@ mod tests {
                 "EXPLAIN (verbose) SELECT timevector('2021-01-01'::timestamptz, 0.1) -> round() -> abs() -> round();",
                 None,
                 None
-            ).nth(1)
+            ).unwrap().nth(1)
                 .unwrap()
-                .by_ordinal(1).unwrap()
-                .value::<String>().unwrap();
+                .get_datum_by_ordinal(1).unwrap()
+                .value::<String>().unwrap().unwrap();
             // check that it's executing as if we had input `timevector -> (round() -> abs())`
             assert_eq!(output.trim(), "Output: \
                 arrow_run_pipeline(\

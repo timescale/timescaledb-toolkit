@@ -95,8 +95,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(output.as_deref(), Some("foo"));
         })
     }
@@ -213,8 +215,10 @@ mod tests {
                 None,
                 None,
             )
+            .unwrap()
             .first()
             .get_one::<String>()
+            .unwrap()
             .expect("no aggregate found")
     }
 }

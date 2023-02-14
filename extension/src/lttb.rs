@@ -480,8 +480,8 @@ mod tests {
 
             let delta = client
                 .select("SELECT count(*)  FROM results1 r1 FULL OUTER JOIN results2 r2 ON r1 = r2 WHERE r1 IS NULL OR r2 IS NULL;" , None, None)
-                .first()
-                .get_one::<i32>();
+                .unwrap().first()
+                .get_one::<i32>().unwrap();
             assert_eq!(delta.unwrap(), 0);
         })
     }
@@ -490,8 +490,9 @@ mod tests {
     fn test_lttb_result() {
         Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
-            let mut result = client.select(
-                r#"SELECT unnest(lttb(ts, val, 5))::TEXT
+            let mut result = client
+                .select(
+                    r#"SELECT unnest(lttb(ts, val, 5))::TEXT
                 FROM (VALUES
                     ('2020-1-1'::timestamptz, 10),
                     ('2020-1-2'::timestamptz, 21),
@@ -505,28 +506,29 @@ mod tests {
                     ('2020-1-10'::timestamptz, 27),
                     ('2020-1-11'::timestamptz, 14)
                 ) AS v(ts, val)"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-01 00:00:00+00\",10)")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-04 00:00:00+00\",32)")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-05 00:00:00+00\",12)")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-08 00:00:00+00\",29)")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-11 00:00:00+00\",14)")
             );
             assert!(result.next().is_none());
@@ -537,8 +539,9 @@ mod tests {
     fn test_gp_lttb() {
         Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
-            let mut result = client.select(
-                r#"SELECT unnest(toolkit_experimental.gp_lttb(ts, val, 7))::TEXT
+            let mut result = client
+                .select(
+                    r#"SELECT unnest(toolkit_experimental.gp_lttb(ts, val, 7))::TEXT
                 FROM (VALUES
                     ('2020-1-1'::timestamptz, 10),
                     ('2020-1-2'::timestamptz, 21),
@@ -552,36 +555,37 @@ mod tests {
                     ('2020-3-10'::timestamptz, 27),
                     ('2020-3-11'::timestamptz, 14)
                 ) AS v(ts, val)"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-01 00:00:00+00\",10)")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-04 00:00:00+00\",32)")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-05 00:00:00+00\",12)")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-02-06 00:00:00+00\",14)")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-03-07 00:00:00+00\",18)")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-03-08 00:00:00+00\",29)")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-03-11 00:00:00+00\",14)")
             );
             assert!(result.next().is_none());
@@ -592,8 +596,9 @@ mod tests {
     fn test_gp_lttb_with_gap() {
         Spi::connect(|client| {
             client.select("SET timezone TO 'UTC'", None, None);
-            let mut result = client.select(
-                r#"SELECT unnest(toolkit_experimental.gp_lttb(ts, val, '36hr', 5))::TEXT
+            let mut result = client
+                .select(
+                    r#"SELECT unnest(toolkit_experimental.gp_lttb(ts, val, '36hr', 5))::TEXT
                 FROM (VALUES
                     ('2020-1-1'::timestamptz, 10),
                     ('2020-1-2'::timestamptz, 21),
@@ -605,45 +610,46 @@ mod tests {
                     ('2020-3-10'::timestamptz, 27),
                     ('2020-3-11'::timestamptz, 14)
                 ) AS v(ts, val)"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             // This should include everything, despite target resolution of 5
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-01 00:00:00+00\",10)")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-02 00:00:00+00\",21)")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-04 00:00:00+00\",32)")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-05 00:00:00+00\",12)")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-02-06 00:00:00+00\",14)")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-03-07 00:00:00+00\",18)")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-03-08 00:00:00+00\",29)")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-03-10 00:00:00+00\",27)")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-03-11 00:00:00+00\",14)")
             );
             assert!(result.next().is_none());

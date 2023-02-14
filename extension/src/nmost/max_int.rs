@@ -198,17 +198,17 @@ mod tests {
             let result =
                 client.select("SELECT toolkit_experimental.into_array(toolkit_experimental.max_n(val, 5)) from data",
                     None, None,
-                ).first().get_one::<Vec<i64>>();
+                ).unwrap().first().get_one::<Vec<i64>>().unwrap();
             assert_eq!(result.unwrap(), vec![99, 98, 97, 96, 95]);
 
             // Test into_values
             let mut result =
                 client.select("SELECT toolkit_experimental.into_values(toolkit_experimental.max_n(val, 3))::TEXT from data",
                     None, None,
-                );
-            assert_eq!(result.next().unwrap()[1].value(), Some("99"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("98"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("97"));
+                ).unwrap();
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("99"));
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("98"));
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("97"));
             assert!(result.next().is_none());
 
             // Test rollup
@@ -217,7 +217,7 @@ mod tests {
                     "WITH aggs as (SELECT category, toolkit_experimental.max_n(val, 5) as agg from data GROUP BY category)
                         SELECT toolkit_experimental.into_array(toolkit_experimental.rollup(agg)) FROM aggs",
                         None, None,
-                    ).first().get_one::<Vec<i64>>();
+                    ).unwrap().first().get_one::<Vec<i64>>().unwrap();
             assert_eq!(result.unwrap(), vec![99, 98, 97, 96, 95]);
         })
     }

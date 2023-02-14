@@ -207,24 +207,24 @@ mod tests {
             let result =
                 client.select("SELECT toolkit_experimental.into_array(toolkit_experimental.min_n(val, 5))::TEXT from data",
                     None, None,
-                ).first().get_one::<&str>();
+                ).unwrap().first().get_one::<&str>().unwrap();
             assert_eq!(result.unwrap(), "{\"2020-01-01 00:00:00+00\",\"2020-01-02 00:00:00+00\",\"2020-01-03 00:00:00+00\",\"2020-01-04 00:00:00+00\",\"2020-01-05 00:00:00+00\"}");
 
             // Test into_values
             let mut result =
                 client.select("SELECT toolkit_experimental.into_values(toolkit_experimental.min_n(val, 3))::TEXT from data",
                     None, None,
-                );
+                ).unwrap();
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("2020-01-01 00:00:00+00")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("2020-01-02 00:00:00+00")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("2020-01-03 00:00:00+00")
             );
             assert!(result.next().is_none());
@@ -235,7 +235,7 @@ mod tests {
                     "WITH aggs as (SELECT category, toolkit_experimental.min_n(val, 5) as agg from data GROUP BY category)
                         SELECT toolkit_experimental.into_array(toolkit_experimental.rollup(agg))::TEXT FROM aggs",
                         None, None,
-                    ).first().get_one::<&str>();
+                    ).unwrap().first().get_one::<&str>().unwrap();
             assert_eq!(result.unwrap(), "{\"2020-01-01 00:00:00+00\",\"2020-01-02 00:00:00+00\",\"2020-01-03 00:00:00+00\",\"2020-01-04 00:00:00+00\",\"2020-01-05 00:00:00+00\"}");
         })
     }

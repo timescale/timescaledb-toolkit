@@ -223,46 +223,46 @@ mod tests {
                     ) AS v(i, val)
                 )) s",
                 None,
-                None);
+                None).unwrap();
 
             assert_relative_eq!(
-                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                result.next().unwrap()[1].value::<f64>().unwrap().unwrap() as f32,
                 10.39
             );
             assert_relative_eq!(
-                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                result.next().unwrap()[1].value::<f64>().unwrap().unwrap() as f32,
                 9.29
             );
             assert_relative_eq!(
-                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                result.next().unwrap()[1].value::<f64>().unwrap().unwrap() as f32,
                 7.54
             );
             assert_relative_eq!(
-                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                result.next().unwrap()[1].value::<f64>().unwrap().unwrap() as f32,
                 7.8
             );
             assert_relative_eq!(
-                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                result.next().unwrap()[1].value::<f64>().unwrap().unwrap() as f32,
                 10.34
             );
             assert_relative_eq!(
-                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                result.next().unwrap()[1].value::<f64>().unwrap().unwrap() as f32,
                 11.01
             );
             assert_relative_eq!(
-                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                result.next().unwrap()[1].value::<f64>().unwrap().unwrap() as f32,
                 10.54
             );
             assert_relative_eq!(
-                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                result.next().unwrap()[1].value::<f64>().unwrap().unwrap() as f32,
                 8.01
             );
             assert_relative_eq!(
-                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                result.next().unwrap()[1].value::<f64>().unwrap().unwrap() as f32,
                 8.99
             );
             assert_relative_eq!(
-                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                result.next().unwrap()[1].value::<f64>().unwrap().unwrap() as f32,
                 8.73
             );
             assert!(result.next().is_none());
@@ -291,7 +291,7 @@ mod tests {
                     ) AS v(i, val)
                 )) s",
                 None,
-                None);
+                None).unwrap();
 
             let mut tvec_result = client.select(
                 "
@@ -314,13 +314,13 @@ mod tests {
                     ), 10)
                 ))",
                 None,
-                None);
+                None).unwrap();
 
             for _ in 0..10 {
                 let v = value_result.next().unwrap();
                 let t = tvec_result.next().unwrap();
                 assert_eq!(v[1].value::<&str>(), t[1].value::<&str>());
-                assert_eq!(v[2].value::<f64>(), t[2].value::<f64>());
+                assert_eq!(v[2].value::<f64>().unwrap(), t[2].value::<f64>().unwrap());
             }
             assert!(value_result.next().is_none());
             assert!(tvec_result.next().is_none());

@@ -542,8 +542,10 @@ mod tests {
         ($client:expr, $stmt:expr, $type:ty) => {
             $client
                 .select($stmt, None, None)
+                .unwrap()
                 .first()
                 .get_one::<$type>()
+                .unwrap()
                 .unwrap()
         };
     }
@@ -837,8 +839,9 @@ mod tests {
                 None,
             );
             // test experimental version
-            let mut experimental_averages = client.select(
-                r#"SELECT
+            let mut experimental_averages = client
+                .select(
+                    r#"SELECT
                 toolkit_experimental.interpolated_average(
                     agg,
                     bucket,
@@ -851,12 +854,14 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
             // test non_experimental version
-            let mut averages = client.select(
-                r#"SELECT
+            let mut averages = client
+                .select(
+                    r#"SELECT
                 interpolated_average(
                     agg,
                     bucket,
@@ -869,11 +874,13 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
-            let mut integrals = client.select(
-                r#"SELECT
+                    None,
+                    None,
+                )
+                .unwrap();
+            let mut integrals = client
+                .select(
+                    r#"SELECT
                 toolkit_experimental.interpolated_integral(
                     agg,
                     bucket,
@@ -887,9 +894,10 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
             // verify that default value works
             client.select(
                 r#"SELECT
@@ -910,31 +918,31 @@ mod tests {
             );
 
             // Day 1, 4 hours @ 10, 4 @ 40, 8 @ 20
-            let result = experimental_averages.next().unwrap()[1].value();
+            let result = experimental_averages.next().unwrap()[1].value().unwrap();
             assert_eq!(result, Some((4. * 10. + 4. * 40. + 8. * 20.) / 16.));
-            assert_eq!(result, averages.next().unwrap()[1].value());
+            assert_eq!(result, averages.next().unwrap()[1].value().unwrap());
 
             assert_eq!(
-                integrals.next().unwrap()[1].value(),
+                integrals.next().unwrap()[1].value().unwrap(),
                 Some(4. * 10. + 4. * 40. + 8. * 20.)
             );
             // Day 2, 2 hours @ 20, 10 @ 15, 8 @ 50, 4 @ 25
-            let result = experimental_averages.next().unwrap()[1].value();
+            let result = experimental_averages.next().unwrap()[1].value().unwrap();
             assert_eq!(
                 result,
                 Some((2. * 20. + 10. * 15. + 8. * 50. + 4. * 25.) / 24.)
             );
-            assert_eq!(result, averages.next().unwrap()[1].value());
+            assert_eq!(result, averages.next().unwrap()[1].value().unwrap());
             assert_eq!(
-                integrals.next().unwrap()[1].value(),
+                integrals.next().unwrap()[1].value().unwrap(),
                 Some(2. * 20. + 10. * 15. + 8. * 50. + 4. * 25.)
             );
             // Day 3, 10 hours @ 25, 2 @ 30, 4 @ 0
-            let result = experimental_averages.next().unwrap()[1].value();
+            let result = experimental_averages.next().unwrap()[1].value().unwrap();
             assert_eq!(result, Some((10. * 25. + 2. * 30.) / 16.));
-            assert_eq!(result, averages.next().unwrap()[1].value());
+            assert_eq!(result, averages.next().unwrap()[1].value().unwrap());
             assert_eq!(
-                integrals.next().unwrap()[1].value(),
+                integrals.next().unwrap()[1].value().unwrap(),
                 Some(10. * 25. + 2. * 30.)
             );
             assert!(experimental_averages.next().is_none());

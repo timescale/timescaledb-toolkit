@@ -687,8 +687,8 @@ mod tests {
     fn test_value_datum_store() {
         Spi::connect(|client| {
             let test = client.select("SELECT toolkit_experimental.datum_test_agg(r.data)::TEXT FROM (SELECT generate_series(10, 100, 10) as data) r", None, None)
-                .first()
-                .get_one::<String>().unwrap();
+                .unwrap().first()
+                .get_one::<String>().unwrap().unwrap();
             let expected = "(version:1,datums:[23,\"10\",\"20\",\"30\",\"40\",\"50\",\"60\",\"70\",\"80\",\"90\",\"100\"])";
             assert_eq!(test, expected);
         });
@@ -698,8 +698,8 @@ mod tests {
     fn test_varlena_datum_store() {
         Spi::connect(|client| {
             let test = client.select("SELECT toolkit_experimental.datum_test_agg(r.data)::TEXT FROM (SELECT generate_series(10, 100, 10)::TEXT as data) r", None, None)
-                .first()
-                .get_one::<String>().unwrap();
+                .unwrap().first()
+                .get_one::<String>().unwrap().unwrap();
             let expected = "(version:1,datums:[25,\"10\",\"20\",\"30\",\"40\",\"50\",\"60\",\"70\",\"80\",\"90\",\"100\"])";
             assert_eq!(test, expected);
         });
@@ -709,8 +709,8 @@ mod tests {
     fn test_byref_datum_store() {
         Spi::connect(|client| {
             let test = client.select("SELECT toolkit_experimental.datum_test_agg(r.data)::TEXT FROM (SELECT (generate_series(10, 100, 10)::TEXT || ' seconds')::INTERVAL as data) r", None, None)
-                .first()
-                .get_one::<String>().unwrap();
+                .unwrap().first()
+                .get_one::<String>().unwrap().unwrap();
             let expected = "(version:1,datums:[1186,\"00:00:10\",\"00:00:20\",\"00:00:30\",\"00:00:40\",\"00:00:50\",\"00:01:00\",\"00:01:10\",\"00:01:20\",\"00:01:30\",\"00:01:40\"])";
             assert_eq!(test, expected);
         });

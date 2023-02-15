@@ -628,7 +628,6 @@ mod tests {
         unsafe {
             // Unable to build the hyperloglog through hyperloglog_trans, as that requires a valid fcinfo to determine OIDs.
 
-            // FIXME: use named constant for default correlation oid
             let hasher = DatumHashBuilder::from_type_id(
                 pg_sys::TEXTOID,
                 Some(crate::serialization::collations::DEFAULT_COLLATION_OID),

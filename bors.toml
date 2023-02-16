@@ -3,6 +3,7 @@ status = [
     "Test Postgres (12)",
     "Test Postgres (13)",
     "Test Postgres (14)",
+    "Test Postgres (15)",
 ]
 delete-merged-branches = true
 timeout_sec = 3600 # 60 min

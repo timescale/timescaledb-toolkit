@@ -482,17 +482,19 @@ mod tests {
 
     #[pg_test]
     fn test_hll_aggregate() {
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             let text = client
-                .select(
+                .update(
                     "SELECT \
                         hyperloglog(32, v::float)::TEXT \
                         FROM generate_series(1, 100) v",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
 
             let expected = "(\
                 version:1,\
@@ -509,7 +511,7 @@ mod tests {
             assert_eq!(text.unwrap(), expected);
 
             let (count, arrow_count) = client
-                .select(
+                .update(
                     "SELECT \
                     distinct_count(\
                         hyperloglog(32, v::float)\
@@ -519,19 +521,23 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<i32, i32>();
+                .get_two::<i64, i64>()
+                .unwrap();
             assert_eq!(count, Some(132));
             assert_eq!(count, arrow_count);
 
             let count2 = client
-                .select(
+                .update(
                     &format!("SELECT distinct_count('{}')", expected),
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i64>()
+                .unwrap();
             assert_eq!(count2, count);
         });
     }
@@ -539,17 +545,19 @@ mod tests {
     #[pg_test]
     // Should have same results as test_hll_distinct_aggregate running with the same number of buckets
     fn test_approx_count_distinct_aggregate() {
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             let text = client
-                .select(
+                .update(
                     "SELECT \
                         toolkit_experimental.approx_count_distinct(v::float)::TEXT \
                         FROM generate_series(1, 100) v",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
 
             let expected = "(\
                 version:1,\
@@ -584,7 +592,7 @@ mod tests {
             assert_eq!(text.unwrap(), expected);
 
             let (count, arrow_count) = client
-                .select(
+                .update(
                     "SELECT \
                     distinct_count(\
                         toolkit_experimental.approx_count_distinct(v::float)\
@@ -594,19 +602,23 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<i32, i32>();
+                .get_two::<i64, i64>()
+                .unwrap();
             assert_eq!(count, Some(100));
             assert_eq!(count, arrow_count);
 
             let count2 = client
-                .select(
+                .update(
                     &format!("SELECT distinct_count('{}')", expected),
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i64>()
+                .unwrap();
             assert_eq!(count2, count);
         });
     }
@@ -616,8 +628,10 @@ mod tests {
         unsafe {
             // Unable to build the hyperloglog through hyperloglog_trans, as that requires a valid fcinfo to determine OIDs.
 
-            // FIXME: use named constant for default correlation oid
-            let hasher = DatumHashBuilder::from_type_id(pg_sys::TEXTOID, Some(100));
+            let hasher = DatumHashBuilder::from_type_id(
+                pg_sys::TEXTOID,
+                Some(crate::serialization::collations::DEFAULT_COLLATION_OID),
+            );
             let mut control = HyperLogLogTrans {
                 logger: HLL::new(6, hasher),
             };
@@ -644,7 +658,11 @@ mod tests {
                 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 136, 136, 9, 7,
                 8, 74, 76, 47, 200, 231, 53, 25, 3, 0, 0, 0, 0, 0, 0, 0, 6, 9, 0, 0, 0, 1,
             ];
-            bincode::serialize_into(&mut expected, &PgCollationId(100)).unwrap();
+            bincode::serialize_into(
+                &mut expected,
+                &PgCollationId(crate::serialization::collations::DEFAULT_COLLATION_OID),
+            )
+            .unwrap();
             assert_eq!(buffer, expected);
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
@@ -670,7 +688,11 @@ mod tests {
                 49, 2, 8, 65, 131, 24, 32, 133, 12, 50, 66, 12, 48, 197, 12, 81, 130, 255, 58, 6,
                 255, 255, 255, 255, 255, 255, 255, 3, 9, 0, 0, 0, 1,
             ];
-            bincode::serialize_into(&mut expected, &PgCollationId(100)).unwrap();
+            bincode::serialize_into(
+                &mut expected,
+                &PgCollationId(crate::serialization::collations::DEFAULT_COLLATION_OID),
+            )
+            .unwrap();
             assert_eq!(buffer, expected);
 
             let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
@@ -683,16 +705,18 @@ mod tests {
 
     #[pg_test]
     fn test_hll_aggregate_int() {
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             let text = client
-                .select(
+                .update(
                     "SELECT hyperloglog(32, v::int)::TEXT
                     FROM generate_series(1, 100) v",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
 
             let expected = "(\
                 version:1,\
@@ -709,7 +733,7 @@ mod tests {
             assert_eq!(text.unwrap(), expected);
 
             let count = client
-                .select(
+                .update(
                     "SELECT \
                 distinct_count(\
                     hyperloglog(32, v::int)\
@@ -717,39 +741,48 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i64>()
+                .unwrap();
             assert_eq!(count, Some(96));
 
             let count2 = client
-                .select(
+                .update(
                     &format!("SELECT distinct_count('{}')", expected),
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i64>()
+                .unwrap();
             assert_eq!(count2, count);
         });
     }
 
     #[pg_test]
     fn test_hll_aggregate_text() {
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             use crate::serialization::PgCollationId;
 
             let text = client
-                .select(
+                .update(
                     "SELECT \
                         hyperloglog(32, v::text)::TEXT \
                     FROM generate_series(1, 100) v",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
 
-            let default_collation = ron::to_string(&PgCollationId(100)).unwrap();
+            let default_collation = ron::to_string(&PgCollationId(
+                crate::serialization::collations::DEFAULT_COLLATION_OID,
+            ))
+            .unwrap();
             let expected = format!(
                 "(\
                 version:1,\
@@ -768,48 +801,54 @@ mod tests {
             assert_eq!(text.unwrap(), expected);
 
             let count = client
-                .select(
+                .update(
                     "SELECT distinct_count(\
                     hyperloglog(32, v::text)\
                 ) FROM generate_series(1, 100) v",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i64>()
+                .unwrap();
             assert_eq!(count, Some(111));
 
             let count2 = client
-                .select(
+                .update(
                     &format!("SELECT distinct_count('{}')", expected),
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i64>()
+                .unwrap();
             assert_eq!(count2, count);
         });
     }
 
     #[pg_test]
     fn test_hll_union_text() {
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             {
                 // self-union should be a nop
                 let expected = client
-                    .select(
+                    .update(
                         "SELECT \
                                 hyperloglog(32, v::text)::TEXT \
                             FROM generate_series(1, 100) v",
                         None,
                         None,
                     )
+                    .unwrap()
                     .first()
                     .get_one::<String>()
+                    .unwrap()
                     .unwrap();
 
                 let text = client
-                    .select(
+                    .update(
                         "SELECT rollup(logs)::text \
                         FROM (\
                             (SELECT hyperloglog(32, v::text) logs \
@@ -821,8 +860,10 @@ mod tests {
                         None,
                         None,
                     )
+                    .unwrap()
                     .first()
-                    .get_one::<String>();
+                    .get_one::<String>()
+                    .unwrap();
 
                 assert_eq!(text.unwrap(), expected);
             }
@@ -837,7 +878,12 @@ mod tests {
                         (SELECT hyperloglog(32, v::text) \
                          FROM generate_series(50, 150) v)\
                     ) q";
-                let count = client.select(query, None, None).first().get_one::<i64>();
+                let count = client
+                    .update(query, None, None)
+                    .unwrap()
+                    .first()
+                    .get_one::<i64>()
+                    .unwrap();
 
                 assert_eq!(count, Some(153));
             }
@@ -846,11 +892,13 @@ mod tests {
 
     #[pg_test]
     fn test_hll_null_input_yields_null_output() {
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             let output = client
-                .select("SELECT hyperloglog(32, null::int)::TEXT", None, None)
+                .update("SELECT hyperloglog(32, null::int)::TEXT", None, None)
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(output, None)
         })
     }
@@ -859,42 +907,48 @@ mod tests {
         error = "Invalid value for size 2. Size must be between 16 and 262144, though less than 1024 not recommended"
     )]
     fn test_hll_error_too_small() {
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             let output = client
-                .select("SELECT hyperloglog(2, 'foo'::text)::TEXT", None, None)
+                .update("SELECT hyperloglog(2, 'foo'::text)::TEXT", None, None)
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(output, None)
         })
     }
 
     #[pg_test]
     fn test_hll_size_min() {
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             let output = client
-                .select("SELECT hyperloglog(16, 'foo'::text)::TEXT", None, None)
+                .update("SELECT hyperloglog(16, 'foo'::text)::TEXT", None, None)
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert!(output.is_some())
         })
     }
 
     #[pg_test]
     fn test_hll_size_max() {
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             let output = client
-                .select("SELECT hyperloglog(262144, 'foo'::text)::TEXT", None, None)
+                .update("SELECT hyperloglog(262144, 'foo'::text)::TEXT", None, None)
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert!(output.is_some())
         })
     }
 
     #[pg_test]
     fn stderror_arrow_match() {
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             let (count, arrow_count) = client
-                .select(
+                .update(
                     "SELECT \
                     stderror(\
                         hyperloglog(32, v::float)\
@@ -904,9 +958,11 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<i32, i32>();
-            assert_eq!(Some(-788581389), count);
+                .get_two::<f64, f64>()
+                .unwrap();
+            assert_eq!(Some(0.18384776310850234), count);
             assert_eq!(count, arrow_count);
         });
     }
@@ -915,7 +971,7 @@ mod tests {
     fn bias_correct_values_accurate() {
         const NUM_BIAS_TRIALS: usize = 5;
         const MAX_TRIAL_ERROR: f64 = 0.05;
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             // This should match THRESHOLD_DATA_VEC from b=12-18
             let thresholds = vec![3100, 6500, 11500, 20000, 50000, 120000, 350000];
             let rand_precision: Uniform<usize> = Uniform::new_inclusive(12, 18);
@@ -932,9 +988,11 @@ mod tests {
                 );
 
                 let estimate = client
-                    .select(&query, None, None)
+                    .update(&query, None, None)
+                    .unwrap()
                     .first()
                     .get_one::<i64>()
+                    .unwrap()
                     .unwrap();
 
                 let error = (estimate as f64 / cardinality as f64).abs() - 1.;
@@ -947,11 +1005,13 @@ mod tests {
         error = "Invalid value for size 262145. Size must be between 16 and 262144, though less than 1024 not recommended"
     )]
     fn test_hll_error_too_large() {
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             let output = client
-                .select("SELECT hyperloglog(262145, 'foo'::text)::TEXT", None, None)
+                .update("SELECT hyperloglog(262145, 'foo'::text)::TEXT", None, None)
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(output, None)
         })
     }

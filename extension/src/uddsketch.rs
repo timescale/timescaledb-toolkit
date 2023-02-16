@@ -273,7 +273,7 @@ impl<'input> InOutFuncs for UddSketch<'input> {
         }
     }
 
-    fn input(input: &pgx::cstr_core::CStr) -> Self
+    fn input(input: &std::ffi::CStr) -> Self
     where
         Self: Sized,
     {
@@ -706,36 +706,46 @@ mod tests {
 
     #[pg_test]
     fn test_aggregate() {
-        Spi::execute(|client| {
-            client.select("CREATE TABLE test (data DOUBLE PRECISION)", None, None);
-            client.select(
-                "INSERT INTO test SELECT generate_series(0.01, 100, 0.01)",
-                None,
-                None,
-            );
+        Spi::connect(|mut client| {
+            client
+                .update("CREATE TABLE test (data DOUBLE PRECISION)", None, None)
+                .unwrap();
+            client
+                .update(
+                    "INSERT INTO test SELECT generate_series(0.01, 100, 0.01)",
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let sanity = client
-                .select("SELECT COUNT(*) FROM test", None, None)
+                .update("SELECT COUNT(*) FROM test", None, None)
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i64>()
+                .unwrap();
             assert_eq!(Some(10000), sanity);
 
-            client.select(
-                "CREATE VIEW sketch AS \
+            client
+                .update(
+                    "CREATE VIEW sketch AS \
                 SELECT uddsketch(100, 0.05, data) \
                 FROM test",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let sanity = client
-                .select("SELECT COUNT(*) FROM sketch", None, None)
+                .update("SELECT COUNT(*) FROM sketch", None, None)
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i64>()
+                .unwrap();
             assert!(sanity.unwrap_or(0) > 0);
 
             let (mean, count) = client
-                .select(
+                .update(
                     "SELECT \
                     mean(uddsketch), \
                     num_vals(uddsketch) \
@@ -743,14 +753,16 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<f64, f64>();
+                .get_two::<f64, f64>()
+                .unwrap();
 
             apx_eql(mean.unwrap(), 50.005, 0.0001);
             apx_eql(count.unwrap(), 10000.0, 0.000001);
 
             let (mean2, count2) = client
-                .select(
+                .update(
                     "SELECT \
                     uddsketch -> mean(), \
                     uddsketch -> num_vals() \
@@ -758,13 +770,15 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<f64, f64>();
+                .get_two::<f64, f64>()
+                .unwrap();
             assert_eq!(mean, mean2);
             assert_eq!(count, count2);
 
             let (error, error2) = client
-                .select(
+                .update(
                     "SELECT \
                     error(uddsketch), \
                     uddsketch -> error() \
@@ -772,8 +786,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<f64, f64>();
+                .get_two::<f64, f64>()
+                .unwrap();
 
             apx_eql(error.unwrap(), 0.05, 0.0001);
             assert_eq!(error, error2);
@@ -783,7 +799,7 @@ mod tests {
                 let approx_percentile = value / 100.0;
 
                 let (est_val, est_quant) = client
-                    .select(
+                    .update(
                         &format!(
                             "SELECT \
                                 approx_percentile({}, uddsketch), \
@@ -794,8 +810,10 @@ mod tests {
                         None,
                         None,
                     )
+                    .unwrap()
                     .first()
-                    .get_two::<f64, f64>();
+                    .get_two::<f64, f64>()
+                    .unwrap();
 
                 if i == 0 {
                     pct_eql(est_val.unwrap(), 0.01, 1.0);
@@ -806,7 +824,7 @@ mod tests {
                 }
 
                 let (est_val2, est_quant2) = client
-                    .select(
+                    .update(
                         &format!(
                             "SELECT \
                                 uddsketch->approx_percentile({}), \
@@ -817,8 +835,10 @@ mod tests {
                         None,
                         None,
                     )
+                    .unwrap()
                     .first()
-                    .get_two::<f64, f64>();
+                    .get_two::<f64, f64>()
+                    .unwrap();
                 assert_eq!(est_val, est_val2);
                 assert_eq!(est_quant, est_quant2);
             }
@@ -827,47 +847,57 @@ mod tests {
 
     #[pg_test]
     fn test_compound_agg() {
-        Spi::execute(|client| {
-            client.select(
-                "CREATE TABLE new_test (device INTEGER, value DOUBLE PRECISION)",
-                None,
-                None,
-            );
-            client.select("INSERT INTO new_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
+        Spi::connect(|mut client| {
+            client
+                .update(
+                    "CREATE TABLE new_test (device INTEGER, value DOUBLE PRECISION)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client.update("INSERT INTO new_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None).unwrap();
 
             let sanity = client
-                .select("SELECT COUNT(*) FROM new_test", None, None)
+                .update("SELECT COUNT(*) FROM new_test", None, None)
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i64>()
+                .unwrap();
             assert_eq!(Some(1010), sanity);
 
-            client.select(
-                "CREATE VIEW sketches AS \
+            client
+                .update(
+                    "CREATE VIEW sketches AS \
                 SELECT device, uddsketch(20, 0.01, value) \
                 FROM new_test \
                 GROUP BY device",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            client.select(
-                "CREATE VIEW composite AS \
+            client
+                .update(
+                    "CREATE VIEW composite AS \
                 SELECT rollup(uddsketch) as uddsketch \
                 FROM sketches",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            client.select(
-                "CREATE VIEW base AS \
+            client
+                .update(
+                    "CREATE VIEW base AS \
                 SELECT uddsketch(20, 0.01, value) \
                 FROM new_test",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let (value, error) = client
-                .select(
+                .update(
                     "SELECT \
                     approx_percentile(0.9, uddsketch), \
                     error(uddsketch) \
@@ -875,11 +905,13 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<f64, f64>();
+                .get_two::<f64, f64>()
+                .unwrap();
 
             let (test_value, test_error) = client
-                .select(
+                .update(
                     "SELECT \
                     approx_percentile(0.9, uddsketch), \
                     error(uddsketch) \
@@ -887,8 +919,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<f64, f64>();
+                .get_two::<f64, f64>()
+                .unwrap();
 
             apx_eql(test_value.unwrap(), value.unwrap(), 0.0001);
             apx_eql(test_error.unwrap(), error.unwrap(), 0.000001);
@@ -898,39 +932,47 @@ mod tests {
 
     #[pg_test]
     fn test_percentile_agg() {
-        Spi::execute(|client| {
-            client.select(
-                "CREATE TABLE pa_test (device INTEGER, value DOUBLE PRECISION)",
-                None,
-                None,
-            );
-            client.select("INSERT INTO pa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
+        Spi::connect(|mut client| {
+            client
+                .update(
+                    "CREATE TABLE pa_test (device INTEGER, value DOUBLE PRECISION)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client.update("INSERT INTO pa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None).unwrap();
 
             let sanity = client
-                .select("SELECT COUNT(*) FROM pa_test", None, None)
+                .update("SELECT COUNT(*) FROM pa_test", None, None)
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i64>()
+                .unwrap();
             assert_eq!(Some(1010), sanity);
 
             // use the default values for percentile_agg
-            client.select(
-                "CREATE VIEW uddsketch_test AS \
+            client
+                .update(
+                    "CREATE VIEW uddsketch_test AS \
                 SELECT uddsketch(200, 0.001, value) as approx \
                 FROM pa_test ",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            client.select(
-                "CREATE VIEW percentile_agg AS \
+            client
+                .update(
+                    "CREATE VIEW percentile_agg AS \
                 SELECT percentile_agg(value) as approx \
                 FROM pa_test",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let (value, error) = client
-                .select(
+                .update(
                     "SELECT \
                     approx_percentile(0.9, approx), \
                     error(approx) \
@@ -938,11 +980,13 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<f64, f64>();
+                .get_two::<f64, f64>()
+                .unwrap();
 
             let (test_value, test_error) = client
-                .select(
+                .update(
                     "SELECT \
                     approx_percentile(0.9, approx), \
                     error(approx) \
@@ -950,8 +994,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<f64, f64>();
+                .get_two::<f64, f64>()
+                .unwrap();
 
             apx_eql(test_value.unwrap(), value.unwrap(), 0.0001);
             apx_eql(test_error.unwrap(), error.unwrap(), 0.000001);
@@ -960,38 +1006,46 @@ mod tests {
     }
     #[pg_test]
     fn test_approx_percentile_array() {
-        Spi::execute(|client| {
-            client.select(
-                "CREATE TABLE paa_test (device INTEGER, value DOUBLE PRECISION)",
-                None,
-                None,
-            );
-            client.select("INSERT INTO paa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
+        Spi::connect(|mut client| {
+            client
+                .update(
+                    "CREATE TABLE paa_test (device INTEGER, value DOUBLE PRECISION)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client.update("INSERT INTO paa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None).unwrap();
 
             let sanity = client
-                .select("SELECT COUNT(*) FROM paa_test", None, None)
+                .update("SELECT COUNT(*) FROM paa_test", None, None)
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i64>()
+                .unwrap();
             assert_eq!(Some(1010), sanity);
 
-            client.select(
-                "CREATE VIEW uddsketch_test AS \
+            client
+                .update(
+                    "CREATE VIEW uddsketch_test AS \
                 SELECT uddsketch(200, 0.001, value) as approx \
                 FROM paa_test ",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            client.select(
-                "CREATE VIEW percentile_agg AS \
+            client
+                .update(
+                    "CREATE VIEW percentile_agg AS \
                 SELECT percentile_agg(value) as approx \
                 FROM paa_test",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let (value, error) = client
-                .select(
+                .update(
                     "SELECT \
                     toolkit_experimental.approx_percentile_array(array[0.9,0.5,0.2], approx), \
                     error(approx) \
@@ -999,11 +1053,13 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<Vec<f64>, f64>();
+                .get_two::<Vec<f64>, f64>()
+                .unwrap();
 
             let (test_value, test_error) = client
-                .select(
+                .update(
                     "SELECT \
                     toolkit_experimental.approx_percentile_array(array[0.9,0.5,0.2], approx), \
                     error(approx) \
@@ -1011,8 +1067,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<Vec<f64>, f64>();
+                .get_two::<Vec<f64>, f64>()
+                .unwrap();
             assert!(
                 test_value
                     .as_ref()
@@ -1035,38 +1093,46 @@ mod tests {
 
     #[pg_test]
     fn test_approx_percentile_array_arrow() {
-        Spi::execute(|client| {
-            client.select(
-                "CREATE TABLE paa_test (device INTEGER, value DOUBLE PRECISION)",
-                None,
-                None,
-            );
-            client.select("INSERT INTO paa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
+        Spi::connect(|mut client| {
+            client
+                .update(
+                    "CREATE TABLE paa_test (device INTEGER, value DOUBLE PRECISION)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client.update("INSERT INTO paa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None).unwrap();
 
             let sanity = client
-                .select("SELECT COUNT(*) FROM paa_test", None, None)
+                .update("SELECT COUNT(*) FROM paa_test", None, None)
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i64>()
+                .unwrap();
             assert_eq!(Some(1010), sanity);
 
-            client.select(
-                "CREATE VIEW uddsketch_test AS \
+            client
+                .update(
+                    "CREATE VIEW uddsketch_test AS \
                 SELECT uddsketch(200, 0.001, value) as approx \
                 FROM paa_test ",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            client.select(
-                "CREATE VIEW percentile_agg AS \
+            client
+                .update(
+                    "CREATE VIEW percentile_agg AS \
                 SELECT percentile_agg(value) as approx \
                 FROM paa_test",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let (value, error) = client
-                .select(
+                .update(
                     "SELECT \
                     toolkit_experimental.approx_percentile_array(array[0.9,0.5,0.2], approx), \
                     error(approx) \
@@ -1074,19 +1140,23 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<Vec<f64>, f64>();
+                .get_two::<Vec<f64>, f64>()
+                .unwrap();
 
             let (test_value_arrow, test_error_arrow) = client
-                .select(
+                .update(
                     "SELECT approx->toolkit_experimental.approx_percentiles(array[0.9,0.5,0.2]), \
         	     error(approx) \
                     FROM uddsketch_test",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<Vec<f64>, f64>();
+                .get_two::<Vec<f64>, f64>()
+                .unwrap();
 
             assert!(
                 test_value_arrow
@@ -1110,18 +1180,22 @@ mod tests {
 
     #[pg_test]
     fn uddsketch_io_test() {
-        Spi::execute(|client| {
-            client.select("CREATE TABLE io_test (value DOUBLE PRECISION)", None, None);
-            client.select("INSERT INTO io_test VALUES (-1000), (-100), (-10), (-1), (-0.1), (-0.01), (-0.001), (0), (0.001), (0.01), (0.1), (1), (10), (100), (1000)", None, None);
+        Spi::connect(|mut client| {
+            client
+                .update("CREATE TABLE io_test (value DOUBLE PRECISION)", None, None)
+                .unwrap();
+            client.update("INSERT INTO io_test VALUES (-1000), (-100), (-10), (-1), (-0.1), (-0.01), (-0.001), (0), (0.001), (0.01), (0.1), (1), (10), (100), (1000)", None, None).unwrap();
 
             let sketch = client
-                .select(
+                .update(
                     "SELECT uddsketch(10, 0.01, value)::text FROM io_test",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
 
             let expected = "(\
                 version:1,\
@@ -1147,13 +1221,12 @@ mod tests {
             assert_eq!(sketch, Some(expected.into()));
 
             client
-                .select(
+                .update(
                     "CREATE VIEW sketch AS SELECT uddsketch(10, 0.01, value) FROM io_test",
                     None,
                     None,
                 )
-                .first()
-                .get_one::<String>();
+                .unwrap();
 
             for cmd in [
                 "mean(",
@@ -1169,14 +1242,18 @@ mod tests {
                 let sql2 = format!("SELECT {}'{}'::uddsketch) FROM sketch", cmd, expected);
 
                 let expected = client
-                    .select(&sql1, None, None)
+                    .update(&sql1, None, None)
+                    .unwrap()
                     .first()
                     .get_one::<f64>()
+                    .unwrap()
                     .unwrap();
                 let test = client
-                    .select(&sql2, None, None)
+                    .update(&sql2, None, None)
+                    .unwrap()
                     .first()
                     .get_one::<f64>()
+                    .unwrap()
                     .unwrap();
 
                 assert!((expected - test).abs() < f64::EPSILON);
@@ -1215,11 +1292,13 @@ mod tests {
 
     #[pg_test]
     fn test_udd_null_input_yields_null_output() {
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             let output = client
-                .select("SELECT uddsketch(20, 0.01, NULL)::TEXT", None, None)
+                .update("SELECT uddsketch(20, 0.01, NULL)::TEXT", None, None)
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(output, None)
         })
     }

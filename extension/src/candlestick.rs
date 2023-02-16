@@ -531,22 +531,29 @@ mod tests {
 
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {
-            $client.select($stmt, None, None).first().get_one::<$type>()
+            $client
+                .update($stmt, None, None)
+                .unwrap()
+                .first()
+                .get_one::<$type>()
+                .unwrap()
         };
     }
     macro_rules! select_two {
         ($client:expr, $stmt:expr, $type1:ty, $type2:ty) => {
             $client
-                .select($stmt, None, None)
+                .update($stmt, None, None)
+                .unwrap()
                 .first()
                 .get_two::<$type1, $type2>()
+                .unwrap()
         };
     }
 
     #[pg_test]
     fn candlestick_single_point() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
 
             let stmt = r#"SELECT candlestick(ts, open, high, low, close, volume)::text
                           FROM (
@@ -569,8 +576,8 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_single_point() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
 
             let stmt = r#"SELECT candlestick_agg(ts, price, volume)::text
                           FROM (
@@ -593,8 +600,8 @@ mod tests {
 
     #[pg_test]
     fn candlestick_accessors() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
 
             for ohlc in ["open", "high", "low", "close"] {
                 let stmt = format!(
@@ -648,8 +655,8 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_accessors() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
 
             for ohlc in ["open", "high", "low", "close"] {
                 let stmt = format!(
@@ -686,8 +693,8 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_extreme_values() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
 
             // timestamptz low and high val according to https://www.postgresql.org/docs/14/datatype-datetime.html
             for extreme_time in &["4713-01-01 00:00:00+00 BC", "294276-12-31 23:59:59+00"] {
@@ -744,7 +751,7 @@ mod tests {
 
     #[pg_test]
     fn candlestick_null_inputs() {
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             for (t, o, h, l, c, v) in &[
                 ("NULL", "NULL", "NULL", "NULL", "NULL", "NULL"),
                 ("NULL", "1.0", "1.0", "1.0", "1.0", "1.0"),
@@ -753,7 +760,7 @@ mod tests {
                 ("now()", "1.0", "1.0", "NULL", "1.0", "1.0"),
                 ("now()", "1.0", "1.0", "1.0", "NULL", "1.0"),
             ] {
-                let stmt = format!("SELECT candlestick({t}, {o}, {h}, {l}, {c}, {v})");
+                let stmt = format!("SELECT candlestick({t}, {o}, {h}, {l}, {c}, {v})::TEXT");
                 let output = select_one!(client, &stmt, String);
                 assert_eq!(output, None);
             }
@@ -762,18 +769,18 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_null_inputs() {
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             for (ts, price, vol) in &[
                 ("NULL", "NULL", "NULL"),
                 ("NULL", "1.0", "1.0"),
                 ("now()", "NULL", "1.0"),
             ] {
-                let stmt = format!("SELECT candlestick_agg({ts}, {price}, {vol})");
+                let stmt = format!("SELECT candlestick_agg({ts}, {price}, {vol})::text");
                 let output = select_one!(client, &stmt, String);
                 assert_eq!(output, None);
             }
 
-            client.select("SET timezone TO 'UTC'", None, None);
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
 
             let expected = "(\
                             version:1,\
@@ -796,8 +803,8 @@ mod tests {
 
     #[pg_test]
     fn candlestick_as_constructor() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
 
             let stmt = r#"SELECT
                               candlestick(ts, open, high, low, close, volume)::text
@@ -806,7 +813,7 @@ mod tests {
                                      ('2022-08-02 00:00:00+00'::timestamptz, 9.0, 12.0, 3.0, 6.0, 1.0)
                           ) AS v(ts, open, high, low, close, volume)"#;
 
-            let mut candlesticks = client.select(stmt, None, None);
+            let mut candlesticks = client.update(stmt, None, None).unwrap();
 
             let expected = "(\
                             version:1,\
@@ -817,7 +824,10 @@ mod tests {
                             volume:Transaction(vol:1,vwap:0)\
                             )";
 
-            assert_eq!(Some(expected), candlesticks.next().unwrap()[1].value());
+            assert_eq!(
+                Some(expected),
+                candlesticks.next().unwrap()[1].value().unwrap()
+            );
 
             let expected = "(\
                             version:1,\
@@ -828,14 +838,17 @@ mod tests {
                             volume:Transaction(vol:1,vwap:7)\
                             )";
 
-            assert_eq!(Some(expected), candlesticks.next().unwrap()[1].value());
+            assert_eq!(
+                Some(expected),
+                candlesticks.next().unwrap()[1].value().unwrap()
+            );
         });
     }
 
     #[pg_test]
     fn candlestick_agg_constant() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
 
             let stmt = r#"SELECT
                               date_trunc('day', ts)::text,
@@ -864,8 +877,8 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_strictly_increasing() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
 
             let stmt = r#"SELECT
                               date_trunc('day', ts)::text,
@@ -894,8 +907,8 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_strictly_decreasing() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
 
             let stmt = r#"SELECT
                               date_trunc('day', ts)::text,
@@ -924,8 +937,8 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_oscillating() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
 
             let stmt = r#"SELECT
                               date_trunc('day', ts)::text,
@@ -961,8 +974,8 @@ mod tests {
 
     #[pg_test]
     fn candlestick_rollup() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
 
             let stmt = r#"WITH t AS (
                               SELECT
@@ -992,8 +1005,8 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_rollup() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
 
             let stmt = r#"WITH t AS (
                               SELECT

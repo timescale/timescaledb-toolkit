@@ -146,8 +146,12 @@ pub fn arrow_run_pipeline_then_materialize<'a>(
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_materialize_support(input: pgx::Internal) -> pgx::Internal {
     pipeline_support_helper(input, |old_pipeline, new_element| {
-        let new_element =
-            PipelineForceMaterialize::from_polymorphic_datum(new_element, false, 0).unwrap();
+        let new_element = PipelineForceMaterialize::from_polymorphic_datum(
+            new_element,
+            false,
+            pg_sys::Oid::INVALID,
+        )
+        .unwrap();
         arrow_force_materialize(old_pipeline, new_element)
             .into_datum()
             .unwrap()
@@ -170,20 +174,24 @@ mod tests {
 
     #[pg_test]
     fn test_unnest_finalizer() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -194,7 +202,7 @@ mod tests {
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)) as v(time, value)";
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT array_agg(val)::TEXT \
                     FROM (SELECT series -> unnest() as val FROM ({}) s) t",
@@ -203,28 +211,34 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(val.unwrap(), "{\"(\\\"2020-01-04 00:00:00+00\\\",25)\",\"(\\\"2020-01-01 00:00:00+00\\\",10)\",\"(\\\"2020-01-03 00:00:00+00\\\",20)\",\"(\\\"2020-01-02 00:00:00+00\\\",15)\",\"(\\\"2020-01-05 00:00:00+00\\\",30)\"}");
         });
     }
 
     #[pg_test]
     fn test_series_finalizer() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -235,7 +249,7 @@ mod tests {
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 31.0)) as v(time, value)";
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> materialize())::TEXT FROM ({}) s",
                         create_series
@@ -243,8 +257,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -260,25 +276,29 @@ mod tests {
 
     #[pg_test]
     fn test_force_materialize() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
             // `-> materialize()` should force materialization, but otherwise the
             // pipeline-folding optimization should proceed
             let output = client
-                .select(
+                .update(
                     "EXPLAIN (verbose) SELECT \
                 timevector('2021-01-01'::timestamptz, 0.1) \
                 -> round() -> abs() \
@@ -287,11 +307,13 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .nth(1)
                 .unwrap()
-                .by_ordinal(1)
+                .get_datum_by_ordinal(1)
                 .unwrap()
                 .value::<String>()
+                .unwrap()
                 .unwrap();
             assert_eq!(output.trim(), "Output: \
                 arrow_run_pipeline(\

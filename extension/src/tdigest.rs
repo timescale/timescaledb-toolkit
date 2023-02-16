@@ -130,7 +130,7 @@ impl<'input> InOutFuncs for TDigest<'input> {
         }
     }
 
-    fn input(input: &pgx::cstr_core::CStr) -> TDigest<'input>
+    fn input(input: &std::ffi::CStr) -> TDigest<'input>
     where
         Self: Sized,
     {
@@ -441,29 +441,37 @@ mod tests {
 
     #[pg_test]
     fn test_tdigest_aggregate() {
-        Spi::execute(|client| {
-            client.select("CREATE TABLE test (data DOUBLE PRECISION)", None, None);
-            client.select(
-                "INSERT INTO test SELECT generate_series(0.01, 100, 0.01)",
-                None,
-                None,
-            );
+        Spi::connect(|mut client| {
+            client
+                .update("CREATE TABLE test (data DOUBLE PRECISION)", None, None)
+                .unwrap();
+            client
+                .update(
+                    "INSERT INTO test SELECT generate_series(0.01, 100, 0.01)",
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let sanity = client
-                .select("SELECT COUNT(*) FROM test", None, None)
+                .update("SELECT COUNT(*) FROM test", None, None)
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i64>()
+                .unwrap();
             assert_eq!(10000, sanity.unwrap());
 
-            client.select(
-                "CREATE VIEW digest AS \
+            client
+                .update(
+                    "CREATE VIEW digest AS \
                 SELECT tdigest(100, data) FROM test",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let (min, max, count) = client
-                .select(
+                .update(
                     "SELECT \
                     min_val(tdigest), \
                     max_val(tdigest), \
@@ -472,15 +480,17 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_three::<f64, f64, f64>();
+                .get_three::<f64, f64, f64>()
+                .unwrap();
 
             apx_eql(min.unwrap(), 0.01, 0.000001);
             apx_eql(max.unwrap(), 100.0, 0.000001);
             apx_eql(count.unwrap(), 10000.0, 0.000001);
 
             let (min2, max2, count2) = client
-                .select(
+                .update(
                     "SELECT \
                     tdigest->min_val(), \
                     tdigest->max_val(), \
@@ -489,15 +499,17 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_three::<f64, f64, f64>();
+                .get_three::<f64, f64, f64>()
+                .unwrap();
 
             assert_eq!(min2, min);
             assert_eq!(max2, max);
             assert_eq!(count2, count);
 
             let (mean, mean2) = client
-                .select(
+                .update(
                     "SELECT \
                     mean(tdigest), \
                     tdigest -> mean()
@@ -505,8 +517,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<f64, f64>();
+                .get_two::<f64, f64>()
+                .unwrap();
 
             apx_eql(mean.unwrap(), 50.005, 0.0001);
             assert_eq!(mean, mean2);
@@ -516,7 +530,7 @@ mod tests {
                 let quantile = value / 100.0;
 
                 let (est_val, est_quant) = client
-                    .select(
+                    .update(
                         &format!(
                             "SELECT
                             approx_percentile({}, tdigest), \
@@ -527,8 +541,10 @@ mod tests {
                         None,
                         None,
                     )
+                    .unwrap()
                     .first()
-                    .get_two::<f64, f64>();
+                    .get_two::<f64, f64>()
+                    .unwrap();
 
                 if i == 0 {
                     pct_eql(est_val.unwrap(), 0.01, 1.0);
@@ -539,7 +555,7 @@ mod tests {
                 }
 
                 let (est_val2, est_quant2) = client
-                    .select(
+                    .update(
                         &format!(
                             "SELECT
                             tdigest->approx_percentile({}), \
@@ -550,8 +566,10 @@ mod tests {
                         None,
                         None,
                     )
+                    .unwrap()
                     .first()
-                    .get_two::<f64, f64>();
+                    .get_two::<f64, f64>()
+                    .unwrap();
                 assert_eq!(est_val2, est_val);
                 assert_eq!(est_quant2, est_quant);
             }
@@ -560,9 +578,9 @@ mod tests {
 
     #[pg_test]
     fn test_tdigest_small_count() {
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             let estimate = client
-                .select(
+                .update(
                     "SELECT \
                     approx_percentile(\
                         0.99, \
@@ -571,8 +589,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one();
+                .get_one()
+                .unwrap();
 
             assert_eq!(estimate, Some(99.5));
         });
@@ -593,30 +613,34 @@ mod tests {
 
     #[pg_test]
     fn test_tdigest_io() {
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             let output = client
-                .select(
+                .update(
                     "SELECT \
                 tdigest(100, data)::text \
                 FROM generate_series(1, 100) data;",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
 
             let expected = "(version:1,buckets:88,max_buckets:100,count:100,sum:5050,min:1,max:100,centroids:[(mean:1,weight:1),(mean:2,weight:1),(mean:3,weight:1),(mean:4,weight:1),(mean:5,weight:1),(mean:6,weight:1),(mean:7,weight:1),(mean:8,weight:1),(mean:9,weight:1),(mean:10,weight:1),(mean:11,weight:1),(mean:12,weight:1),(mean:13,weight:1),(mean:14,weight:1),(mean:15,weight:1),(mean:16,weight:1),(mean:17,weight:1),(mean:18,weight:1),(mean:19,weight:1),(mean:20,weight:1),(mean:21,weight:1),(mean:22,weight:1),(mean:23,weight:1),(mean:24,weight:1),(mean:25,weight:1),(mean:26,weight:1),(mean:27,weight:1),(mean:28,weight:1),(mean:29,weight:1),(mean:30,weight:1),(mean:31,weight:1),(mean:32,weight:1),(mean:33,weight:1),(mean:34,weight:1),(mean:35,weight:1),(mean:36,weight:1),(mean:37,weight:1),(mean:38,weight:1),(mean:39,weight:1),(mean:40,weight:1),(mean:41,weight:1),(mean:42,weight:1),(mean:43,weight:1),(mean:44,weight:1),(mean:45,weight:1),(mean:46,weight:1),(mean:47,weight:1),(mean:48,weight:1),(mean:49,weight:1),(mean:50,weight:1),(mean:51,weight:1),(mean:52.5,weight:2),(mean:54.5,weight:2),(mean:56.5,weight:2),(mean:58.5,weight:2),(mean:60.5,weight:2),(mean:62.5,weight:2),(mean:64,weight:1),(mean:65.5,weight:2),(mean:67.5,weight:2),(mean:69,weight:1),(mean:70.5,weight:2),(mean:72,weight:1),(mean:73.5,weight:2),(mean:75,weight:1),(mean:76,weight:1),(mean:77.5,weight:2),(mean:79,weight:1),(mean:80,weight:1),(mean:81.5,weight:2),(mean:83,weight:1),(mean:84,weight:1),(mean:85,weight:1),(mean:86,weight:1),(mean:87,weight:1),(mean:88,weight:1),(mean:89,weight:1),(mean:90,weight:1),(mean:91,weight:1),(mean:92,weight:1),(mean:93,weight:1),(mean:94,weight:1),(mean:95,weight:1),(mean:96,weight:1),(mean:97,weight:1),(mean:98,weight:1),(mean:99,weight:1),(mean:100,weight:1)])";
 
             assert_eq!(output, Some(expected.into()));
 
             let estimate = client
-                .select(
+                .update(
                     &format!("SELECT approx_percentile(0.90, '{}'::tdigest)", expected),
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one();
+                .get_one()
+                .unwrap();
             assert_eq!(estimate, Some(90.5));
         });
     }
@@ -655,66 +679,80 @@ mod tests {
 
     #[pg_test]
     fn test_tdigest_compound_agg() {
-        Spi::execute(|client| {
-            client.select(
-                "CREATE TABLE new_test (device INTEGER, value DOUBLE PRECISION)",
-                None,
-                None,
-            );
-            client.select("INSERT INTO new_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None);
+        Spi::connect(|mut client| {
+            client
+                .update(
+                    "CREATE TABLE new_test (device INTEGER, value DOUBLE PRECISION)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client.update("INSERT INTO new_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None).unwrap();
 
             let sanity = client
-                .select("SELECT COUNT(*) FROM new_test", None, None)
+                .update("SELECT COUNT(*) FROM new_test", None, None)
+                .unwrap()
                 .first()
-                .get_one::<i32>();
+                .get_one::<i64>()
+                .unwrap();
             assert_eq!(Some(1010), sanity);
 
-            client.select(
-                "CREATE VIEW digests AS \
+            client
+                .update(
+                    "CREATE VIEW digests AS \
                 SELECT device, tdigest(20, value) \
                 FROM new_test \
                 GROUP BY device",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            client.select(
-                "CREATE VIEW composite AS \
+            client
+                .update(
+                    "CREATE VIEW composite AS \
                 SELECT tdigest(tdigest) \
                 FROM digests",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            client.select(
-                "CREATE VIEW base AS \
+            client
+                .update(
+                    "CREATE VIEW base AS \
                 SELECT tdigest(20, value) \
                 FROM new_test",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let value = client
-                .select(
+                .update(
                     "SELECT \
                     approx_percentile(0.9, tdigest) \
                     FROM base",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<f64>();
+                .get_one::<f64>()
+                .unwrap();
 
             let test_value = client
-                .select(
+                .update(
                     "SELECT \
                 approx_percentile(0.9, tdigest) \
                     FROM composite",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<f64>();
+                .get_one::<f64>()
+                .unwrap();
 
             apx_eql(test_value.unwrap(), value.unwrap(), 0.1);
             apx_eql(test_value.unwrap(), 9.0, 0.1);

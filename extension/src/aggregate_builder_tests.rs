@@ -87,24 +87,26 @@ mod tests {
 
     #[pg_test]
     fn test_anything_in_experimental_and_returns_first() {
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             let output = client
-                .select(
+                .update(
                     "SELECT toolkit_experimental.anything(val) \
                 FROM (VALUES ('foo'), ('bar'), ('baz')) as v(val)",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(output.as_deref(), Some("foo"));
         })
     }
 
     #[pg_test]
     fn test_anything_has_correct_fn_names_and_def() {
-        Spi::execute(|client| {
-            let spec = get_aggregate_spec(&client, "anything");
+        Spi::connect(|mut client| {
+            let spec = get_aggregate_spec(&mut client, "anything");
             // output is
             //   fn kind (`a`), volatility, parallel-safety, num args, final fn modify (is this right?)
             //   transition type (`internal`)
@@ -131,8 +133,8 @@ mod tests {
 
     #[pg_test]
     fn test_cagg_anything_has_correct_fn_names_and_def() {
-        Spi::execute(|client| {
-            let spec = get_aggregate_spec(&client, "cagg_anything");
+        Spi::connect(|mut client| {
+            let spec = get_aggregate_spec(&mut client, "cagg_anything");
             // output is
             //   fn kind (`a`), volatility, parallel-safety, num args, final fn modify (is this right?)
             //   transition type (`internal`)
@@ -159,8 +161,8 @@ mod tests {
 
     #[pg_test]
     fn test_parallel_anything_has_correct_fn_names_and_def() {
-        Spi::execute(|client| {
-            let spec = get_aggregate_spec(&client, "parallel_anything");
+        Spi::connect(|mut client| {
+            let spec = get_aggregate_spec(&mut client, "parallel_anything");
             // output is
             //   fn kind (`a`), volatility, parallel-safety, num args, final fn modify (is this right?)
             //   transition type (`internal`)
@@ -188,9 +190,9 @@ mod tests {
     // It gets annoying, and segfaulty to handle many arguments from the Spi.
     // For simplicity, we just return a single string representing the tuple
     // and use string-comparison.
-    fn get_aggregate_spec(client: &spi::SpiClient, aggregate_name: &str) -> String {
+    fn get_aggregate_spec(client: &mut spi::SpiClient, aggregate_name: &str) -> String {
         client
-            .select(
+            .update(
                 &format!(
                     r#"SELECT (
                 prokind,
@@ -213,8 +215,10 @@ mod tests {
                 None,
                 None,
             )
+            .unwrap()
             .first()
             .get_one::<String>()
+            .unwrap()
             .expect("no aggregate found")
     }
 }

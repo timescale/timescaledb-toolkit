@@ -698,22 +698,26 @@ mod tests {
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {
             $client
-                .select($stmt, None, None)
+                .update($stmt, None, None)
+                .unwrap()
                 .first()
                 .get_one::<$type>()
+                .unwrap()
                 .unwrap()
         };
     }
 
     #[pg_test]
     fn round_trip() {
-        Spi::execute(|client| {
-            client.select(
-                "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
-                None,
-                None,
-            );
-            client.select("SET TIME ZONE 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client
+                .update(
+                    "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
             let stmt = "INSERT INTO test VALUES\
                 ('2020-01-01 00:00:00+00', 10.0),\
                 ('2020-01-01 00:01:00+00', 20.0),\
@@ -724,7 +728,7 @@ mod tests {
                 ('2020-01-01 00:06:00+00', 10.0),\
                 ('2020-01-01 00:07:00+00', 30.0),\
                 ('2020-01-01 00:08:00+00', 10.0)";
-            client.select(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             let expected = "(\
                 version:1,\
@@ -784,8 +788,8 @@ mod tests {
 
     #[pg_test]
     fn delta_after_gauge_decrease() {
-        Spi::execute(|client| {
-            decrease(&client);
+        Spi::connect(|mut client| {
+            decrease(&mut client);
             let stmt = "SELECT toolkit_experimental.delta(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(-20.0, select_one!(client, stmt, f64));
         });
@@ -793,8 +797,8 @@ mod tests {
 
     #[pg_test]
     fn delta_after_gauge_increase() {
-        Spi::execute(|client| {
-            increase(&client);
+        Spi::connect(|mut client| {
+            increase(&mut client);
             let stmt = "SELECT toolkit_experimental.delta(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
         });
@@ -802,8 +806,8 @@ mod tests {
 
     #[pg_test]
     fn delta_after_gauge_decrease_then_increase_to_same_value() {
-        Spi::execute(|client| {
-            decrease_then_increase_to_same_value(&client);
+        Spi::connect(|mut client| {
+            decrease_then_increase_to_same_value(&mut client);
             let stmt = "SELECT toolkit_experimental.delta(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(0.0, select_one!(client, stmt, f64));
         });
@@ -811,8 +815,8 @@ mod tests {
 
     #[pg_test]
     fn delta_after_gauge_increase_then_decrease_to_same_value() {
-        Spi::execute(|client| {
-            increase_then_decrease_to_same_value(&client);
+        Spi::connect(|mut client| {
+            increase_then_decrease_to_same_value(&mut client);
             let stmt = "SELECT toolkit_experimental.delta(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(0.0, select_one!(client, stmt, f64));
         });
@@ -820,8 +824,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_after_gauge_decrease() {
-        Spi::execute(|client| {
-            decrease(&client);
+        Spi::connect(|mut client| {
+            decrease(&mut client);
             let stmt = "SELECT toolkit_experimental.idelta_left(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
         });
@@ -829,8 +833,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_after_gauge_increase() {
-        Spi::execute(|client| {
-            increase(&client);
+        Spi::connect(|mut client| {
+            increase(&mut client);
             let stmt = "SELECT toolkit_experimental.idelta_left(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
         });
@@ -838,8 +842,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_after_gauge_increase_then_decrease_to_same_value() {
-        Spi::execute(|client| {
-            increase_then_decrease_to_same_value(&client);
+        Spi::connect(|mut client| {
+            increase_then_decrease_to_same_value(&mut client);
             let stmt = "SELECT toolkit_experimental.idelta_left(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
         });
@@ -847,8 +851,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_after_gauge_decrease_then_increase_to_same_value() {
-        Spi::execute(|client| {
-            decrease_then_increase_to_same_value(&client);
+        Spi::connect(|mut client| {
+            decrease_then_increase_to_same_value(&mut client);
             let stmt = "SELECT toolkit_experimental.idelta_left(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
         });
@@ -856,8 +860,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_after_gauge_decrease() {
-        Spi::execute(|client| {
-            decrease(&client);
+        Spi::connect(|mut client| {
+            decrease(&mut client);
             let stmt = "SELECT toolkit_experimental.idelta_right(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
         });
@@ -865,8 +869,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_after_gauge_increase() {
-        Spi::execute(|client| {
-            increase(&client);
+        Spi::connect(|mut client| {
+            increase(&mut client);
             let stmt = "SELECT toolkit_experimental.idelta_right(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
         });
@@ -874,8 +878,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_after_gauge_increase_then_decrease_to_same_value() {
-        Spi::execute(|client| {
-            increase_then_decrease_to_same_value(&client);
+        Spi::connect(|mut client| {
+            increase_then_decrease_to_same_value(&mut client);
             let stmt = "SELECT toolkit_experimental.idelta_right(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
         });
@@ -883,8 +887,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_after_gauge_decrease_then_increase_to_same_value() {
-        Spi::execute(|client| {
-            decrease_then_increase_to_same_value(&client);
+        Spi::connect(|mut client| {
+            decrease_then_increase_to_same_value(&mut client);
             let stmt = "SELECT toolkit_experimental.idelta_right(toolkit_experimental.gauge_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
         });
@@ -910,28 +914,46 @@ mod tests {
 
     #[pg_test]
     fn rollup() {
-        Spi::execute(|client| {
-            client.select(
-                "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
-                None,
-                None,
-            );
+        Spi::connect(|mut client| {
+            // needed so that GaugeSummary type can be resolved
+            let sp = client
+                .update(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .unwrap()
+                .first()
+                .get_one::<String>()
+                .unwrap()
+                .unwrap();
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
+
+            client
+                .update(
+                    "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+                    None,
+                    None,
+                )
+                .unwrap();
 
             // This tests GaugeSummary::single_value - the old first == last
             // check erroneously saw 21.0 == 21.0 and called it a single value.
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:00:00+00', 10.0), ('2020-01-01 00:01:00+00', 21.0), ('2020-01-01 00:01:00+00', 22.0), ('2020-01-01 00:01:00+00', 21.0)";
-            client.select(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)";
-            client.select(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:08:00+00', 30.0), ('2020-01-01 00:10:00+00', 30.0), ('2020-01-01 00:10:30+00', 10.0), ('2020-01-01 00:20:00+00', 40.0)";
-            client.select(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             //combine function works as expected
-            let stmt = "SELECT toolkit_experimental.gauge_agg(ts, val) FROM test";
+            let stmt = "SELECT gauge_agg(ts, val) FROM test";
             let a = select_one!(client, stmt, GaugeSummary);
-            let stmt = "WITH t as (SELECT date_trunc('minute', ts), toolkit_experimental.gauge_agg(ts, val) as agg FROM test group by 1 ) SELECT toolkit_experimental.rollup(agg) FROM t";
+            let stmt = "WITH t as (SELECT date_trunc('minute', ts), gauge_agg(ts, val) as agg FROM test group by 1 ) SELECT rollup(agg) FROM t";
             let b = select_one!(client, stmt, GaugeSummary);
             assert_close_enough(&a.into(), &b.into());
         });
@@ -939,14 +961,15 @@ mod tests {
 
     #[pg_test]
     fn gauge_agg_interpolation() {
-        Spi::execute(|client| {
-            client.select(
+        Spi::connect(|mut client| {
+            client.update(
                 "CREATE TABLE test(time timestamptz, value double precision, bucket timestamptz)",
                 None,
                 None,
-            );
-            client.select(
-                r#"INSERT INTO test VALUES
+            ).unwrap();
+            client
+                .update(
+                    r#"INSERT INTO test VALUES
                 ('2020-1-1 10:00'::timestamptz, 10.0, '2020-1-1'::timestamptz),
                 ('2020-1-1 12:00'::timestamptz, 40.0, '2020-1-1'::timestamptz),
                 ('2020-1-1 16:00'::timestamptz, 20.0, '2020-1-1'::timestamptz),
@@ -956,12 +979,14 @@ mod tests {
                 ('2020-1-3 4:00'::timestamptz, 30.0, '2020-1-3'::timestamptz),
                 ('2020-1-3 12:00'::timestamptz, 0.0, '2020-1-3'::timestamptz), 
                 ('2020-1-3 16:00'::timestamptz, 35.0, '2020-1-3'::timestamptz)"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            let mut deltas = client.select(
-                r#"SELECT
+            let mut deltas = client
+                .update(
+                    r#"SELECT
                 toolkit_experimental.interpolated_delta(
                     agg,
                     bucket,
@@ -974,19 +999,21 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             // Day 1, start at 10, interpolated end of day is 16
-            assert_eq!(deltas.next().unwrap()[1].value(), Some(16. - 10.));
+            assert_eq!(deltas.next().unwrap()[1].value().unwrap(), Some(16. - 10.));
             // Day 2, interpolated start is 16, interpolated end is 27.5
-            assert_eq!(deltas.next().unwrap()[1].value(), Some(27.5 - 16.));
+            assert_eq!(deltas.next().unwrap()[1].value().unwrap(), Some(27.5 - 16.));
             // Day 3, interpolated start is 27.5, end is 35
-            assert_eq!(deltas.next().unwrap()[1].value(), Some(35. - 27.5));
+            assert_eq!(deltas.next().unwrap()[1].value().unwrap(), Some(35. - 27.5));
 
-            let mut rates = client.select(
-                r#"SELECT
+            let mut rates = client
+                .update(
+                    r#"SELECT
                 toolkit_experimental.interpolated_rate(
                     agg,
                     bucket,
@@ -999,23 +1026,24 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             // Day 1, 14 hours (rate is per second)
             assert_eq!(
-                rates.next().unwrap()[1].value(),
+                rates.next().unwrap()[1].value().unwrap(),
                 Some((16. - 10.) / (14. * 60. * 60.))
             );
             // Day 2, 24 hours
             assert_eq!(
-                rates.next().unwrap()[1].value(),
+                rates.next().unwrap()[1].value().unwrap(),
                 Some((27.5 - 16.) / (24. * 60. * 60.))
             );
             // Day 3, 16 hours
             assert_eq!(
-                rates.next().unwrap()[1].value(),
+                rates.next().unwrap()[1].value().unwrap(),
                 Some((35. - 27.5) / (16. * 60. * 60.))
             );
         });
@@ -1023,26 +1051,29 @@ mod tests {
 
     #[pg_test]
     fn guage_agg_interpolated_delta_with_aligned_point() {
-        Spi::execute(|client| {
-            client.select(
+        Spi::connect(|mut client| {
+            client.update(
                 "CREATE TABLE test(time timestamptz, value double precision, bucket timestamptz)",
                 None,
                 None,
-            );
-            client.select(
-                r#"INSERT INTO test VALUES
+            ).unwrap();
+            client
+                .update(
+                    r#"INSERT INTO test VALUES
                 ('2020-1-1 10:00'::timestamptz, 10.0, '2020-1-1'::timestamptz),
                 ('2020-1-1 12:00'::timestamptz, 40.0, '2020-1-1'::timestamptz),
                 ('2020-1-1 16:00'::timestamptz, 20.0, '2020-1-1'::timestamptz),
                 ('2020-1-2 0:00'::timestamptz, 15.0, '2020-1-2'::timestamptz),
                 ('2020-1-2 12:00'::timestamptz, 50.0, '2020-1-2'::timestamptz),
                 ('2020-1-2 20:00'::timestamptz, 25.0, '2020-1-2'::timestamptz)"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            let mut deltas = client.select(
-                r#"SELECT
+            let mut deltas = client
+                .update(
+                    r#"SELECT
                 toolkit_experimental.interpolated_delta(
                     agg,
                     bucket,
@@ -1055,34 +1086,55 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
             // Day 1, start at 10, interpolated end of day is 15 (after reset)
-            assert_eq!(deltas.next().unwrap()[1].value(), Some(15. - 10.));
+            assert_eq!(deltas.next().unwrap()[1].value().unwrap(), Some(15. - 10.));
             // Day 2, start is 15, end is 25
-            assert_eq!(deltas.next().unwrap()[1].value(), Some(25. - 15.));
+            assert_eq!(deltas.next().unwrap()[1].value().unwrap(), Some(25. - 15.));
             assert!(deltas.next().is_none());
         });
     }
 
     #[pg_test]
     fn no_results_on_null_input() {
-        Spi::execute(|client| {
-            client.select(
-                "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
-                None,
-                None,
-            );
+        Spi::connect(|mut client| {
+            // needed so that GaugeSummary type can be resolved
+            let sp = client
+                .update(
+                    "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
+                    None,
+                    None,
+                )
+                .unwrap()
+                .first()
+                .get_one::<String>()
+                .unwrap()
+                .unwrap();
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
+
+            client
+                .update(
+                    "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let stmt = "INSERT INTO test VALUES (NULL, NULL)";
-            client.select(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             let stmt = "SELECT toolkit_experimental.gauge_agg(ts, val) FROM test";
             assert!(client
-                .select(stmt, None, None)
+                .update(stmt, None, None)
+                .unwrap()
                 .first()
                 .get_one::<GaugeSummary>()
+                .unwrap()
                 .is_none());
         });
     }

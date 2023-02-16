@@ -143,68 +143,70 @@ mod tests {
 
     #[pg_test]
     fn min_by_time_correctness() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
-            client.select(
-                "CREATE TABLE data(val TIMESTAMPTZ, category INT)",
-                None,
-                None,
-            );
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+            client
+                .update(
+                    "CREATE TABLE data(val TIMESTAMPTZ, category INT)",
+                    None,
+                    None,
+                )
+                .unwrap();
 
             for i in 0..100 {
                 let i = (i * 83) % 100; // mess with the ordering just a little
 
-                client.select(
+                client.update(
                     &format!("INSERT INTO data VALUES ('2020-1-1 UTC'::timestamptz + {} * '1d'::interval, {})", i, i % 4),
                     None,
                     None,
-                );
+                ).unwrap();
             }
 
             // Test into_values
             let mut result =
-                client.select("SELECT toolkit_experimental.into_values(toolkit_experimental.min_n_by(val, data, 3), NULL::data)::TEXT from data",
+                client.update("SELECT toolkit_experimental.into_values(toolkit_experimental.min_n_by(val, data, 3), NULL::data)::TEXT from data",
                     None, None,
-                );
+                ).unwrap();
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-01 00:00:00+00\",\"(\"\"2020-01-01 00:00:00+00\"\",0)\")")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-02 00:00:00+00\",\"(\"\"2020-01-02 00:00:00+00\"\",1)\")")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-03 00:00:00+00\",\"(\"\"2020-01-03 00:00:00+00\"\",2)\")")
             );
             assert!(result.next().is_none());
 
             // Test rollup
             let mut result =
-                client.select(
+                client.update(
                     "WITH aggs as (SELECT category, toolkit_experimental.min_n_by(val, data, 5) as agg from data GROUP BY category)
                         SELECT toolkit_experimental.into_values(toolkit_experimental.rollup(agg), NULL::data)::TEXT FROM aggs",
                         None, None,
-                    );
+                    ).unwrap();
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-01 00:00:00+00\",\"(\"\"2020-01-01 00:00:00+00\"\",0)\")")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-02 00:00:00+00\",\"(\"\"2020-01-02 00:00:00+00\"\",1)\")")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-03 00:00:00+00\",\"(\"\"2020-01-03 00:00:00+00\"\",2)\")")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-04 00:00:00+00\",\"(\"\"2020-01-04 00:00:00+00\"\",3)\")")
             );
             assert_eq!(
-                result.next().unwrap()[1].value(),
+                result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-05 00:00:00+00\",\"(\"\"2020-01-05 00:00:00+00\"\",0)\")")
             );
             assert!(result.next().is_none());

@@ -64,6 +64,6 @@ impl<'de> Deserialize<'de> for PgProcId {
             )
         };
 
-        Ok(Self(oid.value() as _))
+        Ok(Self(unsafe { Oid::from_u32_unchecked(oid.value() as _) }))
     }
 }

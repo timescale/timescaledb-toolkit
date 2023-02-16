@@ -41,7 +41,7 @@ impl PgCollationId {
 #[allow(non_upper_case_globals)]
 const Anum_pg_collation_oid: u32 = 1;
 // https://github.com/postgres/postgres/blob/e955bd4b6c2bcdbd253837f6cf4c7520b98e69d4/src/include/catalog/pg_collation.dat
-const DEFAULT_COLLATION_OID: u32 = 100;
+pub(crate) const DEFAULT_COLLATION_OID: Oid = unsafe { pg_sys::Oid::from_u32_unchecked(100) };
 
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone)]
@@ -168,7 +168,7 @@ impl<'de> Deserialize<'de> for PgCollationId {
 
         let collation = <Option<(&str, &str)>>::deserialize(deserializer)?;
         let (namespace, name) = match collation {
-            None => return Ok(Self(0)),
+            None => return Ok(Self(pg_sys::Oid::INVALID)),
             Some(qualified_name) => qualified_name,
         };
 
@@ -229,7 +229,7 @@ impl<'de> Deserialize<'de> for PgCollationId {
                 // The default collation doesn't necessarily exist in the
                 // collations catalog, so check that specially
                 if name == &**DEFAULT_COLLATION_NAME {
-                    return Ok(PgCollationId(100));
+                    return Ok(PgCollationId(DEFAULT_COLLATION_OID));
                 }
                 return Err(D::Error::custom(format!(
                     "invalid collation {:?}.{:?}",
@@ -254,22 +254,33 @@ unsafe fn get_struct<T>(tuple: pg_sys::HeapTuple) -> *mut T {
 mod tests {
 
     use super::PgCollationId;
-    use pgx::{pg_guard, pg_sys, pg_test};
+    use pgx::{pg_sys, pg_test};
+
+    const COLLATION_ID_950: PgCollationId =
+        PgCollationId(unsafe { pg_sys::Oid::from_u32_unchecked(950) });
+    const COLLATION_ID_951: PgCollationId =
+        PgCollationId(unsafe { pg_sys::Oid::from_u32_unchecked(951) });
 
     // TODO is there a way we can test more of this without making it flaky?
     #[pg_test]
     fn test_pg_collation_id_serialize_default_collation_ron() {
-        let serialized = ron::to_string(&PgCollationId(100)).unwrap();
+        let serialized = ron::to_string(&PgCollationId(
+            crate::serialization::collations::DEFAULT_COLLATION_OID,
+        ))
+        .unwrap();
         let deserialized: PgCollationId = ron::from_str(&serialized).unwrap();
-        assert_ne!(deserialized.0, 0);
-        let serialized = ron::to_string(&PgCollationId(100)).unwrap();
+        assert_ne!(deserialized.0, pg_sys::Oid::INVALID);
+        let serialized = ron::to_string(&PgCollationId(
+            crate::serialization::collations::DEFAULT_COLLATION_OID,
+        ))
+        .unwrap();
         let deserialized2: PgCollationId = ron::from_str(&serialized).unwrap();
         assert_eq!(deserialized2.0, deserialized.0);
     }
 
     #[pg_test]
     fn test_pg_collation_id_serialize_c_collation() {
-        let serialized = bincode::serialize(&PgCollationId(950)).unwrap();
+        let serialized = bincode::serialize(&COLLATION_ID_950).unwrap();
         assert_eq!(
             serialized,
             vec![
@@ -278,21 +289,21 @@ mod tests {
             ]
         );
         let deserialized: PgCollationId = bincode::deserialize(&serialized).unwrap();
-        assert_eq!(deserialized.0, 950);
+        assert_eq!(deserialized.0, COLLATION_ID_950.0);
     }
 
     // TODO this test may be too flaky depending on what the default collation actually is
     #[pg_test]
     fn test_pg_collation_id_serialize_c_collation_ron() {
-        let serialized = ron::to_string(&PgCollationId(950)).unwrap();
+        let serialized = ron::to_string(&COLLATION_ID_950).unwrap();
         assert_eq!(&*serialized, "Some((\"pg_catalog\",\"C\"))",);
         let deserialized: PgCollationId = ron::from_str(&serialized).unwrap();
-        assert_eq!(deserialized.0, 950);
+        assert_eq!(deserialized.0, COLLATION_ID_950.0);
     }
 
     #[pg_test]
     fn test_pg_collation_id_serialize_posix_collation() {
-        let serialized = bincode::serialize(&PgCollationId(951)).unwrap();
+        let serialized = bincode::serialize(&COLLATION_ID_951).unwrap();
         assert_eq!(
             serialized,
             vec![
@@ -301,15 +312,15 @@ mod tests {
             ]
         );
         let deserialized: PgCollationId = bincode::deserialize(&serialized).unwrap();
-        assert_eq!(deserialized.0, 951);
+        assert_eq!(deserialized.0, COLLATION_ID_951.0);
     }
 
     // TODO this test may be too flaky depending on what the default collation actually is
     #[pg_test]
     fn test_pg_collation_id_serialize_posix_collation_ron() {
-        let serialized = ron::to_string(&PgCollationId(951)).unwrap();
+        let serialized = ron::to_string(&COLLATION_ID_951).unwrap();
         assert_eq!(&*serialized, "Some((\"pg_catalog\",\"POSIX\"))",);
         let deserialized: PgCollationId = ron::from_str(&serialized).unwrap();
-        assert_eq!(deserialized.0, 951);
+        assert_eq!(deserialized.0, COLLATION_ID_951.0);
     }
 }

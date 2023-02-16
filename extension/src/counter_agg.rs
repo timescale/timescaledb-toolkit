@@ -885,9 +885,11 @@ mod tests {
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {
             $client
-                .select($stmt, None, None)
+                .update($stmt, None, None)
+                .unwrap()
                 .first()
                 .get_one::<$type>()
+                .unwrap()
                 .unwrap()
         };
     }
@@ -895,9 +897,11 @@ mod tests {
     macro_rules! select_and_check_one {
         ($client:expr, $stmt:expr, $type:ty) => {{
             let (a, b) = $client
-                .select($stmt, None, None)
+                .update($stmt, None, None)
+                .unwrap()
                 .first()
-                .get_two::<$type, $type>();
+                .get_two::<$type, $type>()
+                .unwrap();
             assert_eq!(a, b);
             a.unwrap()
         }};
@@ -923,16 +927,19 @@ mod tests {
 
     #[pg_test]
     fn test_counter_aggregate() {
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             // set search_path after defining our table so we don't pollute the wrong schema
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             let stmt = "SELECT format('toolkit_experimental, %s',current_setting('search_path'))";
             let search_path = select_one!(client, stmt, String);
-            client.select(
-                &format!("SET LOCAL search_path TO {}", search_path),
-                None,
-                None,
-            );
-            make_test_table(&client, "test");
+            client
+                .update(
+                    &format!("SET LOCAL search_path TO {}", search_path),
+                    None,
+                    None,
+                )
+                .unwrap();
+            make_test_table(&mut client, "test");
 
             // NULL bounds are equivalent to none provided
             let stmt = "SELECT counter_agg(ts, val) FROM test";
@@ -976,7 +983,7 @@ mod tests {
             assert_relative_eq!(select_and_check_one!(client, stmt, f64), 20.0 / 120.0);
 
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)";
-            client.select(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             let stmt = "SELECT \
                 slope(counter_agg(ts, val)), \
@@ -997,15 +1004,14 @@ mod tests {
             assert_relative_eq!(select_and_check_one!(client, stmt, f64), 1.0);
 
             let stmt = "SELECT \
-                counter_zero_time(counter_agg(ts, val)), \
-                counter_agg(ts, val)->counter_zero_time() \
+                counter_zero_time(counter_agg(ts, val))::TEXT, \
+                (counter_agg(ts, val)->counter_zero_time())::TEXT \
             FROM test";
-            let zp = select_and_check_one!(client, stmt, i64);
-            let real_zp = select_one!(client, "SELECT '2019-12-31 23:59:00+00'::timestamptz", i64);
-            assert_eq!(zp, real_zp);
+            let zp = select_and_check_one!(client, stmt, String);
+            assert_eq!(&zp, "2019-12-31 23:59:00+00");
 
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:08:00+00', 30.0), ('2020-01-01 00:10:00+00', 30.0), ('2020-01-01 00:10:30+00', 10.0), ('2020-01-01 00:20:00+00', 40.0)";
-            client.select(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             let stmt = "SELECT \
                 num_elements(counter_agg(ts, val)), \
@@ -1039,13 +1045,15 @@ mod tests {
 
     #[pg_test]
     fn test_counter_io() {
-        Spi::execute(|client| {
-            client.select(
-                "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
-                None,
-                None,
-            );
-            client.select("SET TIME ZONE 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client
+                .update(
+                    "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
             let stmt = "INSERT INTO test VALUES\
                 ('2020-01-01 00:00:00+00', 10.0),\
                 ('2020-01-01 00:01:00+00', 20.0),\
@@ -1056,7 +1064,7 @@ mod tests {
                 ('2020-01-01 00:06:00+00', 10.0),\
                 ('2020-01-01 00:07:00+00', 30.0),\
                 ('2020-01-01 00:08:00+00', 10.0)";
-            client.select(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             let expected = "(\
                 version:1,\
@@ -1186,8 +1194,8 @@ mod tests {
 
     #[pg_test]
     fn delta_after_counter_decrease() {
-        Spi::execute(|client| {
-            decrease(&client);
+        Spi::connect(|mut client| {
+            decrease(&mut client);
             let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
             // 10 after 30 means there was a reset so we add 30 + 10 = 40.
             // Delta from 30 to 40 => 10
@@ -1197,8 +1205,8 @@ mod tests {
 
     #[pg_test]
     fn delta_after_counter_increase() {
-        Spi::execute(|client| {
-            increase(&client);
+        Spi::connect(|mut client| {
+            increase(&mut client);
             let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
         });
@@ -1206,8 +1214,8 @@ mod tests {
 
     #[pg_test]
     fn delta_after_counter_decrease_then_increase_to_same_value() {
-        Spi::execute(|client| {
-            decrease_then_increase_to_same_value(&client);
+        Spi::connect(|mut client| {
+            decrease_then_increase_to_same_value(&mut client);
             let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
             // 10 after 30 means there was a reset so we add 30 + 10 + 30 = 70.
             // Delta from 30 to 70 => 30
@@ -1217,8 +1225,8 @@ mod tests {
 
     #[pg_test]
     fn delta_after_counter_increase_then_decrease_to_same_value() {
-        Spi::execute(|client| {
-            increase_then_decrease_to_same_value(&client);
+        Spi::connect(|mut client| {
+            increase_then_decrease_to_same_value(&mut client);
             let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
             // In this case, counter goes 10, 30, 40 (reset + 10).
             // Delta from 10 to 40 => 30
@@ -1228,8 +1236,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_after_counter_decrease() {
-        Spi::execute(|client| {
-            decrease(&client);
+        Spi::connect(|mut client| {
+            decrease(&mut client);
             let stmt = "SELECT idelta_left(counter_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
         });
@@ -1237,8 +1245,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_after_counter_increase() {
-        Spi::execute(|client| {
-            increase(&client);
+        Spi::connect(|mut client| {
+            increase(&mut client);
             let stmt = "SELECT idelta_left(counter_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
         });
@@ -1246,8 +1254,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_after_counter_increase_then_decrease_to_same_value() {
-        Spi::execute(|client| {
-            increase_then_decrease_to_same_value(&client);
+        Spi::connect(|mut client| {
+            increase_then_decrease_to_same_value(&mut client);
             let stmt = "SELECT idelta_left(counter_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
         });
@@ -1255,8 +1263,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_after_counter_decrease_then_increase_to_same_value() {
-        Spi::execute(|client| {
-            decrease_then_increase_to_same_value(&client);
+        Spi::connect(|mut client| {
+            decrease_then_increase_to_same_value(&mut client);
 
             let stmt = "SELECT idelta_left(counter_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
@@ -1265,8 +1273,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_after_counter_decrease() {
-        Spi::execute(|client| {
-            decrease(&client);
+        Spi::connect(|mut client| {
+            decrease(&mut client);
             let stmt = "SELECT idelta_right(counter_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
         });
@@ -1274,8 +1282,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_after_counter_increase() {
-        Spi::execute(|client| {
-            increase(&client);
+        Spi::connect(|mut client| {
+            increase(&mut client);
             let stmt = "SELECT idelta_right(counter_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
         });
@@ -1283,8 +1291,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_after_counter_increase_then_decrease_to_same_value() {
-        Spi::execute(|client| {
-            increase_then_decrease_to_same_value(&client);
+        Spi::connect(|mut client| {
+            increase_then_decrease_to_same_value(&mut client);
             let stmt = "SELECT idelta_right(counter_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
         });
@@ -1292,8 +1300,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_after_counter_decrease_then_increase_to_same_value() {
-        Spi::execute(|client| {
-            decrease_then_increase_to_same_value(&client);
+        Spi::connect(|mut client| {
+            decrease_then_increase_to_same_value(&mut client);
             let stmt = "SELECT idelta_right(counter_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
         });
@@ -1301,14 +1309,15 @@ mod tests {
 
     #[pg_test]
     fn counter_agg_interpolation() {
-        Spi::execute(|client| {
-            client.select(
+        Spi::connect(|mut client| {
+            client.update(
                 "CREATE TABLE test(time timestamptz, value double precision, bucket timestamptz)",
                 None,
                 None,
-            );
-            client.select(
-                r#"INSERT INTO test VALUES
+            ).unwrap();
+            client
+                .update(
+                    r#"INSERT INTO test VALUES
                 ('2020-1-1 10:00'::timestamptz, 10.0, '2020-1-1'::timestamptz),
                 ('2020-1-1 12:00'::timestamptz, 40.0, '2020-1-1'::timestamptz),
                 ('2020-1-1 16:00'::timestamptz, 20.0, '2020-1-1'::timestamptz),
@@ -1318,12 +1327,14 @@ mod tests {
                 ('2020-1-3 4:00'::timestamptz, 30.0, '2020-1-3'::timestamptz),
                 ('2020-1-3 12:00'::timestamptz, 0.0, '2020-1-3'::timestamptz), 
                 ('2020-1-3 16:00'::timestamptz, 35.0, '2020-1-3'::timestamptz)"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            let mut deltas = client.select(
-                r#"SELECT
+            let mut deltas = client
+                .update(
+                    r#"SELECT
                 toolkit_experimental.interpolated_delta(
                     agg,
                     bucket,
@@ -1336,24 +1347,32 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             // Day 1, start at 10, interpolated end of day is 10 (after reset), reset at 40 and 20
             assert_eq!(
-                deltas.next().unwrap()[1].value(),
+                deltas.next().unwrap()[1].value().unwrap(),
                 Some(10. + 40. + 20. - 10.)
             );
             // Day 2, interpolated start is 10, interpolated end is 27.5, reset at 50
-            assert_eq!(deltas.next().unwrap()[1].value(), Some(27.5 + 50. - 10.));
+            assert_eq!(
+                deltas.next().unwrap()[1].value().unwrap(),
+                Some(27.5 + 50. - 10.)
+            );
             // Day 3, interpolated start is 27.5, end is 35, reset at 30
-            assert_eq!(deltas.next().unwrap()[1].value(), Some(35. + 30. - 27.5));
+            assert_eq!(
+                deltas.next().unwrap()[1].value().unwrap(),
+                Some(35. + 30. - 27.5)
+            );
             assert!(deltas.next().is_none());
 
             // test that the non experimental version also returns the same result
-            let mut deltas = client.select(
-                r#"SELECT
+            let mut deltas = client
+                .update(
+                    r#"SELECT
                 interpolated_delta(
                     agg,
                     bucket,
@@ -1366,23 +1385,31 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             // Day 1, start at 10, interpolated end of day is 10 (after reset), reset at 40 and 20
             assert_eq!(
-                deltas.next().unwrap()[1].value(),
+                deltas.next().unwrap()[1].value().unwrap(),
                 Some(10. + 40. + 20. - 10.)
             );
             // Day 2, interpolated start is 10, interpolated end is 27.5, reset at 50
-            assert_eq!(deltas.next().unwrap()[1].value(), Some(27.5 + 50. - 10.));
+            assert_eq!(
+                deltas.next().unwrap()[1].value().unwrap(),
+                Some(27.5 + 50. - 10.)
+            );
             // Day 3, interpolated start is 27.5, end is 35, reset at 30
-            assert_eq!(deltas.next().unwrap()[1].value(), Some(35. + 30. - 27.5));
+            assert_eq!(
+                deltas.next().unwrap()[1].value().unwrap(),
+                Some(35. + 30. - 27.5)
+            );
             assert!(deltas.next().is_none());
 
-            let mut rates = client.select(
-                r#"SELECT
+            let mut rates = client
+                .update(
+                    r#"SELECT
                 toolkit_experimental.interpolated_rate(
                     agg,
                     bucket,
@@ -1395,30 +1422,32 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             // Day 1, 14 hours (rate is per second)
             assert_eq!(
-                rates.next().unwrap()[1].value(),
+                rates.next().unwrap()[1].value().unwrap(),
                 Some((10. + 40. + 20. - 10.) / (14. * 60. * 60.))
             );
             // Day 2, 24 hours
             assert_eq!(
-                rates.next().unwrap()[1].value(),
+                rates.next().unwrap()[1].value().unwrap(),
                 Some((27.5 + 50. - 10.) / (24. * 60. * 60.))
             );
             // Day 3, 16 hours
             assert_eq!(
-                rates.next().unwrap()[1].value(),
+                rates.next().unwrap()[1].value().unwrap(),
                 Some((35. + 30. - 27.5) / (16. * 60. * 60.))
             );
 
             // test that the non experimental version also returns the same result
             assert!(rates.next().is_none());
-            let mut rates = client.select(
-                r#"SELECT
+            let mut rates = client
+                .update(
+                    r#"SELECT
                 interpolated_rate(
                     agg,
                     bucket,
@@ -1431,23 +1460,24 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             // Day 1, 14 hours (rate is per second)
             assert_eq!(
-                rates.next().unwrap()[1].value(),
+                rates.next().unwrap()[1].value().unwrap(),
                 Some((10. + 40. + 20. - 10.) / (14. * 60. * 60.))
             );
             // Day 2, 24 hours
             assert_eq!(
-                rates.next().unwrap()[1].value(),
+                rates.next().unwrap()[1].value().unwrap(),
                 Some((27.5 + 50. - 10.) / (24. * 60. * 60.))
             );
             // Day 3, 16 hours
             assert_eq!(
-                rates.next().unwrap()[1].value(),
+                rates.next().unwrap()[1].value().unwrap(),
                 Some((35. + 30. - 27.5) / (16. * 60. * 60.))
             );
             assert!(rates.next().is_none());
@@ -1456,26 +1486,29 @@ mod tests {
 
     #[pg_test]
     fn interpolated_delta_with_aligned_point() {
-        Spi::execute(|client| {
-            client.select(
+        Spi::connect(|mut client| {
+            client.update(
                 "CREATE TABLE test(time timestamptz, value double precision, bucket timestamptz)",
                 None,
                 None,
-            );
-            client.select(
-                r#"INSERT INTO test VALUES
+            ).unwrap();
+            client
+                .update(
+                    r#"INSERT INTO test VALUES
                 ('2020-1-1 10:00'::timestamptz, 10.0, '2020-1-1'::timestamptz),
                 ('2020-1-1 12:00'::timestamptz, 40.0, '2020-1-1'::timestamptz),
                 ('2020-1-1 16:00'::timestamptz, 20.0, '2020-1-1'::timestamptz),
                 ('2020-1-2 0:00'::timestamptz, 15.0, '2020-1-2'::timestamptz),
                 ('2020-1-2 12:00'::timestamptz, 50.0, '2020-1-2'::timestamptz),
                 ('2020-1-2 20:00'::timestamptz, 25.0, '2020-1-2'::timestamptz)"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            let mut deltas = client.select(
-                r#"SELECT
+            let mut deltas = client
+                .update(
+                    r#"SELECT
                 toolkit_experimental.interpolated_delta(
                     agg,
                     bucket,
@@ -1488,24 +1521,28 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
             // Day 1, start at 10, interpolated end of day is 15 (after reset), reset at 40 and 20
             assert_eq!(
-                deltas.next().unwrap()[1].value(),
+                deltas.next().unwrap()[1].value().unwrap(),
                 Some(15. + 40. + 20. - 10.)
             );
             // Day 2, start is 15, end is 25, reset at 50
-            assert_eq!(deltas.next().unwrap()[1].value(), Some(25. + 50. - 15.));
+            assert_eq!(
+                deltas.next().unwrap()[1].value().unwrap(),
+                Some(25. + 50. - 15.)
+            );
             assert!(deltas.next().is_none());
         });
     }
 
     #[pg_test]
     fn irate_left_arrow_match() {
-        Spi::execute(|client| {
-            make_test_table(&client, "test");
+        Spi::connect(|mut client| {
+            make_test_table(&mut client, "test");
 
             assert_relative_eq!(
                 select_and_check_one!(
@@ -1523,8 +1560,8 @@ mod tests {
 
     #[pg_test]
     fn irate_right_arrow_match() {
-        Spi::execute(|client| {
-            make_test_table(&client, "test");
+        Spi::connect(|mut client| {
+            make_test_table(&mut client, "test");
 
             assert_relative_eq!(
                 select_and_check_one!(
@@ -1542,8 +1579,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_arrow_match() {
-        Spi::execute(|client| {
-            make_test_table(&client, "test");
+        Spi::connect(|mut client| {
+            make_test_table(&mut client, "test");
 
             assert_relative_eq!(
                 select_and_check_one!(
@@ -1561,8 +1598,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_arrow_match() {
-        Spi::execute(|client| {
-            make_test_table(&client, "test");
+        Spi::connect(|mut client| {
+            make_test_table(&mut client, "test");
 
             assert_relative_eq!(
                 select_and_check_one!(
@@ -1580,15 +1617,15 @@ mod tests {
 
     #[pg_test]
     fn num_resets_arrow_match() {
-        Spi::execute(|client| {
-            make_test_table(&client, "test");
+        Spi::connect(|mut client| {
+            make_test_table(&mut client, "test");
 
             assert_relative_eq!(
                 select_and_check_one!(
                     client,
                     "SELECT \
-                       num_resets(counter_agg(ts, val)), \
-                       counter_agg(ts, val) -> num_resets() \
+                       num_resets(counter_agg(ts, val))::float, \
+                       (counter_agg(ts, val) -> num_resets())::float \
                      FROM test",
                     f64
                 ),
@@ -1599,8 +1636,8 @@ mod tests {
 
     #[pg_test]
     fn first_and_last_val() {
-        Spi::execute(|client| {
-            make_test_table(&client, "test");
+        Spi::connect(|mut client| {
+            make_test_table(&mut client, "test");
 
             assert_relative_eq!(
                 select_one!(
@@ -1628,8 +1665,8 @@ mod tests {
 
     #[pg_test]
     fn first_and_last_val_arrow_match() {
-        Spi::execute(|client| {
-            make_test_table(&client, "test");
+        Spi::connect(|mut client| {
+            make_test_table(&mut client, "test");
 
             assert_relative_eq!(
                 select_and_check_one!(
@@ -1659,9 +1696,9 @@ mod tests {
 
     #[pg_test]
     fn first_and_last_time() {
-        Spi::execute(|client| {
-            make_test_table(&client, "test");
-            client.select("SET TIME ZONE 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            make_test_table(&mut client, "test");
+            client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
 
             assert_eq!(
                 select_one!(
@@ -1689,9 +1726,9 @@ mod tests {
 
     #[pg_test]
     fn first_and_last_time_arrow_match() {
-        Spi::execute(|client| {
-            make_test_table(&client, "test");
-            client.select("SET TIME ZONE 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            make_test_table(&mut client, "test");
+            client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
 
             assert_eq!(
                 select_and_check_one!(
@@ -1721,7 +1758,7 @@ mod tests {
 
     // #[pg_test]
     // fn test_combine_aggregate(){
-    //     Spi::execute(|client| {
+    //     Spi::connect(|mut client| {
 
     //     });
     // }
@@ -1729,85 +1766,103 @@ mod tests {
 
 #[cfg(any(test, feature = "pg_test"))]
 pub(crate) mod testing {
-    pub fn decrease(client: &pgx::SpiClient) {
-        client.select(
-            "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
-            None,
-            None,
-        );
-        client.select("SET TIME ZONE 'UTC'", None, None);
-        client.select(
-            r#"INSERT INTO test VALUES
+    pub fn decrease(client: &mut pgx::spi::SpiClient) {
+        client
+            .update(
+                "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+                None,
+                None,
+            )
+            .unwrap();
+        client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
+        client
+            .update(
+                r#"INSERT INTO test VALUES
                 ('2020-01-01 00:00:00+00', 30.0),
                 ('2020-01-01 00:07:00+00', 10.0)"#,
-            None,
-            None,
-        );
+                None,
+                None,
+            )
+            .unwrap();
     }
 
-    pub fn increase(client: &pgx::SpiClient) {
-        client.select(
-            "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
-            None,
-            None,
-        );
-        client.select("SET TIME ZONE 'UTC'", None, None);
-        client.select(
-            r#"INSERT INTO test VALUES
+    pub fn increase(client: &mut pgx::spi::SpiClient) {
+        client
+            .update(
+                "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+                None,
+                None,
+            )
+            .unwrap();
+        client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
+        client
+            .update(
+                r#"INSERT INTO test VALUES
                 ('2020-01-01 00:00:00+00', 10.0),
                 ('2020-01-01 00:07:00+00', 30.0)"#,
-            None,
-            None,
-        );
+                None,
+                None,
+            )
+            .unwrap();
     }
 
-    pub fn decrease_then_increase_to_same_value(client: &pgx::SpiClient) {
-        client.select(
-            "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
-            None,
-            None,
-        );
-        client.select("SET TIME ZONE 'UTC'", None, None);
-        client.select(
-            r#"INSERT INTO test VALUES
+    pub fn decrease_then_increase_to_same_value(client: &mut pgx::spi::SpiClient) {
+        client
+            .update(
+                "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+                None,
+                None,
+            )
+            .unwrap();
+        client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
+        client
+            .update(
+                r#"INSERT INTO test VALUES
                 ('2020-01-01 00:00:00+00', 30.0),
                 ('2020-01-01 00:07:00+00', 10.0),
                 ('2020-01-01 00:08:00+00', 30.0)"#,
-            None,
-            None,
-        );
+                None,
+                None,
+            )
+            .unwrap();
     }
 
-    pub fn increase_then_decrease_to_same_value(client: &pgx::SpiClient) {
-        client.select(
-            "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
-            None,
-            None,
-        );
-        client.select("SET TIME ZONE 'UTC'", None, None);
-        client.select(
-            r#"INSERT INTO test VALUES
+    pub fn increase_then_decrease_to_same_value(client: &mut pgx::spi::SpiClient) {
+        client
+            .update(
+                "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+                None,
+                None,
+            )
+            .unwrap();
+        client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
+        client
+            .update(
+                r#"INSERT INTO test VALUES
                 ('2020-01-01 00:00:00+00', 10.0),
                 ('2020-01-01 00:07:00+00', 30.0),
                 ('2020-01-01 00:08:00+00', 10.0)"#,
-            None,
-            None,
-        );
+                None,
+                None,
+            )
+            .unwrap();
     }
 
-    pub fn make_test_table(client: &pgx::SpiClient, name: &str) {
-        client.select(
-            &format!(
-                "CREATE TABLE {}(ts timestamptz, val DOUBLE PRECISION)",
-                name
-            ),
-            None,
-            None,
-        );
-        client.select(
+    pub fn make_test_table(client: &mut pgx::spi::SpiClient, name: &str) {
+        client
+            .update(
+                &format!(
+                    "CREATE TABLE {}(ts timestamptz, val DOUBLE PRECISION)",
+                    name
+                ),
+                None,
+                None,
+            )
+            .unwrap();
+        client.update(
                 &format!("INSERT INTO {} VALUES('2020-01-01 00:00:00+00', 10.0), ('2020-01-01 00:01:00+00', 20.0)", name),
                 None,
                 None,
-            );
+            ).unwrap();
     }
 }

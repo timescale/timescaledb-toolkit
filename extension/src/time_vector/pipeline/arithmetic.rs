@@ -293,20 +293,24 @@ mod tests {
 
     #[pg_test]
     fn test_simple_arith_binops() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -317,7 +321,7 @@ mod tests {
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)) as v(time, value)";
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> add(1.0))::TEXT FROM ({}) s",
                         create_series
@@ -325,8 +329,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -339,7 +345,7 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> sub(3.0))::TEXT FROM ({}) s",
                         create_series
@@ -347,8 +353,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -361,7 +369,7 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> mul(2.0))::TEXT FROM ({}) s",
                         create_series
@@ -369,8 +377,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -383,7 +393,7 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> div(5.0))::TEXT FROM ({}) s",
                         create_series
@@ -391,8 +401,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -405,7 +417,7 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> mod(5.0))::TEXT FROM ({}) s",
                         create_series
@@ -413,8 +425,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -427,7 +441,7 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> power(2.0))::TEXT FROM ({}) s",
                         create_series
@@ -435,8 +449,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -449,7 +465,7 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> logn(10.0))::TEXT FROM ({}) s",
                         create_series
@@ -457,8 +473,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -474,20 +492,24 @@ mod tests {
 
     #[pg_test]
     fn test_simple_arith_unaryops() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
             // we use a subselect to guarantee order
             let create_series = "SELECT timevector(time, value) as series FROM \
@@ -498,13 +520,15 @@ mod tests {
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.3)) as v(time, value)";
 
             let val = client
-                .select(
+                .update(
                     &format!("SELECT (series -> abs())::TEXT FROM ({}) s", create_series),
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -517,13 +541,13 @@ mod tests {
             );
 
             // TODO re-enable once made stable
-            // let val = client.select(
+            // let val = client.update(
             //     &format!("SELECT (series -> cbrt())::TEXT FROM ({}) s", create_series),
             //     None,
             //     None
             // )
             //     .first()
-            //     .get_one::<String>();
+            //     .get_one::<String>().unwrap();
             // assert_eq!(val.unwrap(), "[\
             //     (ts:\"2020-01-04 00:00:00+00\",val:2.943382658441668),\
             //     (ts:\"2020-01-01 00:00:00+00\",val:-2.161592332945083),\
@@ -533,13 +557,15 @@ mod tests {
             // ]");
 
             let val = client
-                .select(
+                .update(
                     &format!("SELECT (series -> ceil())::TEXT FROM ({}) s", create_series),
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -552,7 +578,7 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> floor())::TEXT FROM ({}) s",
                         create_series
@@ -560,8 +586,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -576,13 +604,13 @@ mod tests {
             // TODO why are there `null`s here?
             // Josh - likely JSON can't represent nans correctly...
             // TODO re-enable once made stable
-            // let val = client.select(
+            // let val = client.update(
             //     &format!("SELECT (series -> ln())::TEXT FROM ({}) s", create_series),
             //     None,
             //     None
             // )
             //     .first()
-            //     .get_one::<String>();
+            //     .get_one::<String>().unwrap();
             // assert_eq!(val.unwrap(), "[\
             //     (ts:\"2020-01-04 00:00:00+00\",val:3.2386784521643803),\
             //     (ts:\"2020-01-01 00:00:00+00\",val:null),\
@@ -592,13 +620,13 @@ mod tests {
             // ]");
 
             // TODO re-enable once made stable
-            // let val = client.select(
+            // let val = client.update(
             //     &format!("SELECT (series -> log10())::TEXT FROM ({}) s", create_series),
             //     None,
             //     None
             // )
             //     .first()
-            //     .get_one::<String>();
+            //     .get_one::<String>().unwrap();
             // assert_eq!(val.unwrap(), "[\
             //     (ts:\"2020-01-04 00:00:00+00\",val:1.4065401804339552),\
             //     (ts:\"2020-01-01 00:00:00+00\",val:null),\
@@ -608,7 +636,7 @@ mod tests {
             // ]");
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> round())::TEXT FROM ({}) s",
                         create_series
@@ -616,8 +644,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -630,13 +660,15 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     &format!("SELECT (series -> sign())::TEXT FROM ({}) s", create_series),
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -649,13 +681,13 @@ mod tests {
             );
 
             // TODO re-enable once made stable
-            // let val = client.select(
+            // let val = client.update(
             //     &format!("SELECT (series -> sqrt())::TEXT FROM ({}) s", create_series),
             //     None,
             //     None
             // )
             //     .first()
-            //     .get_one::<String>();
+            //     .get_one::<String>().unwrap();
             // assert_eq!(val.unwrap(), "[\
             //     (ts:\"2020-01-04 00:00:00+00\",val:5.049752469181039),\
             //     (ts:\"2020-01-01 00:00:00+00\",val:null),\
@@ -665,7 +697,7 @@ mod tests {
             // ]");
 
             let val = client
-                .select(
+                .update(
                     &format!(
                         "SELECT (series -> trunc())::TEXT FROM ({}) s",
                         create_series
@@ -673,8 +705,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\

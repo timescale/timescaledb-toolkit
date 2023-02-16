@@ -6,10 +6,10 @@ use std::{
     os::raw::{c_char, c_int},
 };
 
-use pgx::cstr_core::CStr;
 use pgx::pg_sys;
+use std::ffi::CStr;
 
-mod collations;
+pub(crate) mod collations;
 mod functions;
 mod types;
 

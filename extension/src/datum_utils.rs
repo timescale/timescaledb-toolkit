@@ -62,7 +62,7 @@ pub struct TextSerializableDatumWriter {
 
 impl TextSerializableDatumWriter {
     pub fn from_oid(typoid: Oid) -> Self {
-        let mut type_output = 0;
+        let mut type_output = pg_sys::Oid::INVALID;
         let mut typ_is_varlena = false;
         let mut flinfo = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
 
@@ -81,13 +81,13 @@ impl TextSerializableDatumWriter {
 
 pub struct DatumFromSerializedTextReader {
     flinfo: pg_sys::FmgrInfo,
-    typ_io_param: u32,
+    typ_io_param: pg_sys::Oid,
 }
 
 impl DatumFromSerializedTextReader {
     pub fn from_oid(typoid: Oid) -> Self {
-        let mut type_input = 0;
-        let mut typ_io_param = 0;
+        let mut type_input = pg_sys::Oid::INVALID;
+        let mut typ_io_param = pg_sys::oids::Oid::INVALID;
         let mut flinfo = unsafe { std::mem::MaybeUninit::zeroed().assume_init() };
         unsafe {
             pg_sys::getTypeInputInfo(typoid, &mut type_input, &mut typ_io_param);
@@ -101,7 +101,7 @@ impl DatumFromSerializedTextReader {
     }
 
     pub fn read_datum(&mut self, datum_str: &str) -> Datum {
-        let cstr = pgx::cstr_core::CString::new(datum_str).unwrap(); // TODO: error handling
+        let cstr = std::ffi::CString::new(datum_str).unwrap(); // TODO: error handling
         let cstr_ptr = cstr.as_ptr() as *mut std::os::raw::c_char;
         unsafe { pg_sys::InputFunctionCall(&mut self.flinfo, cstr_ptr, self.typ_io_param, -1) }
     }
@@ -115,7 +115,7 @@ impl Serialize for TextSerializeableDatum {
         S: serde::Serializer,
     {
         let chars = unsafe { pg_sys::OutputFunctionCall(self.1, self.0) };
-        let cstr = unsafe { pgx::cstr_core::CStr::from_ptr(chars) };
+        let cstr = unsafe { std::ffi::CStr::from_ptr(chars) };
         serializer.serialize_str(cstr.to_str().unwrap())
     }
 }
@@ -237,7 +237,7 @@ impl Serialize for DatumHashBuilder {
     where
         S: serde::Serializer,
     {
-        let collation = if self.collation == 0 {
+        let collation = if self.collation == pg_sys::oids::Oid::INVALID {
             None
         } else {
             Some(PgCollationId(self.collation))
@@ -296,7 +296,7 @@ impl<'a> Serialize for DatumStore<'a> {
         let mut writer = TextSerializableDatumWriter::from_oid(self.type_oid.0);
         let count = self.iter().count();
         let mut seq = serializer.serialize_seq(Some(count + 1))?;
-        seq.serialize_element(&self.type_oid.0)?;
+        seq.serialize_element(&self.type_oid.0.as_u32())?;
         for element in self.iter() {
             seq.serialize_element(&writer.make_serializable(element))?;
         }
@@ -322,7 +322,8 @@ impl<'a, 'de> Deserialize<'de> for DatumStore<'a> {
             where
                 A: SeqAccess<'de>,
             {
-                let oid = seq.next_element::<Oid>().unwrap().unwrap(); // TODO: error handling
+                let oid =
+                    unsafe { Oid::from_u32_unchecked(seq.next_element::<u32>().unwrap().unwrap()) }; // TODO: error handling
 
                 // TODO separate human-readable and binary forms
                 let mut reader = DatumFromSerializedTextReader::from_oid(oid);
@@ -685,10 +686,10 @@ mod tests {
 
     #[pg_test]
     fn test_value_datum_store() {
-        Spi::execute(|client| {
-            let test = client.select("SELECT toolkit_experimental.datum_test_agg(r.data)::TEXT FROM (SELECT generate_series(10, 100, 10) as data) r", None, None)
-                .first()
-                .get_one::<String>().unwrap();
+        Spi::connect(|mut client| {
+            let test = client.update("SELECT toolkit_experimental.datum_test_agg(r.data)::TEXT FROM (SELECT generate_series(10, 100, 10) as data) r", None, None)
+                .unwrap().first()
+                .get_one::<String>().unwrap().unwrap();
             let expected = "(version:1,datums:[23,\"10\",\"20\",\"30\",\"40\",\"50\",\"60\",\"70\",\"80\",\"90\",\"100\"])";
             assert_eq!(test, expected);
         });
@@ -696,10 +697,10 @@ mod tests {
 
     #[pg_test]
     fn test_varlena_datum_store() {
-        Spi::execute(|client| {
-            let test = client.select("SELECT toolkit_experimental.datum_test_agg(r.data)::TEXT FROM (SELECT generate_series(10, 100, 10)::TEXT as data) r", None, None)
-                .first()
-                .get_one::<String>().unwrap();
+        Spi::connect(|mut client| {
+            let test = client.update("SELECT toolkit_experimental.datum_test_agg(r.data)::TEXT FROM (SELECT generate_series(10, 100, 10)::TEXT as data) r", None, None)
+                .unwrap().first()
+                .get_one::<String>().unwrap().unwrap();
             let expected = "(version:1,datums:[25,\"10\",\"20\",\"30\",\"40\",\"50\",\"60\",\"70\",\"80\",\"90\",\"100\"])";
             assert_eq!(test, expected);
         });
@@ -707,10 +708,10 @@ mod tests {
 
     #[pg_test]
     fn test_byref_datum_store() {
-        Spi::execute(|client| {
-            let test = client.select("SELECT toolkit_experimental.datum_test_agg(r.data)::TEXT FROM (SELECT (generate_series(10, 100, 10)::TEXT || ' seconds')::INTERVAL as data) r", None, None)
-                .first()
-                .get_one::<String>().unwrap();
+        Spi::connect(|mut client| {
+            let test = client.update("SELECT toolkit_experimental.datum_test_agg(r.data)::TEXT FROM (SELECT (generate_series(10, 100, 10)::TEXT || ' seconds')::INTERVAL as data) r", None, None)
+                .unwrap().first()
+                .get_one::<String>().unwrap().unwrap();
             let expected = "(version:1,datums:[1186,\"00:00:10\",\"00:00:20\",\"00:00:30\",\"00:00:40\",\"00:00:50\",\"00:01:00\",\"00:01:10\",\"00:01:20\",\"00:01:30\",\"00:01:40\"])";
             assert_eq!(test, expected);
         });

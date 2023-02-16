@@ -121,61 +121,65 @@ mod tests {
 
     #[pg_test]
     fn test_to_epoch() {
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             let test_val = client
-                .select(
+                .update(
                     "SELECT toolkit_experimental.to_epoch('2021-01-01 00:00:00+03'::timestamptz)",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<f64>()
+                .unwrap()
                 .unwrap();
             assert!((test_val - 1609448400f64).abs() < f64::EPSILON);
 
             let test_val = client
-                .select(
+                .update(
                     "SELECT toolkit_experimental.to_epoch('epoch'::timestamptz)",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<f64>()
+                .unwrap()
                 .unwrap();
             assert!((test_val - 0f64).abs() < f64::EPSILON);
 
             let test_val = client
-                .select("SELECT toolkit_experimental.to_epoch('epoch'::timestamptz - interval '42 seconds')", None, None)
-                .first()
-                .get_one::<f64>().unwrap();
+                .update("SELECT toolkit_experimental.to_epoch('epoch'::timestamptz - interval '42 seconds')", None, None)
+                .unwrap().first()
+                .get_one::<f64>().unwrap().unwrap();
             assert!((test_val - -42f64).abs() < f64::EPSILON);
         });
     }
 
     #[pg_test]
     fn test_days_in_month() {
-        Spi::execute(|client| {
-            let test_val = client.select("SELECT toolkit_experimental.days_in_month('2021-01-01 00:00:00+03'::timestamptz)",None,None,).first().get_one::<i64>().unwrap();
+        Spi::connect(|mut client| {
+            let test_val = client.update("SELECT toolkit_experimental.days_in_month('2021-01-01 00:00:00+03'::timestamptz)",None,None,).unwrap().first().get_one::<i64>().unwrap().unwrap();
             assert_eq!(test_val, 31);
         });
 
-        Spi::execute(|client| {
-            let test_val = client.select("SELECT toolkit_experimental.days_in_month('2020-02-03 00:00:00+03'::timestamptz)",None,None,).first().get_one::<i64>().unwrap();
+        Spi::connect(|mut client| {
+            let test_val = client.update("SELECT toolkit_experimental.days_in_month('2020-02-03 00:00:00+03'::timestamptz)",None,None,).unwrap().first().get_one::<i64>().unwrap().unwrap();
             assert_eq!(test_val, 29);
         });
     }
     #[pg_test]
     fn test_monthly_normalize() {
-        Spi::execute(|client| {
-            let test_val = client.select("SELECT toolkit_experimental.month_normalize(1000,'2021-01-01 00:00:00+03'::timestamptz)",None,None,).first().get_one::<f64>().unwrap();
+        Spi::connect(|mut client| {
+            let test_val = client.update("SELECT toolkit_experimental.month_normalize(1000,'2021-01-01 00:00:00+03'::timestamptz)",None,None,).unwrap().first().get_one::<f64>().unwrap().unwrap();
             assert_eq!(test_val, 981.8548387096774f64);
         });
-        Spi::execute(|client| {
-            let test_val = client.select("SELECT toolkit_experimental.month_normalize(1000,'2021-01-01 00:00:00+03'::timestamptz,30.5)",None,None,).first().get_one::<f64>().unwrap();
+        Spi::connect(|mut client| {
+            let test_val = client.update("SELECT toolkit_experimental.month_normalize(1000,'2021-01-01 00:00:00+03'::timestamptz,30.5)",None,None,).unwrap().first().get_one::<f64>().unwrap().unwrap();
             assert_eq!(test_val, 983.8709677419355f64);
         });
-        Spi::execute(|client| {
-            let test_val = client.select("SELECT toolkit_experimental.month_normalize(1000,'2021-01-01 00:00:00+03'::timestamptz,30)",None,None,).first().get_one::<f64>().unwrap();
+        Spi::connect(|mut client| {
+            let test_val = client.update("SELECT toolkit_experimental.month_normalize(1000,'2021-01-01 00:00:00+03'::timestamptz,30)",None,None,).unwrap().first().get_one::<f64>().unwrap().unwrap();
             assert_eq!(test_val, 967.741935483871f64);
         });
     }

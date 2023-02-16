@@ -582,13 +582,16 @@ mod tests {
 
     #[pg_test]
     pub fn test_heartbeat_agg() {
-        Spi::execute(|client| {
-            client.select("SET TIMEZONE to UTC", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET TIMEZONE to UTC", None, None).unwrap();
 
-            client.select("CREATE TABLE liveness(heartbeat TIMESTAMPTZ)", None, None);
+            client
+                .update("CREATE TABLE liveness(heartbeat TIMESTAMPTZ)", None, None)
+                .unwrap();
 
-            client.select(
-                "INSERT INTO liveness VALUES
+            client
+                .update(
+                    "INSERT INTO liveness VALUES
                 ('01-01-2020 0:2:20 UTC'),
                 ('01-01-2020 0:10 UTC'),
                 ('01-01-2020 0:17 UTC'),
@@ -610,80 +613,105 @@ mod tests {
                 ('01-01-2020 1:57 UTC'),
                 ('01-01-2020 1:59:50 UTC')
             ",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            let mut result = client.select(
+            let mut result = client.update(
                 "SELECT toolkit_experimental.live_ranges(toolkit_experimental.heartbeat_agg(heartbeat, '01-01-2020 UTC', '2h', '10m'))::TEXT
-                FROM liveness", None, None);
+                FROM liveness", None, None).unwrap();
 
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "(\"2020-01-01 00:02:20+00\",\"2020-01-01 00:27:00+00\")"
             );
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "(\"2020-01-01 00:30:00+00\",\"2020-01-01 00:50:00+00\")"
             );
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "(\"2020-01-01 00:50:30+00\",\"2020-01-01 01:38:00+00\")"
             );
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "(\"2020-01-01 01:38:01+00\",\"2020-01-01 02:00:00+00\")"
             );
             assert!(result.next().is_none());
 
-            let mut result = client.select(
+            let mut result = client.update(
                 "SELECT toolkit_experimental.dead_ranges(toolkit_experimental.heartbeat_agg(heartbeat, '01-01-2020 UTC', '2h', '10m'))::TEXT
-                FROM liveness", None, None);
+                FROM liveness", None, None).unwrap();
 
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "(\"2020-01-01 00:00:00+00\",\"2020-01-01 00:02:20+00\")"
             );
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "(\"2020-01-01 00:27:00+00\",\"2020-01-01 00:30:00+00\")"
             );
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "(\"2020-01-01 00:50:00+00\",\"2020-01-01 00:50:30+00\")"
             );
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "(\"2020-01-01 01:38:00+00\",\"2020-01-01 01:38:01+00\")"
             );
             assert!(result.next().is_none());
 
-            let result = client.select(
+            let result = client.update(
                 "SELECT toolkit_experimental.uptime(toolkit_experimental.heartbeat_agg(heartbeat, '01-01-2020 UTC', '2h', '10m'))::TEXT
-                FROM liveness", None, None).first().get_one::<String>().unwrap();
+                FROM liveness", None, None).unwrap().first().get_one::<String>().unwrap().unwrap();
             assert_eq!("01:54:09", result);
 
-            let result = client.select(
+            let result = client.update(
                 "SELECT toolkit_experimental.downtime(toolkit_experimental.heartbeat_agg(heartbeat, '01-01-2020 UTC', '2h', '10m'))::TEXT
-                FROM liveness", None, None).first().get_one::<String>().unwrap();
+                FROM liveness", None, None).unwrap().first().get_one::<String>().unwrap().unwrap();
             assert_eq!("00:05:51", result);
 
             let (result1, result2, result3) =
-                client.select(
+                client.update(
                     "WITH agg AS (SELECT toolkit_experimental.heartbeat_agg(heartbeat, '01-01-2020 UTC', '2h', '10m') AS agg FROM liveness)
                     SELECT toolkit_experimental.live_at(agg, '01-01-2020 00:01:00 UTC')::TEXT, 
                     toolkit_experimental.live_at(agg, '01-01-2020 00:05:00 UTC')::TEXT,
                     toolkit_experimental.live_at(agg, '01-01-2020 00:30:00 UTC')::TEXT FROM agg", None, None)
-                .first()
-                .get_three::<String, String, String>();
+                .unwrap().first()
+                .get_three::<String, String, String>().unwrap();
 
             let (result4, result5) =
-                client.select(
+                client.update(
                     "WITH agg AS (SELECT toolkit_experimental.heartbeat_agg(heartbeat, '01-01-2020 UTC', '2h', '10m') AS agg FROM liveness)
                     SELECT toolkit_experimental.live_at(agg, '01-01-2020 01:38:00 UTC')::TEXT,
                     toolkit_experimental.live_at(agg, '01-01-2020 02:01:00 UTC')::TEXT FROM agg", None, None)
-                .first()
-                .get_two::<String, String>();
+                .unwrap().first()
+                .get_two::<String, String>().unwrap();
 
             assert_eq!(result1.unwrap(), "false"); // outside ranges
             assert_eq!(result2.unwrap(), "true"); // inside ranges
@@ -695,16 +723,18 @@ mod tests {
 
     #[pg_test]
     pub fn test_heartbeat_rollup() {
-        Spi::execute(|client| {
-            client.select("SET TIMEZONE to UTC", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET TIMEZONE to UTC", None, None).unwrap();
 
-            client.select(
-                "CREATE TABLE heartbeats(time timestamptz, batch timestamptz)",
-                None,
-                None,
-            );
+            client
+                .update(
+                    "CREATE TABLE heartbeats(time timestamptz, batch timestamptz)",
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            client.select(
+            client.update(
                 "INSERT INTO heartbeats VALUES
                     ('01-01-2020 3:02:20 UTC'::timestamptz, '01-01-2020 3:00:00 UTC'::timestamptz),
                     ('01-01-2020 3:03:10 UTC'::timestamptz, '01-01-2020 3:00:00 UTC'::timestamptz),
@@ -720,10 +750,10 @@ mod tests {
                     ('01-01-2020 23:39:00 UTC'::timestamptz, '01-01-2020 23:00:00 UTC'::timestamptz)",
                 None,
                 None,
-            );
+            ).unwrap();
 
             let result = client
-                .select(
+                .update(
                     "WITH aggs AS (
                     SELECT toolkit_experimental.heartbeat_agg(time, batch, '1h', '1m')
                     FROM heartbeats 
@@ -732,8 +762,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
             assert_eq!("(version:1,start_time:631162800000000,end_time:631238400000000,last_seen:631237140000000,interval_len:60000000,num_intervals:7,interval_starts:[631162940000000,631178360000000,631179560000000,631180760000000,631184350000000,631236860000000,631237040000000],interval_ends:[631163107000000,631178420000000,631179620000000,631180870000000,631184410000000,631236920000000,631237200000000])", result);
         })
@@ -741,16 +773,18 @@ mod tests {
 
     #[pg_test]
     pub fn test_heartbeat_combining_rollup() {
-        Spi::execute(|client| {
-            client.select("SET TIMEZONE to UTC", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET TIMEZONE to UTC", None, None).unwrap();
 
-            client.select(
-                "CREATE TABLE aggs(agg toolkit_experimental.heartbeatagg)",
-                None,
-                None,
-            );
+            client
+                .update(
+                    "CREATE TABLE aggs(agg toolkit_experimental.heartbeatagg)",
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            client.select(
+            client.update(
                 "INSERT INTO aggs SELECT toolkit_experimental.heartbeat_agg(hb, '01-01-2020 UTC', '1h', '10m')
                 FROM (VALUES
                     ('01-01-2020 0:2:20 UTC'::timestamptz),
@@ -763,9 +797,9 @@ mod tests {
                 ) AS _(hb)",
                     None,
                     None,
-                );
+                ).unwrap();
 
-            client.select(
+            client.update(
                 "INSERT INTO aggs SELECT toolkit_experimental.heartbeat_agg(hb, '01-01-2020 0:30 UTC', '1h', '10m')
                     FROM (VALUES
                     ('01-01-2020 0:35 UTC'::timestamptz),
@@ -776,9 +810,9 @@ mod tests {
                 ) AS _(hb)",
                     None,
                     None,
-                );
+                ).unwrap();
 
-            client.select(
+            client.update(
                 "INSERT INTO aggs SELECT toolkit_experimental.heartbeat_agg(hb, '01-01-2020 1:00 UTC', '1h', '10m')
                 FROM (VALUES
                     ('01-01-2020 1:00 UTC'::timestamptz),
@@ -792,29 +826,41 @@ mod tests {
                 ) AS _(hb)",
                     None,
                     None,
-                );
+                ).unwrap();
 
-            let mut result = client.select(
+            let mut result = client.update(
                 "SELECT toolkit_experimental.dead_ranges(toolkit_experimental.rollup(agg))::TEXT
                 FROM aggs",
                 None,
                 None,
-            );
+            ).unwrap();
 
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "(\"2020-01-01 00:00:00+00\",\"2020-01-01 00:02:20+00\")"
             );
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "(\"2020-01-01 00:27:00+00\",\"2020-01-01 00:30:00+00\")"
             );
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "(\"2020-01-01 00:50:00+00\",\"2020-01-01 00:50:30+00\")"
             );
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "(\"2020-01-01 01:38:00+00\",\"2020-01-01 01:38:01+00\")"
             );
             assert!(result.next().is_none());
@@ -823,17 +869,20 @@ mod tests {
 
     #[pg_test]
     pub fn test_heartbeat_agg_interpolation() {
-        Spi::execute(|client| {
-            client.select("SET TIMEZONE to UTC", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET TIMEZONE to UTC", None, None).unwrap();
 
-            client.select(
-                "CREATE TABLE liveness(heartbeat TIMESTAMPTZ, start TIMESTAMPTZ)",
-                None,
-                None,
-            );
+            client
+                .update(
+                    "CREATE TABLE liveness(heartbeat TIMESTAMPTZ, start TIMESTAMPTZ)",
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            client.select(
-                "INSERT INTO liveness VALUES
+            client
+                .update(
+                    "INSERT INTO liveness VALUES
                 ('01-01-2020 0:2:20 UTC', '01-01-2020 0:0 UTC'),
                 ('01-01-2020 0:10 UTC', '01-01-2020 0:0 UTC'),
                 ('01-01-2020 0:17 UTC', '01-01-2020 0:0 UTC'),
@@ -855,11 +904,12 @@ mod tests {
                 ('01-01-2020 1:57 UTC', '01-01-2020 1:30 UTC'),
                 ('01-01-2020 1:59:50 UTC', '01-01-2020 1:30 UTC')
             ",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            let mut result = client.select(
+            let mut result = client.update(
                 "WITH s AS (
                     SELECT start,
                         toolkit_experimental.heartbeat_agg(heartbeat, start, '30m', '10m') AS agg 
@@ -869,27 +919,39 @@ mod tests {
                     SELECT start,
                         toolkit_experimental.interpolate(agg, LAG (agg) OVER (ORDER BY start)) AS agg 
                     FROM s)
-                SELECT toolkit_experimental.downtime(agg)::TEXT FROM t;", None, None);
+                SELECT toolkit_experimental.downtime(agg)::TEXT FROM t;", None, None).unwrap();
 
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "00:05:20"
             );
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "00:00:30"
             );
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "00:00:00"
             );
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "00:00:01"
             );
             assert!(result.next().is_none());
 
-            let mut result = client.select(
+            let mut result = client.update(
                 "WITH s AS (
                     SELECT start,
                         toolkit_experimental.heartbeat_agg(heartbeat, start, '30m', '10m') AS agg 
@@ -899,56 +961,86 @@ mod tests {
                     SELECT start,
                         toolkit_experimental.interpolate(agg, LAG (agg) OVER (ORDER BY start)) AS agg 
                     FROM s)
-                SELECT toolkit_experimental.live_ranges(agg)::TEXT FROM t;", None, None);
+                SELECT toolkit_experimental.live_ranges(agg)::TEXT FROM t;", None, None).unwrap();
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "(\"2020-01-01 00:02:20+00\",\"2020-01-01 00:27:00+00\")"
             );
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "(\"2020-01-01 00:30:00+00\",\"2020-01-01 00:50:00+00\")"
             );
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "(\"2020-01-01 00:50:30+00\",\"2020-01-01 01:00:00+00\")"
             );
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "(\"2020-01-01 01:00:00+00\",\"2020-01-01 01:30:00+00\")"
             );
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "(\"2020-01-01 01:30:00+00\",\"2020-01-01 01:38:00+00\")"
             );
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "(\"2020-01-01 01:38:01+00\",\"2020-01-01 02:00:00+00\")"
             );
             assert!(result.next().is_none());
 
-            let mut result = client.select(
+            let mut result = client.update(
                 "WITH s AS (
                     SELECT start,
                         toolkit_experimental.heartbeat_agg(heartbeat, start, '30m', '10m') AS agg 
                     FROM liveness 
                     GROUP BY start)
                 SELECT toolkit_experimental.interpolated_uptime(agg, LAG (agg) OVER (ORDER BY start))::TEXT
-                FROM s", None, None);
+                FROM s", None, None).unwrap();
 
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "00:24:40"
             );
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "00:29:30"
             );
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "00:30:00"
             );
             assert_eq!(
-                result.next().unwrap()[1].value::<String>().unwrap(),
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .unwrap(),
                 "00:29:59"
             );
             assert!(result.next().is_none());

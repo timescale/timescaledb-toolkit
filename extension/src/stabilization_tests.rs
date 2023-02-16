@@ -12,12 +12,12 @@ mod tests {
     // Test that any new features are added to the the experimental schema
     #[pg_test]
     fn test_schema_qualification() {
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             let stable_functions: HashSet<String> = stable_functions();
             let stable_types: HashSet<String> = stable_types();
             let stable_operators: HashSet<String> = stable_operators();
             let unexpected_features: Vec<_> = client
-                .select(
+                .update(
                     "SELECT pg_catalog.pg_describe_object(classid, objid, 0) \
                     FROM pg_catalog.pg_extension e, pg_catalog.pg_depend d \
                     WHERE e.extname='timescaledb_toolkit' \
@@ -28,8 +28,14 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .filter_map(|row| {
-                    let val: String = row.by_ordinal(1).unwrap().value().unwrap();
+                    let val: String = row
+                        .get_datum_by_ordinal(1)
+                        .unwrap()
+                        .value()
+                        .unwrap()
+                        .unwrap();
 
                     if let Some(schema) = val.strip_prefix("schema ") {
                         // the only schemas we should define are

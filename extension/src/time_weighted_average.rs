@@ -541,22 +541,24 @@ mod tests {
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {
             $client
-                .select($stmt, None, None)
+                .update($stmt, None, None)
+                .unwrap()
                 .first()
                 .get_one::<$type>()
+                .unwrap()
                 .unwrap()
         };
     }
     #[pg_test]
     fn test_time_weight_aggregate() {
-        Spi::execute(|client| {
+        Spi::connect(|mut client| {
             let stmt =
                 "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION); SET TIME ZONE 'UTC'";
-            client.select(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             // add a point
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:00:00+00', 10.0)";
-            client.select(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             let stmt = "SELECT toolkit_experimental.integral(time_weight('Trapezoidal', ts, val), 'hrs') FROM test";
             assert_eq!(select_one!(client, stmt, f64), 0.0);
@@ -565,7 +567,7 @@ mod tests {
 
             // add another point
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:01:00+00', 20.0)";
-            client.select(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             // test basic with 2 points
             let stmt = "SELECT average(time_weight('Linear', ts, val)) FROM test";
@@ -597,7 +599,7 @@ mod tests {
 
             // more values evenly spaced
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)";
-            client.select(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             let stmt = "SELECT average(time_weight('Linear', ts, val)) FROM test";
             assert!((select_one!(client, stmt, f64) - 15.0).abs() < f64::EPSILON);
@@ -611,7 +613,7 @@ mod tests {
 
             //non-evenly spaced values
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:08:00+00', 30.0), ('2020-01-01 00:10:00+00', 10.0), ('2020-01-01 00:10:30+00', 20.0), ('2020-01-01 00:20:00+00', 30.0)";
-            client.select(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             let stmt = "SELECT average(time_weight('Linear', ts, val)) FROM test";
             // expected =(15 +15 +15 +15 + 20*4 + 20*2 +15*.5 + 25*9.5) / 20 = 21.25 just taking the midpoints between each point and multiplying by minutes and dividing by total
@@ -662,10 +664,10 @@ mod tests {
 
     #[pg_test]
     fn test_time_weight_io() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             let stmt = "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)";
-            client.select(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             let linear_time_weight = "SELECT time_weight('Linear', ts, val)::TEXT FROM test";
             let locf_time_weight = "SELECT time_weight('LOCF', ts, val)::TEXT FROM test";
@@ -673,7 +675,7 @@ mod tests {
 
             // add a couple points
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:00:00+00', 10.0), ('2020-01-01 00:01:00+00', 20.0)";
-            client.select(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             // test basic with 2 points
             let expected = "(\
@@ -698,7 +700,7 @@ mod tests {
 
             // more values evenly spaced
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)";
-            client.select(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             let expected = "(\
                 version:1,\
@@ -721,7 +723,7 @@ mod tests {
 
             //non-evenly spaced values
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:08:00+00', 30.0), ('2020-01-01 00:10:00+00', 10.0), ('2020-01-01 00:10:30+00', 20.0), ('2020-01-01 00:20:00+00', 30.0)";
-            client.select(stmt, None, None);
+            client.update(stmt, None, None).unwrap();
 
             let expected = "(\
                 version:1,\
@@ -816,14 +818,15 @@ mod tests {
 
     #[pg_test]
     fn test_time_weight_interpolation() {
-        Spi::execute(|client| {
-            client.select(
+        Spi::connect(|mut client| {
+            client.update(
                 "CREATE TABLE test(time timestamptz, value double precision, bucket timestamptz)",
                 None,
                 None,
-            );
-            client.select(
-                r#"INSERT INTO test VALUES
+            ).unwrap();
+            client
+                .update(
+                    r#"INSERT INTO test VALUES
                 ('2020-1-1 8:00'::timestamptz, 10.0, '2020-1-1'::timestamptz),
                 ('2020-1-1 12:00'::timestamptz, 40.0, '2020-1-1'::timestamptz),
                 ('2020-1-1 16:00'::timestamptz, 20.0, '2020-1-1'::timestamptz),
@@ -833,12 +836,14 @@ mod tests {
                 ('2020-1-3 10:00'::timestamptz, 30.0, '2020-1-3'::timestamptz),
                 ('2020-1-3 12:00'::timestamptz, 0.0, '2020-1-3'::timestamptz), 
                 ('2020-1-3 16:00'::timestamptz, 35.0, '2020-1-3'::timestamptz)"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
             // test experimental version
-            let mut experimental_averages = client.select(
-                r#"SELECT
+            let mut experimental_averages = client
+                .update(
+                    r#"SELECT
                 toolkit_experimental.interpolated_average(
                     agg,
                     bucket,
@@ -851,12 +856,14 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
             // test non_experimental version
-            let mut averages = client.select(
-                r#"SELECT
+            let mut averages = client
+                .update(
+                    r#"SELECT
                 interpolated_average(
                     agg,
                     bucket,
@@ -869,11 +876,13 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
-            let mut integrals = client.select(
-                r#"SELECT
+                    None,
+                    None,
+                )
+                .unwrap();
+            let mut integrals = client
+                .update(
+                    r#"SELECT
                 toolkit_experimental.interpolated_integral(
                     agg,
                     bucket,
@@ -887,12 +896,14 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
             // verify that default value works
-            client.select(
-                r#"SELECT
+            client
+                .update(
+                    r#"SELECT
                 toolkit_experimental.interpolated_integral(
                     agg,
                     bucket,
@@ -905,36 +916,37 @@ mod tests {
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             // Day 1, 4 hours @ 10, 4 @ 40, 8 @ 20
-            let result = experimental_averages.next().unwrap()[1].value();
+            let result = experimental_averages.next().unwrap()[1].value().unwrap();
             assert_eq!(result, Some((4. * 10. + 4. * 40. + 8. * 20.) / 16.));
-            assert_eq!(result, averages.next().unwrap()[1].value());
+            assert_eq!(result, averages.next().unwrap()[1].value().unwrap());
 
             assert_eq!(
-                integrals.next().unwrap()[1].value(),
+                integrals.next().unwrap()[1].value().unwrap(),
                 Some(4. * 10. + 4. * 40. + 8. * 20.)
             );
             // Day 2, 2 hours @ 20, 10 @ 15, 8 @ 50, 4 @ 25
-            let result = experimental_averages.next().unwrap()[1].value();
+            let result = experimental_averages.next().unwrap()[1].value().unwrap();
             assert_eq!(
                 result,
                 Some((2. * 20. + 10. * 15. + 8. * 50. + 4. * 25.) / 24.)
             );
-            assert_eq!(result, averages.next().unwrap()[1].value());
+            assert_eq!(result, averages.next().unwrap()[1].value().unwrap());
             assert_eq!(
-                integrals.next().unwrap()[1].value(),
+                integrals.next().unwrap()[1].value().unwrap(),
                 Some(2. * 20. + 10. * 15. + 8. * 50. + 4. * 25.)
             );
             // Day 3, 10 hours @ 25, 2 @ 30, 4 @ 0
-            let result = experimental_averages.next().unwrap()[1].value();
+            let result = experimental_averages.next().unwrap()[1].value().unwrap();
             assert_eq!(result, Some((10. * 25. + 2. * 30.) / 16.));
-            assert_eq!(result, averages.next().unwrap()[1].value());
+            assert_eq!(result, averages.next().unwrap()[1].value().unwrap());
             assert_eq!(
-                integrals.next().unwrap()[1].value(),
+                integrals.next().unwrap()[1].value().unwrap(),
                 Some(10. * 25. + 2. * 30.)
             );
             assert!(experimental_averages.next().is_none());

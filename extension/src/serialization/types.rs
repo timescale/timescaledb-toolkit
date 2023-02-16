@@ -17,17 +17,17 @@ use pgx::*;
 /// that these types can be stored more compactly if desired.
 #[derive(Debug, Clone, Copy)]
 #[repr(transparent)]
-pub struct ShortTypeId(pub u32);
+pub struct ShortTypeId(pub Oid);
 
 impl_flat_serializable!(ShortTypeId);
 
-impl From<u32> for ShortTypeId {
-    fn from(id: u32) -> Self {
+impl From<Oid> for ShortTypeId {
+    fn from(id: Oid) -> Self {
         Self(id)
     }
 }
 
-impl From<ShortTypeId> for u32 {
+impl From<ShortTypeId> for Oid {
     fn from(id: ShortTypeId) -> Self {
         id.0
     }
@@ -321,8 +321,7 @@ mod tests {
 
     use super::{PgTypId, ShortTypeId};
     use pgx::{
-        pg_guard,
-        pg_sys::{self, BOOLOID, CHAROID, CIRCLEOID},
+        pg_sys::{BOOLOID, CHAROID, CIRCLEOID},
         pg_test,
     };
 

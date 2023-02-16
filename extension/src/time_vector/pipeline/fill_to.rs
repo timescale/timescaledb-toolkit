@@ -146,45 +146,53 @@ mod tests {
 
     #[pg_test]
     fn test_pipeline_fill_to() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
-            client.select(
-                "CREATE TABLE series(time timestamptz, value double precision)",
-                None,
-                None,
-            );
-            client.select(
-                "INSERT INTO series \
+            client
+                .update(
+                    "CREATE TABLE series(time timestamptz, value double precision)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client
+                .update(
+                    "INSERT INTO series \
                     VALUES \
                     ('2020-01-01 UTC'::TIMESTAMPTZ, 10.0), \
                     ('2020-01-03 UTC'::TIMESTAMPTZ, 20.0), \
                     ('2020-01-04 UTC'::TIMESTAMPTZ, 90.0), \
                     ('2020-01-06 UTC'::TIMESTAMPTZ, 30),   \
                     ('2020-01-09 UTC'::TIMESTAMPTZ, 40.0)",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            let val = client.select(
+            let val = client.update(
                 "SELECT (timevector(time, value) -> fill_to('24 hours', 'locf'))::TEXT FROM series",
                 None,
                 None
             )
-                .first()
-                .get_one::<String>();
+                .unwrap().first()
+                .get_one::<String>().unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:9,flags:1,internal_padding:(0,0,0),points:[\
@@ -200,13 +208,13 @@ mod tests {
             ],null_val:[0,0])"
             );
 
-            let val = client.select(
+            let val = client.update(
                 "SELECT (timevector(time, value) -> fill_to('24 hours', 'linear'))::TEXT FROM series",
                 None,
                 None
             )
-                .first()
-                .get_one::<String>();
+                .unwrap().first()
+                .get_one::<String>().unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:9,flags:1,internal_padding:(0,0,0),points:[\
@@ -222,13 +230,13 @@ mod tests {
             ],null_val:[0,0])"
             );
 
-            let val = client.select(
+            let val = client.update(
                 "SELECT (timevector(time, value) -> fill_to('24 hours', 'nearest'))::TEXT FROM series",
                 None,
                 None
             )
-                .first()
-                .get_one::<String>();
+                .unwrap().first()
+                .get_one::<String>().unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:9,flags:1,internal_padding:(0,0,0),points:[\
@@ -244,13 +252,13 @@ mod tests {
             ],null_val:[0,0])"
             );
 
-            let val = client.select(
+            let val = client.update(
                 "SELECT (timevector(time, value) -> fill_to('10 hours', 'nearest'))::TEXT FROM series",
                 None,
                 None
             )
-                .first()
-                .get_one::<String>();
+                .unwrap().first()
+                .get_one::<String>().unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:22,flags:1,internal_padding:(0,0,0),points:[\

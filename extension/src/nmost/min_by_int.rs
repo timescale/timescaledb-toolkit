@@ -136,42 +136,70 @@ mod tests {
 
     #[pg_test]
     fn min_by_int_correctness() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
-            client.select("CREATE TABLE data(val INT8, category INT)", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+            client
+                .update("CREATE TABLE data(val INT8, category INT)", None, None)
+                .unwrap();
 
             for i in 0..100 {
                 let i = (i * 83) % 100; // mess with the ordering just a little
 
-                client.select(
-                    &format!("INSERT INTO data VALUES ({}, {})", i, i % 4),
-                    None,
-                    None,
-                );
+                client
+                    .update(
+                        &format!("INSERT INTO data VALUES ({}, {})", i, i % 4),
+                        None,
+                        None,
+                    )
+                    .unwrap();
             }
 
             // Test into_values
             let mut result =
-                client.select("SELECT toolkit_experimental.into_values(toolkit_experimental.min_n_by(val, data, 3), NULL::data)::TEXT from data",
+                client.update("SELECT toolkit_experimental.into_values(toolkit_experimental.min_n_by(val, data, 3), NULL::data)::TEXT from data",
                     None, None,
-                );
-            assert_eq!(result.next().unwrap()[1].value(), Some("(0,\"(0,0)\")"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(1,\"(1,1)\")"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(2,\"(2,2)\")"));
+                ).unwrap();
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(0,\"(0,0)\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(1,\"(1,1)\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(2,\"(2,2)\")")
+            );
             assert!(result.next().is_none());
 
             // Test rollup
             let mut result =
-                client.select(
+                client.update(
                     "WITH aggs as (SELECT category, toolkit_experimental.min_n_by(val, data, 5) as agg from data GROUP BY category)
                         SELECT toolkit_experimental.into_values(toolkit_experimental.rollup(agg), NULL::data)::TEXT FROM aggs",
                         None, None,
-                    );
-            assert_eq!(result.next().unwrap()[1].value(), Some("(0,\"(0,0)\")"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(1,\"(1,1)\")"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(2,\"(2,2)\")"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(3,\"(3,3)\")"));
-            assert_eq!(result.next().unwrap()[1].value(), Some("(4,\"(4,0)\")"));
+                    ).unwrap();
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(0,\"(0,0)\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(1,\"(1,1)\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(2,\"(2,2)\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(3,\"(3,3)\")")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("(4,\"(4,0)\")")
+            );
             assert!(result.next().is_none());
         })
     }

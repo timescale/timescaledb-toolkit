@@ -93,7 +93,10 @@ pub fn map_series_pipeline_element<'e>(
 }
 
 pub fn map_series_element<'a>(function: crate::raw::regproc) -> Element<'a> {
-    let function: pg_sys::regproc = function.0.value().try_into().unwrap();
+    let function: pg_sys::regproc =
+        unsafe { pg_sys::Oid::from_u32_unchecked(function.0.value() as u32) }
+            .try_into()
+            .unwrap();
     check_user_function_type(function);
     Element::MapSeries {
         function: PgProcId(function),
@@ -156,7 +159,7 @@ pub fn map_data_pipeline_element<'e>(
     let mut nargs: ::std::os::raw::c_int = 0;
     let rettype = unsafe {
         pg_sys::get_func_signature(
-            function.0.value().try_into().unwrap(),
+            pg_sys::Oid::from_u32_unchecked(function.0.value() as u32),
             &mut argtypes,
             &mut nargs,
         )
@@ -175,7 +178,7 @@ pub fn map_data_pipeline_element<'e>(
     }
 
     Element::MapData {
-        function: PgProcId(function.0.value().try_into().unwrap()),
+        function: PgProcId(unsafe { pg_sys::Oid::from_u32_unchecked(function.0.value() as u32) }),
     }
     .flatten()
 }
@@ -250,46 +253,56 @@ mod tests {
 
     #[pg_test]
     fn test_pipeline_map_lambda() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
-            client.select(
-                "CREATE TABLE series(time timestamptz, value double precision)",
-                None,
-                None,
-            );
-            client.select(
-                "INSERT INTO series \
+            client
+                .update(
+                    "CREATE TABLE series(time timestamptz, value double precision)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client
+                .update(
+                    "INSERT INTO series \
                     VALUES \
                     ('2020-01-04 UTC'::TIMESTAMPTZ, 25.0), \
                     ('2020-01-01 UTC'::TIMESTAMPTZ, 10.0), \
                     ('2020-01-03 UTC'::TIMESTAMPTZ, 20.0), \
                     ('2020-01-02 UTC'::TIMESTAMPTZ, 15.0), \
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let val = client
-                .select(
+                .update(
                     "SELECT (timevector(time, value))::TEXT FROM series",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -301,13 +314,13 @@ mod tests {
             ],null_val:[0])"
             );
 
-            let val = client.select(
+            let val = client.update(
                 "SELECT (timevector(time, value) -> map($$ ($time + '1 day'i, $value * 2) $$))::TEXT FROM series",
                 None,
                 None
             )
-                .first()
-                .get_one::<String>();
+                .unwrap().first()
+                .get_one::<String>().unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -323,46 +336,56 @@ mod tests {
 
     #[pg_test]
     fn test_pipeline_map_lambda2() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
-            client.select(
-                "CREATE TABLE series(time timestamptz, value double precision)",
-                None,
-                None,
-            );
-            client.select(
-                "INSERT INTO series \
+            client
+                .update(
+                    "CREATE TABLE series(time timestamptz, value double precision)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client
+                .update(
+                    "INSERT INTO series \
                     VALUES \
                     ('2020-01-04 UTC'::TIMESTAMPTZ, 25.0), \
                     ('2020-01-01 UTC'::TIMESTAMPTZ, 10.0), \
                     ('2020-01-03 UTC'::TIMESTAMPTZ, 20.0), \
                     ('2020-01-02 UTC'::TIMESTAMPTZ, 15.0), \
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let val = client
-                .select(
+                .update(
                     "SELECT (timevector(time, value))::TEXT FROM series",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -382,73 +405,87 @@ mod tests {
                 (ts:\"2020-01-05 00:00:00+00\",val:1012.2)\
             ],null_val:[0])";
             let val = client
-                .select(
+                .update(
                     "SELECT (timevector(time, value) \
                     -> map($$ ($time, $value^2 + $value * 2.3 + 43.2) $$))::TEXT \
                     FROM series",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(val.unwrap(), expected);
 
             let val = client
-                .select(
+                .update(
                     "SELECT (timevector(time, value) \
                     -> map($$ ($value^2 + $value * 2.3 + 43.2) $$))::TEXT \
                     FROM series",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(val.unwrap(), expected);
         });
     }
 
     #[pg_test]
     fn test_pipeline_map_data() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
-            client.select(
-                "CREATE TABLE series(time timestamptz, value double precision)",
-                None,
-                None,
-            );
-            client.select(
-                "INSERT INTO series \
+            client
+                .update(
+                    "CREATE TABLE series(time timestamptz, value double precision)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client
+                .update(
+                    "INSERT INTO series \
                     VALUES \
                     ('2020-01-04 UTC'::TIMESTAMPTZ, 25.0), \
                     ('2020-01-01 UTC'::TIMESTAMPTZ, 10.0), \
                     ('2020-01-03 UTC'::TIMESTAMPTZ, 20.0), \
                     ('2020-01-02 UTC'::TIMESTAMPTZ, 15.0), \
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let val = client
-                .select(
+                .update(
                     "SELECT (timevector(time, value))::TEXT FROM series",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -460,20 +497,22 @@ mod tests {
             ],null_val:[0])"
             );
 
-            client.select(
+            client.update(
                 "CREATE FUNCTION x2(double precision) RETURNS DOUBLE PRECISION AS 'SELECT $1 * 2;' LANGUAGE SQL",
                 None,
                 None,
-            );
+            ).unwrap();
 
             let val = client
-                .select(
+                .update(
                     "SELECT (timevector(time, value) -> map_data('x2'))::TEXT FROM series",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -489,46 +528,56 @@ mod tests {
 
     #[pg_test]
     fn test_pipeline_map_series() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
-            client.select(
-                "CREATE TABLE series(time timestamptz, value double precision)",
-                None,
-                None,
-            );
-            client.select(
-                "INSERT INTO series \
+            client
+                .update(
+                    "CREATE TABLE series(time timestamptz, value double precision)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client
+                .update(
+                    "INSERT INTO series \
                     VALUES \
                     ('2020-01-04 UTC'::TIMESTAMPTZ, 25.0), \
                     ('2020-01-01 UTC'::TIMESTAMPTZ, 10.0), \
                     ('2020-01-03 UTC'::TIMESTAMPTZ, 20.0), \
                     ('2020-01-02 UTC'::TIMESTAMPTZ, 15.0), \
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let val = client
-                .select(
+                .update(
                     "SELECT (timevector(time, value))::TEXT FROM series",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -540,7 +589,7 @@ mod tests {
             ],null_val:[0])"
             );
 
-            client.select(
+            client.update(
                 "CREATE FUNCTION jan_3_x3(timevector_tstz_f64) RETURNS timevector_tstz_f64 AS $$\
                     SELECT timevector(time, value * 3) \
                     FROM (SELECT (unnest($1)).*) a \
@@ -548,16 +597,18 @@ mod tests {
                 $$ LANGUAGE SQL",
                 None,
                 None,
-            );
+            ).unwrap();
 
             let val = client
-                .select(
+                .update(
                     "SELECT (timevector(time, value) -> map_series('jan_3_x3'))::TEXT FROM series",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:1,flags:1,internal_padding:(0,0,0),points:[\
@@ -570,33 +621,41 @@ mod tests {
     #[pg_test]
     #[should_panic = "division by zero"]
     fn test_pipeline_map_series_failure() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select(
-                "CREATE TABLE series(time timestamptz, value double precision)",
-                None,
-                None,
-            );
-            client.select(
-                "INSERT INTO series \
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
+            client
+                .update(
+                    "CREATE TABLE series(time timestamptz, value double precision)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client
+                .update(
+                    "INSERT INTO series \
                     VALUES \
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)",
-                None,
-                None,
-            );
-            client.select(
+                    None,
+                    None,
+                )
+                .unwrap();
+            client.update(
                 "CREATE FUNCTION always_fail(timevector_tstz_f64) RETURNS timevector_tstz_f64 AS
                 $$
                     SELECT 0/0;
@@ -604,110 +663,128 @@ mod tests {
                 $$ LANGUAGE SQL",
                 None,
                 None,
-            );
+            ).unwrap();
 
             client
-                .select(
+                .update(
                     "SELECT (timevector(time, value) -> map_series('always_fail'))::TEXT FROM series",
                     None,
                     None,
                 )
-                .first()
-                .get_one::<String>();
+                .unwrap().first()
+                .get_one::<String>().unwrap();
         });
     }
 
     #[pg_test]
     #[should_panic = " returned NULL"]
     fn test_pipeline_map_series_null() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
-            client.select(
-                "CREATE TABLE series(time timestamptz, value double precision)",
-                None,
-                None,
-            );
-            client.select(
-                "INSERT INTO series \
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
+            client
+                .update(
+                    "CREATE TABLE series(time timestamptz, value double precision)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client
+                .update(
+                    "INSERT INTO series \
                     VALUES \
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)",
-                None,
-                None,
-            );
-            client.select(
+                    None,
+                    None,
+                )
+                .unwrap();
+            client.update(
                 "CREATE FUNCTION always_null(timevector_tstz_f64) RETURNS timevector_tstz_f64 AS
                 $$
                     SELECT NULL::timevector_tstz_f64;
                 $$ LANGUAGE SQL",
                 None,
                 None,
-            );
+            ).unwrap();
 
             client
-                .select(
+                .update(
                     "SELECT (timevector(time, value) -> map_series('always_null'))::TEXT FROM series",
                     None,
                     None,
                 )
-                .first()
-                .get_one::<String>();
+                .unwrap().first()
+                .get_one::<String>().unwrap();
         });
     }
 
     #[pg_test]
     fn test_map_io() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
-            client.select(
-                "CREATE TABLE series(time timestamptz, value double precision)",
-                None,
-                None,
-            );
-            client.select(
-                "INSERT INTO series \
+            client
+                .update(
+                    "CREATE TABLE series(time timestamptz, value double precision)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client
+                .update(
+                    "INSERT INTO series \
                     VALUES \
                     ('2020-01-04 UTC'::TIMESTAMPTZ, 25.0), \
                     ('2020-01-01 UTC'::TIMESTAMPTZ, 10.0), \
                     ('2020-01-03 UTC'::TIMESTAMPTZ, 20.0), \
                     ('2020-01-02 UTC'::TIMESTAMPTZ, 15.0), \
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let val = client
-                .select(
+                .update(
                     "SELECT (timevector(time, value))::TEXT FROM series",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
@@ -719,30 +796,36 @@ mod tests {
             ],null_val:[0])"
             );
 
-            client.select(
-                "CREATE FUNCTION serier(timevector_tstz_f64) RETURNS timevector_tstz_f64 AS $$\
+            client
+                .update(
+                    "CREATE FUNCTION serier(timevector_tstz_f64) RETURNS timevector_tstz_f64 AS $$\
                     SELECT $1;\
                 $$ LANGUAGE SQL",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
-            client.select(
-                "CREATE FUNCTION dater(double precision) RETURNS double precision AS $$\
+            client
+                .update(
+                    "CREATE FUNCTION dater(double precision) RETURNS double precision AS $$\
                     SELECT $1 * 3;\
                 $$ LANGUAGE SQL",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let (a, b) = client
-                .select(
+                .update(
                     "SELECT map_series('serier')::TEXT, map_data('dater')::TEXT FROM series",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<String, String>();
+                .get_two::<String, String>()
+                .unwrap();
             let one = "\
             (\
                 version:1,\
@@ -767,7 +850,7 @@ mod tests {
 
             // FIXME this doesn't work yet
             let (a, b) = client
-                .select(
+                .update(
                     &format!(
                         "SELECT \
                     '{}'::UnstableTimevectorPipeline::Text, \
@@ -777,8 +860,10 @@ mod tests {
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_two::<String, String>();
+                .get_two::<String, String>()
+                .unwrap();
             assert_eq!((&*a.unwrap(), &*b.unwrap()), (one, two));
         });
     }

@@ -65,28 +65,35 @@ mod tests {
 
     #[pg_test]
     fn test_pipeline_sort() {
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
-                .select(
+                .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
                 .get_one::<String>()
+                .unwrap()
                 .unwrap();
-            client.select(&format!("SET LOCAL search_path TO {}", sp), None, None);
+            client
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .unwrap();
 
-            client.select(
-                "CREATE TABLE series(time timestamptz, value double precision)",
-                None,
-                None,
-            );
-            client.select(
-                "INSERT INTO series \
+            client
+                .update(
+                    "CREATE TABLE series(time timestamptz, value double precision)",
+                    None,
+                    None,
+                )
+                .unwrap();
+            client
+                .update(
+                    "INSERT INTO series \
                     VALUES \
                     ('2020-01-04 UTC'::TIMESTAMPTZ, 25), \
                     ('2020-01-01 UTC'::TIMESTAMPTZ, 10), \
@@ -94,18 +101,21 @@ mod tests {
                     ('2020-01-02 UTC'::TIMESTAMPTZ, 15), \
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30), \
                     ('2020-01-02 12:00:00 UTC'::TIMESTAMPTZ, NULL)",
-                None,
-                None,
-            );
+                    None,
+                    None,
+                )
+                .unwrap();
 
             let val = client
-                .select(
+                .update(
                     "SELECT (timevector(time, value))::TEXT FROM series",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:6,flags:2,internal_padding:(0,0,0),points:[\
@@ -119,13 +129,15 @@ mod tests {
             );
 
             let val = client
-                .select(
+                .update(
                     "SELECT (timevector(time, value) -> sort())::TEXT FROM series",
                     None,
                     None,
                 )
+                .unwrap()
                 .first()
-                .get_one::<String>();
+                .get_one::<String>()
+                .unwrap();
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:6,flags:3,internal_padding:(0,0,0),points:[\

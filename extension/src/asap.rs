@@ -202,9 +202,9 @@ mod tests {
     fn test_against_reference() {
         // Test our ASAP implementation against the reference implementation at http://www.futuredata.io.s3-website-us-west-2.amazonaws.com/asap/
         // The sample data is the first 100 points of the second sample data set.  Note that the dates are not important for this test.
-        Spi::execute(|client| {
-            client.select("SET timezone TO 'UTC'", None, None);
-            let mut result = client.select(
+        Spi::connect(|mut client| {
+            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+            let mut result = client.update(
                 "
                 SELECT value
                 FROM unnest(
@@ -223,46 +223,46 @@ mod tests {
                     ) AS v(i, val)
                 )) s",
                 None,
-                None);
+                None).unwrap();
 
             assert_relative_eq!(
-                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                result.next().unwrap()[1].value::<f64>().unwrap().unwrap() as f32,
                 10.39
             );
             assert_relative_eq!(
-                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                result.next().unwrap()[1].value::<f64>().unwrap().unwrap() as f32,
                 9.29
             );
             assert_relative_eq!(
-                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                result.next().unwrap()[1].value::<f64>().unwrap().unwrap() as f32,
                 7.54
             );
             assert_relative_eq!(
-                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                result.next().unwrap()[1].value::<f64>().unwrap().unwrap() as f32,
                 7.8
             );
             assert_relative_eq!(
-                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                result.next().unwrap()[1].value::<f64>().unwrap().unwrap() as f32,
                 10.34
             );
             assert_relative_eq!(
-                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                result.next().unwrap()[1].value::<f64>().unwrap().unwrap() as f32,
                 11.01
             );
             assert_relative_eq!(
-                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                result.next().unwrap()[1].value::<f64>().unwrap().unwrap() as f32,
                 10.54
             );
             assert_relative_eq!(
-                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                result.next().unwrap()[1].value::<f64>().unwrap().unwrap() as f32,
                 8.01
             );
             assert_relative_eq!(
-                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                result.next().unwrap()[1].value::<f64>().unwrap().unwrap() as f32,
                 8.99
             );
             assert_relative_eq!(
-                result.next().unwrap()[1].value::<f64>().unwrap() as f32,
+                result.next().unwrap()[1].value::<f64>().unwrap().unwrap() as f32,
                 8.73
             );
             assert!(result.next().is_none());
@@ -271,8 +271,8 @@ mod tests {
 
     #[pg_test]
     fn test_asap_equivalence() {
-        Spi::execute(|client| {
-            let mut value_result = client.select(
+        Spi::connect(|mut client| {
+            let mut value_result = client.update(
                 "
                 SELECT time::text, value
                 FROM unnest(
@@ -291,9 +291,9 @@ mod tests {
                     ) AS v(i, val)
                 )) s",
                 None,
-                None);
+                None).unwrap();
 
-            let mut tvec_result = client.select(
+            let mut tvec_result = client.update(
                 "
                 SELECT time::text, value
                 FROM unnest(
@@ -314,13 +314,13 @@ mod tests {
                     ), 10)
                 ))",
                 None,
-                None);
+                None).unwrap();
 
             for _ in 0..10 {
                 let v = value_result.next().unwrap();
                 let t = tvec_result.next().unwrap();
                 assert_eq!(v[1].value::<&str>(), t[1].value::<&str>());
-                assert_eq!(v[2].value::<f64>(), t[2].value::<f64>());
+                assert_eq!(v[2].value::<f64>().unwrap(), t[2].value::<f64>().unwrap());
             }
             assert!(value_result.next().is_none());
             assert!(tvec_result.next().is_none());

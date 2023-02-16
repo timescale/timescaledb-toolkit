@@ -66,7 +66,7 @@ select_pg() {
 # Start postgres and run the first half (old toolkit) of the test.
 # Must select_pg first.
 start_test() {
-    $nop cargo pgx start pg$PG_VERSION
+    $nop cargo pgx start --package timescaledb_toolkit pg$PG_VERSION
     $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- create-test-objects -u $LOGNAME -h 127.1 -p $PG_PORT
 }
 
@@ -74,7 +74,7 @@ start_test() {
 # Must select_pg first.
 finish_test() {
     $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- validate-test-objects -u $LOGNAME -h 127.1 -p $PG_PORT
-    $nop cargo pgx stop pg$PG_VERSION
+    $nop cargo pgx stop --package timescaledb_toolkit pg$PG_VERSION
 }
 
 deb_init() {
@@ -210,7 +210,7 @@ cleanup() {
     set +e
     for PG_VERSION in $PG_VERSIONS; do
         select_pg $PG_VERSION
-        $nop cargo pgx stop pg$PG_VERSION
+        $nop cargo pgx stop --package timescaledb_toolkit pg$PG_VERSION
     done
 }
 

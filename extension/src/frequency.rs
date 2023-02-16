@@ -851,7 +851,7 @@ pub fn rollup_agg_trans_inner(
         in_aggregate_context(fcinfo, || {
             let trans = (&value, &fcinfo).into();
             if let Some(state) = state {
-                Some(SpaceSavingTransState::combine(&*state, &trans).into())
+                Some(SpaceSavingTransState::combine(&state, &trans).into())
             } else {
                 Some(trans.into())
             }
@@ -881,7 +881,7 @@ pub fn rollup_agg_bigint_trans_inner(
         in_aggregate_context(fcinfo, || {
             let trans = (&value, &fcinfo).into();
             if let Some(state) = state {
-                Some(SpaceSavingTransState::combine(&*state, &trans).into())
+                Some(SpaceSavingTransState::combine(&state, &trans).into())
             } else {
                 Some(trans.into())
             }
@@ -911,7 +911,7 @@ pub fn rollup_agg_text_trans_inner(
         in_aggregate_context(fcinfo, || {
             let trans = (&value, &fcinfo).into();
             if let Some(state) = state {
-                Some(SpaceSavingTransState::combine(&*state, &trans).into())
+                Some(SpaceSavingTransState::combine(&state, &trans).into())
             } else {
                 Some(trans.into())
             }

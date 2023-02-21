@@ -112,25 +112,37 @@ impl OwnedCompactStateAgg {
 
         let earlier_len = earlier.combined_durations.len();
 
-        let mut added_entries = 0;
-        for dis in later.durations.iter() {
-            let merged_duration_to_update = merged_durations.iter_mut().find(|merged_dis| {
-                merged_dis.state.materialize(&merged_states) == dis.state.materialize(&later_states)
-            });
-            if let Some(merged_duration_to_update) = merged_duration_to_update {
-                merged_duration_to_update.duration += dis.duration;
-            } else {
-                let state = dis
-                    .state
-                    .materialize(&later_states)
-                    .entry(&mut merged_states);
-                merged_durations.push(DurationInState {
-                    state,
-                    duration: dis.duration,
-                });
-                added_entries += 1;
+        let mut merged_last_state = None;
+        for (later_idx, dis) in later.durations.iter().enumerate() {
+            let materialized_dis = dis.state.materialize(&later_states);
+            let merged_duration_info =
+                merged_durations
+                    .iter_mut()
+                    .enumerate()
+                    .find(|(_, merged_dis)| {
+                        merged_dis.state.materialize(&merged_states) == materialized_dis
+                    });
+
+            let merged_idx =
+                if let Some((merged_idx, merged_duration_to_update)) = merged_duration_info {
+                    merged_duration_to_update.duration += dis.duration;
+                    merged_idx
+                } else {
+                    let state = materialized_dis.entry(&mut merged_states);
+                    merged_durations.push(DurationInState {
+                        state,
+                        duration: dis.duration,
+                    });
+                    merged_durations.len() - 1
+                };
+
+            if later_idx == later.last_state as usize {
+                // this is the last state
+                merged_last_state = Some(merged_idx);
             };
         }
+        let merged_last_state =
+            merged_last_state.expect("later last_state not in later.durations") as u32;
 
         let mut combined_durations = earlier
             .combined_durations
@@ -187,8 +199,8 @@ impl OwnedCompactStateAgg {
 
             first_time: earlier.first_time,
             last_time: later.last_time,
-            first_state: earlier.first_state,
-            last_state: added_entries + later.last_state,
+            first_state: earlier.first_state, // indexes into earlier durations are same for merged_durations
+            last_state: merged_last_state,
 
             // these values are always the same for both
             compact: earlier.compact,

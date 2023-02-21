@@ -56,7 +56,7 @@ pub struct RollupTransState {
     compact: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct OwnedCompactStateAgg {
     durations: Vec<DurationInState>,
     combined_durations: Vec<TimeInState>,
@@ -234,8 +234,23 @@ impl<'a> From<CompactStateAgg<'a>> for OwnedCompactStateAgg {
     }
 }
 
+impl PartialOrd for OwnedCompactStateAgg {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for OwnedCompactStateAgg {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // compare using first time (OwnedCompactStateAgg::merge will handle any overlap)
+        self.first_time.cmp(&other.first_time)
+    }
+}
+
 impl RollupTransState {
     fn merge(&mut self) {
+        // OwnedCompactStateAgg::merge can't merge overlapping aggregates
+        self.values.sort();
         self.values = self
             .values
             .drain(..)

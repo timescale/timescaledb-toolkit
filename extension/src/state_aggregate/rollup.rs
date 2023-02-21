@@ -80,14 +80,18 @@ impl OwnedCompactStateAgg {
             "can't merge aggs with different state types"
         );
 
-        let (earlier, later) = match self.first_time.cmp(&other.first_time) {
+        let (earlier, later) = match self.cmp(&other) {
             Ordering::Less => (self, other),
             Ordering::Greater => (other, self),
-            Ordering::Equal => panic!("can't merge overlapping aggregates (same start time)"),
+            Ordering::Equal => panic!(
+                "can't merge overlapping aggregates (same start time: {})",
+                self.first_time
+            ),
         };
+
         assert!(
             earlier.last_time <= later.first_time,
-            "can't merge overlapping aggregates"
+            "can't merge overlapping aggregates (earlier={earlier:?}, later={later:?})"
         );
         assert_ne!(
             later.durations.len(),
@@ -97,7 +101,7 @@ impl OwnedCompactStateAgg {
         assert_ne!(
             earlier.durations.len(),
             0,
-            "later aggregate must be non-empty"
+            "earlier aggregate must be non-empty"
         );
 
         let later_states =
@@ -142,22 +146,36 @@ impl OwnedCompactStateAgg {
 
         let gap = later.first_time - earlier.last_time;
         assert!(gap >= 0);
-        merged_durations[earlier.last_state as usize].duration += gap;
+        merged_durations
+            .get_mut(earlier.last_state as usize)
+            .expect("earlier.last_state doesn't point to a state")
+            .duration += gap;
 
         // ensure combined_durations covers the whole range of time
         if !earlier.compact {
-            if combined_durations[earlier_len - 1]
+            if combined_durations
+                .get_mut(earlier_len - 1)
+                .expect("invalid combined_durations: nothing at end of earlier")
                 .state
                 .materialize(&merged_states)
-                == combined_durations[earlier_len]
+                == combined_durations
+                    .get(earlier_len)
+                    .expect("invalid combined_durations: nothing at start of earlier")
                     .state
                     .materialize(&merged_states)
             {
-                combined_durations[earlier_len - 1].end_time =
-                    combined_durations.remove(earlier_len).end_time;
+                combined_durations
+                    .get_mut(earlier_len - 1)
+                    .expect("invalid combined_durations (nothing at earlier_len - 1, equal)")
+                    .end_time = combined_durations.remove(earlier_len).end_time;
             } else {
-                combined_durations[earlier_len - 1].end_time =
-                    combined_durations[earlier_len].start_time;
+                combined_durations
+                    .get_mut(earlier_len - 1)
+                    .expect("invalid combined_durations (nothing at earlier_len - 1, not equal)")
+                    .end_time = combined_durations
+                    .get(earlier_len)
+                    .expect("invalid combined_durations (nothing at earlier_len, not equal)")
+                    .start_time;
             }
         }
 

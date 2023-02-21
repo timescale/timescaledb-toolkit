@@ -435,4 +435,72 @@ mod tests {
 
         r2.merge(r1);
     }
+
+    #[test]
+    fn merges_compact_aggs_correctly() {
+        let s1 = OwnedCompactStateAgg {
+            durations: vec![
+                DurationInState {
+                    duration: 500,
+                    state: StateEntry::from_integer(555_2),
+                },
+                DurationInState {
+                    duration: 400,
+                    state: StateEntry::from_integer(555_1),
+                },
+            ],
+            combined_durations: vec![],
+            first_time: 100,
+            last_time: 1000,
+            first_state: 1,
+            last_state: 0,
+            states: vec![],
+            compact: true,
+            integer_states: true,
+        };
+        let s2 = OwnedCompactStateAgg {
+            durations: vec![
+                DurationInState {
+                    duration: 500,
+                    state: StateEntry::from_integer(555_2),
+                },
+                DurationInState {
+                    duration: 400,
+                    state: StateEntry::from_integer(555_1),
+                },
+            ],
+            combined_durations: vec![],
+            first_time: 1000 + 12345,
+            last_time: 1900 + 12345,
+            first_state: 1,
+            last_state: 0,
+            states: vec![],
+            compact: true,
+            integer_states: true,
+        };
+        let expected = OwnedCompactStateAgg {
+            durations: vec![
+                DurationInState {
+                    duration: 500 * 2 + 12345,
+                    state: StateEntry::from_integer(555_2),
+                },
+                DurationInState {
+                    duration: 400 * 2,
+                    state: StateEntry::from_integer(555_1),
+                },
+            ],
+            combined_durations: vec![],
+            first_time: 100,
+            last_time: 1900 + 12345,
+            first_state: 1,
+            last_state: 0,
+            states: vec![],
+            compact: true,
+            integer_states: true,
+        };
+        let merged = s1.clone().merge(s2.clone());
+        assert_eq!(merged, expected);
+        let merged = s2.merge(s1);
+        assert_eq!(merged, expected);
+    }
 }

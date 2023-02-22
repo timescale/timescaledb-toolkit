@@ -91,7 +91,11 @@ impl OwnedCompactStateAgg {
 
         assert!(
             earlier.last_time <= later.first_time,
-            "can't merge overlapping aggregates (earlier={earlier:?}, later={later:?})"
+            "can't merge overlapping aggregates (earlier={}-{}, later={}-{})",
+            earlier.first_time,
+            earlier.last_time,
+            later.first_time,
+            later.last_time,
         );
         assert_ne!(
             later.durations.len(),

@@ -78,6 +78,8 @@ if $privileged; then
                     ;;
 
                 8)
+                    yum -qy install dnf-plugins-core
+                    dnf config-manager --enable powertools
                     dnf -qy module disable postgresql
                     # fpm suddenly requires newer public_suffix that requires newer ruby
                     # https://github.com/jordansissel/fpm/issues/1923 ¯\_(ツ)_/¯
@@ -86,6 +88,8 @@ if $privileged; then
                     ;;
 
                 9)
+                    yum -qy install dnf-plugins-core
+                    dnf config-manager --enable crb
                     dnf -qy install ruby-devel rubygems
                     ;;
 

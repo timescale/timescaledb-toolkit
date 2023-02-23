@@ -509,29 +509,65 @@ mod tests {
             compact: true,
             integer_states: true,
         };
-        let expected = OwnedCompactStateAgg {
+        let s3 = OwnedCompactStateAgg {
             durations: vec![
                 DurationInState {
-                    duration: 500 * 2 + 12345,
+                    duration: 500,
                     state: StateEntry::from_integer(555_2),
                 },
                 DurationInState {
-                    duration: 400 * 2,
+                    duration: 400,
                     state: StateEntry::from_integer(555_1),
                 },
             ],
             combined_durations: vec![],
-            first_time: 100,
-            last_time: 1900 + 12345,
+            first_time: 1900 + 12345,
+            last_time: 1900 + 12345 + 900,
             first_state: 1,
             last_state: 0,
             states: vec![],
             compact: true,
             integer_states: true,
         };
-        let merged = s1.clone().merge(s2.clone());
+        let expected = OwnedCompactStateAgg {
+            durations: vec![
+                DurationInState {
+                    duration: 500 * 3 + 12345,
+                    state: StateEntry::from_integer(555_2),
+                },
+                DurationInState {
+                    duration: 400 * 3,
+                    state: StateEntry::from_integer(555_1),
+                },
+            ],
+            combined_durations: vec![],
+            first_time: 100,
+            last_time: 1900 + 12345 + 900,
+            first_state: 1,
+            last_state: 0,
+            states: vec![],
+            compact: true,
+            integer_states: true,
+        };
+        let merged = s1.clone().merge(s2.clone().merge(s3.clone()));
         assert_eq!(merged, expected);
-        let merged = s2.merge(s1);
+        let merged = s3.clone().merge(s2.clone().merge(s1.clone()));
         assert_eq!(merged, expected);
+
+        let mut trans_state = RollupTransState {
+            values: vec![s1.clone(), s2.clone(), s3.clone()],
+            compact: true,
+        };
+        trans_state.merge();
+        assert_eq!(trans_state.values.len(), 1);
+        assert_eq!(trans_state.values[0], expected.clone());
+
+        let mut trans_state = RollupTransState {
+            values: vec![s3.clone(), s1.clone(), s2.clone()],
+            compact: true,
+        };
+        trans_state.merge();
+        assert_eq!(trans_state.values.len(), 1);
+        assert_eq!(trans_state.values[0], expected.clone());
     }
 }

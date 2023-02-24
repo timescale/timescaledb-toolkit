@@ -52,6 +52,19 @@ impl MaterializedState {
             Self::String(s) => StateEntry::try_from_existing_str(states, s)?,
         })
     }
+
+    fn as_string(self) -> String {
+        match self {
+            Self::String(str) => str,
+            _ => panic!("MaterializedState::as_string called with non-string"),
+        }
+    }
+    fn as_integer(&self) -> i64 {
+        match self {
+            Self::Integer(int) => *int,
+            _ => panic!("MaterializedState::as_integer called with non-integer"),
+        }
+    }
 }
 
 /// A stored state entry. Needs a `states` string to be interpreted.
@@ -1444,6 +1457,46 @@ pub fn interpolated_state_periods_int<'a>(
         interval,
         prev,
     )
+}
+
+fn state_at_inner<'a>(agg: StateAgg<'a>, point: TimestampTz) -> Option<MaterializedState> {
+    let agg = agg.as_compact_state_agg();
+    let point: i64 = point.into();
+    if agg.combined_durations.is_empty() {
+        return None;
+    }
+
+    // binary search to find the first time at or after the start time
+    let slice = agg.combined_durations.as_slice();
+    let idx = match slice.binary_search_by(|tis| tis.start_time.cmp(&point)) {
+        Ok(idx) => idx,
+        Err(idx) => idx.checked_sub(1)?, // return NULL if before first item
+    };
+    let tis = slice.get(idx).expect("binary search index out-of-bounds");
+
+    Some(tis.state.materialize(agg.states_as_str()))
+}
+
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    schema = "toolkit_experimental",
+    name = "state_at"
+)]
+fn state_at<'a>(agg: StateAgg<'a>, point: TimestampTz) -> Option<String> {
+    agg.assert_str();
+    state_at_inner(agg, point).map(MaterializedState::as_string)
+}
+
+#[pg_extern(
+    immutable,
+    parallel_safe,
+    schema = "toolkit_experimental",
+    name = "state_at_int"
+)]
+fn state_at_int<'a>(agg: StateAgg<'a>, point: TimestampTz) -> Option<i64> {
+    agg.assert_int();
+    state_at_inner(agg, point).map(|s| MaterializedState::as_integer(&s))
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, FlatSerializable, PartialEq, Serialize)]

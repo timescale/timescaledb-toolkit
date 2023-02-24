@@ -212,6 +212,75 @@ START | 2019-12-31 00:00:00+00 | 2019-12-31 00:00:11+00
  STOP | 2019-12-31 00:02:00+00 | 2019-12-31 00:02:00+00
 ```
 
+### state_in
+
+```SQL
+SELECT toolkit_experimental.state_at(
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test),
+    '2020-01-01 00:01:02+00'
+);
+```
+```output
+ state_at
+----------
+ ERROR
+```
+```SQL
+SELECT toolkit_experimental.state_at(
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test),
+    '2020-01-01 00:01:00+00'
+);
+```
+```output
+ state_at
+----------
+ ERROR
+```
+```SQL
+SELECT toolkit_experimental.state_at(
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test),
+    '2020-01-01 00:00:05+00'
+);
+```
+```output
+ state_at
+----------
+ START
+```
+```SQL
+SELECT toolkit_experimental.state_at(
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test),
+    '2020-01-01 00:00:00+00'
+);
+```
+```output
+ state_at
+----------
+ START
+```
+```SQL
+SELECT toolkit_experimental.state_at(
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test),
+    '2019-12-31 23:59:59.999999+00'
+);
+```
+```output
+ state_at
+----------
+ 
+```
+```SQL
+SELECT toolkit_experimental.state_at(
+    (SELECT toolkit_experimental.state_agg(ts, state) FROM states_test),
+    '2025-01-01 00:00:00+00'
+);
+```
+```output
+ state_at
+----------
+ STOP
+```
+
 ## state_periods
 
 ```SQL

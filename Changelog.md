@@ -9,6 +9,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 #### New experimental features
 
 #### Bug fixes
+- [#715](https://github.com/timescale/timescaledb-toolkit/pull/715): Fix out-of-bounds indexing error in `state_agg` rollup
 
 #### Other notable changes
 

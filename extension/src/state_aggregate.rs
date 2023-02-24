@@ -104,13 +104,20 @@ impl StateEntry {
         if self.a == i64::MAX {
             MaterializedState::Integer(self.b)
         } else {
-            MaterializedState::String(states[self.a as usize..self.b as usize].to_string())
+            MaterializedState::String(
+                states
+                    .get(self.a as usize..self.b as usize)
+                    .expect("tried to materialize out-of-bounds state")
+                    .to_string(),
+            )
         }
     }
 
     fn as_str(self, states: &str) -> &str {
         assert!(self.a != i64::MAX, "Tried to get non-string state");
-        &states[self.a as usize..self.b as usize]
+        states
+            .get(self.a as usize..self.b as usize)
+            .expect("tried to stringify out-of-bounds state")
     }
 
     fn as_integer(self) -> i64 {

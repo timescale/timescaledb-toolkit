@@ -15,6 +15,9 @@ use flat_serialize::*;
 use flat_serialize_macro::FlatSerializable;
 
 use crate::{
+    accessors::{
+        AccessorIntoIntValues, AccessorIntoValues, AccessorStateIntTimeline, AccessorStateTimeline,
+    },
     flatten,
     palloc::{Inner, Internal},
     pg_type,
@@ -24,6 +27,8 @@ use crate::{
 
 use toolkit_experimental::CompactStateAgg;
 
+mod accessors;
+use accessors::*;
 pub mod rollup;
 
 /// The data of a state.
@@ -53,16 +58,16 @@ impl MaterializedState {
         })
     }
 
-    fn as_string(self) -> String {
+    fn into_string(self) -> String {
         match self {
             Self::String(str) => str,
-            _ => panic!("MaterializedState::as_string called with non-string"),
+            _ => panic!("MaterializedState::into_string called with non-string"),
         }
     }
-    fn as_integer(&self) -> i64 {
+    fn into_integer(self) -> i64 {
         match self {
-            Self::Integer(int) => *int,
-            _ => panic!("MaterializedState::as_integer called with non-integer"),
+            Self::Integer(int) => int,
+            _ => panic!("MaterializedState::into_integer called with non-integer"),
         }
     }
 }
@@ -133,7 +138,7 @@ impl StateEntry {
             .expect("tried to stringify out-of-bounds state")
     }
 
-    fn as_integer(self) -> i64 {
+    fn into_integer(self) -> i64 {
         assert!(self.a == i64::MAX, "Tried to get non-integer state");
         self.b
     }
@@ -248,9 +253,11 @@ pub mod toolkit_experimental {
         }
 
         pub fn get(&self, state: StateEntry) -> Option<i64> {
-            let materialized = state.materialize(self.states_as_str());
+            self.get_materialized(&state.materialize(self.states_as_str()))
+        }
+        pub(super) fn get_materialized(&self, state: &MaterializedState) -> Option<i64> {
             for record in self.durations.iter() {
-                if record.state.materialize(self.states_as_str()) == materialized {
+                if record.state.materialize(self.states_as_str()) == *state {
                     return Some(record.duration);
                 }
             }
@@ -425,6 +432,10 @@ impl<'input> StateAgg<'input> {
                 compact_state_agg: compact_state_agg.0,
             })
         }
+    }
+
+    pub fn empty(integer_states: bool) -> Self {
+        Self::new(CompactStateAgg::empty(false, integer_states))
     }
 
     pub fn as_compact_state_agg(self) -> toolkit_experimental::CompactStateAgg<'input> {
@@ -757,7 +768,7 @@ impl CompactStateAggTransState {
 
 fn duration_in_inner<'a>(
     aggregate: Option<CompactStateAgg<'a>>,
-    state: Option<StateEntry>,
+    state: MaterializedState,
     range: Option<(i64, Option<i64>)>, // start and interval
 ) -> crate::raw::Interval {
     let time: i64 = if let Some((start, interval)) = range {
@@ -768,13 +779,12 @@ fn duration_in_inner<'a>(
             i64::MAX
         };
         assert!(end >= start, "End time must be after start time");
-        if let (Some(state), Some(agg)) = (state, aggregate) {
+        if let Some(agg) = aggregate {
             assert!(
                 !agg.0.compact,
                 "unreachable: interval specified for compact aggregate"
             );
 
-            let state = state.materialize(agg.states_as_str());
             let mut total = 0;
             for tis in agg.combined_durations.iter() {
                 let tis_start_time = i64::max(tis.start_time, start);
@@ -794,7 +804,9 @@ fn duration_in_inner<'a>(
             0
         }
     } else {
-        state.and_then(|state| aggregate?.get(state)).unwrap_or(0)
+        aggregate
+            .and_then(|aggregate| aggregate.get_materialized(&state))
+            .unwrap_or(0)
     };
     time.into()
 }
@@ -804,9 +816,7 @@ pub fn duration_in<'a>(agg: Option<CompactStateAgg<'a>>, state: String) -> crate
     if let Some(ref agg) = agg {
         agg.assert_str()
     };
-    let state = agg
-        .as_ref()
-        .and_then(|agg| StateEntry::try_from_existing_str(agg.states_as_str(), &state));
+    let state = MaterializedState::String(state);
     duration_in_inner(agg, state, None)
 }
 
@@ -820,7 +830,7 @@ pub fn duration_in_int<'a>(agg: Option<CompactStateAgg<'a>>, state: i64) -> crat
     if let Some(ref agg) = agg {
         agg.assert_int()
     };
-    duration_in_inner(agg, Some(StateEntry::from_integer(state)), None)
+    duration_in_inner(agg, MaterializedState::Integer(state), None)
 }
 
 #[pg_extern(immutable, parallel_safe, name = "duration_in")]
@@ -838,9 +848,29 @@ pub fn duration_in_tl_int<'a>(agg: Option<StateAgg<'a>>, state: i64) -> crate::r
     };
     duration_in_inner(
         agg.map(StateAgg::as_compact_state_agg),
-        Some(StateEntry::from_integer(state)),
+        MaterializedState::Integer(state),
         None,
     )
+}
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_state_agg_duration_in_string<'a>(
+    agg: StateAgg<'a>,
+    accessor: AccessorDurationIn<'a>,
+) -> crate::raw::Interval {
+    let state = MaterializedState::String(
+        String::from_utf8_lossy(accessor.state_bytes.as_slice()).to_string(),
+    );
+    duration_in_inner(Some(agg.as_compact_state_agg()), state, None)
+}
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_state_agg_duration_in_int<'a>(
+    agg: StateAgg<'a>,
+    accessor: AccessorDurationInInt<'a>,
+) -> crate::raw::Interval {
+    let state = MaterializedState::Integer(accessor.state);
+    duration_in_inner(Some(agg.as_compact_state_agg()), state, None)
 }
 
 #[pg_extern(immutable, parallel_safe, name = "duration_in")]
@@ -856,10 +886,11 @@ pub fn duration_in_range<'a>(
     let agg = agg.map(StateAgg::as_compact_state_agg);
     let interval = interval.map(|interval| crate::datum_utils::interval_to_ms(&start, &interval));
     let start = start.into();
-    let state = agg
-        .as_ref()
-        .and_then(|agg| StateEntry::try_from_existing_str(agg.states_as_str(), &state));
-    duration_in_inner(agg, state, Some((start, interval)))
+    duration_in_inner(
+        agg,
+        MaterializedState::String(state),
+        Some((start, interval)),
+    )
 }
 
 #[pg_extern(immutable, parallel_safe, name = "duration_in")]
@@ -876,16 +907,58 @@ pub fn duration_in_range_int<'a>(
     let start = start.into();
     duration_in_inner(
         agg.map(StateAgg::as_compact_state_agg),
-        Some(StateEntry::from_integer(state)),
+        MaterializedState::Integer(state),
         Some((start, interval)),
+    )
+}
+
+/// Used to indicate no interval was specified. The interval cannot be negative anyways, so this
+/// value will never be a valid argument.
+const NO_INTERVAL_MARKER: i64 = i64::MIN;
+fn range_tuple(start: i64, interval: i64) -> (i64, Option<i64>) {
+    (
+        start,
+        if interval == NO_INTERVAL_MARKER {
+            None
+        } else {
+            Some(interval)
+        },
+    )
+}
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_state_agg_duration_in_range_string<'a>(
+    agg: StateAgg<'a>,
+    accessor: AccessorDurationInRange<'a>,
+) -> crate::raw::Interval {
+    let state = MaterializedState::String(
+        String::from_utf8_lossy(accessor.state_bytes.as_slice()).to_string(),
+    );
+    duration_in_inner(
+        Some(agg.as_compact_state_agg()),
+        state,
+        Some(range_tuple(accessor.start, accessor.interval)),
+    )
+}
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_state_agg_duration_in_range_int<'a>(
+    agg: StateAgg<'a>,
+    accessor: AccessorDurationInRangeInt<'a>,
+) -> crate::raw::Interval {
+    let state = MaterializedState::Integer(accessor.state);
+    duration_in_inner(
+        Some(agg.as_compact_state_agg()),
+        state,
+        Some(range_tuple(accessor.start, accessor.interval)),
     )
 }
 
 fn interpolated_duration_in_inner<'a>(
     aggregate: Option<CompactStateAgg<'a>>,
-    state: Option<MaterializedState>,
-    start: TimestampTz,
-    interval: crate::raw::Interval,
+    state: MaterializedState,
+    start: i64,
+    interval: i64,
     prev: Option<CompactStateAgg<'a>>,
 ) -> crate::raw::Interval {
     match aggregate {
@@ -893,8 +966,6 @@ fn interpolated_duration_in_inner<'a>(
             "when interpolating data between grouped data, all groups must contain some data"
         ),
         Some(aggregate) => {
-            let interval = crate::datum_utils::interval_to_ms(&start, &interval);
-            let start = start.into();
             if let Some(ref prev) = prev {
                 assert!(
                     start >= prev.0.last_time,
@@ -915,9 +986,7 @@ fn interpolated_duration_in_inner<'a>(
                 Some((start, Some(interval)))
             };
             let new_agg = aggregate.interpolate(start, interval, prev);
-            let state_entry =
-                state.and_then(|state| state.try_existing_entry(new_agg.states_as_str()));
-            duration_in_inner(Some(new_agg), state_entry, range)
+            duration_in_inner(Some(new_agg), state, range)
         }
     }
 }
@@ -932,10 +1001,11 @@ pub fn interpolated_duration_in<'a>(
     if let Some(ref agg) = agg {
         agg.assert_str()
     };
+    let interval = crate::datum_utils::interval_to_ms(&start, &interval);
     interpolated_duration_in_inner(
         agg,
-        Some(MaterializedState::String(state)),
-        start,
+        MaterializedState::String(state),
+        start.into(),
         interval,
         prev,
     )
@@ -977,10 +1047,11 @@ pub fn interpolated_duration_in_int<'a>(
     if let Some(ref agg) = agg {
         agg.assert_int()
     };
+    let interval = crate::datum_utils::interval_to_ms(&start, &interval);
     interpolated_duration_in_inner(
         agg,
-        Some(MaterializedState::Integer(state)),
-        start,
+        MaterializedState::Integer(state),
+        start.into(),
         interval,
         prev,
     )
@@ -1003,6 +1074,46 @@ pub fn interpolated_duration_in_tl_int<'a>(
         start,
         interval,
         prev.map(StateAgg::as_compact_state_agg),
+    )
+}
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_state_agg_interpolated_duration_in_string<'a>(
+    agg: Option<StateAgg<'a>>,
+    accessor: AccessorInterpolatedDurationIn<'a>,
+) -> crate::raw::Interval {
+    let state = MaterializedState::String(
+        String::from_utf8_lossy(accessor.state_bytes.as_slice()).to_string(),
+    );
+    interpolated_duration_in_inner(
+        agg.map(StateAgg::as_compact_state_agg),
+        state,
+        accessor.start,
+        accessor.interval,
+        if accessor.prev_present {
+            Some(unsafe { accessor.prev.flatten() }.as_compact_state_agg())
+        } else {
+            None
+        },
+    )
+}
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_state_agg_interpolated_duration_in_int<'a>(
+    agg: Option<StateAgg<'a>>,
+    accessor: AccessorInterpolatedDurationInInt<'a>,
+) -> crate::raw::Interval {
+    let state = MaterializedState::Integer(accessor.state);
+    interpolated_duration_in_inner(
+        agg.map(StateAgg::as_compact_state_agg),
+        state,
+        accessor.start,
+        accessor.interval,
+        if accessor.prev_present {
+            Some(unsafe { accessor.prev.flatten() }.as_compact_state_agg())
+        } else {
+            None
+        },
     )
 }
 
@@ -1075,7 +1186,7 @@ pub fn into_int_values<'a>(
         agg.durations
             .clone()
             .into_iter()
-            .map(move |record| (record.state.as_integer(), record.duration.into()))
+            .map(move |record| (record.state.into_integer(), record.duration.into()))
             .collect::<Vec<_>>()
             .into_iter(), // make map panic now instead of at iteration time
     )
@@ -1105,6 +1216,34 @@ pub fn into_values_tl_int<'a>(
 > {
     agg.assert_int();
     into_int_values(agg.as_compact_state_agg())
+}
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_state_agg_into_values<'a>(
+    agg: StateAgg<'a>,
+    _accessor: AccessorIntoValues<'a>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(state, String),
+        pgx::name!(duration, crate::raw::Interval),
+    ),
+> {
+    into_values_tl(agg)
+}
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_state_agg_into_int_values<'a>(
+    agg: StateAgg<'a>,
+    _accessor: AccessorIntoIntValues<'a>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(state, i64),
+        pgx::name!(duration, crate::raw::Interval),
+    ),
+> {
+    into_values_tl_int(agg)
 }
 
 fn state_timeline_inner<'a>(
@@ -1155,7 +1294,7 @@ fn state_int_timeline_inner<'a>(
             .into_iter()
             .map(move |record| {
                 (
-                    record.state.as_integer(),
+                    record.state.into_integer(),
                     TimestampTz::from(record.start_time),
                     TimestampTz::from(record.end_time),
                 )
@@ -1194,11 +1333,41 @@ pub fn state_int_timeline<'a>(
     state_int_timeline_inner(agg.as_compact_state_agg())
 }
 
-#[pg_extern(immutable, parallel_safe)]
-pub fn interpolated_state_timeline<'a>(
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_state_agg_state_timeline<'a>(
+    agg: StateAgg<'a>,
+    _accessor: AccessorStateTimeline<'a>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(state, String),
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    state_timeline(agg)
+}
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_state_agg_state_int_timeline<'a>(
+    agg: StateAgg<'a>,
+    _accessor: AccessorStateIntTimeline<'a>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(state, i64),
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    state_int_timeline(agg)
+}
+
+fn interpolated_state_timeline_inner<'a>(
     agg: Option<StateAgg<'a>>,
-    start: TimestampTz,
-    interval: crate::raw::Interval,
+    start: i64,
+    interval: i64,
     prev: Option<StateAgg<'a>>,
 ) -> TableIterator<
     'a,
@@ -1215,25 +1384,21 @@ pub fn interpolated_state_timeline<'a>(
         None => pgx::error!(
             "when interpolating data between grouped data, all groups must contain some data"
         ),
-        Some(agg) => {
-            let interval = crate::datum_utils::interval_to_ms(&start, &interval);
-            TableIterator::new(
-                state_timeline_inner(agg.as_compact_state_agg().interpolate(
-                    start.into(),
-                    interval,
-                    prev.map(StateAgg::as_compact_state_agg),
-                ))
-                .collect::<Vec<_>>()
-                .into_iter(),
-            )
-        }
+        Some(agg) => TableIterator::new(
+            state_timeline_inner(agg.as_compact_state_agg().interpolate(
+                start,
+                interval,
+                prev.map(StateAgg::as_compact_state_agg),
+            ))
+            .collect::<Vec<_>>()
+            .into_iter(),
+        ),
     }
 }
-#[pg_extern(immutable, parallel_safe)]
-pub fn interpolated_state_int_timeline<'a>(
+fn interpolated_state_int_timeline_inner<'a>(
     agg: Option<StateAgg<'a>>,
-    start: TimestampTz,
-    interval: crate::raw::Interval,
+    start: i64,
+    interval: i64,
     prev: Option<StateAgg<'a>>,
 ) -> TableIterator<
     'a,
@@ -1250,24 +1415,103 @@ pub fn interpolated_state_int_timeline<'a>(
         None => pgx::error!(
             "when interpolating data between grouped data, all groups must contain some data"
         ),
-        Some(agg) => {
-            let interval = crate::datum_utils::interval_to_ms(&start, &interval);
-            TableIterator::new(
-                state_int_timeline_inner(agg.as_compact_state_agg().interpolate(
-                    start.into(),
-                    interval,
-                    prev.map(StateAgg::as_compact_state_agg),
-                ))
-                .collect::<Vec<_>>()
-                .into_iter(),
-            )
-        }
+        Some(agg) => TableIterator::new(
+            state_int_timeline_inner(agg.as_compact_state_agg().interpolate(
+                start,
+                interval,
+                prev.map(StateAgg::as_compact_state_agg),
+            ))
+            .collect::<Vec<_>>()
+            .into_iter(),
+        ),
     }
+}
+#[pg_extern(immutable, parallel_safe)]
+pub fn interpolated_state_timeline<'a>(
+    agg: Option<StateAgg<'a>>,
+    start: TimestampTz,
+    interval: crate::raw::Interval,
+    prev: Option<StateAgg<'a>>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(state, String),
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    let interval = crate::datum_utils::interval_to_ms(&start, &interval);
+    interpolated_state_timeline_inner(agg, start.into(), interval, prev)
+}
+#[pg_extern(immutable, parallel_safe)]
+pub fn interpolated_state_int_timeline<'a>(
+    agg: Option<StateAgg<'a>>,
+    start: TimestampTz,
+    interval: crate::raw::Interval,
+    prev: Option<StateAgg<'a>>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(state, i64),
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    let interval = crate::datum_utils::interval_to_ms(&start, &interval);
+    interpolated_state_int_timeline_inner(agg, start.into(), interval, prev)
+}
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_state_agg_interpolated_state_timeline<'a>(
+    agg: Option<StateAgg<'a>>,
+    accessor: AccessorInterpolatedStateTimeline<'a>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(state, String),
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    interpolated_state_timeline_inner(
+        agg,
+        accessor.start,
+        accessor.interval,
+        if accessor.prev_present {
+            Some(unsafe { accessor.prev.flatten() })
+        } else {
+            None
+        },
+    )
+}
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_state_agg_interpolated_state_int_timeline<'a>(
+    agg: Option<StateAgg<'a>>,
+    accessor: AccessorInterpolatedStateIntTimeline<'a>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(state, i64),
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    interpolated_state_int_timeline_inner(
+        agg,
+        accessor.start,
+        accessor.interval,
+        if accessor.prev_present {
+            Some(unsafe { accessor.prev.flatten() })
+        } else {
+            None
+        },
+    )
 }
 
 fn state_periods_inner<'a>(
-    state: MaterializedState,
     agg: CompactStateAgg<'a>,
+    state: MaterializedState,
 ) -> TableIterator<
     'a,
     (
@@ -1310,7 +1554,7 @@ pub fn state_periods<'a>(
 > {
     agg.assert_str();
     let agg = agg.as_compact_state_agg();
-    state_periods_inner(MaterializedState::String(state), agg)
+    state_periods_inner(agg, MaterializedState::String(state))
 }
 #[pg_extern(immutable, parallel_safe, name = "state_periods")]
 pub fn state_int_periods<'a>(
@@ -1325,17 +1569,50 @@ pub fn state_int_periods<'a>(
 > {
     agg.assert_int();
     state_periods_inner(
-        MaterializedState::Integer(state),
         agg.as_compact_state_agg(),
+        MaterializedState::Integer(state),
     )
 }
 
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_state_agg_state_periods_string<'a>(
+    agg: StateAgg<'a>,
+    accessor: AccessorStatePeriods<'a>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    let state = MaterializedState::String(
+        String::from_utf8_lossy(accessor.state_bytes.as_slice()).to_string(),
+    );
+    state_periods_inner(agg.as_compact_state_agg(), state)
+}
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_state_agg_state_periods_int<'a>(
+    agg: StateAgg<'a>,
+    accessor: AccessorStatePeriodsInt<'a>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    let state = MaterializedState::Integer(accessor.state);
+    state_periods_inner(agg.as_compact_state_agg(), state)
+}
+
 fn interpolated_state_periods_inner<'a>(
-    aggregate: Option<StateAgg<'a>>,
+    aggregate: Option<CompactStateAgg<'a>>,
     state: MaterializedState,
-    start: TimestampTz,
-    interval: crate::raw::Interval,
-    prev: Option<StateAgg<'a>>,
+    start: i64,
+    interval: i64,
+    prev: Option<CompactStateAgg<'a>>,
 ) -> TableIterator<
     'a,
     (
@@ -1347,21 +1624,11 @@ fn interpolated_state_periods_inner<'a>(
         None => pgx::error!(
             "when interpolating data between grouped data, all groups must contain some data"
         ),
-        Some(aggregate) => {
-            let interval = crate::datum_utils::interval_to_ms(&start, &interval);
-            TableIterator::new(
-                state_periods_inner(
-                    state,
-                    aggregate.as_compact_state_agg().interpolate(
-                        start.into(),
-                        interval,
-                        prev.map(StateAgg::as_compact_state_agg),
-                    ),
-                )
+        Some(aggregate) => TableIterator::new(
+            state_periods_inner(aggregate.interpolate(start, interval, prev), state)
                 .collect::<Vec<_>>()
                 .into_iter(),
-            )
-        }
+        ),
     }
 }
 #[pg_extern(immutable, parallel_safe)]
@@ -1381,7 +1648,14 @@ pub fn interpolated_state_periods<'a>(
     if let Some(ref agg) = agg {
         agg.assert_str()
     };
-    interpolated_state_periods_inner(agg, MaterializedState::String(state), start, interval, prev)
+    let interval = crate::datum_utils::interval_to_ms(&start, &interval);
+    interpolated_state_periods_inner(
+        agg.map(StateAgg::as_compact_state_agg),
+        MaterializedState::String(state),
+        start.into(),
+        interval,
+        prev.map(StateAgg::as_compact_state_agg),
+    )
 }
 #[pg_extern(immutable, parallel_safe, name = "interpolated_state_periods")]
 pub fn interpolated_state_periods_int<'a>(
@@ -1400,16 +1674,69 @@ pub fn interpolated_state_periods_int<'a>(
     if let Some(ref agg) = agg {
         agg.assert_int()
     };
+    let interval = crate::datum_utils::interval_to_ms(&start, &interval);
     interpolated_state_periods_inner(
-        agg,
+        agg.map(StateAgg::as_compact_state_agg),
         MaterializedState::Integer(state),
-        start,
+        start.into(),
         interval,
-        prev,
+        prev.map(StateAgg::as_compact_state_agg),
+    )
+}
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_state_agg_interpolated_state_periods_string<'a>(
+    agg: Option<StateAgg<'a>>,
+    accessor: AccessorInterpolatedStatePeriods<'a>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    let state = MaterializedState::String(
+        String::from_utf8_lossy(accessor.state_bytes.as_slice()).to_string(),
+    );
+    interpolated_state_periods_inner(
+        agg.map(StateAgg::as_compact_state_agg),
+        state,
+        accessor.start,
+        accessor.interval,
+        if accessor.prev_present {
+            Some(unsafe { accessor.prev.flatten() }.as_compact_state_agg())
+        } else {
+            None
+        },
+    )
+}
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_state_agg_interpolated_state_periods_int<'a>(
+    agg: Option<StateAgg<'a>>,
+    accessor: AccessorInterpolatedStatePeriodsInt<'a>,
+) -> TableIterator<
+    'a,
+    (
+        pgx::name!(start_time, TimestampTz),
+        pgx::name!(end_time, TimestampTz),
+    ),
+> {
+    let state = MaterializedState::Integer(accessor.state);
+    interpolated_state_periods_inner(
+        agg.map(StateAgg::as_compact_state_agg),
+        state,
+        accessor.start,
+        accessor.interval,
+        if accessor.prev_present {
+            Some(unsafe { accessor.prev.flatten() }.as_compact_state_agg())
+        } else {
+            None
+        },
     )
 }
 
-fn state_at_inner<'a>(agg: StateAgg<'a>, point: TimestampTz) -> Option<MaterializedState> {
+fn state_at_inner<'a>(agg: StateAgg<'a>, point: i64) -> Option<MaterializedState> {
     let agg = agg.as_compact_state_agg();
     let point: i64 = point.into();
     if agg.combined_durations.is_empty() {
@@ -1430,13 +1757,31 @@ fn state_at_inner<'a>(agg: StateAgg<'a>, point: TimestampTz) -> Option<Materiali
 #[pg_extern(immutable, parallel_safe, name = "state_at")]
 fn state_at<'a>(agg: StateAgg<'a>, point: TimestampTz) -> Option<String> {
     agg.assert_str();
-    state_at_inner(agg, point).map(MaterializedState::as_string)
+    state_at_inner(agg, point.into()).map(MaterializedState::into_string)
 }
 
 #[pg_extern(immutable, parallel_safe, name = "state_at_int")]
 fn state_at_int<'a>(agg: StateAgg<'a>, point: TimestampTz) -> Option<i64> {
     agg.assert_int();
-    state_at_inner(agg, point).map(|s| MaterializedState::as_integer(&s))
+    state_at_inner(agg, point.into()).map(MaterializedState::into_integer)
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_state_agg_state_at_string<'a>(
+    agg: StateAgg<'a>,
+    accessor: AccessorStateAt<'a>,
+) -> Option<String> {
+    state_at_inner(agg, accessor.time).map(MaterializedState::into_string)
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_state_agg_state_at_int<'a>(
+    agg: StateAgg<'a>,
+    accessor: AccessorStateAtInt<'a>,
+) -> Option<i64> {
+    state_at_inner(agg, accessor.time).map(MaterializedState::into_integer)
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, FlatSerializable, PartialEq, Serialize)]

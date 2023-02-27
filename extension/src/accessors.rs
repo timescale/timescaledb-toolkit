@@ -101,7 +101,10 @@ accessor! { live_ranges() }
 accessor! { dead_ranges() }
 accessor! { uptime() }
 accessor! { downtime() }
-
+accessor! { into_values() }
+accessor! { into_int_values() }
+accessor! { state_timeline() }
+accessor! { state_int_timeline() }
 // The rest are more complex, with String or other challenges.  Leaving alone for now.
 
 pg_type! {

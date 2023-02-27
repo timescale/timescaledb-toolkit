@@ -1230,7 +1230,7 @@ pub fn interpolated_state_timeline<'a>(
     }
 }
 #[pg_extern(immutable, parallel_safe)]
-pub fn interpolated_int_state_timeline<'a>(
+pub fn interpolated_state_int_timeline<'a>(
     agg: Option<StateAgg<'a>>,
     start: TimestampTz,
     interval: crate::raw::Interval,

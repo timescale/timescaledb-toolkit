@@ -23,6 +23,10 @@ use time_weighted_average::{
 
 use crate::raw::bytea;
 
+mod accessors;
+
+use accessors::TimeWeightInterpolatedAverageAccessor;
+
 pg_type! {
     #[derive(Debug)]
     struct TimeWeightSummary {
@@ -488,20 +492,6 @@ fn interpolate<'a>(
     }
 }
 
-// Public facing interpolated_average
-extension_sql!(
-    "\n\
-     CREATE FUNCTION toolkit_experimental.interpolated_average(tws timeweightsummary,\n\
-          start timestamptz,\n\
-          duration interval,\n\
-          prev timeweightsummary,\n\
-          next timeweightsummary) RETURNS DOUBLE PRECISION\n\
-     AS $$\n\
-          SELECT interpolated_average(tws,start,duration,prev,next) $$ LANGUAGE SQL IMMUTABLE PARALLEL SAFE;\n\
-",
-    name = "experimental_interpolated_average", requires = [time_weighted_average_interpolated_average]
-);
-
 #[pg_extern(immutable, parallel_safe, name = "interpolated_average")]
 pub fn time_weighted_average_interpolated_average<'a>(
     tws: Option<TimeWeightSummary<'a>>,
@@ -512,6 +502,32 @@ pub fn time_weighted_average_interpolated_average<'a>(
 ) -> Option<f64> {
     let target = interpolate(tws, start, duration, prev, next);
     time_weighted_average_average(target)
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_time_weighted_average_interpolated_average<'a>(
+    tws: Option<TimeWeightSummary<'a>>,
+    accessor: TimeWeightInterpolatedAverageAccessor<'a>,
+) -> Option<f64> {
+    let prev = if accessor.flags & 1 == 1 {
+        Some(accessor.prev.clone().into())
+    } else {
+        None
+    };
+    let next = if accessor.flags & 2 == 2 {
+        Some(accessor.next.clone().into())
+    } else {
+        None
+    };
+
+    time_weighted_average_interpolated_average(
+        tws,
+        accessor.timestamp.into(),
+        accessor.interval.into(),
+        prev,
+        next,
+    )
 }
 
 #[pg_extern(
@@ -840,11 +856,11 @@ mod tests {
                     None,
                 )
                 .unwrap();
-            // test experimental version
-            let mut experimental_averages = client
+
+            let mut averages = client
                 .update(
                     r#"SELECT
-                toolkit_experimental.interpolated_average(
+                interpolated_average(
                     agg,
                     bucket,
                     '1 day'::interval,
@@ -860,12 +876,11 @@ mod tests {
                     None,
                 )
                 .unwrap();
-            // test non_experimental version
-            let mut averages = client
+            // test arrow version
+            let mut arrow_averages = client
                 .update(
                     r#"SELECT
-                interpolated_average(
-                    agg,
+                agg -> interpolated_average(
                     bucket,
                     '1 day'::interval,
                     LAG(agg) OVER (ORDER BY bucket),
@@ -922,35 +937,35 @@ mod tests {
                 .unwrap();
 
             // Day 1, 4 hours @ 10, 4 @ 40, 8 @ 20
-            let result = experimental_averages.next().unwrap()[1].value().unwrap();
+            let result = averages.next().unwrap()[1].value().unwrap();
             assert_eq!(result, Some((4. * 10. + 4. * 40. + 8. * 20.) / 16.));
-            assert_eq!(result, averages.next().unwrap()[1].value().unwrap());
+            assert_eq!(result, arrow_averages.next().unwrap()[1].value().unwrap());
 
             assert_eq!(
                 integrals.next().unwrap()[1].value().unwrap(),
                 Some(4. * 10. + 4. * 40. + 8. * 20.)
             );
             // Day 2, 2 hours @ 20, 10 @ 15, 8 @ 50, 4 @ 25
-            let result = experimental_averages.next().unwrap()[1].value().unwrap();
+            let result = averages.next().unwrap()[1].value().unwrap();
             assert_eq!(
                 result,
                 Some((2. * 20. + 10. * 15. + 8. * 50. + 4. * 25.) / 24.)
             );
-            assert_eq!(result, averages.next().unwrap()[1].value().unwrap());
+            assert_eq!(result, arrow_averages.next().unwrap()[1].value().unwrap());
             assert_eq!(
                 integrals.next().unwrap()[1].value().unwrap(),
                 Some(2. * 20. + 10. * 15. + 8. * 50. + 4. * 25.)
             );
             // Day 3, 10 hours @ 25, 2 @ 30, 4 @ 0
-            let result = experimental_averages.next().unwrap()[1].value().unwrap();
+            let result = averages.next().unwrap()[1].value().unwrap();
             assert_eq!(result, Some((10. * 25. + 2. * 30.) / 16.));
-            assert_eq!(result, averages.next().unwrap()[1].value().unwrap());
+            assert_eq!(result, arrow_averages.next().unwrap()[1].value().unwrap());
             assert_eq!(
                 integrals.next().unwrap()[1].value().unwrap(),
                 Some(10. * 25. + 2. * 30.)
             );
-            assert!(experimental_averages.next().is_none());
             assert!(averages.next().is_none());
+            assert!(arrow_averages.next().is_none());
             assert!(integrals.next().is_none());
         });
     }

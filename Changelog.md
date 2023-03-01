@@ -14,10 +14,12 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 #### Stabilized features
 - [#722](https://github.com/timescale/timescaledb-toolkit/pull/722): Stabilize heartbeat aggregate.
 - [#724](https://github.com/timescale/timescaledb-toolkit/pull/724): Stabilize integral and interpolated_integral for time-weighted-average.
+- [#723](https://github.com/timescale/timescaledb-toolkit/pull/723): Stabilized `state_agg`
 
 #### Other notable changes
 - [#716](https://github.com/timescale/timescaledb-toolkit/issues/716): Add arrow operator support for counter aggregate and time-weighted aggregate interpolated accessors.
 - [#716](https://github.com/timescale/timescaledb-toolkit/issues/716): Remove experimental versions of interpolated accessors for counter aggregate and time-weighted aggregates.  The stable versions introduced in 1.14.0 should be used instead.
+- [#723](https://github.com/timescale/timescaledb-toolkit/pull/723): Added `state_at` function for `state_agg`
 
 #### Shout-outs
 

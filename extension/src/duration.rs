@@ -2,6 +2,8 @@
 //! PostgreSQL parses duration units. Currently units longer than an hour are unsupported since
 //! the length of days varies when in a timezone with daylight savings time.
 
+use core::fmt::{self, Formatter};
+
 // Canonical PostgreSQL units: https://github.com/postgres/postgres/blob/b76fb6c2a99eb7d49f96e56599fef1ffc1c134c9/src/include/utils/datetime.h#L48-L60
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum DurationUnit {
@@ -14,7 +16,7 @@ pub enum DurationUnit {
 }
 
 impl DurationUnit {
-    fn microseconds(self) -> u32 {
+    pub fn microseconds(self) -> u32 {
         match self {
             Self::Microsec => 1,
             Self::Millisec => 1000,
@@ -42,6 +44,18 @@ impl DurationUnit {
             "minute" | "m" | "min" | "mins" | "minutes" => Some(Self::Minute),
             "hour" | "hours" | "h" | "hr" | "hrs" => Some(Self::Hour),
             _ => None,
+        }
+    }
+}
+
+impl fmt::Display for DurationUnit {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            DurationUnit::Microsec => write!(f, "microsecond"),
+            DurationUnit::Millisec => write!(f, "millisecond"),
+            DurationUnit::Second => write!(f, "second"),
+            DurationUnit::Minute => write!(f, "minute"),
+            DurationUnit::Hour => write!(f, "hour"),
         }
     }
 }

@@ -12,40 +12,40 @@ extension_sql!(
         sfunc = toolkit_experimental.compact_state_agg_rollup_trans,
         stype = internal,
         finalfunc = toolkit_experimental.compact_state_agg_rollup_final,
-        combinefunc = toolkit_experimental.compact_state_agg_rollup_combine,
-        serialfunc = toolkit_experimental.compact_state_agg_rollup_serialize,
-        deserialfunc = toolkit_experimental.compact_state_agg_rollup_deserialize,
+        combinefunc = state_agg_rollup_combine,
+        serialfunc = state_agg_rollup_serialize,
+        deserialfunc = state_agg_rollup_deserialize,
         parallel = restricted
     );",
     name = "compact_state_agg_rollup",
     requires = [
         compact_state_agg_rollup_trans,
         compact_state_agg_rollup_final,
-        compact_state_agg_rollup_combine,
-        compact_state_agg_rollup_serialize,
-        compact_state_agg_rollup_deserialize,
+        state_agg_rollup_combine,
+        state_agg_rollup_serialize,
+        state_agg_rollup_deserialize,
         CompactStateAgg,
     ],
 );
 extension_sql!(
-    "CREATE AGGREGATE toolkit_experimental.rollup(
-        value toolkit_experimental.StateAgg
+    "CREATE AGGREGATE rollup(
+        value StateAgg
     ) (
-        sfunc = toolkit_experimental.state_agg_rollup_trans,
+        sfunc = state_agg_rollup_trans,
         stype = internal,
-        finalfunc = toolkit_experimental.state_agg_rollup_final,
-        combinefunc = toolkit_experimental.compact_state_agg_rollup_combine,
-        serialfunc = toolkit_experimental.compact_state_agg_rollup_serialize,
-        deserialfunc = toolkit_experimental.compact_state_agg_rollup_deserialize,
+        finalfunc = state_agg_rollup_final,
+        combinefunc = state_agg_rollup_combine,
+        serialfunc = state_agg_rollup_serialize,
+        deserialfunc = state_agg_rollup_deserialize,
         parallel = restricted
     );",
     name = "state_agg_rollup",
     requires = [
         state_agg_rollup_trans,
         state_agg_rollup_final,
-        compact_state_agg_rollup_combine,
-        compact_state_agg_rollup_serialize,
-        compact_state_agg_rollup_deserialize,
+        state_agg_rollup_combine,
+        state_agg_rollup_serialize,
+        state_agg_rollup_deserialize,
         StateAgg,
     ],
 );
@@ -309,7 +309,7 @@ pub fn compact_state_agg_rollup_trans_inner<'a>(
     }
 }
 
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(immutable, parallel_safe)]
 pub fn state_agg_rollup_trans<'a>(
     state: Internal,
     next: Option<StateAgg<'a>>,
@@ -349,7 +349,7 @@ fn compact_state_agg_rollup_final_inner<'a>(
     }
 }
 
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(immutable, parallel_safe)]
 fn state_agg_rollup_final<'a>(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
@@ -375,36 +375,35 @@ fn state_agg_rollup_final_inner<'a>(
     }
 }
 
-#[pg_extern(immutable, parallel_safe, strict, schema = "toolkit_experimental")]
-pub fn compact_state_agg_rollup_serialize(state: Internal) -> bytea {
+#[pg_extern(immutable, parallel_safe, strict)]
+pub fn state_agg_rollup_serialize(state: Internal) -> bytea {
     let mut state: Inner<RollupTransState> = unsafe { state.to_inner().unwrap() };
     state.merge();
     crate::do_serialize!(state)
 }
 
-#[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn compact_state_agg_rollup_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
-    compact_state_agg_rollup_deserialize_inner(bytes).internal()
+#[pg_extern(strict, immutable, parallel_safe)]
+pub fn state_agg_rollup_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
+    state_agg_rollup_deserialize_inner(bytes).internal()
 }
-pub fn compact_state_agg_rollup_deserialize_inner(bytes: bytea) -> Inner<RollupTransState> {
+pub fn state_agg_rollup_deserialize_inner(bytes: bytea) -> Inner<RollupTransState> {
     let t: RollupTransState = crate::do_deserialize!(bytes, RollupTransState);
     t.into()
 }
 
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn compact_state_agg_rollup_combine(
+#[pg_extern(immutable, parallel_safe)]
+pub fn state_agg_rollup_combine(
     state1: Internal,
     state2: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     unsafe {
-        compact_state_agg_rollup_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo)
-            .internal()
+        state_agg_rollup_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal()
     }
 }
 
 #[allow(clippy::redundant_clone)] // clone is needed so we don't mutate shared memory
-pub fn compact_state_agg_rollup_combine_inner(
+pub fn state_agg_rollup_combine_inner(
     state1: Option<Inner<RollupTransState>>,
     state2: Option<Inner<RollupTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,

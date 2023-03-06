@@ -51,12 +51,6 @@ impl MaterializedState {
             Self::String(s) => StateEntry::from_existing_str(states, s),
         }
     }
-    fn try_existing_entry(&self, states: &str) -> Option<StateEntry> {
-        Some(match self {
-            Self::Integer(i) => StateEntry { a: i64::MAX, b: *i },
-            Self::String(s) => StateEntry::try_from_existing_str(states, s)?,
-        })
-    }
 
     fn into_string(self) -> String {
         match self {
@@ -82,6 +76,7 @@ pub struct StateEntry {
     b: i64,
 }
 impl StateEntry {
+    #[cfg(test)] // only used by tests
     fn from_integer(int: i64) -> Self {
         Self {
             a: i64::MAX,
@@ -2394,6 +2389,40 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
 
             let mut durations = client.update(
                 r#"SELECT
+                interpolated_duration_in(
+                    agg,
+                    10003, 
+                    '2019-12-31 0:00'::timestamptz + (bucket * '1 day'::interval), '1 day'::interval, 
+                    LAG(agg) OVER (ORDER BY bucket)
+                )::TEXT FROM (
+                    SELECT bucket, state_agg(time, state) as agg 
+                    FROM inttest2 
+                    GROUP BY bucket
+                ) s
+                ORDER BY bucket"#,
+                None,
+                None,
+            ).unwrap();
+
+            // Day 1, in "three" from "16:00" to end of day
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("08:00:00")
+            );
+            // Day 2, in "three" from start of day to "2:00" and "20:00" to end of day
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("06:00:00")
+            );
+            // Day 3, in "three" from start of day to end
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("18:00:00")
+            );
+            assert!(durations.next().is_none());
+
+            let mut durations = client.update(
+                r#"SELECT
                 toolkit_experimental.interpolated_duration_in(
                     agg,
                     10003,
@@ -2557,6 +2586,186 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                 durations.next().unwrap()[1].value().unwrap(),
                 Some("12:00:00")
             );
+
+            let mut durations = client
+                .update(
+                    r#"SELECT 
+                (agg -> interpolated_duration_in(
+                    'running',
+                    '2019-12-31 0:00'::timestamptz + (bucket * '1 day'::interval), '1 day'::interval,
+                    LAG(agg) OVER (ORDER BY bucket)
+                ))::TEXT FROM (
+                    SELECT bucket, state_agg(time, state) as agg
+                    FROM states
+                    GROUP BY bucket
+                ) s
+                ORDER BY bucket"#,
+                    None,
+                    None,
+                )
+                .unwrap();
+
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("13:30:00")
+            );
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("16:00:00")
+            );
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("04:30:00")
+            );
+            assert_eq!(
+                durations.next().unwrap()[1].value().unwrap(),
+                Some("12:00:00")
+            );
         })
+    }
+
+    #[pg_test]
+    fn text_serialization() {
+        Spi::connect(|mut client| {
+            client
+                .update(
+                    "SET TIME ZONE 'UTC';
+                    CREATE TABLE states(ts TIMESTAMPTZ, state TEXT);
+                    CREATE TABLE states_int(ts TIMESTAMPTZ, state BIGINT);",
+                    None,
+                    None,
+                )
+                .unwrap();
+            // only a single entry so ordering is consistent between runs
+            client
+                .update(
+                    r#"INSERT INTO states VALUES
+                        ('2020-1-1 10:00', 'starting');
+                    INSERT INTO states_int VALUES
+                        ('2020-1-1 10:00', -67876545);"#,
+                    None,
+                    None,
+                )
+                .unwrap();
+
+            let agg_text = select_one!(
+                client,
+                "SELECT state_agg(ts, state)::TEXT FROM states",
+                &str
+            );
+            let expected = "(version:1,compact_state_agg:(version:1,states_len:8,durations_len:1,durations:[(duration:0,state:(a:0,b:8))],combined_durations_len:1,combined_durations:[(start_time:631188000000000,end_time:631188000000000,state:(a:0,b:8))],first_time:631188000000000,last_time:631188000000000,first_state:0,last_state:0,states:[115,116,97,114,116,105,110,103],compact:false,integer_states:false))";
+            assert_eq!(agg_text, expected);
+
+            let agg_text = select_one!(
+                client,
+                "SELECT state_agg(ts, state)::TEXT FROM states_int",
+                &str
+            );
+            let expected = "(version:1,compact_state_agg:(version:1,states_len:0,durations_len:1,durations:[(duration:0,state:(a:9223372036854775807,b:-67876545))],combined_durations_len:1,combined_durations:[(start_time:631188000000000,end_time:631188000000000,state:(a:9223372036854775807,b:-67876545))],first_time:631188000000000,last_time:631188000000000,first_state:0,last_state:0,states:[],compact:false,integer_states:true))";
+            assert_eq!(agg_text, expected);
+        });
+    }
+
+    #[pg_test]
+    fn combine() {
+        assert_eq!(state_agg::combine(None, None), None);
+
+        let mut trans_state_2 = CompactStateAggTransState::new(true);
+        trans_state_2.record(MaterializedState::Integer(444), 10005000);
+        let mut trans_state_1 = CompactStateAggTransState::new(true);
+        trans_state_1.record(MaterializedState::Integer(333), 10000000);
+        let trans_state = state_agg::combine(Some(&trans_state_1), Some(&trans_state_2)).unwrap();
+        let trans_state = state_agg::combine(Some(&trans_state), None).unwrap();
+        let trans_state = state_agg::combine(None, Some(&trans_state)).unwrap();
+        assert_eq!(
+            trans_state,
+            CompactStateAggTransState {
+                records: vec![
+                    Record {
+                        state: MaterializedState::Integer(333),
+                        time: 10000000
+                    },
+                    Record {
+                        state: MaterializedState::Integer(444),
+                        time: 10005000
+                    }
+                ],
+                integer_states: true,
+            }
+        );
+    }
+
+    #[pg_test]
+    fn binary_serialization_integer() {
+        let mut trans_state = CompactStateAggTransState::new(true);
+        // only inserting one state since to avoid random ordering
+        trans_state.record(MaterializedState::Integer(22), 99);
+        let agg = state_agg::finally(Some(&mut trans_state)).unwrap();
+
+        // dis: duration i64, state entry (i64, i64)
+        let expected = [
+            232, 1, 0, 0, // header
+            1, // version
+            0, 0, 0, // padding
+            // inner compact_state_agg:
+            200, 1, 0, 0, // header
+            1, // version
+            0, 0, 0, // padding
+            0, 0, 0, 0, 0, 0, 0, 0, // states_len (empty since integer states)
+            1, 0, 0, 0, 0, 0, 0, 0, // durations_len
+            0, 0, 0, 0, 0, 0, 0, 0, // state 1: duration
+            255, 255, 255, 255, 255, 255, 255, 127, // state 1:  a
+            22, 0, 0, 0, 0, 0, 0, 0, // state 1: b
+            1, 0, 0, 0, 0, 0, 0, 0, // combined_durations_len
+            99, 0, 0, 0, 0, 0, 0, 0, // state 1: start time
+            99, 0, 0, 0, 0, 0, 0, 0, // state 1: end time
+            255, 255, 255, 255, 255, 255, 255, 127, // state 1: a
+            22, 0, 0, 0, 0, 0, 0, 0, // state 1: b
+            99, 0, 0, 0, 0, 0, 0, 0, // first_time
+            99, 0, 0, 0, 0, 0, 0, 0, // last_time
+            0, 0, 0, 0, // first_state (index)
+            0, 0, 0, 0, // last_state (index)
+            // states array is empty
+            0, // compact (false)
+            1, // integer states (true)
+        ];
+        assert_eq!(agg.to_pg_bytes(), expected);
+    }
+
+    #[pg_test]
+    fn binary_serialization_string() {
+        let mut trans_state = CompactStateAggTransState::new(false);
+        // only inserting one state since to avoid random ordering
+        trans_state.record(MaterializedState::String("ABC".to_string()), 99);
+        let agg = state_agg::finally(Some(&mut trans_state)).unwrap();
+
+        // dis: duration i64, state entry (i64, i64)
+        let expected = [
+            244, 1, 0, 0, // header
+            1, // version
+            0, 0, 0, // padding
+            // inner compact_state_agg:
+            212, 1, 0, 0, // header
+            1, // version
+            0, 0, 0, // padding
+            3, 0, 0, 0, 0, 0, 0, 0, // states_len
+            1, 0, 0, 0, 0, 0, 0, 0, // durations_len
+            0, 0, 0, 0, 0, 0, 0, 0, // state 1: duration
+            0, 0, 0, 0, 0, 0, 0, 0, // state 1: a
+            3, 0, 0, 0, 0, 0, 0, 0, // state 1: b
+            1, 0, 0, 0, 0, 0, 0, 0, // combined_durations_len
+            99, 0, 0, 0, 0, 0, 0, 0, // state 1: start time
+            99, 0, 0, 0, 0, 0, 0, 0, // state 1: end time
+            0, 0, 0, 0, 0, 0, 0, 0, // state 1: a
+            3, 0, 0, 0, 0, 0, 0, 0, // state 1: b
+            99, 0, 0, 0, 0, 0, 0, 0, // first_time
+            99, 0, 0, 0, 0, 0, 0, 0, // last_time
+            0, 0, 0, 0, // first_state (index)
+            0, 0, 0, 0, // last_state (index)
+            65, 66, 67, // states array
+            0,  // compact (false)
+            0,  // integer states (false)
+        ];
+        assert_eq!(agg.to_pg_bytes(), expected);
     }
 }

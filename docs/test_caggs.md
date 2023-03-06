@@ -23,7 +23,8 @@ AS SELECT
     hyperloglog(64, value1) as hll,
     counter_agg(time, value1) as counter,
     stats_agg(value1, value2) as stats,
-    timevector(time, value2) as tvec
+    timevector(time, value2) as tvec,
+    heartbeat_agg(time, time_bucket('7 day'::interval, time), '1w', '55m') as hb
 FROM test
 GROUP BY time_bucket('7 day'::interval, time);
 ```
@@ -113,4 +114,23 @@ ORDER BY week;
  2020-07-13 00:00:00+00 |   168
  2020-07-20 00:00:00+00 |   168
  2020-07-27 00:00:00+00 |    59
+```
+
+```SQL
+SELECT week, uptime(hb), interpolated_uptime(hb, LAG(hb) OVER (ORDER BY week))
+FROM weekly_aggs
+WHERE week > '2020-06-01'
+ORDER BY week;
+```
+```output
+          week          |     uptime      | interpolated_uptime 
+------------------------+-----------------+---------------------
+ 2020-06-08 00:00:00+00 | 6 days 10:00:00 | 6 days 10:00:00
+ 2020-06-15 00:00:00+00 | 6 days 10:00:00 | 6 days 10:00:00
+ 2020-06-22 00:00:00+00 | 6 days 10:00:00 | 6 days 10:00:00
+ 2020-06-29 00:00:00+00 | 6 days 10:00:00 | 6 days 10:00:00
+ 2020-07-06 00:00:00+00 | 6 days 10:00:00 | 6 days 10:00:00
+ 2020-07-13 00:00:00+00 | 6 days 10:00:00 | 6 days 10:00:00
+ 2020-07-20 00:00:00+00 | 6 days 10:00:00 | 6 days 10:00:00
+ 2020-07-27 00:00:00+00 | 2 days 06:05:00 | 2 days 06:05:00
 ```

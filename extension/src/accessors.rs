@@ -97,7 +97,32 @@ accessor! { open_time() }
 accessor! { high_time() }
 accessor! { low_time() }
 accessor! { close_time() }
+accessor! { live_ranges() }
+accessor! { dead_ranges() }
+accessor! { uptime() }
+accessor! { downtime() }
+
 // The rest are more complex, with String or other challenges.  Leaving alone for now.
+
+pg_type! {
+    #[derive(Debug)]
+    struct AccessorLiveAt {
+        time: u64,
+    }
+}
+
+ron_inout_funcs!(AccessorLiveAt);
+
+#[pg_extern(immutable, parallel_safe, name = "live_at")]
+pub fn accessor_live_at(ts: crate::raw::TimestampTz) -> AccessorLiveAt<'static> {
+    unsafe {
+        flatten! {
+            AccessorLiveAt {
+                time: ts.0.value() as u64,
+            }
+        }
+    }
+}
 
 pg_type! {
     #[derive(Debug)]

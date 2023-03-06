@@ -13,6 +13,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 #### Stabilized features
 - [#722](https://github.com/timescale/timescaledb-toolkit/pull/722): Stabilize heartbeat aggregate.
+- [#724](https://github.com/timescale/timescaledb-toolkit/pull/724): Stabilize integral and interpolated_integral for time-weighted-average.
 
 #### Other notable changes
 - [#716](https://github.com/timescale/timescaledb-toolkit/issues/716): Add arrow operator support for counter aggregate and time-weighted aggregate interpolated accessors.

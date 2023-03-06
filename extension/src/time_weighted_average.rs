@@ -5,8 +5,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     accessors::{
-        toolkit_experimental, AccessorAverage, AccessorFirstTime, AccessorFirstVal,
-        AccessorLastTime, AccessorLastVal,
+        AccessorAverage, AccessorFirstTime, AccessorFirstVal, AccessorIntegral, AccessorLastTime,
+        AccessorLastVal,
     },
     aggregate_utils::in_aggregate_context,
     duration::DurationUnit,
@@ -25,7 +25,7 @@ use crate::raw::bytea;
 
 mod accessors;
 
-use accessors::TimeWeightInterpolatedAverageAccessor;
+use accessors::{TimeWeightInterpolatedAverageAccessor, TimeWeightInterpolatedIntegralAccessor};
 
 pg_type! {
     #[derive(Debug)]
@@ -429,7 +429,7 @@ pub fn arrow_time_weighted_average_average<'a>(
 #[opname(->)]
 pub fn arrow_time_weighted_average_integral<'a>(
     tws: Option<TimeWeightSummary<'a>>,
-    accessor: toolkit_experimental::AccessorIntegral<'a>,
+    accessor: AccessorIntegral<'a>,
 ) -> Option<f64> {
     time_weighted_average_integral(
         tws,
@@ -455,12 +455,7 @@ pub fn time_weighted_average_average<'a>(tws: Option<TimeWeightSummary<'a>>) -> 
     }
 }
 
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    name = "integral",
-    schema = "toolkit_experimental"
-)]
+#[pg_extern(immutable, parallel_safe, name = "integral")]
 pub fn time_weighted_average_integral<'a>(
     tws: Option<TimeWeightSummary<'a>>,
     unit: default!(String, "'second'"),
@@ -530,12 +525,7 @@ pub fn arrow_time_weighted_average_interpolated_average<'a>(
     )
 }
 
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    name = "interpolated_integral",
-    schema = "toolkit_experimental"
-)]
+#[pg_extern(immutable, parallel_safe, name = "interpolated_integral")]
 pub fn time_weighted_average_interpolated_integral<'a>(
     tws: Option<TimeWeightSummary<'a>>,
     start: crate::raw::TimestampTz,
@@ -546,6 +536,44 @@ pub fn time_weighted_average_interpolated_integral<'a>(
 ) -> Option<f64> {
     let target = interpolate(tws, start, interval, prev, next);
     time_weighted_average_integral(target, unit)
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_time_weighted_average_interpolated_integral<'a>(
+    tws: Option<TimeWeightSummary<'a>>,
+    accessor: TimeWeightInterpolatedIntegralAccessor<'a>,
+) -> Option<f64> {
+    let prev = if accessor.flags & 1 == 1 {
+        Some(accessor.prev.clone().into())
+    } else {
+        None
+    };
+    let next = if accessor.flags & 2 == 2 {
+        Some(accessor.next.clone().into())
+    } else {
+        None
+    };
+
+    // Convert from num of milliseconds to DurationUnit and then to string
+    let unit = match accessor.unit {
+        1 => DurationUnit::Microsec,
+        1000 => DurationUnit::Millisec,
+        1_000_000 => DurationUnit::Second,
+        60_000_000 => DurationUnit::Minute,
+        3_600_000_000 => DurationUnit::Hour,
+        _ => todo!(), // This should never be reached, the accessor gets these numbers from microseconds() in duration.rs, which only matches on valid enum values
+    }
+    .to_string();
+
+    time_weighted_average_interpolated_integral(
+        tws,
+        accessor.start.into(),
+        accessor.interval.into(),
+        prev,
+        next,
+        unit,
+    )
 }
 
 #[cfg(any(test, feature = "pg_test"))]
@@ -576,9 +604,9 @@ mod tests {
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:00:00+00', 10.0)";
             client.update(stmt, None, None).unwrap();
 
-            let stmt = "SELECT toolkit_experimental.integral(time_weight('Trapezoidal', ts, val), 'hrs') FROM test";
+            let stmt = "SELECT integral(time_weight('Trapezoidal', ts, val), 'hrs') FROM test";
             assert_eq!(select_one!(client, stmt, f64), 0.0);
-            let stmt = "SELECT toolkit_experimental.integral(time_weight('LOCF', ts, val), 'msecond') FROM test";
+            let stmt = "SELECT integral(time_weight('LOCF', ts, val), 'msecond') FROM test";
             assert_eq!(select_one!(client, stmt, f64), 0.0);
 
             // add another point
@@ -622,9 +650,9 @@ mod tests {
             let stmt = "SELECT average(time_weight('LOCF', ts, val)) FROM test";
             assert!((select_one!(client, stmt, f64) - 15.0).abs() < f64::EPSILON);
 
-            let stmt = "SELECT toolkit_experimental.integral(time_weight('Linear', ts, val), 'mins') FROM test";
+            let stmt = "SELECT integral(time_weight('Linear', ts, val), 'mins') FROM test";
             assert!((select_one!(client, stmt, f64) - 60.0).abs() < f64::EPSILON);
-            let stmt = "SELECT toolkit_experimental.integral(time_weight('LOCF', ts, val), 'hour') FROM test";
+            let stmt = "SELECT integral(time_weight('LOCF', ts, val), 'hour') FROM test";
             assert!((select_one!(client, stmt, f64) - 1.0).abs() < f64::EPSILON);
 
             //non-evenly spaced values
@@ -640,15 +668,15 @@ mod tests {
             // arrow syntax should be the same
             assert!((select_one!(client, stmt, f64) - 21.25).abs() < f64::EPSILON);
 
-            let stmt = "SELECT toolkit_experimental.integral(time_weight('Linear', ts, val), 'microseconds') FROM test";
+            let stmt = "SELECT integral(time_weight('Linear', ts, val), 'microseconds') FROM test";
             assert!((select_one!(client, stmt, f64) - 25500000000.00).abs() < f64::EPSILON);
             let stmt = "SELECT time_weight('Linear', ts, val) \
-                ->toolkit_experimental.integral('microseconds') \
+                ->integral('microseconds') \
             FROM test";
             // arrow syntax should be the same
             assert!((select_one!(client, stmt, f64) - 25500000000.00).abs() < f64::EPSILON);
             let stmt = "SELECT time_weight('Linear', ts, val) \
-                ->toolkit_experimental.integral() \
+                ->integral() \
             FROM test";
             assert!((select_one!(client, stmt, f64) - 25500.00).abs() < f64::EPSILON);
 
@@ -656,7 +684,7 @@ mod tests {
             // expected = (10 + 20 + 10 + 20 + 10*4 + 30*2 +10*.5 + 20*9.5) / 20 = 17.75 using last value and carrying for each point
             assert!((select_one!(client, stmt, f64) - 17.75).abs() < f64::EPSILON);
 
-            let stmt = "SELECT toolkit_experimental.integral(time_weight('LOCF', ts, val), 'milliseconds') FROM test";
+            let stmt = "SELECT integral(time_weight('LOCF', ts, val), 'milliseconds') FROM test";
             assert!((select_one!(client, stmt, f64) - 21300000.0).abs() < f64::EPSILON);
 
             //make sure this works with whatever ordering we throw at it
@@ -665,9 +693,9 @@ mod tests {
             let stmt = "SELECT average(time_weight('LOCF', ts, val ORDER BY random())) FROM test";
             assert!((select_one!(client, stmt, f64) - 17.75).abs() < f64::EPSILON);
 
-            let stmt = "SELECT toolkit_experimental.integral(time_weight('Linear', ts, val ORDER BY random()), 'seconds') FROM test";
+            let stmt = "SELECT integral(time_weight('Linear', ts, val ORDER BY random()), 'seconds') FROM test";
             assert!((select_one!(client, stmt, f64) - 25500.0).abs() < f64::EPSILON);
-            let stmt = "SELECT toolkit_experimental.integral(time_weight('LOCF', ts, val ORDER BY random())) FROM test";
+            let stmt = "SELECT integral(time_weight('LOCF', ts, val ORDER BY random())) FROM test";
             assert!((select_one!(client, stmt, f64) - 21300.0).abs() < f64::EPSILON);
 
             // make sure we get the same result if we do multi-level aggregation
@@ -898,7 +926,7 @@ mod tests {
             let mut integrals = client
                 .update(
                     r#"SELECT
-                toolkit_experimental.interpolated_integral(
+                interpolated_integral(
                     agg,
                     bucket,
                     '1 day'::interval, 
@@ -919,7 +947,7 @@ mod tests {
             client
                 .update(
                     r#"SELECT
-                toolkit_experimental.interpolated_integral(
+                interpolated_integral(
                     agg,
                     bucket,
                     '1 day'::interval,

@@ -39,4 +39,5 @@ jobs:
     - name: Run tools/release
       env:
         GITHUB_TOKEN: ${{ secrets.API_TOKEN_GITHUB_PACKAGE }}
+        ACTIONS_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       run: su postgres -c 'tools/release ${{ inputs.dry-run }} -version ${{ inputs.version }} ${{ inputs.commit }}' 2>&1

@@ -44,13 +44,11 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 - [#699](https://github.com/timescale/timescaledb-toolkit/pull/699): `interpolated_duration_in`/`duration_in`/`interpolated_state_periods`/`state_periods` have the first two arguments swapped: now the aggregate is first and the state is second
 - [#699](https://github.com/timescale/timescaledb-toolkit/pull/699): `into_values`/`into_int_values` now returns a table with intervals instead of microseconds
 
-#### Shout-outs
-
-**Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.13.0...1.13.1
+**Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.13.1...1.14.0
 
 ## [1.13.1](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.13.1) (2023-01-03)
 
-**Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.12.0...1.13.0
+**Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.13.0...1.13.1
 
 - [#664](https://github.com/timescale/timescaledb-toolkit/pull/664) Support PostgreSQL 15.
 
@@ -96,6 +94,8 @@ Users can use the new experimental function `toolkit_experimental.to_text(timeve
 #### Other notable changes
 - [#646](https://github.com/timescale/timescaledb-toolkit/pull/646): Added experimental support for PostgreSQL 15.
 - [#621](https://github.com/timescale/timescaledb-toolkit/pull/621): Rocky Linux 9 support
+
+**Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.12.1...1.13.0
 
 ## [1.12.1](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.12.1) (2022-11-17)
 

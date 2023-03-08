@@ -230,7 +230,7 @@ for pg in $PG_VERSIONS; do
 done
 assert_clean || die 'tools/build should not dirty the working directory'
 
-# 4. Push the branch so release-build-scripts repository
+# 4. Push the branch
 if $push; then
     $nop git push origin $branch
 fi

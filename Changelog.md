@@ -9,6 +9,18 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 #### New experimental features
 
 #### Bug fixes
+
+#### Other notable changes
+
+#### Shout-outs
+
+**Full Changelog**: [TODO]
+
+## [1.15.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.15.0) (2023-03-08)
+
+#### New experimental features
+
+#### Bug fixes
 - [#715](https://github.com/timescale/timescaledb-toolkit/pull/715): Fix out-of-bounds indexing error in `state_agg` rollup
 
 #### Stabilized features

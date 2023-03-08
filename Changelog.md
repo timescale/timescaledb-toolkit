@@ -20,10 +20,9 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 - [#716](https://github.com/timescale/timescaledb-toolkit/issues/716): Add arrow operator support for counter aggregate and time-weighted aggregate interpolated accessors.
 - [#716](https://github.com/timescale/timescaledb-toolkit/issues/716): Remove experimental versions of interpolated accessors for counter aggregate and time-weighted aggregates.  The stable versions introduced in 1.14.0 should be used instead.
 - [#723](https://github.com/timescale/timescaledb-toolkit/pull/723): Added `state_at` function for `state_agg`
+- [#709](https://github.com/timescale/timescaledb-toolkit/pull/709): Updated pgx version to 0.7.1
 
-#### Shout-outs
-
-**Full Changelog**: [TODO]
+**Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.14.0...1.15.0
 
 ## [1.14.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.14.0) (2023-02-09)
 
@@ -47,11 +46,11 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 #### Shout-outs
 
-**Full Changelog**: [TODO]
+**Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.13.0...1.13.1
 
 ## [1.13.1](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.13.1) (2023-01-03)
 
-**Full Changelog**:
+**Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.12.0...1.13.0
 
 - [#664](https://github.com/timescale/timescaledb-toolkit/pull/664) Support PostgreSQL 15.
 

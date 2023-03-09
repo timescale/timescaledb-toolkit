@@ -94,6 +94,9 @@ skip_from_version() {
     # from it (and we tested that at the time), but we pulled the binaries, so
     # we can't test it here.
     [ $FROM_VERSION = 1.10.0-dev ] && return
+    [ $OS_NAME = debian ] && [ $OS_VERSION = 10 ] && [ `cmp_version $FROM_VERSION` -lt 011100 ] && return
+    [ $OS_NAME = ubuntu ] && [ $OS_VERSION = 22.04 ] && [ `cmp_version $FROM_VERSION` -lt 010600 ] && return
+    [ $OS_NAME = centos ] && [ $OS_VERSION = 7 ] && [ `cmp_version $FROM_VERSION` -ge 010800 ] && [ `cmp_version $FROM_VERSION` -le 011100 ] && return
 }
 
 # Requires:
@@ -161,23 +164,27 @@ test_ci() {
     done
 }
 
+rpm_start_test() {
+    for PG_VERSION in $PG_VERSIONS; do
+        skip_from_version_pg_version && continue
+        select_pg $PG_VERSION
+        rpm=timescaledb-toolkit-postgresql-$PG_VERSION
+        # yum doesn't seem to allow force-install of a specific version.
+        # If the package is already installed at a different version,
+        # the install command below does nothing.
+        # So, uninstall if installed.
+        $nop rpm -q $rpm > /dev/null && $nop sudo rpm -e $rpm
+        $nop sudo yum -q -y install $rpm-$FROM_VERSION
+
+        start_test
+    done
+}
+
 test_rpm() {
     ARCH=`rpm -E '%{_arch}'`
     for FROM_VERSION; do
         skip_from_version && continue
-        for PG_VERSION in $PG_VERSIONS; do
-            skip_from_version_pg_version && continue
-            select_pg $PG_VERSION
-            rpm=timescaledb-toolkit-postgresql-$PG_VERSION
-            # yum doesn't seem to allow force-install of a specific version.
-            # If the package is already installed at a different version,
-            # the install command below does nothing.
-            # So, uninstall if installed.
-            rpm -q $rpm > /dev/null && $nop sudo rpm -e $rpm
-            $nop sudo yum -q -y install $rpm-$FROM_VERSION
-
-            start_test
-        done
+        rpm_start_test
         for PG_VERSION in $PG_VERSIONS; do
             skip_from_version_pg_version && continue
             select_pg $PG_VERSION
@@ -187,6 +194,23 @@ test_rpm() {
             finish_test
 
             $nop sudo rpm -e timescaledb-toolkit-postgresql-$PG_VERSION
+        done
+    done
+}
+
+test_rpm_ci() {
+    for FROM_VERSION; do
+        skip_from_version && continue
+        rpm_start_test
+        for PG_VERSION in $PG_VERSIONS; do
+            skip_from_version_pg_version && continue
+            select_pg $PG_VERSION
+
+            $nop sudo rpm -e timescaledb-toolkit-postgresql-$PG_VERSION
+            $nop sudo chown -R $LOGNAME /usr/pgsql-$PG_VERSION/lib /usr/pgsql-$PG_VERSION/share/extension
+            $nop tools/build -pg$PG_VERSION install
+
+            finish_test
         done
     done
 }
@@ -251,7 +275,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
 
-        ci|deb|rpm)
+        ci|deb|rpm|rpm_ci)
             run $arg
             ;;
 

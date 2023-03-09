@@ -7,8 +7,10 @@ on:
     - staging
     - trying
   schedule:
-    # we build at 8am UTC, 3am Eastern, midnight Pacific
-    - cron:  '0 8 * * 1-4'
+    # TimescaleDB integration: 8am UTC, 3am Eastern, midnight Pacific
+    - cron: '0 8 * * 1-4'
+    # Testing on every platform: 6am UTC, 1am Eastern, 10pm Pacific
+    - cron: '0 6 * * 1-4'
   workflow_dispatch:
     inputs:
       container-image:
@@ -22,17 +24,46 @@ on:
         description: 'TimescaleDB repo to use'
         default: 'https://github.com/timescale/timescaledb.git'
         required: false
+      all-platforms:
+        description: 'Test all platforms'
+        type: boolean
+        default: false
 
 jobs:
   testpostgres:
     name: Test Postgres
     runs-on: ubuntu-20.04
     container:
-      image: ${{ inputs.container-image || 'timescaledev/toolkit-builder:debian-11-amd64' }}
+      image: ${{ inputs.container-image || 'timescaledev/toolkit-builder' }}:${{ matrix.container.image }}
     strategy:
       fail-fast: false
+      max-parallel: 12
       matrix:
         pgversion: [12, 13, 14, 15]
+        container: "${{ \
+          ( \
+            inputs.all-platforms || \
+            ( \
+              github.event_name == 'schedule' && \
+              github.event.schedule == '0 6 * * 1-4' \
+            ) \
+          ) && \
+          fromJSON('[ \
+            { \"os\": \"debian\", \"version\": \"10\", \"image\": \"debian-10-amd64\" }, \
+            { \"os\": \"debian\", \"version\": \"11\", \"image\": \"debian-11-amd64\" }, \
+            { \"os\": \"rockylinux\", \"version\": \"8\", \"image\": \"rockylinux-8-x86_64\" }, \
+            { \"os\": \"rockylinux\", \"version\": \"9\", \"image\": \"rockylinux-9-x86_64\" }, \
+            { \"os\": \"centos\", \"version\": \"7\", \"image\": \"centos-7-x86_64\" }, \
+            { \"os\": \"ubuntu\", \"version\": \"20.04\", \"image\": \"ubuntu-20.04-amd64\" }, \
+            { \"os\": \"ubuntu\", \"version\": \"22.04\", \"image\": \"ubuntu-22.04-amd64\" } \
+          ]') \
+          || fromJSON('[ \
+            { \"os\": \"debian\", \"version\": \"11\", \"image\": \"debian-11-amd64\" }, \
+            { \"os\": \"rockylinux\", \"version\": \"9\", \"image\": \"rockylinux-9-x86_64\" }, \
+            { \"os\": \"centos\", \"version\": \"7\", \"image\": \"centos-7-x86_64\" } \
+          ]') \
+        }}"
+
     env:
       # TODO Why?  Cargo default is to pass `-C incremental` to rustc; why don't we want that?
       #   https://doc.rust-lang.org/rustc/codegen-options/index.html#incremental
@@ -65,33 +96,47 @@ jobs:
       run: chown -R postgres .
 
     - name: Build and install TimescaleDB
-      if: ${{ github.event_name == 'schedule' || inputs.tsdb-commit != '' }}
+      if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || inputs.tsdb-commit != '' }}
       run: ./tools/install-timescaledb '${{ matrix.pgversion }}' '${{ inputs.tsdb-repo || 'https://github.com/timescale/timescaledb.git' }}' '${{ inputs.tsdb-commit == '' && 'main' || inputs.tsdb-commit }}'
 
     # TODO After the container image contains a primed target dir, is this still worth it?
     #   Only possible advantage is this one is per-pg-version but what's the impact?
     - name: Cache cargo target dir
       uses: actions/cache@v3
+      if: ${{ matrix.container.image == 'debian-11-amd64' }}
       with:
         path: target
         key: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
         restore-keys: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-
 
     - name: Run pgx tests
-      run: su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-extension 2>&1'
+      run: |
+        if [ "${{ matrix.container.version }}" = 7 ]; then
+          # needed for pgx to find clang
+          set +e # will succeed but have non-zero exit code
+          . scl_source enable llvm-toolset-7
+          set -e
+        fi
+
+        su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-extension 2>&1'
 
     - name: Run doc tests
       run: su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-doc 2>&1'
 
-    - name: Run binary update tests
+    - name: Run binary update tests (deb)
+      if: ${{ matrix.container.os == 'debian' || matrix.container.os == 'ubuntu' }}
       run: |
-        su postgres -c 'OS_NAME=debian OS_VERSION=11 tools/testbin -version no -bindir / -pgversions ${{ matrix.pgversion }} ci 2>&1'
+        su postgres -c 'OS_NAME=${{ matrix.container.os }} OS_VERSION=${{ matrix.container.version }} tools/testbin -version no -bindir / -pgversions ${{ matrix.pgversion }} ci 2>&1'    
+    - name: Run binary update tests (EL)
+      if: ${{ (matrix.container.os == 'rockylinux' || matrix.container.os == 'centos') && matrix.container.version != '9' }}
+      run: |
+        su postgres -c 'OS_NAME=${{ matrix.container.os }} OS_VERSION=${{ matrix.container.version }} tools/testbin -version no -bindir / -pgversions ${{ matrix.pgversion }} rpm_ci 2>&1'
 
   testcrates:
     name: Test Crates
     runs-on: ubuntu-20.04
     container:
-      image: ${{ inputs.container-image || 'timescaledev/toolkit-builder:debian-11-amd64' }}
+      image: ${{ inputs.container-image || 'timescaledev/toolkit-builder' }}:debian-11-amd64
       env:
         CARGO_INCREMENTAL: 0
         CARGO_NET_RETRY: 10

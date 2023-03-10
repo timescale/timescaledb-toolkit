@@ -43,13 +43,13 @@ ORDER BY bucket;
 ```
 
 ```sql,validation,min-toolkit-version=1.15.0
-SELECT integral(agg, 'hrs') FROM twa;
+SELECT integral(agg, 'hrs') FROM twa ORDER BY bucket;
 ```
 
 ```output
  integral
 ----------
-      200
-       60
-      550
+      625
+      100
+      220
 ```

@@ -23,6 +23,7 @@ CREATE MATERIALIZED VIEW twa AS (
 
 ```sql,validation,min-toolkit-version=1.15.0
 SELECT
+    bucket,
     interpolated_integral(
         agg,
         bucket,
@@ -35,21 +36,21 @@ ORDER BY bucket;
 ```
 
 ```output
- interpolated_integral
------------------------
-                   364
-     758.8571428571429
-     382.1428571428571
+         bucket         | interpolated_integral
+------------------------+-----------------------
+ 2020-01-01 00:00:00-06 |                   364
+ 2020-01-02 00:00:00-06 |     758.8571428571429
+ 2020-01-03 00:00:00-06 |     382.1428571428571
 ```
 
 ```sql,validation,min-toolkit-version=1.15.0
-SELECT integral(agg, 'hrs') FROM twa ORDER BY bucket;
+SELECT bucket, integral(agg, 'hrs') FROM twa ORDER BY bucket;
 ```
 
 ```output
- integral
-----------
-      625
-      100
-      220
+         bucket         | integral
+------------------------+----------
+ 2020-01-01 00:00:00-06 |      220
+ 2020-01-02 00:00:00-06 |      625
+ 2020-01-03 00:00:00-06 |      100
 ```

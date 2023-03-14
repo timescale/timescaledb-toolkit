@@ -1,6 +1,17 @@
 status = [
     "Clippy/rustfmt Test",
-    "Test Postgres (%)",
+    "Test Postgres (12, debian, 11, debian-11-amd64)",
+    "Test Postgres (12, rockylinux, 9, rockylinux-9-x86_64)",
+    "Test Postgres (12, centos, 7, centos-7-x86_64)",
+    "Test Postgres (13, debian, 11, debian-11-amd64)",
+    "Test Postgres (13, rockylinux, 9, rockylinux-9-x86_64)",
+    "Test Postgres (13, centos, 7, centos-7-x86_64)",
+    "Test Postgres (14, debian, 11, debian-11-amd64)",
+    "Test Postgres (14, rockylinux, 9, rockylinux-9-x86_64)",
+    "Test Postgres (14, centos, 7, centos-7-x86_64)",
+    "Test Postgres (15, debian, 11, debian-11-amd64)",
+    "Test Postgres (15, rockylinux, 9, rockylinux-9-x86_64)",
+    "Test Postgres (15, centos, 7, centos-7-x86_64)",
 ]
 delete-merged-branches = true
 timeout_sec = 3600 # 60 min

@@ -3,11 +3,11 @@
 ```sql,creation
 CREATE TABLE time_vector_data(time TIMESTAMPTZ, value DOUBLE PRECISION);
 INSERT INTO time_vector_data VALUES
-    ('2020-1-1', 30.0),
-    ('2020-1-2', 45.0),
-    ('2020-1-3', NULL),
-    ('2020-1-4', 55.5),
-    ('2020-1-5', 10.0);
+    ('2020-1-1 UTC', 30.0),
+    ('2020-1-2 UTC', 45.0),
+    ('2020-1-3 UTC', NULL),
+    ('2020-1-4 UTC', 55.5),
+    ('2020-1-5 UTC', 10.0);
 ```
 
 ```sql,validation
@@ -27,14 +27,14 @@ SELECT unnest(timevector(time,value))::TEXT FROM time_vector_data;
 ```sql,creation
 CREATE TABLE tv_rollup_data(time TIMESTAMPTZ, value DOUBLE PRECISION, bucket INTEGER);
 INSERT INTO tv_rollup_data VALUES
-    ('2020-1-1', 30.0, 1),
-    ('2020-1-2', 45.0, 1),
-    ('2020-1-3', NULL, 2),
-    ('2020-1-4', 55.5, 2),
-    ('2020-1-5', 10.0, 3),
-    ('2020-1-6', 13.0, 3),
-    ('2020-1-7', 71.0, 4),
-    ('2020-1-8', 0.0, 4);
+    ('2020-1-1 UTC', 30.0, 1),
+    ('2020-1-2 UTC', 45.0, 1),
+    ('2020-1-3 UTC', NULL, 2),
+    ('2020-1-4 UTC', 55.5, 2),
+    ('2020-1-5 UTC', 10.0, 3),
+    ('2020-1-6 UTC', 13.0, 3),
+    ('2020-1-7 UTC', 71.0, 4),
+    ('2020-1-8 UTC', 0.0, 4);
 ```
 
 ```sql,validation

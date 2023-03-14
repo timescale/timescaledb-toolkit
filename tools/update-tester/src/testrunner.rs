@@ -279,7 +279,10 @@ impl TestClient {
 
                 let mut test_client = connect_to(&test_config);
                 test_client
-                    .simple_query("SET TIME ZONE 'UTC';")
+                    .simple_query(&format!(
+                        r#"ALTER DATABASE "{}" SET timezone TO 'UTC';"#,
+                        &test_db_name
+                    ))
                     .unwrap_or_else(|e| panic!("could not set time zone to UTC due to {}", e));
 
                 // install new version and make sure it is correct
@@ -358,10 +361,6 @@ impl TestClient {
                 test_client.check_no_references_to_the_old_binary_leaked(&new_toolkit_version);
 
                 test_client.validate_stable_objects_exist();
-
-                test_client
-                    .simple_query("SET TIME ZONE 'UTC';")
-                    .unwrap_or_else(|e| panic!("could not set time zone to UTC due to {}", e));
 
                 tests
                     .tests

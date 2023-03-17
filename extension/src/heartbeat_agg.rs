@@ -107,8 +107,8 @@ impl HeartbeatTransState {
     }
 
     fn combine_intervals(&mut self, new_intervals: Vec<(i64, i64)>) {
-        // Optimized path for ordered inputs
-        if self.liveness.last().unwrap().0 < new_intervals.first().unwrap().0 {
+        // Optimized path for nonoverlapping, ordered inputs
+        if self.last < new_intervals.first().unwrap().0 {
             let mut new_intervals = new_intervals.into_iter();
 
             // Grab the first new interval to check for overlap with the existing data
@@ -1577,5 +1577,53 @@ mod tests {
             110, 0, 0, 0, 0, 0, 0, 0, // interval_ends[2]
         ];
         assert_eq!(serial, expected);
+    }
+
+    #[pg_test]
+    fn test_rollup_overlap() {
+        Spi::connect(|mut client| {
+            client.update("SET TIMEZONE to UTC", None, None).unwrap();
+
+            client
+                .update(
+                    "CREATE TABLE poc(ts TIMESTAMPTZ, batch TIMESTAMPTZ)",
+                    None,
+                    None,
+                )
+                .unwrap();
+
+            client
+                .update(
+                    "INSERT INTO poc VALUES
+                    ('1-1-2020 0:50 UTC', '1-1-2020 0:00 UTC'),
+                    ('1-1-2020 1:10 UTC', '1-1-2020 0:00 UTC'),
+                    ('1-1-2020 1:00 UTC', '1-1-2020 1:00 UTC')",
+                    None,
+                    None,
+                )
+                .unwrap();
+
+            let output = client
+                .update(
+                    "WITH rollups AS (
+                        SELECT heartbeat_agg(ts, batch, '2h', '20m') 
+                        FROM poc 
+                        GROUP BY batch 
+                        ORDER BY batch
+                    )
+                    SELECT live_ranges(rollup(heartbeat_agg))::TEXT 
+                    FROM rollups",
+                    None,
+                    None,
+                )
+                .unwrap()
+                .first()
+                .get_one::<String>()
+                .unwrap();
+
+            let expected = "(\"2020-01-01 00:50:00+00\",\"2020-01-01 01:30:00+00\")";
+
+            assert_eq!(output, Some(expected.into()));
+        });
     }
 }

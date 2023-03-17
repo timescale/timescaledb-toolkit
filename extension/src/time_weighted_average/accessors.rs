@@ -26,8 +26,8 @@ ron_inout_funcs!(TimeWeightInterpolatedAverageAccessor);
 fn time_weight_interpolated_average_accessor<'a>(
     start: crate::raw::TimestampTz,
     duration: crate::raw::Interval,
-    prev: Option<TimeWeightSummary<'a>>,
-    next: Option<TimeWeightSummary<'a>>,
+    prev: default!(Option<TimeWeightSummary<'a>>, "NULL"),
+    next: default!(Option<TimeWeightSummary<'a>>, "NULL"),
 ) -> TimeWeightInterpolatedAverageAccessor<'static> {
     fn empty_summary<'b>() -> Option<TimeWeightSummary<'b>> {
         Some(unsafe {
@@ -75,8 +75,8 @@ ron_inout_funcs!(TimeWeightInterpolatedIntegralAccessor);
 fn time_weight_interpolated_integral_accessor<'a>(
     start: crate::raw::TimestampTz,
     interval: crate::raw::Interval,
-    prev: Option<TimeWeightSummary<'a>>,
-    next: Option<TimeWeightSummary<'a>>,
+    prev: default!(Option<TimeWeightSummary<'a>>, "NULL"),
+    next: default!(Option<TimeWeightSummary<'a>>, "NULL"),
     unit: default!(String, "'second'"),
 ) -> TimeWeightInterpolatedIntegralAccessor<'static> {
     fn empty_summary<'b>() -> Option<TimeWeightSummary<'b>> {

@@ -325,6 +325,10 @@ set +e
 if $push; then
     # 7d. Push to $POST_REL_BRANCH branch.
     $nop git push origin HEAD:$POST_REL_BRANCH
+
+    # Run these next steps as github-actions[bot]
+    GITHUB_TOKEN="$ACTIONS_GITHUB_TOKEN"
+
     $nop gh pr create -R timescale/timescaledb-toolkit -B $MAIN_BRANCH --fill -H $POST_REL_BRANCH
 
     # 8. File issue for release tasks that are not yet automated.

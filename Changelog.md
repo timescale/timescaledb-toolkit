@@ -12,6 +12,9 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 - [#733](https://github.com/timescale/timescaledb-toolkit/pull/733): Fix a bug when rolling up overlapping heartbeat_aggs
 - [#740](https://github.com/timescale/timescaledb-toolkit/pull/740): When interpolating an 'locf' time weighted average, extend last point to interpolation boundary
 
+#### Stabilized features
+- [#741](https://github.com/timescale/timescaledb-toolkit/pull/741): Stabilize `approx_count_distinct`
+
 #### Other notable changes
 
 #### Shout-outs

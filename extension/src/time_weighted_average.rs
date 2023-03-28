@@ -80,11 +80,19 @@ impl<'input> TimeWeightSummary<'input> {
             }
             _ => self.first,
         };
-        let new_end = match next {
-            Some(next) => {
+        let new_end = match (self.method, next) {
+            (_, Some(next)) => {
                 let new_end = self
                     .method
                     .interpolate(self.last, Some(next.first), end)
+                    .expect("unable to interpolate end of interval");
+                new_sum += self.method.weighted_sum(self.last, new_end);
+                new_end
+            }
+            (TimeWeightMethod::LOCF, None) => {
+                let new_end = self
+                    .method
+                    .interpolate(self.last, None, end)
                     .expect("unable to interpolate end of interval");
                 new_sum += self.method.weighted_sum(self.last, new_end);
                 new_end
@@ -492,8 +500,8 @@ pub fn time_weighted_average_interpolated_average<'a>(
     tws: Option<TimeWeightSummary<'a>>,
     start: crate::raw::TimestampTz,
     duration: crate::raw::Interval,
-    prev: Option<TimeWeightSummary<'a>>,
-    next: Option<TimeWeightSummary<'a>>,
+    prev: default!(Option<TimeWeightSummary<'a>>, "NULL"),
+    next: default!(Option<TimeWeightSummary<'a>>, "NULL"),
 ) -> Option<f64> {
     let target = interpolate(tws, start, duration, prev, next);
     time_weighted_average_average(target)
@@ -530,8 +538,8 @@ pub fn time_weighted_average_interpolated_integral<'a>(
     tws: Option<TimeWeightSummary<'a>>,
     start: crate::raw::TimestampTz,
     interval: crate::raw::Interval,
-    prev: Option<TimeWeightSummary<'a>>,
-    next: Option<TimeWeightSummary<'a>>,
+    prev: default!(Option<TimeWeightSummary<'a>>, "NULL"),
+    next: default!(Option<TimeWeightSummary<'a>>, "NULL"),
     unit: default!(String, "'second'"),
 ) -> Option<f64> {
     let target = interpolate(tws, start, interval, prev, next);
@@ -984,17 +992,30 @@ mod tests {
                 integrals.next().unwrap()[1].value().unwrap(),
                 Some(2. * 20. + 10. * 15. + 8. * 50. + 4. * 25.)
             );
-            // Day 3, 10 hours @ 25, 2 @ 30, 4 @ 0
+            // Day 3, 10 hours @ 25, 2 @ 30, 4 @ 0, 8 @ 35
             let result = averages.next().unwrap()[1].value().unwrap();
-            assert_eq!(result, Some((10. * 25. + 2. * 30.) / 16.));
+            assert_eq!(result, Some((10. * 25. + 2. * 30. + 8. * 35.) / 24.));
             assert_eq!(result, arrow_averages.next().unwrap()[1].value().unwrap());
             assert_eq!(
                 integrals.next().unwrap()[1].value().unwrap(),
-                Some(10. * 25. + 2. * 30.)
+                Some(10. * 25. + 2. * 30. + 8. * 35.)
             );
             assert!(averages.next().is_none());
             assert!(arrow_averages.next().is_none());
             assert!(integrals.next().is_none());
+        });
+    }
+
+    #[pg_test]
+    fn test_locf_interpolation_to_null() {
+        Spi::connect(|mut client| {
+            let stmt =
+                "SELECT interpolated_average(time_weight('locf', '2020-01-01 20:00:00+00', 100),
+                    '2020-01-01 00:00:00+00', '1d')";
+            assert_eq!(select_one!(client, stmt, f64), 100.0);
+            let stmt = "SELECT time_weight('locf', '2020-01-01 20:00:00+00', 100)
+                 -> interpolated_integral('2020-01-01 00:00:00+00', '1d')";
+            assert_eq!(select_one!(client, stmt, f64), 1440000.0);
         });
     }
 }

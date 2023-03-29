@@ -58,7 +58,7 @@ pub fn hyperloglog_trans(
 const APPROX_COUNT_DISTINCT_DEFAULT_SIZE: i32 = 32768;
 
 /// Similar to hyperloglog_trans(), except size is set to a default of 32,768
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(immutable, parallel_safe)]
 pub fn approx_count_distinct_trans(
     state: Internal,
     // TODO we want to use crate::raw::AnyElement but it doesn't work for some reason...
@@ -252,10 +252,10 @@ extension_sql!(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.approx_count_distinct(value AnyElement)\n\
+    CREATE AGGREGATE approx_count_distinct(value AnyElement)\n\
     (\n\
         stype = internal,\n\
-        sfunc = toolkit_experimental.approx_count_distinct_trans,\n\
+        sfunc = approx_count_distinct_trans,\n\
         finalfunc = hyperloglog_final,\n\
         combinefunc = hyperloglog_combine,\n\
         serialfunc = hyperloglog_serialize,\n\
@@ -276,18 +276,24 @@ extension_sql!(
 #[pg_extern(immutable, parallel_safe)]
 pub fn hyperloglog_union<'a>(
     state: Internal,
-    other: HyperLogLog<'a>,
+    other: Option<HyperLogLog<'a>>,
     fc: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     hyperloglog_union_inner(unsafe { state.to_inner() }, other, fc).internal()
 }
 pub fn hyperloglog_union_inner(
     state: Option<Inner<HyperLogLogTrans>>,
-    other: HyperLogLog,
+    other: Option<HyperLogLog>,
     fc: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<HyperLogLogTrans>> {
     unsafe {
         in_aggregate_context(fc, || {
+            let other = match other {
+                Some(other) => other,
+                None => {
+                    return state;
+                }
+            };
             let mut state = match state {
                 Some(state) => state,
                 None => {
@@ -549,7 +555,7 @@ mod tests {
             let text = client
                 .update(
                     "SELECT \
-                        toolkit_experimental.approx_count_distinct(v::float)::TEXT \
+                        approx_count_distinct(v::float)::TEXT \
                         FROM generate_series(1, 100) v",
                     None,
                     None,
@@ -595,9 +601,9 @@ mod tests {
                 .update(
                     "SELECT \
                     distinct_count(\
-                        toolkit_experimental.approx_count_distinct(v::float)\
+                        approx_count_distinct(v::float)\
                     ), \
-                    toolkit_experimental.approx_count_distinct(v::float) -> distinct_count() \
+                    approx_count_distinct(v::float) -> distinct_count() \
                     FROM generate_series(1, 100) v",
                     None,
                     None,
@@ -1013,6 +1019,43 @@ mod tests {
                 .get_one::<String>()
                 .unwrap();
             assert_eq!(output, None)
+        })
+    }
+
+    #[pg_test]
+    fn test_hll_null_rollup() {
+        Spi::connect(|mut client| {
+            let output1 = client
+                .update(
+                    "SELECT distinct_count(rollup(logs))
+                FROM (
+                    (SELECT hyperloglog(16, v::text) logs FROM generate_series(1, 5) v)
+                    UNION ALL
+                    (SELECT hyperloglog(16, v::text) FROM generate_series(6, 10) v WHERE v <=5)
+                ) hll;",
+                    None,
+                    None,
+                )
+                .unwrap()
+                .first()
+                .get_one::<i64>()
+                .unwrap();
+
+            let output2 = client
+                .update(
+                    "SELECT distinct_count(rollup(logs))
+                FROM (
+                    (SELECT hyperloglog(16, v::text) logs FROM generate_series(1, 5) v)
+                ) hll;",
+                    None,
+                    None,
+                )
+                .unwrap()
+                .first()
+                .get_one::<i64>()
+                .unwrap();
+
+            assert_eq!(output1, output2);
         })
     }
 

@@ -14,6 +14,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 - [#742](https://github.com/timescale/timescaledb-toolkit/pull/742): Ignore incoming NULL values in hyperloglog rollup
 
 #### Other notable changes
+- [#744](https://github.com/timescale/timescaledb-toolkit/pull/744): Fix nightly CI failures from building TimescaleDB on Enterprise Linux
 
 #### Shout-outs
 

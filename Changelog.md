@@ -17,6 +17,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 - [#741](https://github.com/timescale/timescaledb-toolkit/pull/741): Stabilize `approx_count_distinct`
 
 #### Other notable changes
+- [#743](https://github.com/timescale/timescaledb-toolkit/pull/743): Remove support for direct upgrades from toolkit versions more than 1 year old. Toolkit versions 1.4.x and 1.5.x will have to upgrade to an intermediate version before upgrading to 1.16.0.
 - [#744](https://github.com/timescale/timescaledb-toolkit/pull/744): Fix nightly CI failures from building TimescaleDB on Enterprise Linux
 
 #### Shout-outs

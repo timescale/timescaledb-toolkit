@@ -13,6 +13,9 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 - [#740](https://github.com/timescale/timescaledb-toolkit/pull/740): When interpolating an 'locf' time weighted average, extend last point to interpolation boundary
 - [#742](https://github.com/timescale/timescaledb-toolkit/pull/742): Ignore incoming NULL values in hyperloglog rollup
 
+#### Stabilized features
+- [#741](https://github.com/timescale/timescaledb-toolkit/pull/741): Stabilize `approx_count_distinct`
+
 #### Other notable changes
 - [#744](https://github.com/timescale/timescaledb-toolkit/pull/744): Fix nightly CI failures from building TimescaleDB on Enterprise Linux
 

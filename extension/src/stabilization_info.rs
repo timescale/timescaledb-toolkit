@@ -11,6 +11,10 @@
 
 crate::functions_stabilized_at! {
     STABLE_FUNCTIONS
+    "1.16.0" => {
+        approx_count_distinct(anyelement),
+        approx_count_distinct_trans(internal,anyelement),
+    }
     "1.15.0" => {
         arrow_counter_interpolated_delta(countersummary,counterinterpolateddeltaaccessor),
         arrow_counter_interpolated_rate(countersummary,counterinterpolatedrateaccessor),

@@ -276,18 +276,24 @@ extension_sql!(
 #[pg_extern(immutable, parallel_safe)]
 pub fn hyperloglog_union<'a>(
     state: Internal,
-    other: HyperLogLog<'a>,
+    other: Option<HyperLogLog<'a>>,
     fc: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     hyperloglog_union_inner(unsafe { state.to_inner() }, other, fc).internal()
 }
 pub fn hyperloglog_union_inner(
     state: Option<Inner<HyperLogLogTrans>>,
-    other: HyperLogLog,
+    other: Option<HyperLogLog>,
     fc: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<HyperLogLogTrans>> {
     unsafe {
         in_aggregate_context(fc, || {
+            let other = match other {
+                Some(other) => other,
+                None => {
+                    return state;
+                }
+            };
             let mut state = match state {
                 Some(state) => state,
                 None => {
@@ -1013,6 +1019,43 @@ mod tests {
                 .get_one::<String>()
                 .unwrap();
             assert_eq!(output, None)
+        })
+    }
+
+    #[pg_test]
+    fn test_hll_null_rollup() {
+        Spi::connect(|mut client| {
+            let output1 = client
+                .update(
+                    "SELECT distinct_count(rollup(logs))
+                FROM (
+                    (SELECT hyperloglog(16, v::text) logs FROM generate_series(1, 5) v)
+                    UNION ALL
+                    (SELECT hyperloglog(16, v::text) FROM generate_series(6, 10) v WHERE v <=5)
+                ) hll;",
+                    None,
+                    None,
+                )
+                .unwrap()
+                .first()
+                .get_one::<i64>()
+                .unwrap();
+
+            let output2 = client
+                .update(
+                    "SELECT distinct_count(rollup(logs))
+                FROM (
+                    (SELECT hyperloglog(16, v::text) logs FROM generate_series(1, 5) v)
+                ) hll;",
+                    None,
+                    None,
+                )
+                .unwrap()
+                .first()
+                .get_one::<i64>()
+                .unwrap();
+
+            assert_eq!(output1, output2);
         })
     }
 

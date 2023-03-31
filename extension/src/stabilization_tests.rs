@@ -91,6 +91,13 @@ mod tests {
                             return None;
                         }
 
+                        // Hack to fix the function macro's inability to handle [] in the type double precision[].
+                        if function == "approx_percentile_array(double precision[],uddsketch)"
+                            || function == "approx_percentiles(double precision[])"
+                        {
+                            return None;
+                        }
+
                         return Some(val);
                     }
 

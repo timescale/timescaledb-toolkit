@@ -6,8 +6,8 @@ use uddsketch::{SketchHashKey, UDDSketch as UddSketchInternal};
 
 use crate::{
     accessors::{
-        toolkit_experimental, AccessorApproxPercentile, AccessorApproxPercentileRank,
-        AccessorError, AccessorMean, AccessorNumVals,
+        AccessorApproxPercentile, AccessorApproxPercentileRank, AccessorError, AccessorMean,
+        AccessorNumVals, AccessorPercentileArray,
     },
     aggregate_utils::in_aggregate_context,
     flatten,
@@ -585,17 +585,13 @@ pub fn uddsketch_approx_percentile<'a>(percentile: f64, sketch: UddSketch<'a>) -
 #[opname(->)]
 pub fn arrow_uddsketch_approx_percentile_array<'a>(
     sketch: UddSketch<'a>,
-    percentiles: toolkit_experimental::AccessorPercentileArray<'a>,
+    percentiles: AccessorPercentileArray<'a>,
 ) -> Vec<f64> {
     approx_percentile_slice(percentiles.percentile.as_slice(), sketch)
 }
 
 // Approximate the value at the given approx_percentile (0.0-1.0) for each entry in an array
-#[pg_extern(
-    immutable,
-    schema = "toolkit_experimental",
-    name = "approx_percentile_array"
-)]
+#[pg_extern(immutable, name = "approx_percentile_array")]
 pub fn uddsketch_approx_percentile_array<'a>(
     percentiles: Vec<f64>,
     sketch: UddSketch<'a>,
@@ -1047,7 +1043,7 @@ mod tests {
             let (value, error) = client
                 .update(
                     "SELECT \
-                    toolkit_experimental.approx_percentile_array(array[0.9,0.5,0.2], approx), \
+                    approx_percentile_array(array[0.9,0.5,0.2], approx), \
                     error(approx) \
                     FROM uddsketch_test",
                     None,
@@ -1061,7 +1057,7 @@ mod tests {
             let (test_value, test_error) = client
                 .update(
                     "SELECT \
-                    toolkit_experimental.approx_percentile_array(array[0.9,0.5,0.2], approx), \
+                    approx_percentile_array(array[0.9,0.5,0.2], approx), \
                     error(approx) \
                     FROM percentile_agg",
                     None,
@@ -1134,7 +1130,7 @@ mod tests {
             let (value, error) = client
                 .update(
                     "SELECT \
-                    toolkit_experimental.approx_percentile_array(array[0.9,0.5,0.2], approx), \
+                    approx_percentile_array(array[0.9,0.5,0.2], approx), \
                     error(approx) \
                     FROM uddsketch_test",
                     None,
@@ -1147,7 +1143,7 @@ mod tests {
 
             let (test_value_arrow, test_error_arrow) = client
                 .update(
-                    "SELECT approx->toolkit_experimental.approx_percentiles(array[0.9,0.5,0.2]), \
+                    "SELECT approx->approx_percentiles(array[0.9,0.5,0.2]), \
         	     error(approx) \
                     FROM uddsketch_test",
                     None,

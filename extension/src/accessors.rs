@@ -105,6 +105,8 @@ accessor! { into_values() }
 accessor! { into_int_values() }
 accessor! { state_timeline() }
 accessor! { state_int_timeline() }
+accessor! { num_live_ranges() }
+accessor! { num_gaps() }
 // The rest are more complex, with String or other challenges.  Leaving alone for now.
 
 pg_type! {

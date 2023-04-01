@@ -19,6 +19,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 #### Other notable changes
 - [#743](https://github.com/timescale/timescaledb-toolkit/pull/743): Remove support for direct upgrades from toolkit versions more than 1 year old. Toolkit versions 1.4.x and 1.5.x will have to upgrade to an intermediate version before upgrading to 1.16.0.
 - [#744](https://github.com/timescale/timescaledb-toolkit/pull/744): Fix nightly CI failures from building TimescaleDB on Enterprise Linux
+- [#749](https://github.com/timescale/timescaledb-toolkit/pull/749): Added num_live_ranges, num_gaps, and trim_to accessors for heartbeat aggregates
 
 #### Shout-outs
 

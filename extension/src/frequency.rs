@@ -32,10 +32,6 @@ use crate::{
 use spfunc::zeta::zeta;
 use statrs::function::harmonic::gen_harmonic;
 
-use crate::frequency::toolkit_experimental::{
-    SpaceSavingAggregate, SpaceSavingBigIntAggregate, SpaceSavingTextAggregate,
-};
-
 // Helper functions for zeta distribution
 
 // Default s-value
@@ -412,239 +408,226 @@ impl SpaceSavingTransState {
     }
 }
 
-#[pg_schema]
-pub mod toolkit_experimental {
-    pub(crate) use super::*;
-
-    pg_type! {
-        #[derive(Debug)]
-        struct SpaceSavingAggregate<'input> {
-            type_oid: u32,
-            num_values: u32,
-            values_seen: u64,
-            freq_param: f64,
-            topn: u64, // bump this up to u64 to keep alignment
-            counts: [u64; self.num_values], // JOSH TODO look at AoS instead of SoA at some point
-            overcounts: [u64; self.num_values],
-            datums: DatumStore<'input>,
-        }
+pg_type! {
+    #[derive(Debug)]
+    struct SpaceSavingAggregate<'input> {
+        type_oid: u32,
+        num_values: u32,
+        values_seen: u64,
+        freq_param: f64,
+        topn: u64, // bump this up to u64 to keep alignment
+        counts: [u64; self.num_values], // JOSH TODO look at AoS instead of SoA at some point
+        overcounts: [u64; self.num_values],
+        datums: DatumStore<'input>,
     }
-
-    impl<'input> From<&SpaceSavingTransState> for SpaceSavingAggregate<'input> {
-        fn from(trans: &SpaceSavingTransState) -> Self {
-            let mut values = Vec::new();
-            let mut counts = Vec::new();
-            let mut overcounts = Vec::new();
-
-            for entry in &trans.entries {
-                values.push(entry.value);
-                counts.push(entry.count);
-                overcounts.push(entry.overcount);
-            }
-
-            build! {
-                SpaceSavingAggregate {
-                    type_oid: trans.type_oid().into(),
-                    num_values: trans.entries.len() as _,
-                    values_seen: trans.total_vals,
-                    freq_param: trans.freq_param,
-                    topn: trans.topn as u64,
-                    counts: counts.into(),
-                    overcounts: overcounts.into(),
-                    datums: DatumStore::from((trans.type_oid(), values)),
-                }
-            }
-        }
-    }
-
-    impl<'input> From<(&SpaceSavingAggregate<'input>, &pg_sys::FunctionCallInfo)>
-        for SpaceSavingTransState
-    {
-        fn from(data_in: (&SpaceSavingAggregate<'input>, &pg_sys::FunctionCallInfo)) -> Self {
-            let (agg, fcinfo) = data_in;
-            let collation = get_collation_or_default(*fcinfo);
-            let mut trans = if agg.topn == 0 {
-                SpaceSavingTransState::freq_agg_from_type_id(
-                    agg.freq_param,
-                    unsafe { Oid::from_u32_unchecked(agg.type_oid) },
-                    collation,
-                )
-            } else {
-                SpaceSavingTransState::topn_agg_from_type_id(
-                    agg.freq_param,
-                    agg.topn as u32,
-                    unsafe { Oid::from_u32_unchecked(agg.type_oid) },
-                    collation,
-                )
-            };
-            trans.ingest_aggregate_data(
-                agg.values_seen,
-                &agg.datums,
-                agg.counts.as_slice(),
-                agg.overcounts.as_slice(),
-            );
-            trans
-        }
-    }
-
-    ron_inout_funcs!(SpaceSavingAggregate);
-
-    pg_type! {
-        #[derive(Debug)]
-        struct SpaceSavingBigIntAggregate<'input> {
-            num_values: u32,
-            topn: u32,
-            values_seen: u64,
-            freq_param: f64,
-            counts: [u64; self.num_values], // JOSH TODO look at AoS instead of SoA at some point
-            overcounts: [u64; self.num_values],
-            datums: [i64; self.num_values],
-        }
-    }
-
-    impl<'input> From<&SpaceSavingTransState> for SpaceSavingBigIntAggregate<'input> {
-        fn from(trans: &SpaceSavingTransState) -> Self {
-            assert_eq!(trans.type_oid(), pg_sys::INT8OID);
-
-            let mut values = Vec::new();
-            let mut counts = Vec::new();
-            let mut overcounts = Vec::new();
-
-            for entry in &trans.entries {
-                values.push(entry.value.value() as i64);
-                counts.push(entry.count);
-                overcounts.push(entry.overcount);
-            }
-
-            build! {
-                SpaceSavingBigIntAggregate {
-                    num_values: trans.entries.len() as _,
-                    values_seen: trans.total_vals,
-                    freq_param: trans.freq_param,
-                    topn: trans.topn,
-                    counts: counts.into(),
-                    overcounts: overcounts.into(),
-                    datums: values.into(),
-                }
-            }
-        }
-    }
-
-    impl<'input>
-        From<(
-            &SpaceSavingBigIntAggregate<'input>,
-            &pg_sys::FunctionCallInfo,
-        )> for SpaceSavingTransState
-    {
-        fn from(
-            data_in: (
-                &SpaceSavingBigIntAggregate<'input>,
-                &pg_sys::FunctionCallInfo,
-            ),
-        ) -> Self {
-            let (agg, fcinfo) = data_in;
-            let collation = get_collation_or_default(*fcinfo);
-            let mut trans = if agg.topn == 0 {
-                SpaceSavingTransState::freq_agg_from_type_id(
-                    agg.freq_param,
-                    pg_sys::INT8OID,
-                    collation,
-                )
-            } else {
-                SpaceSavingTransState::topn_agg_from_type_id(
-                    agg.freq_param,
-                    agg.topn as u32,
-                    pg_sys::INT8OID,
-                    collation,
-                )
-            };
-            trans.ingest_aggregate_ints(
-                agg.values_seen,
-                agg.datums.as_slice(),
-                agg.counts.as_slice(),
-                agg.overcounts.as_slice(),
-            );
-            trans
-        }
-    }
-
-    ron_inout_funcs!(SpaceSavingBigIntAggregate);
-
-    pg_type! {
-        #[derive(Debug)]
-        struct SpaceSavingTextAggregate<'input> {
-            num_values: u32,
-            topn: u32,
-            values_seen: u64,
-            freq_param: f64,
-            counts: [u64; self.num_values], // JOSH TODO look at AoS instead of SoA at some point
-            overcounts: [u64; self.num_values],
-            datums: DatumStore<'input>,
-        }
-    }
-
-    impl<'input> From<&SpaceSavingTransState> for SpaceSavingTextAggregate<'input> {
-        fn from(trans: &SpaceSavingTransState) -> Self {
-            assert_eq!(trans.type_oid(), pg_sys::TEXTOID);
-
-            let mut values = Vec::new();
-            let mut counts = Vec::new();
-            let mut overcounts = Vec::new();
-
-            for entry in &trans.entries {
-                values.push(entry.value);
-                counts.push(entry.count);
-                overcounts.push(entry.overcount);
-            }
-
-            build! {
-                SpaceSavingTextAggregate {
-                    num_values: trans.entries.len() as _,
-                    values_seen: trans.total_vals,
-                    freq_param: trans.freq_param,
-                    topn: trans.topn,
-                    counts: counts.into(),
-                    overcounts: overcounts.into(),
-                    datums: DatumStore::from((trans.type_oid(), values)),
-                }
-            }
-        }
-    }
-
-    impl<'input> From<(&SpaceSavingTextAggregate<'input>, &pg_sys::FunctionCallInfo)>
-        for SpaceSavingTransState
-    {
-        fn from(data_in: (&SpaceSavingTextAggregate<'input>, &pg_sys::FunctionCallInfo)) -> Self {
-            let (agg, fcinfo) = data_in;
-            let collation = get_collation_or_default(*fcinfo);
-            let mut trans = if agg.topn == 0 {
-                SpaceSavingTransState::freq_agg_from_type_id(
-                    agg.freq_param,
-                    pg_sys::TEXTOID,
-                    collation,
-                )
-            } else {
-                SpaceSavingTransState::topn_agg_from_type_id(
-                    agg.freq_param,
-                    agg.topn,
-                    pg_sys::TEXTOID,
-                    collation,
-                )
-            };
-            trans.ingest_aggregate_data(
-                agg.values_seen,
-                &agg.datums,
-                agg.counts.as_slice(),
-                agg.overcounts.as_slice(),
-            );
-            trans
-        }
-    }
-
-    ron_inout_funcs!(SpaceSavingTextAggregate);
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+impl<'input> From<&SpaceSavingTransState> for SpaceSavingAggregate<'input> {
+    fn from(trans: &SpaceSavingTransState) -> Self {
+        let mut values = Vec::new();
+        let mut counts = Vec::new();
+        let mut overcounts = Vec::new();
+
+        for entry in &trans.entries {
+            values.push(entry.value);
+            counts.push(entry.count);
+            overcounts.push(entry.overcount);
+        }
+
+        build! {
+            SpaceSavingAggregate {
+                type_oid: trans.type_oid().into(),
+                num_values: trans.entries.len() as _,
+                values_seen: trans.total_vals,
+                freq_param: trans.freq_param,
+                topn: trans.topn as u64,
+                counts: counts.into(),
+                overcounts: overcounts.into(),
+                datums: DatumStore::from((trans.type_oid(), values)),
+            }
+        }
+    }
+}
+
+impl<'input> From<(&SpaceSavingAggregate<'input>, &pg_sys::FunctionCallInfo)>
+    for SpaceSavingTransState
+{
+    fn from(data_in: (&SpaceSavingAggregate<'input>, &pg_sys::FunctionCallInfo)) -> Self {
+        let (agg, fcinfo) = data_in;
+        let collation = get_collation_or_default(*fcinfo);
+        let mut trans = if agg.topn == 0 {
+            SpaceSavingTransState::freq_agg_from_type_id(
+                agg.freq_param,
+                unsafe { Oid::from_u32_unchecked(agg.type_oid) },
+                collation,
+            )
+        } else {
+            SpaceSavingTransState::topn_agg_from_type_id(
+                agg.freq_param,
+                agg.topn as u32,
+                unsafe { Oid::from_u32_unchecked(agg.type_oid) },
+                collation,
+            )
+        };
+        trans.ingest_aggregate_data(
+            agg.values_seen,
+            &agg.datums,
+            agg.counts.as_slice(),
+            agg.overcounts.as_slice(),
+        );
+        trans
+    }
+}
+
+ron_inout_funcs!(SpaceSavingAggregate);
+
+pg_type! {
+    #[derive(Debug)]
+    struct SpaceSavingBigIntAggregate<'input> {
+        num_values: u32,
+        topn: u32,
+        values_seen: u64,
+        freq_param: f64,
+        counts: [u64; self.num_values], // JOSH TODO look at AoS instead of SoA at some point
+        overcounts: [u64; self.num_values],
+        datums: [i64; self.num_values],
+    }
+}
+
+impl<'input> From<&SpaceSavingTransState> for SpaceSavingBigIntAggregate<'input> {
+    fn from(trans: &SpaceSavingTransState) -> Self {
+        assert_eq!(trans.type_oid(), pg_sys::INT8OID);
+
+        let mut values = Vec::new();
+        let mut counts = Vec::new();
+        let mut overcounts = Vec::new();
+
+        for entry in &trans.entries {
+            values.push(entry.value.value() as i64);
+            counts.push(entry.count);
+            overcounts.push(entry.overcount);
+        }
+
+        build! {
+            SpaceSavingBigIntAggregate {
+                num_values: trans.entries.len() as _,
+                values_seen: trans.total_vals,
+                freq_param: trans.freq_param,
+                topn: trans.topn,
+                counts: counts.into(),
+                overcounts: overcounts.into(),
+                datums: values.into(),
+            }
+        }
+    }
+}
+
+impl<'input>
+    From<(
+        &SpaceSavingBigIntAggregate<'input>,
+        &pg_sys::FunctionCallInfo,
+    )> for SpaceSavingTransState
+{
+    fn from(
+        data_in: (
+            &SpaceSavingBigIntAggregate<'input>,
+            &pg_sys::FunctionCallInfo,
+        ),
+    ) -> Self {
+        let (agg, fcinfo) = data_in;
+        let collation = get_collation_or_default(*fcinfo);
+        let mut trans = if agg.topn == 0 {
+            SpaceSavingTransState::freq_agg_from_type_id(agg.freq_param, pg_sys::INT8OID, collation)
+        } else {
+            SpaceSavingTransState::topn_agg_from_type_id(
+                agg.freq_param,
+                agg.topn as u32,
+                pg_sys::INT8OID,
+                collation,
+            )
+        };
+        trans.ingest_aggregate_ints(
+            agg.values_seen,
+            agg.datums.as_slice(),
+            agg.counts.as_slice(),
+            agg.overcounts.as_slice(),
+        );
+        trans
+    }
+}
+
+ron_inout_funcs!(SpaceSavingBigIntAggregate);
+
+pg_type! {
+    #[derive(Debug)]
+    struct SpaceSavingTextAggregate<'input> {
+        num_values: u32,
+        topn: u32,
+        values_seen: u64,
+        freq_param: f64,
+        counts: [u64; self.num_values], // JOSH TODO look at AoS instead of SoA at some point
+        overcounts: [u64; self.num_values],
+        datums: DatumStore<'input>,
+    }
+}
+
+impl<'input> From<&SpaceSavingTransState> for SpaceSavingTextAggregate<'input> {
+    fn from(trans: &SpaceSavingTransState) -> Self {
+        assert_eq!(trans.type_oid(), pg_sys::TEXTOID);
+
+        let mut values = Vec::new();
+        let mut counts = Vec::new();
+        let mut overcounts = Vec::new();
+
+        for entry in &trans.entries {
+            values.push(entry.value);
+            counts.push(entry.count);
+            overcounts.push(entry.overcount);
+        }
+
+        build! {
+            SpaceSavingTextAggregate {
+                num_values: trans.entries.len() as _,
+                values_seen: trans.total_vals,
+                freq_param: trans.freq_param,
+                topn: trans.topn,
+                counts: counts.into(),
+                overcounts: overcounts.into(),
+                datums: DatumStore::from((trans.type_oid(), values)),
+            }
+        }
+    }
+}
+
+impl<'input> From<(&SpaceSavingTextAggregate<'input>, &pg_sys::FunctionCallInfo)>
+    for SpaceSavingTransState
+{
+    fn from(data_in: (&SpaceSavingTextAggregate<'input>, &pg_sys::FunctionCallInfo)) -> Self {
+        let (agg, fcinfo) = data_in;
+        let collation = get_collation_or_default(*fcinfo);
+        let mut trans = if agg.topn == 0 {
+            SpaceSavingTransState::freq_agg_from_type_id(agg.freq_param, pg_sys::TEXTOID, collation)
+        } else {
+            SpaceSavingTransState::topn_agg_from_type_id(
+                agg.freq_param,
+                agg.topn,
+                pg_sys::TEXTOID,
+                collation,
+            )
+        };
+        trans.ingest_aggregate_data(
+            agg.values_seen,
+            &agg.datums,
+            agg.counts.as_slice(),
+            agg.overcounts.as_slice(),
+        );
+        trans
+    }
+}
+
+ron_inout_funcs!(SpaceSavingTextAggregate);
+
+#[pg_extern(immutable, parallel_safe)]
 pub fn topn_agg_trans(
     state: Internal,
     n: i32,
@@ -654,7 +637,7 @@ pub fn topn_agg_trans(
     topn_agg_with_skew_trans(state, n, DEFAULT_ZETA_SKEW, value, fcinfo)
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn topn_agg_bigint_trans(
     state: Internal,
     n: i32,
@@ -664,7 +647,7 @@ pub fn topn_agg_bigint_trans(
     topn_agg_with_skew_bigint_trans(state, n, DEFAULT_ZETA_SKEW, value, fcinfo)
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn topn_agg_text_trans(
     state: Internal,
     n: i32,
@@ -674,7 +657,7 @@ pub fn topn_agg_text_trans(
     topn_agg_with_skew_text_trans(state, n, DEFAULT_ZETA_SKEW, value, fcinfo)
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn topn_agg_with_skew_trans(
     state: Internal,
     n: i32,
@@ -693,7 +676,7 @@ pub fn topn_agg_with_skew_trans(
     .internal()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn topn_agg_with_skew_bigint_trans(
     state: Internal,
     n: i32,
@@ -719,7 +702,7 @@ pub fn topn_agg_with_skew_bigint_trans(
     .internal()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn topn_agg_with_skew_text_trans(
     state: Internal,
     n: i32,
@@ -829,7 +812,7 @@ where
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn rollup_agg_trans<'input>(
     state: Internal,
     value: Option<SpaceSavingAggregate<'input>>,
@@ -859,7 +842,7 @@ pub fn rollup_agg_trans_inner(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn rollup_agg_bigint_trans<'input>(
     state: Internal,
     value: Option<SpaceSavingBigIntAggregate<'input>>,
@@ -889,7 +872,7 @@ pub fn rollup_agg_bigint_trans_inner(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn rollup_agg_text_trans<'input>(
     state: Internal,
     value: Option<SpaceSavingTextAggregate<'input>>,
@@ -919,7 +902,7 @@ pub fn rollup_agg_text_trans_inner(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn space_saving_combine(
     state1: Internal,
     state2: Internal,
@@ -942,40 +925,40 @@ pub fn space_saving_combine_inner(
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 fn space_saving_final(
     state: Internal,
     _fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<toolkit_experimental::SpaceSavingAggregate<'static>> {
+) -> Option<SpaceSavingAggregate<'static>> {
     let state: Option<&SpaceSavingTransState> = unsafe { state.get() };
     state.map(SpaceSavingAggregate::from)
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 fn space_saving_bigint_final(
     state: Internal,
     _fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<toolkit_experimental::SpaceSavingBigIntAggregate<'static>> {
+) -> Option<SpaceSavingBigIntAggregate<'static>> {
     let state: Option<&SpaceSavingTransState> = unsafe { state.get() };
     state.map(SpaceSavingBigIntAggregate::from)
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 fn space_saving_text_final(
     state: Internal,
     _fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<toolkit_experimental::SpaceSavingTextAggregate<'static>> {
+) -> Option<SpaceSavingTextAggregate<'static>> {
     let state: Option<&SpaceSavingTransState> = unsafe { state.get() };
     state.map(SpaceSavingTextAggregate::from)
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 fn space_saving_serialize(state: Internal) -> bytea {
     let state: Inner<SpaceSavingTransState> = unsafe { state.to_inner().unwrap() };
     crate::do_serialize!(state)
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn space_saving_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
     let i: SpaceSavingTransState = crate::do_deserialize!(bytes, SpaceSavingTransState);
     Inner::from(i).internal()
@@ -988,10 +971,10 @@ extension_sql!(
     ) (\n\
         sfunc = toolkit_experimental.freq_agg_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.space_saving_final,\n\
-        combinefunc = toolkit_experimental.space_saving_combine,\n\
-        serialfunc = toolkit_experimental.space_saving_serialize,\n\
-        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        finalfunc = space_saving_final,\n\
+        combinefunc = space_saving_combine,\n\
+        serialfunc = space_saving_serialize,\n\
+        deserialfunc = space_saving_deserialize,\n\
         parallel = safe\n\
     );\n\
 ",
@@ -1012,10 +995,10 @@ extension_sql!(
     ) (\n\
         sfunc = toolkit_experimental.freq_agg_bigint_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.space_saving_bigint_final,\n\
-        combinefunc = toolkit_experimental.space_saving_combine,\n\
-        serialfunc = toolkit_experimental.space_saving_serialize,\n\
-        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        finalfunc = space_saving_bigint_final,\n\
+        combinefunc = space_saving_combine,\n\
+        serialfunc = space_saving_serialize,\n\
+        deserialfunc = space_saving_deserialize,\n\
         parallel = safe\n\
     );\n\
 ",
@@ -1036,10 +1019,10 @@ extension_sql!(
     ) (\n\
         sfunc = toolkit_experimental.freq_agg_text_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.space_saving_text_final,\n\
-        combinefunc = toolkit_experimental.space_saving_combine,\n\
-        serialfunc = toolkit_experimental.space_saving_serialize,\n\
-        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        finalfunc = space_saving_text_final,\n\
+        combinefunc = space_saving_combine,\n\
+        serialfunc = space_saving_serialize,\n\
+        deserialfunc = space_saving_deserialize,\n\
         parallel = safe\n\
     );\n\
 ",
@@ -1055,15 +1038,15 @@ extension_sql!(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.raw_topn_agg(\n\
+    CREATE AGGREGATE raw_topn_agg(\n\
         count integer, value AnyElement\n\
     ) (\n\
-        sfunc = toolkit_experimental.topn_agg_trans,\n\
+        sfunc = topn_agg_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.space_saving_final,\n\
-        combinefunc = toolkit_experimental.space_saving_combine,\n\
-        serialfunc = toolkit_experimental.space_saving_serialize,\n\
-        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        finalfunc = space_saving_final,\n\
+        combinefunc = space_saving_combine,\n\
+        serialfunc = space_saving_serialize,\n\
+        deserialfunc = space_saving_deserialize,\n\
         parallel = safe\n\
     );\n\
 ",
@@ -1079,15 +1062,15 @@ extension_sql!(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.topn_agg(\n\
+    CREATE AGGREGATE topn_agg(\n\
         count integer, value INT8\n\
     ) (\n\
-        sfunc = toolkit_experimental.topn_agg_bigint_trans,\n\
+        sfunc = topn_agg_bigint_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.space_saving_bigint_final,\n\
-        combinefunc = toolkit_experimental.space_saving_combine,\n\
-        serialfunc = toolkit_experimental.space_saving_serialize,\n\
-        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        finalfunc = space_saving_bigint_final,\n\
+        combinefunc = space_saving_combine,\n\
+        serialfunc = space_saving_serialize,\n\
+        deserialfunc = space_saving_deserialize,\n\
         parallel = safe\n\
     );\n\
 ",
@@ -1103,15 +1086,15 @@ extension_sql!(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.topn_agg(\n\
+    CREATE AGGREGATE topn_agg(\n\
         count integer, value TEXT\n\
     ) (\n\
-        sfunc = toolkit_experimental.topn_agg_text_trans,\n\
+        sfunc = topn_agg_text_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.space_saving_text_final,\n\
-        combinefunc = toolkit_experimental.space_saving_combine,\n\
-        serialfunc = toolkit_experimental.space_saving_serialize,\n\
-        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        finalfunc = space_saving_text_final,\n\
+        combinefunc = space_saving_combine,\n\
+        serialfunc = space_saving_serialize,\n\
+        deserialfunc = space_saving_deserialize,\n\
         parallel = safe\n\
     );\n\
 ",
@@ -1127,15 +1110,15 @@ extension_sql!(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.raw_topn_agg(\n\
+    CREATE AGGREGATE raw_topn_agg(\n\
         count integer, skew double precision, value AnyElement\n\
     ) (\n\
-        sfunc = toolkit_experimental.topn_agg_with_skew_trans,\n\
+        sfunc = topn_agg_with_skew_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.space_saving_final,\n\
-        combinefunc = toolkit_experimental.space_saving_combine,\n\
-        serialfunc = toolkit_experimental.space_saving_serialize,\n\
-        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        finalfunc = space_saving_final,\n\
+        combinefunc = space_saving_combine,\n\
+        serialfunc = space_saving_serialize,\n\
+        deserialfunc = space_saving_deserialize,\n\
         parallel = safe\n\
     );\n\
 ",
@@ -1151,15 +1134,15 @@ extension_sql!(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.topn_agg(\n\
+    CREATE AGGREGATE topn_agg(\n\
         count integer, skew double precision, value int8\n\
     ) (\n\
-        sfunc = toolkit_experimental.topn_agg_with_skew_bigint_trans,\n\
+        sfunc = topn_agg_with_skew_bigint_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.space_saving_bigint_final,\n\
-        combinefunc = toolkit_experimental.space_saving_combine,\n\
-        serialfunc = toolkit_experimental.space_saving_serialize,\n\
-        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        finalfunc = space_saving_bigint_final,\n\
+        combinefunc = space_saving_combine,\n\
+        serialfunc = space_saving_serialize,\n\
+        deserialfunc = space_saving_deserialize,\n\
         parallel = safe\n\
     );\n\
 ",
@@ -1175,15 +1158,15 @@ extension_sql!(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.topn_agg(\n\
+    CREATE AGGREGATE topn_agg(\n\
         count integer, skew double precision, value text\n\
     ) (\n\
-        sfunc = toolkit_experimental.topn_agg_with_skew_text_trans,\n\
+        sfunc = topn_agg_with_skew_text_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.space_saving_text_final,\n\
-        combinefunc = toolkit_experimental.space_saving_combine,\n\
-        serialfunc = toolkit_experimental.space_saving_serialize,\n\
-        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        finalfunc = space_saving_text_final,\n\
+        combinefunc = space_saving_combine,\n\
+        serialfunc = space_saving_serialize,\n\
+        deserialfunc = space_saving_deserialize,\n\
         parallel = safe\n\
     );\n\
 ",
@@ -1199,15 +1182,15 @@ extension_sql!(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.rollup(\n\
-        agg toolkit_experimental.SpaceSavingAggregate\n\
+    CREATE AGGREGATE rollup(\n\
+        agg SpaceSavingAggregate\n\
     ) (\n\
-        sfunc = toolkit_experimental.rollup_agg_trans,\n\
+        sfunc = rollup_agg_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.space_saving_final,\n\
-        combinefunc = toolkit_experimental.space_saving_combine,\n\
-        serialfunc = toolkit_experimental.space_saving_serialize,\n\
-        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        finalfunc = space_saving_final,\n\
+        combinefunc = space_saving_combine,\n\
+        serialfunc = space_saving_serialize,\n\
+        deserialfunc = space_saving_deserialize,\n\
         parallel = safe\n\
     );\n\
 ",
@@ -1223,15 +1206,15 @@ extension_sql!(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.rollup(\n\
-        agg toolkit_experimental.SpaceSavingBigIntAggregate\n\
+    CREATE AGGREGATE rollup(\n\
+        agg SpaceSavingBigIntAggregate\n\
     ) (\n\
-        sfunc = toolkit_experimental.rollup_agg_bigint_trans,\n\
+        sfunc = rollup_agg_bigint_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.space_saving_bigint_final,\n\
-        combinefunc = toolkit_experimental.space_saving_combine,\n\
-        serialfunc = toolkit_experimental.space_saving_serialize,\n\
-        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        finalfunc = space_saving_bigint_final,\n\
+        combinefunc = space_saving_combine,\n\
+        serialfunc = space_saving_serialize,\n\
+        deserialfunc = space_saving_deserialize,\n\
         parallel = safe\n\
     );\n\
 ",
@@ -1247,15 +1230,15 @@ extension_sql!(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.rollup(\n\
-        agg toolkit_experimental.SpaceSavingTextAggregate\n\
+    CREATE AGGREGATE rollup(\n\
+        agg SpaceSavingTextAggregate\n\
     ) (\n\
-        sfunc = toolkit_experimental.rollup_agg_text_trans,\n\
+        sfunc = rollup_agg_text_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.space_saving_text_final,\n\
-        combinefunc = toolkit_experimental.space_saving_combine,\n\
-        serialfunc = toolkit_experimental.space_saving_serialize,\n\
-        deserialfunc = toolkit_experimental.space_saving_deserialize,\n\
+        finalfunc = space_saving_text_final,\n\
+        combinefunc = space_saving_combine,\n\
+        serialfunc = space_saving_serialize,\n\
+        deserialfunc = space_saving_deserialize,\n\
         parallel = safe\n\
     );\n\
 ",
@@ -1273,7 +1256,6 @@ extension_sql!(
     immutable,
     parallel_safe,
     name = "into_values",
-    schema = "toolkit_experimental"
 )]
 pub fn freq_iter<'a>(
     agg: SpaceSavingAggregate<'a>,
@@ -1312,7 +1294,6 @@ pub fn freq_iter<'a>(
     immutable,
     parallel_safe,
     name = "into_values",
-    schema = "toolkit_experimental"
 )]
 pub fn freq_bigint_iter<'a>(
     agg: SpaceSavingBigIntAggregate<'a>,
@@ -1339,7 +1320,6 @@ pub fn freq_bigint_iter<'a>(
     immutable,
     parallel_safe,
     name = "into_values",
-    schema = "toolkit_experimental"
 )]
 pub fn freq_text_iter<'a>(
     agg: SpaceSavingTextAggregate<'a>,
@@ -1392,7 +1372,7 @@ fn validate_topn_for_topn_agg(
     }
 }
 
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(immutable, parallel_safe)]
 pub fn topn(
     agg: SpaceSavingAggregate<'_>,
     n: i32,
@@ -1432,7 +1412,6 @@ pub fn topn(
     immutable,
     parallel_safe,
     name = "topn",
-    schema = "toolkit_experimental"
 )]
 pub fn default_topn(
     agg: SpaceSavingAggregate<'_>,
@@ -1449,7 +1428,6 @@ pub fn default_topn(
     immutable,
     parallel_safe,
     name = "topn",
-    schema = "toolkit_experimental"
 )]
 pub fn topn_bigint(agg: SpaceSavingBigIntAggregate<'_>, n: i32) -> SetOfIterator<i64> {
     validate_topn_for_topn_agg(
@@ -1474,7 +1452,6 @@ pub fn topn_bigint(agg: SpaceSavingBigIntAggregate<'_>, n: i32) -> SetOfIterator
     immutable,
     parallel_safe,
     name = "topn",
-    schema = "toolkit_experimental"
 )]
 pub fn default_topn_bigint(agg: SpaceSavingBigIntAggregate<'_>) -> SetOfIterator<i64> {
     if agg.topn == 0 {
@@ -1488,7 +1465,6 @@ pub fn default_topn_bigint(agg: SpaceSavingBigIntAggregate<'_>) -> SetOfIterator
     immutable,
     parallel_safe,
     name = "topn",
-    schema = "toolkit_experimental"
 )]
 pub fn topn_text(agg: SpaceSavingTextAggregate<'_>, n: i32) -> SetOfIterator<String> {
     validate_topn_for_topn_agg(
@@ -1516,7 +1492,6 @@ pub fn topn_text(agg: SpaceSavingTextAggregate<'_>, n: i32) -> SetOfIterator<Str
     immutable,
     parallel_safe,
     name = "topn",
-    schema = "toolkit_experimental"
 )]
 pub fn default_topn_text(agg: SpaceSavingTextAggregate<'_>) -> SetOfIterator<String> {
     if agg.topn == 0 {
@@ -1526,7 +1501,7 @@ pub fn default_topn_text(agg: SpaceSavingTextAggregate<'_>) -> SetOfIterator<Str
     topn_text(agg, n)
 }
 
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(immutable, parallel_safe)]
 pub fn max_frequency(agg: SpaceSavingAggregate<'_>, value: AnyElement) -> f64 {
     let value: PgAnyElement = value.into();
     match agg
@@ -1539,7 +1514,7 @@ pub fn max_frequency(agg: SpaceSavingAggregate<'_>, value: AnyElement) -> f64 {
     }
 }
 
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(immutable, parallel_safe)]
 pub fn min_frequency(agg: SpaceSavingAggregate<'_>, value: AnyElement) -> f64 {
     let value: PgAnyElement = value.into();
     match agg
@@ -1558,7 +1533,6 @@ pub fn min_frequency(agg: SpaceSavingAggregate<'_>, value: AnyElement) -> f64 {
     immutable,
     parallel_safe,
     name = "max_frequency",
-    schema = "toolkit_experimental"
 )]
 pub fn max_bigint_frequency(agg: SpaceSavingBigIntAggregate<'_>, value: i64) -> f64 {
     match agg.datums.iter().position(|datum| value == datum) {
@@ -1571,7 +1545,6 @@ pub fn max_bigint_frequency(agg: SpaceSavingBigIntAggregate<'_>, value: i64) -> 
     immutable,
     parallel_safe,
     name = "min_frequency",
-    schema = "toolkit_experimental"
 )]
 pub fn min_bigint_frequency(agg: SpaceSavingBigIntAggregate<'_>, value: i64) -> f64 {
     match agg.datums.iter().position(|datum| value == datum) {
@@ -1586,7 +1559,6 @@ pub fn min_bigint_frequency(agg: SpaceSavingBigIntAggregate<'_>, value: i64) -> 
     immutable,
     parallel_safe,
     name = "max_frequency",
-    schema = "toolkit_experimental"
 )]
 pub fn max_text_frequency(agg: SpaceSavingTextAggregate<'_>, value: text) -> f64 {
     let value: PgAnyElement = (value.0, pg_sys::TEXTOID).into();
@@ -1604,7 +1576,6 @@ pub fn max_text_frequency(agg: SpaceSavingTextAggregate<'_>, value: text) -> f64
     immutable,
     parallel_safe,
     name = "min_frequency",
-    schema = "toolkit_experimental"
 )]
 pub fn min_text_frequency(agg: SpaceSavingTextAggregate<'_>, value: text) -> f64 {
     let value: PgAnyElement = (value.0, pg_sys::TEXTOID).into();
@@ -2241,8 +2212,8 @@ mod tests {
             // No matter how the values are batched into subaggregates, we should always
             // see the same top 5 values
             let mut result = client.update(
-                "WITH aggs AS (SELECT bucket, toolkit_experimental.raw_topn_agg(5, raw_data) as raw_agg FROM test GROUP BY bucket)
-                SELECT toolkit_experimental.topn(toolkit_experimental.rollup(raw_agg), NULL::DOUBLE PRECISION)::TEXT from aggs",
+                "WITH aggs AS (SELECT bucket, raw_topn_agg(5, raw_data) as raw_agg FROM test GROUP BY bucket)
+                SELECT topn(rollup(raw_agg), NULL::DOUBLE PRECISION)::TEXT from aggs",
                 None, None
             ).unwrap();
             assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("1"));
@@ -2253,8 +2224,8 @@ mod tests {
             assert!(result.next().is_none());
 
             let mut result = client.update(
-                "WITH aggs AS (SELECT bucket, toolkit_experimental.topn_agg(5, int_data) as int_agg FROM test GROUP BY bucket)
-                SELECT toolkit_experimental.topn(toolkit_experimental.rollup(int_agg))::TEXT from aggs",
+                "WITH aggs AS (SELECT bucket, topn_agg(5, int_data) as int_agg FROM test GROUP BY bucket)
+                SELECT topn(rollup(int_agg))::TEXT from aggs",
                 None, None
             ).unwrap();
             assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("1"));
@@ -2265,8 +2236,8 @@ mod tests {
             assert!(result.next().is_none());
 
             let mut result = client.update(
-                "WITH aggs AS (SELECT bucket, toolkit_experimental.topn_agg(5, text_data) as text_agg FROM test GROUP BY bucket)
-                SELECT toolkit_experimental.topn(toolkit_experimental.rollup(text_agg))::TEXT from aggs",
+                "WITH aggs AS (SELECT bucket, topn_agg(5, text_data) as text_agg FROM test GROUP BY bucket)
+                SELECT topn(rollup(text_agg))::TEXT from aggs",
                 None, None
             ).unwrap();
             assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("1"));

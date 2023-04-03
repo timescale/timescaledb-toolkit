@@ -1,6 +1,6 @@
 use pgx::{iter::TableIterator, *};
 
-use crate::nmost::min_int::toolkit_experimental::*;
+use crate::nmost::min_int::*;
 use crate::nmost::*;
 
 use crate::{
@@ -11,38 +11,33 @@ use crate::{
 
 type MinByIntTransType = NMostByTransState<i64>;
 
-#[pg_schema]
-pub mod toolkit_experimental {
-    use super::*;
-
-    pg_type! {
-        #[derive(Debug)]
-        struct MinByInts<'input> {
-            values: MinIntsData<'input>,  // Nesting pg_types adds 8 bytes of header
-            data: DatumStore<'input>,
-        }
+pg_type! {
+    #[derive(Debug)]
+    struct MinByInts<'input> {
+        values: MinIntsData<'input>,  // Nesting pg_types adds 8 bytes of header
+        data: DatumStore<'input>,
     }
-    ron_inout_funcs!(MinByInts);
+}
+ron_inout_funcs!(MinByInts);
 
-    impl<'input> From<MinByIntTransType> for MinByInts<'input> {
-        fn from(item: MinByIntTransType) -> Self {
-            let (capacity, val_ary, data) = item.into_sorted_parts();
-            unsafe {
-                flatten!(MinByInts {
-                    values: build!(MinInts {
-                        capacity: capacity as u32,
-                        elements: val_ary.len() as u32,
-                        values: val_ary.into()
-                    })
-                    .0,
-                    data,
+impl<'input> From<MinByIntTransType> for MinByInts<'input> {
+    fn from(item: MinByIntTransType) -> Self {
+        let (capacity, val_ary, data) = item.into_sorted_parts();
+        unsafe {
+            flatten!(MinByInts {
+                values: build!(MinInts {
+                    capacity: capacity as u32,
+                    elements: val_ary.len() as u32,
+                    values: val_ary.into()
                 })
-            }
+                .0,
+                data,
+            })
         }
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn min_n_by_int_trans(
     state: Internal,
     value: i64,
@@ -60,10 +55,10 @@ pub fn min_n_by_int_trans(
     .internal()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn min_n_by_int_rollup_trans(
     state: Internal,
-    value: toolkit_experimental::MinByInts<'static>,
+    value: MinByInts<'static>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     nmost_by_rollup_trans_function(
@@ -76,19 +71,14 @@ pub fn min_n_by_int_rollup_trans(
     .internal()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn min_n_by_int_final(state: Internal) -> toolkit_experimental::MinByInts<'static> {
+#[pg_extern(immutable, parallel_safe)]
+pub fn min_n_by_int_final(state: Internal) -> MinByInts<'static> {
     unsafe { state.to_inner::<MinByIntTransType>().unwrap().clone() }.into()
 }
 
-#[pg_extern(
-    schema = "toolkit_experimental",
-    name = "into_values",
-    immutable,
-    parallel_safe
-)]
+#[pg_extern(name = "into_values", immutable, parallel_safe)]
 pub fn min_n_by_int_to_values(
-    agg: toolkit_experimental::MinByInts<'static>,
+    agg: MinByInts<'static>,
     _dummy: Option<AnyElement>,
 ) -> TableIterator<'static, (name!(value, i64), name!(data, AnyElement))> {
     TableIterator::new(
@@ -102,12 +92,12 @@ pub fn min_n_by_int_to_values(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.min_n_by(\n\
+    CREATE AGGREGATE min_n_by(\n\
         value bigint, data AnyElement, capacity bigint\n\
     ) (\n\
-        sfunc = toolkit_experimental.min_n_by_int_trans,\n\
+        sfunc = min_n_by_int_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.min_n_by_int_final\n\
+        finalfunc = min_n_by_int_final\n\
     );\n\
 ",
     name = "min_n_by_int",
@@ -116,12 +106,12 @@ extension_sql!(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.rollup(\n\
-        toolkit_experimental.MinByInts\n\
+    CREATE AGGREGATE rollup(\n\
+        MinByInts\n\
     ) (\n\
-        sfunc = toolkit_experimental.min_n_by_int_rollup_trans,\n\
+        sfunc = min_n_by_int_rollup_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.min_n_by_int_final\n\
+        finalfunc = min_n_by_int_final\n\
     );\n\
 ",
     name = "min_n_by_int_rollup",
@@ -155,10 +145,13 @@ mod tests {
             }
 
             // Test into_values
-            let mut result =
-                client.update("SELECT toolkit_experimental.into_values(toolkit_experimental.min_n_by(val, data, 3), NULL::data)::TEXT from data",
-                    None, None,
-                ).unwrap();
+            let mut result = client
+                .update(
+                    "SELECT into_values(min_n_by(val, data, 3), NULL::data)::TEXT from data",
+                    None,
+                    None,
+                )
+                .unwrap();
             assert_eq!(
                 result.next().unwrap()[1].value().unwrap(),
                 Some("(0,\"(0,0)\")")
@@ -176,8 +169,8 @@ mod tests {
             // Test rollup
             let mut result =
                 client.update(
-                    "WITH aggs as (SELECT category, toolkit_experimental.min_n_by(val, data, 5) as agg from data GROUP BY category)
-                        SELECT toolkit_experimental.into_values(toolkit_experimental.rollup(agg), NULL::data)::TEXT FROM aggs",
+                    "WITH aggs as (SELECT category, min_n_by(val, data, 5) as agg from data GROUP BY category)
+                        SELECT into_values(rollup(agg), NULL::data)::TEXT FROM aggs",
                         None, None,
                     ).unwrap();
             assert_eq!(

@@ -14,40 +14,35 @@ use std::cmp::Reverse;
 
 type MaxTimeTransType = NMostTransState<Reverse<pg_sys::TimestampTz>>;
 
-#[pg_schema]
-pub mod toolkit_experimental {
-    use super::*;
-
-    pg_type! {
-        #[derive(Debug)]
-        struct MaxTimes <'input> {
-            capacity : u32,
-            elements : u32,
-            values : [pg_sys::TimestampTz; self.elements],
-        }
+pg_type! {
+    #[derive(Debug)]
+    struct MaxTimes <'input> {
+        capacity : u32,
+        elements : u32,
+        values : [pg_sys::TimestampTz; self.elements],
     }
-    ron_inout_funcs!(MaxTimes);
+}
+ron_inout_funcs!(MaxTimes);
 
-    impl<'input> From<&mut MaxTimeTransType> for MaxTimes<'input> {
-        fn from(item: &mut MaxTimeTransType) -> Self {
-            let heap = std::mem::take(&mut item.heap);
-            unsafe {
-                flatten!(MaxTimes {
-                    capacity: item.capacity as u32,
-                    elements: heap.len() as u32,
-                    values: heap
-                        .into_sorted_vec()
-                        .into_iter()
-                        .map(|x| x.0)
-                        .collect::<Vec<pg_sys::TimestampTz>>()
-                        .into()
-                })
-            }
+impl<'input> From<&mut MaxTimeTransType> for MaxTimes<'input> {
+    fn from(item: &mut MaxTimeTransType) -> Self {
+        let heap = std::mem::take(&mut item.heap);
+        unsafe {
+            flatten!(MaxTimes {
+                capacity: item.capacity as u32,
+                elements: heap.len() as u32,
+                values: heap
+                    .into_sorted_vec()
+                    .into_iter()
+                    .map(|x| x.0)
+                    .collect::<Vec<pg_sys::TimestampTz>>()
+                    .into()
+            })
         }
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn max_n_time_trans(
     state: Internal,
     value: crate::raw::TimestampTz,
@@ -63,10 +58,10 @@ pub fn max_n_time_trans(
     .internal()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn max_n_time_rollup_trans(
     state: Internal,
-    value: toolkit_experimental::MaxTimes<'static>,
+    value: MaxTimes<'static>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     let values: Vec<Reverse<pg_sys::TimestampTz>> =
@@ -80,7 +75,7 @@ pub fn max_n_time_rollup_trans(
     .internal()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn max_n_time_combine(state1: Internal, state2: Internal) -> Option<Internal> {
     nmost_trans_combine(unsafe { state1.to_inner::<MaxTimeTransType>() }, unsafe {
         state2.to_inner::<MaxTimeTransType>()
@@ -88,32 +83,25 @@ pub fn max_n_time_combine(state1: Internal, state2: Internal) -> Option<Internal
     .internal()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn max_n_time_serialize(state: Internal) -> bytea {
     let state: Inner<MaxTimeTransType> = unsafe { state.to_inner().unwrap() };
     crate::do_serialize!(state)
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn max_n_time_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
     let i: MaxTimeTransType = crate::do_deserialize!(bytes, MaxTimeTransType);
     Internal::new(i).into()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn max_n_time_final(state: Internal) -> toolkit_experimental::MaxTimes<'static> {
+#[pg_extern(immutable, parallel_safe)]
+pub fn max_n_time_final(state: Internal) -> MaxTimes<'static> {
     unsafe { &mut *state.to_inner::<MaxTimeTransType>().unwrap() }.into()
 }
 
-#[pg_extern(
-    schema = "toolkit_experimental",
-    name = "into_array",
-    immutable,
-    parallel_safe
-)]
-pub fn max_n_time_to_array(
-    agg: toolkit_experimental::MaxTimes<'static>,
-) -> Vec<crate::raw::TimestampTz> {
+#[pg_extern(name = "into_array", immutable, parallel_safe)]
+pub fn max_n_time_to_array(agg: MaxTimes<'static>) -> Vec<crate::raw::TimestampTz> {
     agg.values
         .clone()
         .into_iter()
@@ -121,15 +109,8 @@ pub fn max_n_time_to_array(
         .collect()
 }
 
-#[pg_extern(
-    schema = "toolkit_experimental",
-    name = "into_values",
-    immutable,
-    parallel_safe
-)]
-pub fn max_n_time_to_values(
-    agg: toolkit_experimental::MaxTimes<'static>,
-) -> SetOfIterator<crate::raw::TimestampTz> {
+#[pg_extern(name = "into_values", immutable, parallel_safe)]
+pub fn max_n_time_to_values(agg: MaxTimes<'static>) -> SetOfIterator<crate::raw::TimestampTz> {
     SetOfIterator::new(
         agg.values
             .clone()
@@ -140,16 +121,16 @@ pub fn max_n_time_to_values(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.max_n(\n\
+    CREATE AGGREGATE max_n(\n\
         value timestamptz, capacity bigint\n\
     ) (\n\
-        sfunc = toolkit_experimental.max_n_time_trans,\n\
+        sfunc = max_n_time_trans,\n\
         stype = internal,\n\
-        combinefunc = toolkit_experimental.max_n_time_combine,\n\
+        combinefunc = max_n_time_combine,\n\
         parallel = safe,\n\
-        serialfunc = toolkit_experimental.max_n_time_serialize,\n\
-        deserialfunc = toolkit_experimental.max_n_time_deserialize,\n\
-        finalfunc = toolkit_experimental.max_n_time_final\n\
+        serialfunc = max_n_time_serialize,\n\
+        deserialfunc = max_n_time_deserialize,\n\
+        finalfunc = max_n_time_final\n\
     );\n\
 ",
     name = "max_n_time",
@@ -164,16 +145,16 @@ extension_sql!(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.rollup(\n\
-        value toolkit_experimental.MaxTimes\n\
+    CREATE AGGREGATE rollup(\n\
+        value MaxTimes\n\
     ) (\n\
-        sfunc = toolkit_experimental.max_n_time_rollup_trans,\n\
+        sfunc = max_n_time_rollup_trans,\n\
         stype = internal,\n\
-        combinefunc = toolkit_experimental.max_n_time_combine,\n\
+        combinefunc = max_n_time_combine,\n\
         parallel = safe,\n\
-        serialfunc = toolkit_experimental.max_n_time_serialize,\n\
-        deserialfunc = toolkit_experimental.max_n_time_deserialize,\n\
-        finalfunc = toolkit_experimental.max_n_time_final\n\
+        serialfunc = max_n_time_serialize,\n\
+        deserialfunc = max_n_time_deserialize,\n\
+        finalfunc = max_n_time_final\n\
     );\n\
 ",
     name = "max_n_time_rollup",
@@ -215,17 +196,26 @@ mod tests {
             }
 
             // Test into_array
-            let result =
-                client.update("SELECT toolkit_experimental.into_array(toolkit_experimental.max_n(val, 5))::TEXT from data",
-                    None, None,
-                ).unwrap().first().get_one::<&str>().unwrap();
+            let result = client
+                .update(
+                    "SELECT into_array(max_n(val, 5))::TEXT from data",
+                    None,
+                    None,
+                )
+                .unwrap()
+                .first()
+                .get_one::<&str>()
+                .unwrap();
             assert_eq!(result.unwrap(), "{\"2020-04-09 00:00:00+00\",\"2020-04-08 00:00:00+00\",\"2020-04-07 00:00:00+00\",\"2020-04-06 00:00:00+00\",\"2020-04-05 00:00:00+00\"}");
 
             // Test into_values
-            let mut result =
-                client.update("SELECT toolkit_experimental.into_values(toolkit_experimental.max_n(val, 3))::TEXT from data",
-                    None, None,
-                ).unwrap();
+            let mut result = client
+                .update(
+                    "SELECT into_values(max_n(val, 3))::TEXT from data",
+                    None,
+                    None,
+                )
+                .unwrap();
             assert_eq!(
                 result.next().unwrap()[1].value().unwrap(),
                 Some("2020-04-09 00:00:00+00")
@@ -243,8 +233,8 @@ mod tests {
             // Test rollup
             let result =
                 client.update(
-                    "WITH aggs as (SELECT category, toolkit_experimental.max_n(val, 5) as agg from data GROUP BY category)
-                        SELECT toolkit_experimental.into_array(toolkit_experimental.rollup(agg))::TEXT FROM aggs",
+                    "WITH aggs as (SELECT category, max_n(val, 5) as agg from data GROUP BY category)
+                        SELECT into_array(rollup(agg))::TEXT FROM aggs",
                         None, None,
                     ).unwrap().first().get_one::<&str>().unwrap();
             assert_eq!(result.unwrap(), "{\"2020-04-09 00:00:00+00\",\"2020-04-08 00:00:00+00\",\"2020-04-07 00:00:00+00\",\"2020-04-06 00:00:00+00\",\"2020-04-05 00:00:00+00\"}");

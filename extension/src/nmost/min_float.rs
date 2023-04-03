@@ -14,40 +14,35 @@ use ordered_float::NotNan;
 
 type MinFloatTransType = NMostTransState<NotNan<f64>>;
 
-#[pg_schema]
-pub mod toolkit_experimental {
-    use super::*;
-
-    pg_type! {
-        #[derive(Debug)]
-        struct MinFloats <'input> {
-            capacity : u32,
-            elements : u32,
-            values : [f64; self.elements],
-        }
+pg_type! {
+    #[derive(Debug)]
+    struct MinFloats <'input> {
+        capacity : u32,
+        elements : u32,
+        values : [f64; self.elements],
     }
-    ron_inout_funcs!(MinFloats);
+}
+ron_inout_funcs!(MinFloats);
 
-    impl<'input> From<&mut MinFloatTransType> for MinFloats<'input> {
-        fn from(item: &mut MinFloatTransType) -> Self {
-            let heap = std::mem::take(&mut item.heap);
-            unsafe {
-                flatten!(MinFloats {
-                    capacity: item.capacity as u32,
-                    elements: heap.len() as u32,
-                    values: heap
-                        .into_sorted_vec()
-                        .into_iter()
-                        .map(f64::from)
-                        .collect::<Vec<f64>>()
-                        .into()
-                })
-            }
+impl<'input> From<&mut MinFloatTransType> for MinFloats<'input> {
+    fn from(item: &mut MinFloatTransType) -> Self {
+        let heap = std::mem::take(&mut item.heap);
+        unsafe {
+            flatten!(MinFloats {
+                capacity: item.capacity as u32,
+                elements: heap.len() as u32,
+                values: heap
+                    .into_sorted_vec()
+                    .into_iter()
+                    .map(f64::from)
+                    .collect::<Vec<f64>>()
+                    .into()
+            })
         }
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn min_n_float_trans(
     state: Internal,
     value: f64,
@@ -63,10 +58,10 @@ pub fn min_n_float_trans(
     .internal()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn min_n_float_rollup_trans(
     state: Internal,
-    value: toolkit_experimental::MinFloats<'static>,
+    value: MinFloats<'static>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     let values: Vec<NotNan<f64>> = value
@@ -84,7 +79,7 @@ pub fn min_n_float_rollup_trans(
     .internal()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn min_n_float_combine(state1: Internal, state2: Internal) -> Option<Internal> {
     nmost_trans_combine(unsafe { state1.to_inner::<MinFloatTransType>() }, unsafe {
         state2.to_inner::<MinFloatTransType>()
@@ -92,55 +87,45 @@ pub fn min_n_float_combine(state1: Internal, state2: Internal) -> Option<Interna
     .internal()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn min_n_float_serialize(state: Internal) -> bytea {
     let state: Inner<MinFloatTransType> = unsafe { state.to_inner().unwrap() };
     crate::do_serialize!(state)
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn min_n_float_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
     let i: MinFloatTransType = crate::do_deserialize!(bytes, MinFloatTransType);
     Internal::new(i).into()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn min_n_float_final(state: Internal) -> toolkit_experimental::MinFloats<'static> {
+#[pg_extern(immutable, parallel_safe)]
+pub fn min_n_float_final(state: Internal) -> MinFloats<'static> {
     unsafe { &mut *state.to_inner::<MinFloatTransType>().unwrap() }.into()
 }
 
-#[pg_extern(
-    schema = "toolkit_experimental",
-    name = "into_array",
-    immutable,
-    parallel_safe
-)]
-pub fn min_n_float_to_array(agg: toolkit_experimental::MinFloats<'static>) -> Vec<f64> {
+#[pg_extern(name = "into_array", immutable, parallel_safe)]
+pub fn min_n_float_to_array(agg: MinFloats<'static>) -> Vec<f64> {
     agg.values.clone().into_vec()
 }
 
-#[pg_extern(
-    schema = "toolkit_experimental",
-    name = "into_values",
-    immutable,
-    parallel_safe
-)]
-pub fn min_n_float_to_values(agg: toolkit_experimental::MinFloats<'static>) -> SetOfIterator<f64> {
+#[pg_extern(name = "into_values", immutable, parallel_safe)]
+pub fn min_n_float_to_values(agg: MinFloats<'static>) -> SetOfIterator<f64> {
     SetOfIterator::new(agg.values.clone().into_iter())
 }
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.min_n(\n\
+    CREATE AGGREGATE min_n(\n\
         value double precision, capacity bigint\n\
     ) (\n\
-        sfunc = toolkit_experimental.min_n_float_trans,\n\
+        sfunc = min_n_float_trans,\n\
         stype = internal,\n\
-        combinefunc = toolkit_experimental.min_n_float_combine,\n\
+        combinefunc = min_n_float_combine,\n\
         parallel = safe,\n\
-        serialfunc = toolkit_experimental.min_n_float_serialize,\n\
-        deserialfunc = toolkit_experimental.min_n_float_deserialize,\n\
-        finalfunc = toolkit_experimental.min_n_float_final\n\
+        serialfunc = min_n_float_serialize,\n\
+        deserialfunc = min_n_float_deserialize,\n\
+        finalfunc = min_n_float_final\n\
     );\n\
 ",
     name = "min_n_float",
@@ -155,16 +140,16 @@ extension_sql!(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.rollup(\n\
-        value toolkit_experimental.MinFloats\n\
+    CREATE AGGREGATE rollup(\n\
+        value MinFloats\n\
     ) (\n\
-        sfunc = toolkit_experimental.min_n_float_rollup_trans,\n\
+        sfunc = min_n_float_rollup_trans,\n\
         stype = internal,\n\
-        combinefunc = toolkit_experimental.min_n_float_combine,\n\
+        combinefunc = min_n_float_combine,\n\
         parallel = safe,\n\
-        serialfunc = toolkit_experimental.min_n_float_serialize,\n\
-        deserialfunc = toolkit_experimental.min_n_float_deserialize,\n\
-        finalfunc = toolkit_experimental.min_n_float_final\n\
+        serialfunc = min_n_float_serialize,\n\
+        deserialfunc = min_n_float_deserialize,\n\
+        finalfunc = min_n_float_final\n\
     );\n\
 ",
     name = "min_n_float_rollup",
@@ -208,20 +193,25 @@ mod tests {
             }
 
             // Test into_array
-            let result =
-                client.update("SELECT toolkit_experimental.into_array(toolkit_experimental.min_n(val, 5)) from data",
-                    None, None,
-                ).unwrap().first().get_one::<Vec<f64>>().unwrap();
+            let result = client
+                .update("SELECT into_array(min_n(val, 5)) from data", None, None)
+                .unwrap()
+                .first()
+                .get_one::<Vec<f64>>()
+                .unwrap();
             assert_eq!(
                 result.unwrap(),
                 vec![0. / 128., 1. / 128., 2. / 128., 3. / 128., 4. / 128.]
             );
 
             // Test into_values
-            let mut result =
-                client.update("SELECT toolkit_experimental.into_values(toolkit_experimental.min_n(val, 3))::TEXT from data",
-                    None, None,
-                ).unwrap();
+            let mut result = client
+                .update(
+                    "SELECT into_values(min_n(val, 3))::TEXT from data",
+                    None,
+                    None,
+                )
+                .unwrap();
             assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("0"));
             assert_eq!(
                 result.next().unwrap()[1].value().unwrap(),
@@ -233,8 +223,8 @@ mod tests {
             // Test rollup
             let result =
                 client.update(
-                    "WITH aggs as (SELECT category, toolkit_experimental.min_n(val, 5) as agg from data GROUP BY category)
-                        SELECT toolkit_experimental.into_array(toolkit_experimental.rollup(agg)) FROM aggs",
+                    "WITH aggs as (SELECT category, min_n(val, 5) as agg from data GROUP BY category)
+                        SELECT into_array(rollup(agg)) FROM aggs",
                         None, None,
                     ).unwrap().first().get_one::<Vec<f64>>();
             assert_eq!(

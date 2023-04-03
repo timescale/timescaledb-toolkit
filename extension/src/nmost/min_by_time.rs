@@ -1,6 +1,6 @@
 use pgx::{iter::TableIterator, *};
 
-use crate::nmost::min_time::toolkit_experimental::*;
+use crate::nmost::min_time::*;
 use crate::nmost::*;
 
 use crate::{
@@ -11,38 +11,33 @@ use crate::{
 
 type MinByTimeTransType = NMostByTransState<pg_sys::TimestampTz>;
 
-#[pg_schema]
-pub mod toolkit_experimental {
-    use super::*;
-
-    pg_type! {
-        #[derive(Debug)]
-        struct MinByTimes<'input> {
-            values: MinTimesData<'input>,  // Nesting pg_types adds 8 bytes of header
-            data: DatumStore<'input>,
-        }
+pg_type! {
+    #[derive(Debug)]
+    struct MinByTimes<'input> {
+        values: MinTimesData<'input>,  // Nesting pg_types adds 8 bytes of header
+        data: DatumStore<'input>,
     }
-    ron_inout_funcs!(MinByTimes);
+}
+ron_inout_funcs!(MinByTimes);
 
-    impl<'input> From<MinByTimeTransType> for MinByTimes<'input> {
-        fn from(item: MinByTimeTransType) -> Self {
-            let (capacity, val_ary, data) = item.into_sorted_parts();
-            unsafe {
-                flatten!(MinByTimes {
-                    values: build!(MinTimes {
-                        capacity: capacity as u32,
-                        elements: val_ary.len() as u32,
-                        values: val_ary.into()
-                    })
-                    .0,
-                    data,
+impl<'input> From<MinByTimeTransType> for MinByTimes<'input> {
+    fn from(item: MinByTimeTransType) -> Self {
+        let (capacity, val_ary, data) = item.into_sorted_parts();
+        unsafe {
+            flatten!(MinByTimes {
+                values: build!(MinTimes {
+                    capacity: capacity as u32,
+                    elements: val_ary.len() as u32,
+                    values: val_ary.into()
                 })
-            }
+                .0,
+                data,
+            })
         }
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn min_n_by_time_trans(
     state: Internal,
     value: crate::raw::TimestampTz,
@@ -60,10 +55,10 @@ pub fn min_n_by_time_trans(
     .internal()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn min_n_by_time_rollup_trans(
     state: Internal,
-    value: toolkit_experimental::MinByTimes<'static>,
+    value: MinByTimes<'static>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     nmost_by_rollup_trans_function(
@@ -76,19 +71,14 @@ pub fn min_n_by_time_rollup_trans(
     .internal()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn min_n_by_time_final(state: Internal) -> toolkit_experimental::MinByTimes<'static> {
+#[pg_extern(immutable, parallel_safe)]
+pub fn min_n_by_time_final(state: Internal) -> MinByTimes<'static> {
     unsafe { state.to_inner::<MinByTimeTransType>().unwrap().clone() }.into()
 }
 
-#[pg_extern(
-    schema = "toolkit_experimental",
-    name = "into_values",
-    immutable,
-    parallel_safe
-)]
+#[pg_extern(name = "into_values", immutable, parallel_safe)]
 pub fn min_n_by_time_to_values(
-    agg: toolkit_experimental::MinByTimes<'static>,
+    agg: MinByTimes<'static>,
     _dummy: Option<AnyElement>,
 ) -> TableIterator<
     'static,
@@ -109,12 +99,12 @@ pub fn min_n_by_time_to_values(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.min_n_by(\n\
+    CREATE AGGREGATE min_n_by(\n\
         value timestamptz, data AnyElement, capacity bigint\n\
     ) (\n\
-        sfunc = toolkit_experimental.min_n_by_time_trans,\n\
+        sfunc = min_n_by_time_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.min_n_by_time_final\n\
+        finalfunc = min_n_by_time_final\n\
     );\n\
 ",
     name = "min_n_by_time",
@@ -123,12 +113,12 @@ extension_sql!(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.rollup(\n\
-        toolkit_experimental.MinByTimes\n\
+    CREATE AGGREGATE rollup(\n\
+        MinByTimes\n\
     ) (\n\
-        sfunc = toolkit_experimental.min_n_by_time_rollup_trans,\n\
+        sfunc = min_n_by_time_rollup_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.min_n_by_time_final\n\
+        finalfunc = min_n_by_time_final\n\
     );\n\
 ",
     name = "min_n_by_time_rollup",
@@ -164,10 +154,13 @@ mod tests {
             }
 
             // Test into_values
-            let mut result =
-                client.update("SELECT toolkit_experimental.into_values(toolkit_experimental.min_n_by(val, data, 3), NULL::data)::TEXT from data",
-                    None, None,
-                ).unwrap();
+            let mut result = client
+                .update(
+                    "SELECT into_values(min_n_by(val, data, 3), NULL::data)::TEXT from data",
+                    None,
+                    None,
+                )
+                .unwrap();
             assert_eq!(
                 result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-01 00:00:00+00\",\"(\"\"2020-01-01 00:00:00+00\"\",0)\")")
@@ -185,8 +178,8 @@ mod tests {
             // Test rollup
             let mut result =
                 client.update(
-                    "WITH aggs as (SELECT category, toolkit_experimental.min_n_by(val, data, 5) as agg from data GROUP BY category)
-                        SELECT toolkit_experimental.into_values(toolkit_experimental.rollup(agg), NULL::data)::TEXT FROM aggs",
+                    "WITH aggs as (SELECT category, min_n_by(val, data, 5) as agg from data GROUP BY category)
+                        SELECT into_values(rollup(agg), NULL::data)::TEXT FROM aggs",
                         None, None,
                     ).unwrap();
             assert_eq!(

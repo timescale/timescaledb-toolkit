@@ -3,6 +3,7 @@ use pgx::{iter::SetOfIterator, *};
 use crate::nmost::*;
 
 use crate::{
+    accessors::{AccessorIntoArray, AccessorIntoValues},
     flatten,
     palloc::{Inner, Internal, InternalAsValue, ToInternal},
     pg_type,
@@ -114,6 +115,23 @@ pub fn min_n_float_to_values(agg: MinFloats<'static>) -> SetOfIterator<f64> {
     SetOfIterator::new(agg.values.clone().into_iter())
 }
 
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_min_float_into_values<'a>(
+    agg: MinFloats<'static>,
+    _accessor: AccessorIntoValues<'a>,
+) -> SetOfIterator<'a, f64> {
+    min_n_float_to_values(agg)
+}
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_min_float_into_array<'a>(
+    agg: MinFloats<'static>,
+    _accessor: AccessorIntoArray<'a>,
+) -> Vec<f64> {
+    min_n_float_to_array(agg)
+}
+
 extension_sql!(
     "\n\
     CREATE AGGREGATE min_n(\n\
@@ -203,11 +221,35 @@ mod tests {
                 result.unwrap(),
                 vec![0. / 128., 1. / 128., 2. / 128., 3. / 128., 4. / 128.]
             );
+            let result = client
+                .update("SELECT min_n(val, 5)->into_array() from data", None, None)
+                .unwrap()
+                .first()
+                .get_one::<Vec<f64>>()
+                .unwrap();
+            assert_eq!(
+                result.unwrap(),
+                vec![0. / 128., 1. / 128., 2. / 128., 3. / 128., 4. / 128.]
+            );
 
             // Test into_values
             let mut result = client
                 .update(
                     "SELECT into_values(min_n(val, 3))::TEXT from data",
+                    None,
+                    None,
+                )
+                .unwrap();
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("0"));
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("0.0078125")
+            );
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("0.015625"));
+            assert!(result.next().is_none());
+            let mut result = client
+                .update(
+                    "SELECT (min_n(val, 3)->into_values())::TEXT from data",
                     None,
                     None,
                 )

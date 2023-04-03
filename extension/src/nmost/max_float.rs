@@ -3,6 +3,7 @@ use pgx::{iter::SetOfIterator, *};
 use crate::nmost::*;
 
 use crate::{
+    accessors::{AccessorIntoArray, AccessorIntoValues},
     flatten,
     palloc::{Inner, Internal, InternalAsValue, ToInternal},
     pg_type,
@@ -115,6 +116,23 @@ pub fn max_n_float_to_values(agg: MaxFloats<'static>) -> SetOfIterator<f64> {
     SetOfIterator::new(agg.values.clone().into_iter())
 }
 
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_max_float_into_values<'a>(
+    agg: MaxFloats<'static>,
+    _accessor: AccessorIntoValues<'a>,
+) -> SetOfIterator<'a, f64> {
+    max_n_float_to_values(agg)
+}
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_max_float_into_array<'a>(
+    agg: MaxFloats<'static>,
+    _accessor: AccessorIntoArray<'a>,
+) -> Vec<f64> {
+    max_n_float_to_array(agg)
+}
+
 extension_sql!(
     "\n\
     CREATE AGGREGATE max_n(\n\
@@ -204,11 +222,38 @@ mod tests {
                 result.unwrap(),
                 vec![99. / 128., 98. / 128., 97. / 128., 96. / 128., 95. / 128.]
             );
+            let result = client
+                .update("SELECT max_n(val, 5)->into_array() from data", None, None)
+                .unwrap()
+                .first()
+                .get_one::<Vec<f64>>()
+                .unwrap();
+            assert_eq!(
+                result.unwrap(),
+                vec![99. / 128., 98. / 128., 97. / 128., 96. / 128., 95. / 128.]
+            );
 
             // Test into_values
             let mut result = client
                 .update(
                     "SELECT into_values(max_n(val, 3))::TEXT from data",
+                    None,
+                    None,
+                )
+                .unwrap();
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("0.7734375")
+            );
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("0.765625"));
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("0.7578125")
+            );
+            assert!(result.next().is_none());
+            let mut result = client
+                .update(
+                    "SELECT (max_n(val, 3)->into_values())::TEXT from data",
                     None,
                     None,
                 )

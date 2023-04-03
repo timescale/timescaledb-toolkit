@@ -3,6 +3,7 @@ use pgx::{iter::SetOfIterator, *};
 use crate::nmost::*;
 
 use crate::{
+    accessors::{AccessorIntoArray, AccessorIntoValues},
     flatten,
     palloc::{Inner, Internal, InternalAsValue, ToInternal},
     pg_type,
@@ -110,6 +111,23 @@ pub fn min_n_time_to_values(agg: MinTimes<'static>) -> SetOfIterator<crate::raw:
     )
 }
 
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_min_time_into_values<'a>(
+    agg: MinTimes<'static>,
+    _accessor: AccessorIntoValues<'a>,
+) -> SetOfIterator<'a, crate::raw::TimestampTz> {
+    min_n_time_to_values(agg)
+}
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_min_time_into_array<'a>(
+    agg: MinTimes<'static>,
+    _accessor: AccessorIntoArray<'a>,
+) -> Vec<crate::raw::TimestampTz> {
+    min_n_time_to_array(agg)
+}
+
 extension_sql!(
     "\n\
     CREATE AGGREGATE min_n(\n\
@@ -198,11 +216,42 @@ mod tests {
                 .get_one::<&str>()
                 .unwrap();
             assert_eq!(result.unwrap(), "{\"2020-01-01 00:00:00+00\",\"2020-01-02 00:00:00+00\",\"2020-01-03 00:00:00+00\",\"2020-01-04 00:00:00+00\",\"2020-01-05 00:00:00+00\"}");
+            let result = client
+                .update(
+                    "SELECT (min_n(val, 5)->into_array())::TEXT from data",
+                    None,
+                    None,
+                )
+                .unwrap()
+                .first()
+                .get_one::<&str>()
+                .unwrap();
+            assert_eq!(result.unwrap(), "{\"2020-01-01 00:00:00+00\",\"2020-01-02 00:00:00+00\",\"2020-01-03 00:00:00+00\",\"2020-01-04 00:00:00+00\",\"2020-01-05 00:00:00+00\"}");
 
             // Test into_values
             let mut result = client
                 .update(
                     "SELECT into_values(min_n(val, 3))::TEXT from data",
+                    None,
+                    None,
+                )
+                .unwrap();
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("2020-01-01 00:00:00+00")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("2020-01-02 00:00:00+00")
+            );
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("2020-01-03 00:00:00+00")
+            );
+            assert!(result.next().is_none());
+            let mut result = client
+                .update(
+                    "SELECT (min_n(val, 3)->into_values())::TEXT from data",
                     None,
                     None,
                 )

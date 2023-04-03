@@ -160,6 +160,16 @@ crate::functions_stabilized_at! {
         rollup(minfloats),
         rollup(minints),
         rollup(mintimes),
+        arrow_max_int_into_array(maxints,accessorintoarray),
+        arrow_max_int_into_values(maxints,accessorintovalues),
+        arrow_max_time_into_array(maxtimes,accessorintoarray),
+        arrow_max_time_into_values(maxtimes,accessorintovalues),
+        arrow_min_float_into_array(minfloats,accessorintoarray),
+        arrow_min_float_into_values(minfloats,accessorintovalues),
+        arrow_min_int_into_array(minints,accessorintoarray),
+        arrow_min_int_into_values(minints,accessorintovalues),
+        arrow_min_time_into_array(mintimes,accessorintoarray),
+        arrow_min_time_into_values(mintimes,accessorintovalues),
     }
     "1.15.0" => {
         arrow_counter_interpolated_delta(countersummary,counterinterpolateddeltaaccessor),
@@ -836,6 +846,7 @@ crate::types_stabilized_at! {
         minfloats,
         minints,
         mintimes,
+        accessorintoarray,
     }
     "1.15.0" => {
         counterinterpolateddeltaaccessor,
@@ -966,6 +977,18 @@ crate::operators_stabilized_at! {
         "->"(heartbeatagg,accessornumliveranges),
         "->"(heartbeatagg,heartbeattrimtoaccessor),
         "->"(uddsketch,accessorpercentilearray),
+        "->"(maxfloats,accessorintoarray),
+        "->"(maxfloats,accessorintovalues),
+        "->"(maxints,accessorintoarray),
+        "->"(maxints,accessorintovalues),
+        "->"(maxtimes,accessorintoarray),
+        "->"(maxtimes,accessorintovalues),
+        "->"(minfloats,accessorintoarray),
+        "->"(minfloats,accessorintovalues),
+        "->"(minints,accessorintoarray),
+        "->"(minints,accessorintovalues),
+        "->"(mintimes,accessorintoarray),
+        "->"(mintimes,accessorintovalues),
     }
     "1.15.0" => {
         "->"(countersummary,counterinterpolateddeltaaccessor),

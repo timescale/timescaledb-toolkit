@@ -3,6 +3,7 @@ use pgx::{iter::SetOfIterator, *};
 use crate::nmost::*;
 
 use crate::{
+    accessors::{AccessorIntoArray, AccessorIntoValues},
     flatten,
     palloc::{Inner, Internal, InternalAsValue, ToInternal},
     pg_type,
@@ -109,6 +110,23 @@ pub fn max_n_int_to_values(agg: MaxInts<'static>) -> SetOfIterator<i64> {
     SetOfIterator::new(agg.values.clone().into_iter())
 }
 
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_max_int_into_values<'a>(
+    agg: MaxInts<'static>,
+    _accessor: AccessorIntoValues<'a>,
+) -> SetOfIterator<'a, i64> {
+    max_n_int_to_values(agg)
+}
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_max_int_into_array<'a>(
+    agg: MaxInts<'static>,
+    _accessor: AccessorIntoArray<'a>,
+) -> Vec<i64> {
+    max_n_int_to_array(agg)
+}
+
 extension_sql!(
     "\n\
     CREATE AGGREGATE max_n(\n\
@@ -191,11 +209,29 @@ mod tests {
                 .get_one::<Vec<i64>>()
                 .unwrap();
             assert_eq!(result.unwrap(), vec![99, 98, 97, 96, 95]);
+            let result = client
+                .update("SELECT max_n(val, 5)->into_array() from data", None, None)
+                .unwrap()
+                .first()
+                .get_one::<Vec<i64>>()
+                .unwrap();
+            assert_eq!(result.unwrap(), vec![99, 98, 97, 96, 95]);
 
             // Test into_values
             let mut result = client
                 .update(
                     "SELECT into_values(max_n(val, 3))::TEXT from data",
+                    None,
+                    None,
+                )
+                .unwrap();
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("99"));
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("98"));
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("97"));
+            assert!(result.next().is_none());
+            let mut result = client
+                .update(
+                    "SELECT (max_n(val, 3)->into_values())::TEXT from data",
                     None,
                     None,
                 )

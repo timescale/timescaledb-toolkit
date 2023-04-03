@@ -41,7 +41,10 @@ pub(crate) unsafe fn free_datum(datum: Datum, typoid: Oid) {
 
 // TODO: is there a better place for this?
 // Note that this requires an reference time to deal with variable length intervals (days or months)
-pub fn interval_to_ms(ref_time: &crate::raw::TimestampTz, interval: &crate::raw::Interval) -> i64 {
+pub fn ts_interval_sum_to_ms(
+    ref_time: &crate::raw::TimestampTz,
+    interval: &crate::raw::Interval,
+) -> i64 {
     extern "C" {
         fn timestamptz_pl_interval(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
     }
@@ -53,7 +56,11 @@ pub fn interval_to_ms(ref_time: &crate::raw::TimestampTz, interval: &crate::raw:
             interval.0,
         )
     };
-    bound.value() as i64 - ref_time.0.value() as i64
+    bound.value() as i64
+}
+
+pub fn interval_to_ms(ref_time: &crate::raw::TimestampTz, interval: &crate::raw::Interval) -> i64 {
+    ts_interval_sum_to_ms(ref_time, interval) - ref_time.0.value() as i64
 }
 
 pub struct TextSerializableDatumWriter {

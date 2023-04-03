@@ -14,6 +14,21 @@ crate::functions_stabilized_at! {
     "1.16.0" => {
         approx_count_distinct(anyelement),
         approx_count_distinct_trans(internal,anyelement),
+        accessornumgaps_in(cstring),
+        accessornumgaps_out(accessornumgaps),
+        accessornumliveranges_in(cstring),
+        accessornumliveranges_out(accessornumliveranges),
+        arrow_heartbeat_agg_num_gaps(heartbeatagg,accessornumgaps),
+        arrow_heartbeat_agg_num_live_ranges(heartbeatagg,accessornumliveranges),
+        arrow_heartbeat_agg_trim_to(heartbeatagg,heartbeattrimtoaccessor),
+        heartbeattrimtoaccessor_in(cstring),
+        heartbeattrimtoaccessor_out(heartbeattrimtoaccessor),
+        num_gaps(),
+        num_gaps(heartbeatagg),
+        num_live_ranges(),
+        num_live_ranges(heartbeatagg),
+        trim_to(heartbeatagg,timestamp with time zone,interval),
+        trim_to(timestamp with time zone,interval),
     }
     "1.15.0" => {
         arrow_counter_interpolated_delta(countersummary,counterinterpolateddeltaaccessor),
@@ -673,6 +688,11 @@ crate::functions_stabilized_at! {
 
 crate::types_stabilized_at! {
     STABLE_TYPES
+    "1.16.0" => {
+        accessornumgaps,
+        accessornumliveranges,
+        heartbeattrimtoaccessor,
+    }
     "1.15.0" => {
         counterinterpolateddeltaaccessor,
         counterinterpolatedrateaccessor,
@@ -797,6 +817,11 @@ crate::types_stabilized_at! {
 
 crate::operators_stabilized_at! {
     STABLE_OPERATORS
+    "1.16.0" => {
+        "->"(heartbeatagg,accessornumgaps),
+        "->"(heartbeatagg,accessornumliveranges),
+        "->"(heartbeatagg,heartbeattrimtoaccessor),
+    }
     "1.15.0" => {
         "->"(countersummary,counterinterpolateddeltaaccessor),
         "->"(countersummary,counterinterpolatedrateaccessor),

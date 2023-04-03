@@ -121,3 +121,33 @@ impl<'a> HeartbeatInterpolateAccessor<'a> {
         }
     }
 }
+
+pg_type! {
+    struct HeartbeatTrimToAccessor {
+        start : i64,
+        end : i64,
+    }
+}
+
+ron_inout_funcs!(HeartbeatTrimToAccessor);
+
+// Note that this is unable to take only a duration, as we don't have the functionality to store
+// an interval in PG format and are unable to convert it to an int without a reference time.
+// This is a difference from the inline function.
+#[pg_extern(immutable, parallel_safe, name = "trim_to")]
+fn heartbeat_agg_trim_to_accessor(
+    start: crate::raw::TimestampTz,
+    duration: default!(Option<crate::raw::Interval>, "NULL"),
+) -> HeartbeatTrimToAccessor<'static> {
+    let end = duration
+        .map(|intv| crate::datum_utils::ts_interval_sum_to_ms(&start, &intv))
+        .unwrap_or(0);
+    let start = i64::from(start);
+
+    crate::build! {
+        HeartbeatTrimToAccessor {
+            start,
+            end,
+        }
+    }
+}

@@ -32,6 +32,9 @@ crate::functions_stabilized_at! {
         accessorpercentilearray_in(cstring),
         accessorpercentilearray_out(accessorpercentilearray),
         arrow_uddsketch_approx_percentile_array(uddsketch,accessorpercentilearray),
+        days_in_month(timestamp with time zone),
+        month_normalize(double precision,timestamp with time zone,double precision),
+        to_epoch(timestamp with time zone),
     }
     "1.15.0" => {
         arrow_counter_interpolated_delta(countersummary,counterinterpolateddeltaaccessor),

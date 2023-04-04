@@ -29,6 +29,9 @@ crate::functions_stabilized_at! {
         num_live_ranges(heartbeatagg),
         trim_to(heartbeatagg,timestamp with time zone,interval),
         trim_to(timestamp with time zone,interval),
+        accessorpercentilearray_in(cstring),
+        accessorpercentilearray_out(accessorpercentilearray),
+        arrow_uddsketch_approx_percentile_array(uddsketch,accessorpercentilearray),
     }
     "1.15.0" => {
         arrow_counter_interpolated_delta(countersummary,counterinterpolateddeltaaccessor),
@@ -692,6 +695,7 @@ crate::types_stabilized_at! {
         accessornumgaps,
         accessornumliveranges,
         heartbeattrimtoaccessor,
+        accessorpercentilearray
     }
     "1.15.0" => {
         counterinterpolateddeltaaccessor,
@@ -821,6 +825,7 @@ crate::operators_stabilized_at! {
         "->"(heartbeatagg,accessornumgaps),
         "->"(heartbeatagg,accessornumliveranges),
         "->"(heartbeatagg,heartbeattrimtoaccessor),
+        "->"(uddsketch,accessorpercentilearray),
     }
     "1.15.0" => {
         "->"(countersummary,counterinterpolateddeltaaccessor),

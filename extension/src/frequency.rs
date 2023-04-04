@@ -17,7 +17,8 @@ use serde::{
 
 use crate::{
     accessors::{
-        AccessorIntoValues,AccessorMaxFrequencyInt,AccessorMinFrequencyInt,AccessorTopn, AccessorTopNCount,
+        AccessorIntoValues, AccessorMaxFrequencyInt, AccessorMinFrequencyInt, AccessorTopNCount,
+        AccessorTopn,
     },
     aggregate_utils::{get_collation_or_default, in_aggregate_context},
     build,
@@ -1255,11 +1256,7 @@ extension_sql!(
     ],
 );
 
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    name = "into_values",
-)]
+#[pg_extern(immutable, parallel_safe, name = "into_values")]
 pub fn freq_iter<'a>(
     agg: SpaceSavingAggregate<'a>,
     ty: AnyElement,
@@ -1293,11 +1290,7 @@ pub fn freq_iter<'a>(
     }
 }
 
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    name = "into_values",
-)]
+#[pg_extern(immutable, parallel_safe, name = "into_values")]
 pub fn freq_bigint_iter<'a>(
     agg: SpaceSavingBigIntAggregate<'a>,
 ) -> TableIterator<
@@ -1335,11 +1328,7 @@ pub fn arrow_freq_bigint_iter<'a>(
     freq_bigint_iter(agg)
 }
 
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    name = "into_values",
-)]
+#[pg_extern(immutable, parallel_safe, name = "into_values")]
 pub fn freq_text_iter<'a>(
     agg: SpaceSavingTextAggregate<'a>,
 ) -> TableIterator<
@@ -1443,11 +1432,7 @@ pub fn topn(
     )
 }
 
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    name = "topn",
-)]
+#[pg_extern(immutable, parallel_safe, name = "topn")]
 pub fn default_topn(
     agg: SpaceSavingAggregate<'_>,
     ty: Option<AnyElement>,
@@ -1459,11 +1444,7 @@ pub fn default_topn(
     topn(agg, n, ty)
 }
 
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    name = "topn",
-)]
+#[pg_extern(immutable, parallel_safe, name = "topn")]
 pub fn topn_bigint(agg: SpaceSavingBigIntAggregate<'_>, n: i32) -> SetOfIterator<i64> {
     validate_topn_for_mcv_agg(
         n,
@@ -1492,11 +1473,7 @@ pub fn arrow_topn_bigint<'a>(
     topn_bigint(agg, accessor.count as i32)
 }
 
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    name = "topn",
-)]
+#[pg_extern(immutable, parallel_safe, name = "topn")]
 pub fn default_topn_bigint(agg: SpaceSavingBigIntAggregate<'_>) -> SetOfIterator<i64> {
     if agg.topn == 0 {
         pgx::error!("frequency aggregates require a N parameter to topn")
@@ -1514,11 +1491,7 @@ pub fn arrow_default_topn_bigint<'a>(
     default_topn_bigint(agg)
 }
 
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    name = "topn",
-)]
+#[pg_extern(immutable, parallel_safe, name = "topn")]
 pub fn topn_text(agg: SpaceSavingTextAggregate<'_>, n: i32) -> SetOfIterator<String> {
     validate_topn_for_mcv_agg(
         n,
@@ -1550,11 +1523,7 @@ pub fn arrow_topn_text<'a>(
     topn_text(agg, accessor.count as i32)
 }
 
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    name = "topn",
-)]
+#[pg_extern(immutable, parallel_safe, name = "topn")]
 pub fn default_topn_text(agg: SpaceSavingTextAggregate<'_>) -> SetOfIterator<String> {
     if agg.topn == 0 {
         pgx::error!("frequency aggregates require a N parameter to topn")
@@ -1600,11 +1569,7 @@ pub fn min_frequency(agg: SpaceSavingAggregate<'_>, value: AnyElement) -> f64 {
     }
 }
 
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    name = "max_frequency",
-)]
+#[pg_extern(immutable, parallel_safe, name = "max_frequency")]
 pub fn max_bigint_frequency(agg: SpaceSavingBigIntAggregate<'_>, value: i64) -> f64 {
     match agg.datums.iter().position(|datum| value == datum) {
         Some(idx) => agg.counts.slice()[idx] as f64 / agg.values_seen as f64,
@@ -1621,11 +1586,7 @@ pub fn arrow_max_bigint_frequency<'a>(
     max_bigint_frequency(agg, accessor.value)
 }
 
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    name = "min_frequency",
-)]
+#[pg_extern(immutable, parallel_safe, name = "min_frequency")]
 pub fn min_bigint_frequency(agg: SpaceSavingBigIntAggregate<'_>, value: i64) -> f64 {
     match agg.datums.iter().position(|datum| value == datum) {
         Some(idx) => {
@@ -1645,11 +1606,7 @@ pub fn arrow_min_bigint_frequency<'a>(
 }
 
 // Still needs an arrow operator defined, but the text datum input is a bit finicky.
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    name = "max_frequency",
-)]
+#[pg_extern(immutable, parallel_safe, name = "max_frequency")]
 pub fn max_text_frequency(agg: SpaceSavingTextAggregate<'_>, value: text) -> f64 {
     let value: PgAnyElement = (value.0, pg_sys::TEXTOID).into();
     match agg
@@ -1663,11 +1620,7 @@ pub fn max_text_frequency(agg: SpaceSavingTextAggregate<'_>, value: text) -> f64
 }
 
 // Still needs an arrow operator defined, but the text datum input is a bit finicky.
-#[pg_extern(
-    immutable,
-    parallel_safe,
-    name = "min_frequency",
-)]
+#[pg_extern(immutable, parallel_safe, name = "min_frequency")]
 pub fn min_text_frequency(agg: SpaceSavingTextAggregate<'_>, value: text) -> f64 {
     let value: PgAnyElement = (value.0, pg_sys::TEXTOID).into();
     match agg
@@ -1824,9 +1777,17 @@ mod tests {
                 client.update(&format!("INSERT INTO test SELECT i, '2020-1-1'::TIMESTAMPTZ + ('{} days, ' || i::TEXT || ' seconds')::INTERVAL FROM generate_series({}, 199, 1) i", 200 - i, i), None, None).unwrap();
             }
 
-            let test = client.update("SELECT mcv_agg(10, s.data)::TEXT FROM (SELECT data FROM test ORDER BY time) s", None, None)
-                .unwrap().first()
-                .get_one::<String>().unwrap().unwrap();
+            let test = client
+                .update(
+                    "SELECT mcv_agg(10, s.data)::TEXT FROM (SELECT data FROM test ORDER BY time) s",
+                    None,
+                    None,
+                )
+                .unwrap()
+                .first()
+                .get_one::<String>()
+                .unwrap()
+                .unwrap();
             let expected = "(version:1,num_values:110,topn:10,values_seen:20100,freq_param:1.1,counts:[200,199,198,197,196,195,194,193,192,191,190,189,188,187,186,185,184,183,182,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181,181],overcounts:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180,180],datums:[199,198,197,196,195,194,193,192,191,190,189,188,187,186,185,184,183,182,181,90,91,92,93,94,95,96,97,98,99,100,101,102,103,104,105,106,107,108,109,110,111,112,113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137,138,139,140,141,142,143,144,145,146,147,148,149,150,151,152,153,154,155,156,157,158,159,160,161,162,163,164,165,166,167,168,169,170,171,172,173,174,175,176,177,178,179,180])";
             assert_eq!(test, expected);
         });
@@ -2128,13 +2089,13 @@ mod tests {
 
             // can limit below topn_agg value
             let rows = client
-            .update(
-                "SELECT topn(agg, 3) FROM aggs WHERE name = 'mcv_default'",
-                None,
-                None,
-            )
-            .unwrap()
-            .count();
+                .update(
+                    "SELECT topn(agg, 3) FROM aggs WHERE name = 'mcv_default'",
+                    None,
+                    None,
+                )
+                .unwrap()
+                .count();
             assert_eq!(rows, 3);
             let rows = client
                 .update(

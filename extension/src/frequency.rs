@@ -16,6 +16,9 @@ use serde::{
 };
 
 use crate::{
+    accessors::{
+        AccessorIntoValues,AccessorMaxFrequencyInt,AccessorMinFrequencyInt,AccessorTopn, AccessorTopNCount,
+    },
     aggregate_utils::{get_collation_or_default, in_aggregate_context},
     build,
     datum_utils::{
@@ -1316,6 +1319,22 @@ pub fn freq_bigint_iter<'a>(
     ))
 }
 
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_freq_bigint_iter<'a>(
+    agg: SpaceSavingBigIntAggregate<'a>,
+    _accessor: AccessorIntoValues<'static>,
+) -> TableIterator<
+    'a,
+    (
+        name!(value, i64),
+        name!(min_freq, f64),
+        name!(max_freq, f64),
+    ),
+> {
+    freq_bigint_iter(agg)
+}
+
 #[pg_extern(
     immutable,
     parallel_safe,
@@ -1341,6 +1360,22 @@ pub fn freq_text_iter<'a>(
             Some((data, min_freq, max_freq))
         },
     ))
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_freq_text_iter<'a>(
+    agg: SpaceSavingTextAggregate<'a>,
+    _accessor: AccessorIntoValues<'static>,
+) -> TableIterator<
+    'a,
+    (
+        name!(value, String),
+        name!(min_freq, f64),
+        name!(max_freq, f64),
+    ),
+> {
+    freq_text_iter(agg)
 }
 
 fn validate_topn_for_mcv_agg(
@@ -1448,6 +1483,15 @@ pub fn topn_bigint(agg: SpaceSavingBigIntAggregate<'_>, n: i32) -> SetOfIterator
     ))
 }
 
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_topn_bigint<'a>(
+    agg: SpaceSavingBigIntAggregate<'a>,
+    accessor: AccessorTopNCount<'static>,
+) -> SetOfIterator<'a, i64> {
+    topn_bigint(agg, accessor.count as i32)
+}
+
 #[pg_extern(
     immutable,
     parallel_safe,
@@ -1459,6 +1503,15 @@ pub fn default_topn_bigint(agg: SpaceSavingBigIntAggregate<'_>) -> SetOfIterator
     }
     let n = agg.topn as i32;
     topn_bigint(agg, n)
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_default_topn_bigint<'a>(
+    agg: SpaceSavingBigIntAggregate<'a>,
+    _accessor: AccessorTopn<'static>,
+) -> SetOfIterator<'a, i64> {
+    default_topn_bigint(agg)
 }
 
 #[pg_extern(
@@ -1488,6 +1541,15 @@ pub fn topn_text(agg: SpaceSavingTextAggregate<'_>, n: i32) -> SetOfIterator<Str
     )
 }
 
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_topn_text<'a>(
+    agg: SpaceSavingTextAggregate<'a>,
+    accessor: AccessorTopNCount<'static>,
+) -> SetOfIterator<'a, String> {
+    topn_text(agg, accessor.count as i32)
+}
+
 #[pg_extern(
     immutable,
     parallel_safe,
@@ -1499,6 +1561,15 @@ pub fn default_topn_text(agg: SpaceSavingTextAggregate<'_>) -> SetOfIterator<Str
     }
     let n = agg.topn as i32;
     topn_text(agg, n)
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_default_topn_text<'a>(
+    agg: SpaceSavingTextAggregate<'a>,
+    _accessor: AccessorTopn<'static>,
+) -> SetOfIterator<'a, String> {
+    default_topn_text(agg)
 }
 
 #[pg_extern(immutable, parallel_safe)]
@@ -1541,6 +1612,15 @@ pub fn max_bigint_frequency(agg: SpaceSavingBigIntAggregate<'_>, value: i64) -> 
     }
 }
 
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_max_bigint_frequency<'a>(
+    agg: SpaceSavingBigIntAggregate<'a>,
+    accessor: AccessorMaxFrequencyInt<'static>,
+) -> f64 {
+    max_bigint_frequency(agg, accessor.value)
+}
+
 #[pg_extern(
     immutable,
     parallel_safe,
@@ -1555,6 +1635,16 @@ pub fn min_bigint_frequency(agg: SpaceSavingBigIntAggregate<'_>, value: i64) -> 
     }
 }
 
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_min_bigint_frequency<'a>(
+    agg: SpaceSavingBigIntAggregate<'a>,
+    accessor: AccessorMinFrequencyInt<'static>,
+) -> f64 {
+    min_bigint_frequency(agg, accessor.value)
+}
+
+// Still needs an arrow operator defined, but the text datum input is a bit finicky.
 #[pg_extern(
     immutable,
     parallel_safe,
@@ -1572,6 +1662,7 @@ pub fn max_text_frequency(agg: SpaceSavingTextAggregate<'_>, value: text) -> f64
     }
 }
 
+// Still needs an arrow operator defined, but the text datum input is a bit finicky.
 #[pg_extern(
     immutable,
     parallel_safe,
@@ -2018,6 +2109,15 @@ mod tests {
             assert_eq!(rows, 5);
             let rows = client
                 .update(
+                    "SELECT agg -> topn() FROM aggs WHERE name = 'mcv_default'",
+                    None,
+                    None,
+                )
+                .unwrap()
+                .count();
+            assert_eq!(rows, 5);
+            let rows = client
+                .update(
                     "SELECT topn(agg, 5) FROM aggs WHERE name = 'freq_5'",
                     None,
                     None,
@@ -2028,8 +2128,17 @@ mod tests {
 
             // can limit below topn_agg value
             let rows = client
+            .update(
+                "SELECT topn(agg, 3) FROM aggs WHERE name = 'mcv_default'",
+                None,
+                None,
+            )
+            .unwrap()
+            .count();
+            assert_eq!(rows, 3);
+            let rows = client
                 .update(
-                    "SELECT topn(agg, 3) FROM aggs WHERE name = 'mcv_default'",
+                    "SELECT agg -> topn(3) FROM aggs WHERE name = 'mcv_default'",
                     None,
                     None,
                 )
@@ -2132,6 +2241,34 @@ mod tests {
                 .unwrap()
                 .count();
             assert_eq!(rows, 20);
+
+            let rows = client
+                .update(
+                    "SELECT agg -> into_values() FROM aggs WHERE name = 'freq_8'",
+                    None,
+                    None,
+                )
+                .unwrap()
+                .count();
+            assert_eq!(rows, 13);
+            let rows = client
+                .update(
+                    "SELECT agg -> into_values() FROM aggs WHERE name = 'freq_5'",
+                    None,
+                    None,
+                )
+                .unwrap()
+                .count();
+            assert_eq!(rows, 20);
+            let rows = client
+                .update(
+                    "SELECT agg -> into_values() FROM aggs WHERE name = 'freq_2'",
+                    None,
+                    None,
+                )
+                .unwrap()
+                .count();
+            assert_eq!(rows, 20);
         });
     }
 
@@ -2148,6 +2285,17 @@ mod tests {
             assert_eq!(max.unwrap(), 0.01904761904761905);
 
             let (min, max) = client.update("SELECT min_frequency(agg, 11), max_frequency(agg, 11) FROM aggs WHERE name = 'mcv_default'", None, None)
+                .unwrap().first()
+                .get_two::<f64,f64>().unwrap();
+            assert_eq!(min.unwrap(), 0.05714285714285714);
+            assert_eq!(max.unwrap(), 0.05714285714285714);
+            let (min, max) = client.update("SELECT agg -> min_frequency(3), agg -> max_frequency(3) FROM aggs WHERE name = 'freq_2'", None, None)
+                .unwrap().first()
+                .get_two::<f64,f64>().unwrap();
+            assert_eq!(min.unwrap(), 0.01904761904761905);
+            assert_eq!(max.unwrap(), 0.01904761904761905);
+
+            let (min, max) = client.update("SELECT agg -> min_frequency(11), agg -> max_frequency(11) FROM aggs WHERE name = 'mcv_default'", None, None)
                 .unwrap().first()
                 .get_two::<f64,f64>().unwrap();
             assert_eq!(min.unwrap(), 0.05714285714285714);

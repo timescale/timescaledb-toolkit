@@ -108,6 +108,7 @@ accessor! { state_timeline() }
 accessor! { state_int_timeline() }
 accessor! { num_live_ranges() }
 accessor! { num_gaps() }
+accessor! { topn() }
 // The rest are more complex, with String or other challenges.  Leaving alone for now.
 
 pg_type! {
@@ -580,8 +581,68 @@ pub fn accessor_integral(unit: default!(&str, "'second'")) -> AccessorIntegral<'
     }
 }
 
+// Note we also have a AccessorTopn which is similar to this but doesn't store the count
 pg_type! {
     #[derive(Debug)]
+    struct AccessorTopNCount {
+        count: i64,
+    }
+}
+
+ron_inout_funcs!(AccessorTopNCount);
+
+#[pg_extern(immutable, parallel_safe, name = "topn")]
+pub fn accessor_topn_count(count: i64) -> AccessorTopNCount<'static> {
+    unsafe {
+        flatten! {
+            AccessorTopNCount {
+                count
+            }
+        }
+    }
+}
+
+pg_type! {
+    #[derive(Debug)]
+    struct AccessorMaxFrequencyInt {
+        value: i64,
+    }
+}
+
+ron_inout_funcs!(AccessorMaxFrequencyInt);
+
+#[pg_extern(immutable, parallel_safe, name = "max_frequency")]
+pub fn accessor_max_frequency_int(value: i64) -> AccessorMaxFrequencyInt<'static> {
+    unsafe {
+        flatten! {
+            AccessorMaxFrequencyInt {
+                value
+            }
+        }
+    }
+}
+
+pg_type! {
+    #[derive(Debug)]
+    struct AccessorMinFrequencyInt {
+        value: i64,
+    }
+}
+
+ron_inout_funcs!(AccessorMinFrequencyInt);
+
+#[pg_extern(immutable, parallel_safe, name = "min_frequency")]
+pub fn accessor_min_frequency_int(value: i64) -> AccessorMinFrequencyInt<'static> {
+    unsafe {
+        flatten! {
+            AccessorMinFrequencyInt {
+                value
+            }
+        }
+    }
+}
+
+pg_type! {
     struct AccessorPercentileArray<'input> {
         len: u64,
         percentile: [f64; self.len],

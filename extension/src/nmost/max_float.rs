@@ -3,6 +3,7 @@ use pgx::{iter::SetOfIterator, *};
 use crate::nmost::*;
 
 use crate::{
+    accessors::{AccessorIntoArray, AccessorIntoValues},
     flatten,
     palloc::{Inner, Internal, InternalAsValue, ToInternal},
     pg_type,
@@ -15,40 +16,35 @@ use std::cmp::Reverse;
 
 type MaxFloatTransType = NMostTransState<Reverse<NotNan<f64>>>;
 
-#[pg_schema]
-pub mod toolkit_experimental {
-    use super::*;
-
-    pg_type! {
-        #[derive(Debug)]
-        struct MaxFloats <'input> {
-            capacity : u32,
-            elements : u32,
-            values : [f64; self.elements],
-        }
+pg_type! {
+    #[derive(Debug)]
+    struct MaxFloats <'input> {
+        capacity : u32,
+        elements : u32,
+        values : [f64; self.elements],
     }
-    ron_inout_funcs!(MaxFloats);
+}
+ron_inout_funcs!(MaxFloats);
 
-    impl<'input> From<&mut MaxFloatTransType> for MaxFloats<'input> {
-        fn from(item: &mut MaxFloatTransType) -> Self {
-            let heap = std::mem::take(&mut item.heap);
-            unsafe {
-                flatten!(MaxFloats {
-                    capacity: item.capacity as u32,
-                    elements: heap.len() as u32,
-                    values: heap
-                        .into_sorted_vec()
-                        .into_iter()
-                        .map(|x| f64::from(x.0))
-                        .collect::<Vec<f64>>()
-                        .into()
-                })
-            }
+impl<'input> From<&mut MaxFloatTransType> for MaxFloats<'input> {
+    fn from(item: &mut MaxFloatTransType) -> Self {
+        let heap = std::mem::take(&mut item.heap);
+        unsafe {
+            flatten!(MaxFloats {
+                capacity: item.capacity as u32,
+                elements: heap.len() as u32,
+                values: heap
+                    .into_sorted_vec()
+                    .into_iter()
+                    .map(|x| f64::from(x.0))
+                    .collect::<Vec<f64>>()
+                    .into()
+            })
         }
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn max_n_float_trans(
     state: Internal,
     value: f64,
@@ -64,10 +60,10 @@ pub fn max_n_float_trans(
     .internal()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn max_n_float_rollup_trans(
     state: Internal,
-    value: toolkit_experimental::MaxFloats<'static>,
+    value: MaxFloats<'static>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     let values: Vec<Reverse<NotNan<f64>>> = value
@@ -85,7 +81,7 @@ pub fn max_n_float_rollup_trans(
     .internal()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn max_n_float_combine(state1: Internal, state2: Internal) -> Option<Internal> {
     nmost_trans_combine(unsafe { state1.to_inner::<MaxFloatTransType>() }, unsafe {
         state2.to_inner::<MaxFloatTransType>()
@@ -93,55 +89,62 @@ pub fn max_n_float_combine(state1: Internal, state2: Internal) -> Option<Interna
     .internal()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn max_n_float_serialize(state: Internal) -> bytea {
     let state: Inner<MaxFloatTransType> = unsafe { state.to_inner().unwrap() };
     crate::do_serialize!(state)
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn max_n_float_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
     let i: MaxFloatTransType = crate::do_deserialize!(bytes, MaxFloatTransType);
     Internal::new(i).into()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn max_n_float_final(state: Internal) -> toolkit_experimental::MaxFloats<'static> {
+#[pg_extern(immutable, parallel_safe)]
+pub fn max_n_float_final(state: Internal) -> MaxFloats<'static> {
     unsafe { &mut *state.to_inner::<MaxFloatTransType>().unwrap() }.into()
 }
 
-#[pg_extern(
-    schema = "toolkit_experimental",
-    name = "into_array",
-    immutable,
-    parallel_safe
-)]
-pub fn max_n_float_to_array(agg: toolkit_experimental::MaxFloats<'static>) -> Vec<f64> {
+#[pg_extern(name = "into_array", immutable, parallel_safe)]
+pub fn max_n_float_to_array(agg: MaxFloats<'static>) -> Vec<f64> {
     agg.values.clone().into_vec()
 }
 
-#[pg_extern(
-    schema = "toolkit_experimental",
-    name = "into_values",
-    immutable,
-    parallel_safe
-)]
-pub fn max_n_float_to_values(agg: toolkit_experimental::MaxFloats<'static>) -> SetOfIterator<f64> {
+#[pg_extern(name = "into_values", immutable, parallel_safe)]
+pub fn max_n_float_to_values(agg: MaxFloats<'static>) -> SetOfIterator<f64> {
     SetOfIterator::new(agg.values.clone().into_iter())
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_max_float_into_values<'a>(
+    agg: MaxFloats<'static>,
+    _accessor: AccessorIntoValues<'a>,
+) -> SetOfIterator<'a, f64> {
+    max_n_float_to_values(agg)
+}
+#[pg_operator(immutable, parallel_safe)]
+#[opname(->)]
+pub fn arrow_max_float_into_array<'a>(
+    agg: MaxFloats<'static>,
+    _accessor: AccessorIntoArray<'a>,
+) -> Vec<f64> {
+    max_n_float_to_array(agg)
 }
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.max_n(\n\
+    CREATE AGGREGATE max_n(\n\
         value double precision, capacity bigint\n\
     ) (\n\
-        sfunc = toolkit_experimental.max_n_float_trans,\n\
+        sfunc = max_n_float_trans,\n\
         stype = internal,\n\
-        combinefunc = toolkit_experimental.max_n_float_combine,\n\
+        combinefunc = max_n_float_combine,\n\
         parallel = safe,\n\
-        serialfunc = toolkit_experimental.max_n_float_serialize,\n\
-        deserialfunc = toolkit_experimental.max_n_float_deserialize,\n\
-        finalfunc = toolkit_experimental.max_n_float_final\n\
+        serialfunc = max_n_float_serialize,\n\
+        deserialfunc = max_n_float_deserialize,\n\
+        finalfunc = max_n_float_final\n\
     );\n\
 ",
     name = "max_n_float",
@@ -156,16 +159,16 @@ extension_sql!(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.rollup(\n\
-        value toolkit_experimental.MaxFloats\n\
+    CREATE AGGREGATE rollup(\n\
+        value MaxFloats\n\
     ) (\n\
-        sfunc = toolkit_experimental.max_n_float_rollup_trans,\n\
+        sfunc = max_n_float_rollup_trans,\n\
         stype = internal,\n\
-        combinefunc = toolkit_experimental.max_n_float_combine,\n\
+        combinefunc = max_n_float_combine,\n\
         parallel = safe,\n\
-        serialfunc = toolkit_experimental.max_n_float_serialize,\n\
-        deserialfunc = toolkit_experimental.max_n_float_deserialize,\n\
-        finalfunc = toolkit_experimental.max_n_float_final\n\
+        serialfunc = max_n_float_serialize,\n\
+        deserialfunc = max_n_float_deserialize,\n\
+        finalfunc = max_n_float_final\n\
     );\n\
 ",
     name = "max_n_float_rollup",
@@ -209,20 +212,52 @@ mod tests {
             }
 
             // Test into_array
-            let result =
-                client.update("SELECT toolkit_experimental.into_array(toolkit_experimental.max_n(val, 5)) from data",
-                    None, None,
-                ).unwrap().first().get_one::<Vec<f64>>().unwrap();
+            let result = client
+                .update("SELECT into_array(max_n(val, 5)) from data", None, None)
+                .unwrap()
+                .first()
+                .get_one::<Vec<f64>>()
+                .unwrap();
+            assert_eq!(
+                result.unwrap(),
+                vec![99. / 128., 98. / 128., 97. / 128., 96. / 128., 95. / 128.]
+            );
+            let result = client
+                .update("SELECT max_n(val, 5)->into_array() from data", None, None)
+                .unwrap()
+                .first()
+                .get_one::<Vec<f64>>()
+                .unwrap();
             assert_eq!(
                 result.unwrap(),
                 vec![99. / 128., 98. / 128., 97. / 128., 96. / 128., 95. / 128.]
             );
 
             // Test into_values
-            let mut result =
-                client.update("SELECT toolkit_experimental.into_values(toolkit_experimental.max_n(val, 3))::TEXT from data",
-                    None, None,
-                ).unwrap();
+            let mut result = client
+                .update(
+                    "SELECT into_values(max_n(val, 3))::TEXT from data",
+                    None,
+                    None,
+                )
+                .unwrap();
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("0.7734375")
+            );
+            assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("0.765625"));
+            assert_eq!(
+                result.next().unwrap()[1].value().unwrap(),
+                Some("0.7578125")
+            );
+            assert!(result.next().is_none());
+            let mut result = client
+                .update(
+                    "SELECT (max_n(val, 3)->into_values())::TEXT from data",
+                    None,
+                    None,
+                )
+                .unwrap();
             assert_eq!(
                 result.next().unwrap()[1].value().unwrap(),
                 Some("0.7734375")
@@ -237,8 +272,8 @@ mod tests {
             // Test rollup
             let result =
                 client.update(
-                    "WITH aggs as (SELECT category, toolkit_experimental.max_n(val, 5) as agg from data GROUP BY category)
-                        SELECT toolkit_experimental.into_array(toolkit_experimental.rollup(agg)) FROM aggs",
+                    "WITH aggs as (SELECT category, max_n(val, 5) as agg from data GROUP BY category)
+                        SELECT into_array(rollup(agg)) FROM aggs",
                         None, None,
                     ).unwrap().first().get_one::<Vec<f64>>().unwrap();
             assert_eq!(

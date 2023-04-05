@@ -1,6 +1,6 @@
 use pgx::{iter::TableIterator, *};
 
-use crate::nmost::max_time::toolkit_experimental::*;
+use crate::nmost::max_time::*;
 use crate::nmost::*;
 
 use crate::{
@@ -13,42 +13,37 @@ use std::cmp::Reverse;
 
 type MaxByTimeTransType = NMostByTransState<Reverse<pg_sys::TimestampTz>>;
 
-#[pg_schema]
-pub mod toolkit_experimental {
-    use super::*;
-
-    pg_type! {
-        #[derive(Debug)]
-        struct MaxByTimes<'input> {
-            values: MaxTimesData<'input>,  // Nesting pg_types adds 8 bytes of header
-            data: DatumStore<'input>,
-        }
+pg_type! {
+    #[derive(Debug)]
+    struct MaxByTimes<'input> {
+        values: MaxTimesData<'input>,  // Nesting pg_types adds 8 bytes of header
+        data: DatumStore<'input>,
     }
-    ron_inout_funcs!(MaxByTimes);
+}
+ron_inout_funcs!(MaxByTimes);
 
-    impl<'input> From<MaxByTimeTransType> for MaxByTimes<'input> {
-        fn from(item: MaxByTimeTransType) -> Self {
-            let (capacity, val_ary, data) = item.into_sorted_parts();
-            unsafe {
-                flatten!(MaxByTimes {
-                    values: build!(MaxTimes {
-                        capacity: capacity as u32,
-                        elements: val_ary.len() as u32,
-                        values: val_ary
-                            .into_iter()
-                            .map(|x| x.0)
-                            .collect::<Vec<pg_sys::TimestampTz>>()
-                            .into()
-                    })
-                    .0,
-                    data,
+impl<'input> From<MaxByTimeTransType> for MaxByTimes<'input> {
+    fn from(item: MaxByTimeTransType) -> Self {
+        let (capacity, val_ary, data) = item.into_sorted_parts();
+        unsafe {
+            flatten!(MaxByTimes {
+                values: build!(MaxTimes {
+                    capacity: capacity as u32,
+                    elements: val_ary.len() as u32,
+                    values: val_ary
+                        .into_iter()
+                        .map(|x| x.0)
+                        .collect::<Vec<pg_sys::TimestampTz>>()
+                        .into()
                 })
-            }
+                .0,
+                data,
+            })
         }
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn max_n_by_time_trans(
     state: Internal,
     value: crate::raw::TimestampTz,
@@ -66,10 +61,10 @@ pub fn max_n_by_time_trans(
     .internal()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn max_n_by_time_rollup_trans(
     state: Internal,
-    value: toolkit_experimental::MaxByTimes<'static>,
+    value: MaxByTimes<'static>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     let values: Vec<Reverse<pg_sys::TimestampTz>> = value
@@ -89,19 +84,14 @@ pub fn max_n_by_time_rollup_trans(
     .internal()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn max_n_by_time_final(state: Internal) -> toolkit_experimental::MaxByTimes<'static> {
+#[pg_extern(immutable, parallel_safe)]
+pub fn max_n_by_time_final(state: Internal) -> MaxByTimes<'static> {
     unsafe { state.to_inner::<MaxByTimeTransType>().unwrap().clone() }.into()
 }
 
-#[pg_extern(
-    schema = "toolkit_experimental",
-    name = "into_values",
-    immutable,
-    parallel_safe
-)]
+#[pg_extern(name = "into_values", immutable, parallel_safe)]
 pub fn max_n_by_time_to_values(
-    agg: toolkit_experimental::MaxByTimes<'static>,
+    agg: MaxByTimes<'static>,
     _dummy: Option<AnyElement>,
 ) -> TableIterator<
     'static,
@@ -122,12 +112,12 @@ pub fn max_n_by_time_to_values(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.max_n_by(\n\
+    CREATE AGGREGATE max_n_by(\n\
         value timestamptz, data AnyElement, capacity bigint\n\
     ) (\n\
-        sfunc = toolkit_experimental.max_n_by_time_trans,\n\
+        sfunc = max_n_by_time_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.max_n_by_time_final\n\
+        finalfunc = max_n_by_time_final\n\
     );\n\
 ",
     name = "max_n_by_time",
@@ -136,12 +126,12 @@ extension_sql!(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.rollup(\n\
-        toolkit_experimental.MaxByTimes\n\
+    CREATE AGGREGATE rollup(\n\
+        MaxByTimes\n\
     ) (\n\
-        sfunc = toolkit_experimental.max_n_by_time_rollup_trans,\n\
+        sfunc = max_n_by_time_rollup_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.max_n_by_time_final\n\
+        finalfunc = max_n_by_time_final\n\
     );\n\
 ",
     name = "max_n_by_time_rollup",
@@ -177,10 +167,13 @@ mod tests {
             }
 
             // Test into_values
-            let mut result =
-                client.update("SELECT toolkit_experimental.into_values(toolkit_experimental.max_n_by(val, data, 3), NULL::data)::TEXT from data",
-                    None, None,
-                ).unwrap();
+            let mut result = client
+                .update(
+                    "SELECT into_values(max_n_by(val, data, 3), NULL::data)::TEXT from data",
+                    None,
+                    None,
+                )
+                .unwrap();
             assert_eq!(
                 result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-04-09 00:00:00+00\",\"(\"\"2020-04-09 00:00:00+00\"\",3)\")")
@@ -198,8 +191,8 @@ mod tests {
             // Test rollup
             let mut result =
                 client.update(
-                    "WITH aggs as (SELECT category, toolkit_experimental.max_n_by(val, data, 5) as agg from data GROUP BY category)
-                        SELECT toolkit_experimental.into_values(toolkit_experimental.rollup(agg), NULL::data)::TEXT FROM aggs",
+                    "WITH aggs as (SELECT category, max_n_by(val, data, 5) as agg from data GROUP BY category)
+                        SELECT into_values(rollup(agg), NULL::data)::TEXT FROM aggs",
                         None, None,
                     ).unwrap();
             assert_eq!(

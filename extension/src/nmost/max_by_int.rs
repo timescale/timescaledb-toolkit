@@ -1,6 +1,6 @@
 use pgx::{iter::TableIterator, *};
 
-use crate::nmost::max_int::toolkit_experimental::*;
+use crate::nmost::max_int::*;
 use crate::nmost::*;
 
 use crate::{
@@ -13,42 +13,37 @@ use std::cmp::Reverse;
 
 type MaxByIntTransType = NMostByTransState<Reverse<i64>>;
 
-#[pg_schema]
-pub mod toolkit_experimental {
-    use super::*;
-
-    pg_type! {
-        #[derive(Debug)]
-        struct MaxByInts<'input> {
-            values: MaxIntsData<'input>,  // Nesting pg_types adds 8 bytes of header
-            data: DatumStore<'input>,
-        }
+pg_type! {
+    #[derive(Debug)]
+    struct MaxByInts<'input> {
+        values: MaxIntsData<'input>,  // Nesting pg_types adds 8 bytes of header
+        data: DatumStore<'input>,
     }
-    ron_inout_funcs!(MaxByInts);
+}
+ron_inout_funcs!(MaxByInts);
 
-    impl<'input> From<MaxByIntTransType> for MaxByInts<'input> {
-        fn from(item: MaxByIntTransType) -> Self {
-            let (capacity, val_ary, data) = item.into_sorted_parts();
-            unsafe {
-                flatten!(MaxByInts {
-                    values: build!(MaxInts {
-                        capacity: capacity as u32,
-                        elements: val_ary.len() as u32,
-                        values: val_ary
-                            .into_iter()
-                            .map(|x| x.0)
-                            .collect::<Vec<i64>>()
-                            .into()
-                    })
-                    .0,
-                    data,
+impl<'input> From<MaxByIntTransType> for MaxByInts<'input> {
+    fn from(item: MaxByIntTransType) -> Self {
+        let (capacity, val_ary, data) = item.into_sorted_parts();
+        unsafe {
+            flatten!(MaxByInts {
+                values: build!(MaxInts {
+                    capacity: capacity as u32,
+                    elements: val_ary.len() as u32,
+                    values: val_ary
+                        .into_iter()
+                        .map(|x| x.0)
+                        .collect::<Vec<i64>>()
+                        .into()
                 })
-            }
+                .0,
+                data,
+            })
         }
     }
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn max_n_by_int_trans(
     state: Internal,
     value: i64,
@@ -66,10 +61,10 @@ pub fn max_n_by_int_trans(
     .internal()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe)]
 pub fn max_n_by_int_rollup_trans(
     state: Internal,
-    value: toolkit_experimental::MaxByInts<'static>,
+    value: MaxByInts<'static>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     let values: Vec<Reverse<i64>> = value
@@ -89,19 +84,14 @@ pub fn max_n_by_int_rollup_trans(
     .internal()
 }
 
-#[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
-pub fn max_n_by_int_final(state: Internal) -> toolkit_experimental::MaxByInts<'static> {
+#[pg_extern(immutable, parallel_safe)]
+pub fn max_n_by_int_final(state: Internal) -> MaxByInts<'static> {
     unsafe { state.to_inner::<MaxByIntTransType>().unwrap().clone() }.into()
 }
 
-#[pg_extern(
-    schema = "toolkit_experimental",
-    name = "into_values",
-    immutable,
-    parallel_safe
-)]
+#[pg_extern(name = "into_values", immutable, parallel_safe)]
 pub fn max_n_by_int_to_values(
-    agg: toolkit_experimental::MaxByInts<'static>,
+    agg: MaxByInts<'static>,
     _dummy: Option<AnyElement>,
 ) -> TableIterator<'static, (name!(value, i64), name!(data, AnyElement))> {
     TableIterator::new(
@@ -115,12 +105,12 @@ pub fn max_n_by_int_to_values(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.max_n_by(\n\
+    CREATE AGGREGATE max_n_by(\n\
         value bigint, data AnyElement, capacity bigint\n\
     ) (\n\
-        sfunc = toolkit_experimental.max_n_by_int_trans,\n\
+        sfunc = max_n_by_int_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.max_n_by_int_final\n\
+        finalfunc = max_n_by_int_final\n\
     );\n\
 ",
     name = "max_n_by_int",
@@ -129,12 +119,12 @@ extension_sql!(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.rollup(\n\
-        toolkit_experimental.MaxByInts\n\
+    CREATE AGGREGATE rollup(\n\
+        MaxByInts\n\
     ) (\n\
-        sfunc = toolkit_experimental.max_n_by_int_rollup_trans,\n\
+        sfunc = max_n_by_int_rollup_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.max_n_by_int_final\n\
+        finalfunc = max_n_by_int_final\n\
     );\n\
 ",
     name = "max_n_by_int_rollup",
@@ -168,10 +158,13 @@ mod tests {
             }
 
             // Test into_values
-            let mut result =
-                client.update("SELECT toolkit_experimental.into_values(toolkit_experimental.max_n_by(val, data, 3), NULL::data)::TEXT from data",
-                    None, None,
-                ).unwrap();
+            let mut result = client
+                .update(
+                    "SELECT into_values(max_n_by(val, data, 3), NULL::data)::TEXT from data",
+                    None,
+                    None,
+                )
+                .unwrap();
             assert_eq!(
                 result.next().unwrap()[1].value().unwrap(),
                 Some("(99,\"(99,3)\")")
@@ -189,8 +182,8 @@ mod tests {
             // Test rollup
             let mut result =
                 client.update(
-                    "WITH aggs as (SELECT category, toolkit_experimental.max_n_by(val, data, 5) as agg from data GROUP BY category)
-                        SELECT toolkit_experimental.into_values(toolkit_experimental.rollup(agg), NULL::data)::TEXT FROM aggs",
+                    "WITH aggs as (SELECT category, max_n_by(val, data, 5) as agg from data GROUP BY category)
+                        SELECT into_values(rollup(agg), NULL::data)::TEXT FROM aggs",
                         None, None,
                     ).unwrap();
             assert_eq!(

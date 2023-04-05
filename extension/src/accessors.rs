@@ -102,6 +102,7 @@ accessor! { dead_ranges() }
 accessor! { uptime() }
 accessor! { downtime() }
 accessor! { into_values() }
+accessor! { into_array() }
 accessor! { into_int_values() }
 accessor! { state_timeline() }
 accessor! { state_int_timeline() }

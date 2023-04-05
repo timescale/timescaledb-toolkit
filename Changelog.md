@@ -35,9 +35,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 - [#744](https://github.com/timescale/timescaledb-toolkit/pull/744): Fix nightly CI failures from building TimescaleDB on Enterprise Linux
 - [#749](https://github.com/timescale/timescaledb-toolkit/pull/749): Added num_live_ranges, num_gaps, and trim_to accessors for heartbeat aggregates
 
-#### Shout-outs
-
-**Full Changelog**: [TODO]
+**Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.15.0...1.16.0
 
 ## [1.15.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.15.0) (2023-03-08)
 

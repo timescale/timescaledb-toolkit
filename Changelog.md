@@ -9,6 +9,18 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 #### New experimental features
 
 #### Bug fixes
+
+#### Other notable changes
+
+#### Shout-outs
+
+**Full Changelog**: [TODO]
+
+## [1.16.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.16.0) (2023-04-05)
+
+#### New experimental features
+
+#### Bug fixes
 - [#733](https://github.com/timescale/timescaledb-toolkit/pull/733): Fix a bug when rolling up overlapping heartbeat_aggs
 - [#740](https://github.com/timescale/timescaledb-toolkit/pull/740): When interpolating an 'locf' time weighted average, extend last point to interpolation boundary
 - [#742](https://github.com/timescale/timescaledb-toolkit/pull/742): Ignore incoming NULL values in hyperloglog rollup

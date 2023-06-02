@@ -1,4 +1,4 @@
-use pgx::*;
+use pgrx::*;
 
 /// Saturating Math for Integers
 
@@ -46,7 +46,7 @@ fn saturating_mul(x: i32, y: i32) -> i32 {
 #[pg_schema]
 mod tests {
     use super::*;
-    use pgx_macros::pg_test;
+    use pgrx_macros::pg_test;
 
     #[pg_test]
     #[allow(arithmetic_overflow)]

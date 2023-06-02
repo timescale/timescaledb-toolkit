@@ -1,4 +1,4 @@
-use pgx::*;
+use pgrx::*;
 
 use serde::{Deserialize, Serialize};
 
@@ -145,7 +145,7 @@ pub struct NMostByTransState<T: Ord> {
 }
 
 impl<T: Clone + Ord> NMostByTransState<T> {
-    fn new(capacity: usize, first_val: T, first_element: pgx::AnyElement) -> NMostByTransState<T> {
+    fn new(capacity: usize, first_val: T, first_element: pgrx::AnyElement) -> NMostByTransState<T> {
         // first entry will always have index 0
         let first_val = (first_val, 0);
         NMostByTransState {
@@ -155,7 +155,7 @@ impl<T: Clone + Ord> NMostByTransState<T> {
         }
     }
 
-    fn new_entry(&mut self, new_val: T, new_element: pgx::AnyElement) {
+    fn new_entry(&mut self, new_val: T, new_element: pgrx::AnyElement) {
         assert!(new_element.oid() == self.oid);
         if self.data.len() < self.values.capacity {
             // Not yet full, easy case
@@ -216,7 +216,7 @@ impl<T: Ord + Copy> From<(&[T], &DatumStore<'_>, usize)> for NMostByTransState<T
 fn nmost_by_trans_function<T: Ord + Clone>(
     state: Option<Inner<NMostByTransState<T>>>,
     val: T,
-    data: pgx::AnyElement,
+    data: pgrx::AnyElement,
     capacity: usize,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<NMostByTransState<T>>> {

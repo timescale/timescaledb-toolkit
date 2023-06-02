@@ -1,4 +1,4 @@
-use pgx::*;
+use pgrx::*;
 
 use super::*;
 
@@ -182,10 +182,10 @@ where
         use BinOp::*;
         use Type::*;
 
-        // FIXME pgx wraps all functions in rust wrappers, which makes them
+        // FIXME pgrx wraps all functions in rust wrappers, which makes them
         //       uncallable with DirectFunctionCall(). Is there a way to
         //       export both?
-        // TODO This is fixed in a newer pgx version, should remove after upgrade
+        // TODO This is fixed in a newer pgrx version, should remove after upgrade
         extern "C" {
             fn interval_pl(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
             fn interval_mi(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;

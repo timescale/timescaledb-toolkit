@@ -1,6 +1,6 @@
 use std::borrow::Cow;
 
-use pgx::{
+use pgrx::{
     iter::{SetOfIterator, TableIterator},
     *,
 };
@@ -438,8 +438,8 @@ impl<'a> Lambda<'a> {
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgx::*;
-    use pgx_macros::pg_test;
+    use pgrx::*;
+    use pgrx_macros::pg_test;
 
     macro_rules! trace_lambda {
         ($client: expr, $expr:literal) => {

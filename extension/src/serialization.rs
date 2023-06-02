@@ -6,7 +6,7 @@ use std::{
     os::raw::{c_char, c_int},
 };
 
-use pgx::pg_sys;
+use pgrx::pg_sys;
 use std::ffi::CStr;
 
 pub(crate) mod collations;
@@ -100,7 +100,7 @@ pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {
                 let mut result = 0;
                 let err = pg_sys::tm2timestamp(tm, fsec, &mut tz, &mut result);
                 if err != 0 {
-                    // TODO pgx error with correct errcode?
+                    // TODO pgrx error with correct errcode?
                     panic!("timestamptz \"{}\" out of range", text)
                 }
                 result

@@ -9,7 +9,7 @@ use flat_serialize::{impl_flat_serializable, FlatSerializable, WrapErr};
 use serde::{Deserialize, Serialize};
 
 use pg_sys::Oid;
-use pgx::*;
+use pgrx::*;
 
 /// Possibly a premature optimization, `ShortTypId` provides the ability to
 /// serialize and deserialize type Oids as `(namespace, name)` pairs, special
@@ -218,14 +218,14 @@ impl Serialize for PgTypId {
                 pg_sys::Datum::from(self.0),
             );
             if tuple.is_null() {
-                pgx::error!("no type info for oid {}", self.0);
+                pgrx::error!("no type info for oid {}", self.0);
             }
 
             let type_tuple: pg_sys::Form_pg_type = get_struct(tuple);
 
             let namespace = pg_sys::get_namespace_name((*type_tuple).typnamespace);
             if namespace.is_null() {
-                pgx::error!("invalid schema oid {}", (*type_tuple).typnamespace);
+                pgrx::error!("invalid schema oid {}", (*type_tuple).typnamespace);
             }
 
             let namespace_len = CStr::from_ptr(namespace).to_bytes().len();
@@ -320,7 +320,7 @@ unsafe fn get_struct<T>(tuple: pg_sys::HeapTuple) -> *mut T {
 mod tests {
 
     use super::{PgTypId, ShortTypeId};
-    use pgx::{
+    use pgrx::{
         pg_sys::{BOOLOID, CHAROID, CIRCLEOID},
         pg_test,
     };

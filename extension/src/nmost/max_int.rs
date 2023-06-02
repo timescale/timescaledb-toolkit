@@ -1,4 +1,4 @@
-use pgx::{iter::SetOfIterator, *};
+use pgrx::{iter::SetOfIterator, *};
 
 use crate::nmost::*;
 
@@ -179,7 +179,7 @@ extension_sql!(
 #[pg_schema]
 mod tests {
     use super::*;
-    use pgx_macros::pg_test;
+    use pgrx_macros::pg_test;
 
     #[pg_test]
     fn max_int_correctness() {

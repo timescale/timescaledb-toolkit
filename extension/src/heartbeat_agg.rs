@@ -1,5 +1,5 @@
-use pgx::iter::TableIterator;
-use pgx::*;
+use pgrx::iter::TableIterator;
+use pgrx::*;
 
 use crate::{
     accessors::{

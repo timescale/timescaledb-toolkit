@@ -1,5 +1,5 @@
 use crate::raw::TimestampTz;
-use pgx::prelude::*;
+use pgrx::prelude::*;
 
 #[pg_extern(
     name = "generate_periodic_normal_series",
@@ -126,8 +126,8 @@ $$;
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgx::*;
-    use pgx_macros::pg_test;
+    use pgrx::*;
+    use pgrx_macros::pg_test;
 
     #[pg_test]
     fn test_to_epoch() {

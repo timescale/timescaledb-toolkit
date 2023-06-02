@@ -4,7 +4,7 @@ use std::{
     mem::size_of,
 };
 
-use pgx::*;
+use pgrx::*;
 
 use pg_sys::{Datum, Oid};
 
@@ -43,7 +43,7 @@ impl PartialEq for PgAnyElement {
                 let flinfo = if (*tentry).eq_opr_finfo.fn_addr.is_some() {
                     &(*tentry).eq_opr_finfo
                 } else {
-                    pgx::error!("no equality function");
+                    pgrx::error!("no equality function");
                 };
 
                 let size = size_of::<pg_sys::FunctionCallInfoBaseData>()

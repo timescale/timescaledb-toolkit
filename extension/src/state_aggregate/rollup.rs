@@ -436,7 +436,7 @@ pub fn state_agg_rollup_combine_inner(
 #[pg_schema]
 mod tests {
     use super::*;
-    use pgx_macros::pg_test;
+    use pgrx_macros::pg_test;
 
     #[pg_test]
     #[should_panic = "can't merge overlapping aggregates"]

@@ -1,4 +1,4 @@
-use pgx::*;
+use pgrx::*;
 
 use aggregate_builder::aggregate;
 use countminsketch::{CountMinHashFn, CountMinSketch as CountMinSketchInternal};
@@ -135,7 +135,7 @@ pub fn approx_count<'a>(item: String, aggregate: Option<CountMinSketch<'a>>) -> 
 #[pg_schema]
 mod tests {
     use super::*;
-    use pgx_macros::pg_test;
+    use pgrx_macros::pg_test;
 
     #[pg_test]
     fn test_countminsketch() {

@@ -26,17 +26,17 @@ require_pg_version() {
 find_pg_config() {
     if [ -z "$pg_config" ]; then
         require_pg_version
-        pg_config=`sed -ne 's/"//g' -e s/^pg$pg_version=//p ~/.pgx/config.toml`
+        pg_config=`sed -ne 's/"//g' -e s/^pg$pg_version=//p ~/.pgrx/config.toml`
     fi
     [ -x "$pg_config" ] || die "$pg_config not executable"
 }
 
-require_cargo_pgx() {
-    [ -n "$cargo_pgx" ] || die 'specify path to cargo-pgx (0.4 series or newer)'
+require_cargo_pgrx() {
+    [ -n "$cargo_pgrx" ] || die 'specify path to cargo-pgrx (0.4 series or newer)'
 }
 
-require_cargo_pgx_old() {
-    [ -n "$cargo_pgx_old" ] || die 'specify path to cargo-pgx (0.2-0.3 series)'
+require_cargo_pgrx_old() {
+    [ -n "$cargo_pgrx_old" ] || die 'specify path to cargo-pgrx (0.2-0.3 series)'
 }
 
 find_profile() {
@@ -58,13 +58,13 @@ while [ $# -gt 0 ]; do
             shift
             ;;
 
-        -cargo-pgx)
-            cargo_pgx="$1"
+        -cargo-pgrx)
+            cargo_pgrx="$1"
             shift
             ;;
 
-        -cargo-pgx-old)
-            cargo_pgx_old="$1"
+        -cargo-pgrx-old)
+            cargo_pgrx_old="$1"
             shift
             ;;
 
@@ -109,36 +109,36 @@ while [ $# -gt 0 ]; do
             find_profile
             require_pg_version
             find_pg_config
-            (cd extension && $nop cargo pgx install --profile $profile -c "$pg_config")
+            (cd extension && $nop cargo pgrx install --profile $profile -c "$pg_config")
             $nop cargo run --manifest-path tools/post-install/Cargo.toml "$pg_config"
             ;;
 
         test-doc)
             find_profile
             require_pg_version
-            $nop cargo pgx start --package timescaledb_toolkit $pg
+            $nop cargo pgrx start --package timescaledb_toolkit $pg
             $nop cargo run --profile $profile -p sql-doctester -- \
                  -h localhost \
                  -p $pg_port \
                  docs
-            $nop cargo pgx stop --package timescaledb_toolkit $pg
+            $nop cargo pgrx stop --package timescaledb_toolkit $pg
             ;;
 
         test-updates)
             find_profile
             require_pg_version
             find_pg_config
-            require_cargo_pgx
-            require_cargo_pgx_old
-            $nop cargo pgx start --package timescaledb_toolkit $pg
+            require_cargo_pgrx
+            require_cargo_pgrx_old
+            $nop cargo pgrx start --package timescaledb_toolkit $pg
             $nop cargo run --profile $profile --manifest-path tools/update-tester/Cargo.toml -- full-update-test-source \
                  -h localhost \
                  -p $pg_port \
                  --cache old-versions \
                  "$pg_config" \
-                 "$cargo_pgx" \
-                 "$cargo_pgx_old"
-            $nop cargo pgx stop --package timescaledb_toolkit $pg
+                 "$cargo_pgrx" \
+                 "$cargo_pgrx_old"
+            $nop cargo pgrx stop --package timescaledb_toolkit $pg
             ;;
 
         *)

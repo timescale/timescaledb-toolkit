@@ -98,7 +98,7 @@ macro_rules! pg_type_impl {
     ) => {
         ::paste::paste! {
             $(#[$attrs])*
-            #[derive(pgx::PostgresType, Clone)]
+            #[derive(pgrx::PostgresType, Clone)]
             #[inoutfuncs]
             pub struct $name<$lifetemplate>(pub [<$name Data>] $(<$inlife>)?, $crate::type_builder::CachedDatum<$lifetemplate>);
 
@@ -121,7 +121,7 @@ macro_rules! pg_type_impl {
                 }
 
                 #[allow(clippy::missing_safety_doc)]
-                pub unsafe fn cached_datum_or_flatten(&mut self) -> pgx::pg_sys::Datum {
+                pub unsafe fn cached_datum_or_flatten(&mut self) -> pgrx::pg_sys::Datum {
                     use $crate::type_builder::CachedDatum::*;
                     match self.1 {
                         None => {
@@ -163,21 +163,21 @@ macro_rules! pg_type_impl {
                         let len = self.num_bytes();
                         // valena types have a maximum size
                         if len > 0x3FFFFFFF {
-                            pgx::error!("size {} bytes is to large", len)
+                            pgrx::error!("size {} bytes is to large", len)
                         }
                         let memory: *mut MaybeUninit<u8> = pg_sys::palloc0(len).cast();
                         let slice = slice::from_raw_parts_mut(memory, len);
                         let rem = self.fill_slice(slice);
                         debug_assert_eq!(rem.len(), 0);
 
-                        ::pgx::set_varsize(memory.cast(), len as i32);
+                        ::pgrx::set_varsize(memory.cast(), len as i32);
                         slice::from_raw_parts(memory.cast(), len)
                     }
                 }
             }
 
-            impl<$lifetemplate> pgx::FromDatum for $name<$lifetemplate> {
-                unsafe fn from_polymorphic_datum(datum: pgx::pg_sys::Datum, is_null: bool, _: pg_sys::Oid) -> Option<Self>
+            impl<$lifetemplate> pgrx::FromDatum for $name<$lifetemplate> {
+                unsafe fn from_polymorphic_datum(datum: pgrx::pg_sys::Datum, is_null: bool, _: pg_sys::Oid) -> Option<Self>
                 where
                     Self: Sized,
                 {
@@ -188,10 +188,10 @@ macro_rules! pg_type_impl {
 
                     let mut ptr = pg_sys::pg_detoast_datum_packed(datum.cast_mut_ptr());
                     //TODO is there a better way to do this?
-                    if pgx::varatt_is_1b(ptr) {
+                    if pgrx::varatt_is_1b(ptr) {
                         ptr = pg_sys::pg_detoast_datum_copy(ptr);
                     }
-                    let data_len = pgx::varsize_any(ptr);
+                    let data_len = pgrx::varsize_any(ptr);
                     let bytes = std::slice::from_raw_parts(ptr as *mut u8, data_len);
                     let (data, _) = match [<$name Data>]::try_ref(bytes) {
                         Ok(wrapped) => wrapped,
@@ -202,8 +202,8 @@ macro_rules! pg_type_impl {
                 }
             }
 
-            impl<$lifetemplate> pgx::IntoDatum for $name<$lifetemplate> {
-                fn into_datum(self) -> Option<pgx::pg_sys::Datum> {
+            impl<$lifetemplate> pgrx::IntoDatum for $name<$lifetemplate> {
+                fn into_datum(self) -> Option<pgrx::pg_sys::Datum> {
                     use $crate::type_builder::CachedDatum::*;
                     let datum = match self.1 {
                         Flattened(bytes) => pg_sys::Datum::from(bytes.as_ptr()),
@@ -331,36 +331,36 @@ macro_rules! do_serialize {
 
             let state = &*$state;
             let serialized_size = bincode::serialized_size(state)
-                .unwrap_or_else(|e| pgx::error!("serialization error {}", e));
+                .unwrap_or_else(|e| pgrx::error!("serialization error {}", e));
             let our_size = serialized_size + 2; // size of serialized data + our version flags
             let allocated_size = our_size + 4; // size of our data + the varlena header
             let allocated_size = allocated_size.try_into()
-                .unwrap_or_else(|e| pgx::error!("serialization error {}", e));
+                .unwrap_or_else(|e| pgrx::error!("serialization error {}", e));
             // valena types have a maximum size
             if allocated_size > 0x3FFFFFFF {
-                pgx::error!("size {} bytes is to large", allocated_size)
+                pgrx::error!("size {} bytes is to large", allocated_size)
             }
 
             let bytes: &mut [u8] = unsafe {
-                let bytes = pgx::pg_sys::palloc0(allocated_size);
+                let bytes = pgrx::pg_sys::palloc0(allocated_size);
                 std::slice::from_raw_parts_mut(bytes.cast(), allocated_size)
             };
             let mut writer = Cursor::new(bytes);
             // varlena header space
             let varsize = [0; 4];
             writer.write_all(&varsize)
-                .unwrap_or_else(|e| pgx::error!("serialization error {}", e));
+                .unwrap_or_else(|e| pgrx::error!("serialization error {}", e));
             // type version
             writer.write_all(&[$version])
-                .unwrap_or_else(|e| pgx::error!("serialization error {}", e));
+                .unwrap_or_else(|e| pgrx::error!("serialization error {}", e));
             // serialization version; 1 for bincode is currently the only option
             writer.write_all(&[SerializationType::Default as u8])
-                .unwrap_or_else(|e| pgx::error!("serialization error {}", e));
+                .unwrap_or_else(|e| pgrx::error!("serialization error {}", e));
             bincode::serialize_into(&mut writer, state)
-                .unwrap_or_else(|e| pgx::error!("serialization error {}", e));
+                .unwrap_or_else(|e| pgrx::error!("serialization error {}", e));
             unsafe {
                 let len = writer.position().try_into().expect("serialized size too large");
-                ::pgx::set_varsize(writer.get_mut().as_mut_ptr() as *mut _, len);
+                ::pgrx::set_varsize(writer.get_mut().as_mut_ptr() as *mut _, len);
             }
             $crate::raw::bytea::from(pg_sys::Datum::from(writer.into_inner().as_mut_ptr()))
         }
@@ -373,28 +373,28 @@ macro_rules! do_deserialize {
 
         let state: $t = unsafe {
             let input: $crate::raw::bytea = $bytes;
-            let input: pgx::pg_sys::Datum = input.into();
+            let input: pgrx::pg_sys::Datum = input.into();
             let detoasted = pg_sys::pg_detoast_datum_packed(input.cast_mut_ptr());
-            let len = pgx::varsize_any_exhdr(detoasted);
-            let data = pgx::vardata_any(detoasted);
+            let len = pgrx::varsize_any_exhdr(detoasted);
+            let data = pgrx::vardata_any(detoasted);
             let bytes = std::slice::from_raw_parts(data as *mut u8, len);
             if bytes.len() < 1 {
-                pgx::error!("deserialization error, no bytes")
+                pgrx::error!("deserialization error, no bytes")
             }
             if bytes[0] != 1 {
-                pgx::error!(
+                pgrx::error!(
                     "deserialization error, invalid serialization version {}",
                     bytes[0]
                 )
             }
             if bytes[1] != SerializationType::Default as u8 {
-                pgx::error!(
+                pgrx::error!(
                     "deserialization error, invalid serialization type {}",
                     bytes[1]
                 )
             }
             bincode::deserialize(&bytes[2..])
-                .unwrap_or_else(|e| pgx::error!("deserialization error {}", e))
+                .unwrap_or_else(|e| pgrx::error!("deserialization error {}", e))
         };
         state.into()
     }};

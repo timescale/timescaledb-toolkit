@@ -10,7 +10,7 @@ mod sort;
 
 use std::convert::TryInto;
 
-use pgx::*;
+use pgrx::*;
 
 use super::*;
 
@@ -186,7 +186,7 @@ pub(crate) unsafe fn pipeline_support_helper(
 
     let input = input.unwrap().unwrap();
     let input: *mut pg_sys::Node = input.cast_mut_ptr();
-    if !pgx::is_a(input, pg_sys::NodeTag_T_SupportRequestSimplify) {
+    if !pgrx::is_a(input, pg_sys::NodeTag_T_SupportRequestSimplify) {
         return no_change();
     }
 
@@ -223,7 +223,7 @@ pub(crate) unsafe fn pipeline_support_helper(
                 pg_sys::fmgr_info(executor_id, &mut flinfo);
                 flinfo.fn_addr
             };
-            // FIXME this cast should not be necessary; pgx is defining the
+            // FIXME this cast should not be necessary; pgrx is defining the
             //       wrapper functions as
             //       `unsafe fn(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum`
             //       instead of
@@ -280,7 +280,7 @@ pub(crate) unsafe fn pipeline_support_helper(
 
 // support functions are spec'd as returning NULL pointer if no simplification
 // can be made
-fn no_change() -> pgx::Internal {
+fn no_change() -> pgrx::Internal {
     Internal::from(Some(pg_sys::Datum::from(
         std::ptr::null_mut::<pg_sys::Expr>(),
     )))
@@ -317,8 +317,8 @@ pub fn lttb_pipeline_element(
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgx::*;
-    use pgx_macros::pg_test;
+    use pgrx::*;
+    use pgrx_macros::pg_test;
 
     #[pg_test]
     fn test_pipeline_lttb() {

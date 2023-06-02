@@ -1,4 +1,4 @@
-use pgx::*;
+use pgrx::*;
 use serde::{Deserialize, Serialize};
 
 use crate::accessors::{
@@ -527,7 +527,7 @@ mod tests {
     use std::ptr;
 
     use super::*;
-    use pgx_macros::pg_test;
+    use pgrx_macros::pg_test;
 
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {

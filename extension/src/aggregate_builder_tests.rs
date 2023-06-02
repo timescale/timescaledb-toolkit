@@ -3,7 +3,7 @@
 // function
 use aggregate_builder::aggregate;
 
-use pgx::*;
+use pgrx::*;
 
 use crate::{palloc::Inner, raw::bytea};
 
@@ -82,8 +82,8 @@ impl toolkit_experimental::parallel_anything {
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgx::*;
-    use pgx_macros::pg_test;
+    use pgrx::*;
+    use pgrx_macros::pg_test;
 
     #[pg_test]
     fn test_anything_in_experimental_and_returns_first() {

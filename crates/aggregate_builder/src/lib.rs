@@ -581,7 +581,7 @@ fn expand(agg: Aggregate) -> TokenStream2 {
             #deserialize_fns
             #combine_fns
 
-            pgx::extension_sql!(
+            pgrx::extension_sql!(
                 #create,
                 name=#extension_sql_name,
                 requires=[#(#extension_sql_reqs),*],
@@ -671,9 +671,9 @@ impl AggregateFn {
             #state_type_check
             #return_type_check
 
-            #[pgx::pg_extern(immutable, parallel_safe #schema)]
+            #[pgrx::pg_extern(immutable, parallel_safe #schema)]
             pub fn #outer_ident(
-                #input_var: pgx::Internal,
+                #input_var: pgrx::Internal,
                 #(#arg_signatures,)*
             ) -> Option<Internal> {
                 use crate::palloc::{Inner, InternalAsValue, ToInternal};
@@ -741,9 +741,9 @@ impl AggregateFn {
         quote! {
             #state_type_check
 
-            #[pgx::pg_extern(immutable, parallel_safe #schema)]
+            #[pgrx::pg_extern(immutable, parallel_safe #schema)]
             pub fn #outer_ident(
-                __internal: pgx::Internal,
+                __internal: pgrx::Internal,
                 __fcinfo: pg_sys::FunctionCallInfo
             ) #ret {
                 use crate::palloc::InternalAsValue;
@@ -799,9 +799,9 @@ impl AggregateFn {
 
             #return_type_check
 
-            #[pgx::pg_extern(strict, immutable, parallel_safe #schema)]
+            #[pgrx::pg_extern(strict, immutable, parallel_safe #schema)]
             pub fn #outer_ident(
-                __internal: pgx::Internal,
+                __internal: pgrx::Internal,
             ) -> bytea {
                 use crate::palloc::{Inner, InternalAsValue};
                 let #input_var: Option<Inner<Option<State>>> = unsafe {
@@ -859,7 +859,7 @@ impl AggregateFn {
 
             #return_type_check
 
-            #[pgx::pg_extern(strict, immutable, parallel_safe #schema)]
+            #[pgrx::pg_extern(strict, immutable, parallel_safe #schema)]
             pub fn #outer_ident(
                 bytes: crate::raw::bytea,
                 _internal: Internal
@@ -921,7 +921,7 @@ impl AggregateFn {
             #return_type_check
             #mod_counters
 
-            #[pgx::pg_extern(immutable, parallel_safe #schema)]
+            #[pgrx::pg_extern(immutable, parallel_safe #schema)]
             pub fn #outer_ident(
                 #a_name: Internal,
                 #b_name: Internal,

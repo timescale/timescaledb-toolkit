@@ -1,4 +1,4 @@
-use pgx::*;
+use pgrx::*;
 
 use super::*;
 
@@ -288,8 +288,8 @@ pub fn pipeline_trunc<'e>() -> toolkit_experimental::UnstableTimevectorPipeline<
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgx::*;
-    use pgx_macros::pg_test;
+    use pgrx::*;
+    use pgrx_macros::pg_test;
 
     #[pg_test]
     fn test_simple_arith_binops() {

@@ -1,4 +1,4 @@
-use pgx::*;
+use pgrx::*;
 
 use encodings::{delta, prefix_varint};
 
@@ -682,7 +682,7 @@ pub fn uddsketch_error<'a>(sketch: UddSketch<'a>) -> f64 {
 mod tests {
     use super::*;
 
-    use pgx_macros::pg_test;
+    use pgrx_macros::pg_test;
 
     // Assert equality between two floats, within some fixed error range.
     fn apx_eql(value: f64, expected: f64, error: f64) {
@@ -1269,7 +1269,7 @@ mod tests {
 
             let control = state.unwrap();
             let buffer = uddsketch_serialize(Inner::from(control.clone()).internal().unwrap());
-            let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0.cast_mut_ptr());
+            let buffer = pgrx::varlena::varlena_to_byte_slice(buffer.0.cast_mut_ptr());
 
             let expected = [
                 1, 1, 123, 20, 174, 71, 225, 122, 116, 63, 100, 0, 0, 0, 5, 0, 0, 0, 0, 0, 0, 0, 5,
@@ -1279,7 +1279,7 @@ mod tests {
             ];
             assert_eq!(buffer, expected);
 
-            let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
+            let expected = pgrx::varlena::rust_byte_slice_to_bytea(&expected);
             let new_state =
                 uddsketch_deserialize_inner(bytea(pg_sys::Datum::from(expected.as_ptr())));
             assert_eq!(&*new_state, &*control);

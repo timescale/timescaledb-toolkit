@@ -121,10 +121,10 @@ jobs:
         key: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
         restore-keys: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-
 
-    - name: Run pgx tests
+    - name: Run pgrx tests
       run: |
         if [ "${{ matrix.container.version }}" = 7 ]; then
-          # needed for pgx to find clang
+          # needed for pgrx to find clang
           set +e # will succeed but have non-zero exit code
           . scl_source enable llvm-toolset-7
           set -e

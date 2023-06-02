@@ -2,7 +2,7 @@
 
 use std::fmt;
 
-use pgx::{
+use pgrx::{
     iter::{SetOfIterator, TableIterator},
     *,
 };
@@ -213,10 +213,10 @@ impl SpaceSavingTransState {
         collation: Option<Oid>,
     ) -> Self {
         if nval == 0 {
-            pgx::error!("mcv aggregate requires an n value > 0")
+            pgrx::error!("mcv aggregate requires an n value > 0")
         }
         if skew <= 1.0 {
-            pgx::error!("mcv aggregate requires a skew factor > 1.0")
+            pgrx::error!("mcv aggregate requires a skew factor > 1.0")
         }
 
         let prob_eq_n = zeta_eq_n(skew, nval as u64);
@@ -741,7 +741,7 @@ pub fn freq_agg_trans(
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     if freq <= 0. || freq >= 1.0 {
-        pgx::error!("frequency aggregate requires a frequency in the range (0.0, 1.0)")
+        pgrx::error!("frequency aggregate requires a frequency in the range (0.0, 1.0)")
     }
 
     space_saving_trans(
@@ -1270,7 +1270,7 @@ pub fn freq_iter<'a>(
 > {
     unsafe {
         if ty.oid().as_u32() != agg.type_oid {
-            pgx::error!("mischatched types")
+            pgrx::error!("mischatched types")
         }
         let counts = agg.counts.slice().iter().zip(agg.overcounts.slice().iter());
         TableIterator::new(agg.datums.clone().into_iter().zip(counts).map_while(
@@ -1381,7 +1381,7 @@ fn validate_topn_for_mcv_agg(
 
     // TODO: should we allow this if we have enough data?
     if n > topn as i32 {
-        pgx::error!(
+        pgrx::error!(
             "requested N ({}) exceeds creation parameter of mcv aggregate ({})",
             n,
             topn
@@ -1392,7 +1392,7 @@ fn validate_topn_for_mcv_agg(
     // for our zeta curve.
     let needed_count = (zeta_le_n(skew, n as u64) * total_vals as f64).ceil() as u64;
     if counts.take(n as usize).sum::<u64>() < needed_count {
-        pgx::error!("data is not skewed enough to find top {} parameters with a skew of {}, try reducing the skew factor", n , skew)
+        pgrx::error!("data is not skewed enough to find top {} parameters with a skew of {}, try reducing the skew factor", n , skew)
     }
 }
 
@@ -1404,7 +1404,7 @@ pub fn topn(
 ) -> SetOfIterator<AnyElement> {
     // If called with a NULL, assume type matches
     if ty.is_some() && ty.unwrap().oid().as_u32() != agg.type_oid {
-        pgx::error!("mischatched types")
+        pgrx::error!("mischatched types")
     }
 
     validate_topn_for_mcv_agg(
@@ -1438,7 +1438,7 @@ pub fn default_topn(
     ty: Option<AnyElement>,
 ) -> SetOfIterator<AnyElement> {
     if agg.topn == 0 {
-        pgx::error!("frequency aggregates require a N parameter to topn")
+        pgrx::error!("frequency aggregates require a N parameter to topn")
     }
     let n = agg.topn as i32;
     topn(agg, n, ty)
@@ -1476,7 +1476,7 @@ pub fn arrow_topn_bigint<'a>(
 #[pg_extern(immutable, parallel_safe, name = "topn")]
 pub fn default_topn_bigint(agg: SpaceSavingBigIntAggregate<'_>) -> SetOfIterator<i64> {
     if agg.topn == 0 {
-        pgx::error!("frequency aggregates require a N parameter to topn")
+        pgrx::error!("frequency aggregates require a N parameter to topn")
     }
     let n = agg.topn as i32;
     topn_bigint(agg, n)
@@ -1526,7 +1526,7 @@ pub fn arrow_topn_text<'a>(
 #[pg_extern(immutable, parallel_safe, name = "topn")]
 pub fn default_topn_text(agg: SpaceSavingTextAggregate<'_>) -> SetOfIterator<String> {
     if agg.topn == 0 {
-        pgx::error!("frequency aggregates require a N parameter to topn")
+        pgrx::error!("frequency aggregates require a N parameter to topn")
     }
     let n = agg.topn as i32;
     topn_text(agg, n)
@@ -1692,7 +1692,7 @@ unsafe fn varlena_to_string(vl: *const pg_sys::varlena) -> String {
 #[pg_schema]
 mod tests {
     use super::*;
-    use pgx_macros::pg_test;
+    use pgrx_macros::pg_test;
     use rand::distributions::{Distribution, Uniform};
     use rand::prelude::SliceRandom;
     use rand::thread_rng;
@@ -2007,7 +2007,7 @@ mod tests {
     }
 
     // Setup environment and create table 'test' with some aggregates in table 'aggs'
-    fn setup_with_test_table(client: &mut pgx::spi::SpiClient) {
+    fn setup_with_test_table(client: &mut pgrx::spi::SpiClient) {
         // using the search path trick for this test to make it easier to stabilize later on
         let sp = client
             .update(

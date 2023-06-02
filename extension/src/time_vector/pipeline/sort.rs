@@ -1,4 +1,4 @@
-use pgx::*;
+use pgrx::*;
 
 use super::*;
 
@@ -60,8 +60,8 @@ pub fn sort_timevector(mut series: Timevector_TSTZ_F64<'_>) -> Timevector_TSTZ_F
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgx::*;
-    use pgx_macros::pg_test;
+    use pgrx::*;
+    use pgrx_macros::pg_test;
 
     #[pg_test]
     fn test_pipeline_sort() {

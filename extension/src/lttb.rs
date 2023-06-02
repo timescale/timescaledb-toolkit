@@ -1,4 +1,4 @@
-use pgx::*;
+use pgrx::*;
 use std::borrow::Cow;
 
 use crate::{
@@ -430,8 +430,8 @@ pub fn lttb_ts(data: Timevector_TSTZ_F64, threshold: usize) -> Timevector_TSTZ_F
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgx::*;
-    use pgx_macros::pg_test;
+    use pgrx::*;
+    use pgrx_macros::pg_test;
 
     #[pg_test]
     fn test_lttb_equivalence() {

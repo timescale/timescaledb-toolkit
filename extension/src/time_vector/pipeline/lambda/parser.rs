@@ -1,6 +1,6 @@
 use std::{collections::HashMap, ffi::CString};
 
-use pgx::*;
+use pgrx::*;
 
 use super::*;
 
@@ -365,7 +365,7 @@ fn build_binary_op(
 }
 
 fn parse_timestamptz(val: &str) -> i64 {
-    // FIXME pgx wraps all functions in rust wrappers, which makes them
+    // FIXME pgrx wraps all functions in rust wrappers, which makes them
     //       uncallable with DirectFunctionCall(). Is there a way to
     //       export both?
     extern "C" {
@@ -386,7 +386,7 @@ fn parse_timestamptz(val: &str) -> i64 {
 }
 
 fn parse_interval(val: &str) -> *mut pg_sys::Interval {
-    // FIXME pgx wraps all functions in rust wrappers, which makes them
+    // FIXME pgrx wraps all functions in rust wrappers, which makes them
     //       uncallable with DirectFunctionCall(). Is there a way to
     //       export both?
     extern "C" {

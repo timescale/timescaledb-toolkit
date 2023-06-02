@@ -1,6 +1,6 @@
 use std::{convert::TryInto, ops::Deref};
 
-use pgx::*;
+use pgrx::*;
 
 use crate::{
     accessors::{
@@ -421,7 +421,7 @@ pub fn tdigest_mean<'a>(digest: TDigest<'a>) -> f64 {
 mod tests {
     use super::*;
 
-    use pgx_macros::pg_test;
+    use pgrx_macros::pg_test;
 
     // Assert equality between two floats, within some fixed error range.
     fn apx_eql(value: f64, expected: f64, error: f64) {
@@ -657,7 +657,7 @@ mod tests {
 
             let mut control = state.unwrap();
             let buffer = tdigest_serialize(Inner::from(control.clone()).internal().unwrap());
-            let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0.cast_mut_ptr());
+            let buffer = pgrx::varlena::varlena_to_byte_slice(buffer.0.cast_mut_ptr());
 
             let expected = [
                 1, 1, 5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 128, 69, 192, 1, 0, 0, 0, 0, 0, 0, 0,
@@ -669,7 +669,7 @@ mod tests {
             ];
             assert_eq!(buffer, expected);
 
-            let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
+            let expected = pgrx::varlena::rust_byte_slice_to_bytea(&expected);
             let mut new_state =
                 tdigest_deserialize_inner(bytea(pg_sys::Datum::from(expected.as_ptr())));
 

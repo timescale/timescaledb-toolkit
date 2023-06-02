@@ -4,7 +4,7 @@ use std::{
     ptr::NonNull,
 };
 
-use pgx::*;
+use pgrx::*;
 
 pub unsafe fn in_memory_context<T, F: FnOnce() -> T>(mctx: pg_sys::MemoryContext, f: F) -> T {
     let prev_ctx = pg_sys::CurrentMemoryContext;
@@ -14,14 +14,14 @@ pub unsafe fn in_memory_context<T, F: FnOnce() -> T>(mctx: pg_sys::MemoryContext
     t
 }
 
-pub use pgx::Internal;
+pub use pgrx::Internal;
 
-/// Extension trait to translate postgres-understood `pgx::Internal` type into
+/// Extension trait to translate postgres-understood `pgrx::Internal` type into
 /// the well-typed pointer type `Option<Inner<T>>`.
 ///
 /// # Safety
 ///
-/// This trait should only ever be implemented for `pgx::Internal`
+/// This trait should only ever be implemented for `pgrx::Internal`
 /// There is an lifetime constraint on the returned pointer, though this is
 /// currently implicit.
 pub unsafe trait InternalAsValue {
@@ -46,7 +46,7 @@ unsafe impl InternalAsValue for Internal {
 }
 
 /// Extension trait to turn the typed pointers `Inner<...>` and
-/// `Option<Inner<...>>` into the postgres-understood `pgx::Internal` type.
+/// `Option<Inner<...>>` into the postgres-understood `pgrx::Internal` type.
 ///
 /// # Safety
 /// The value input must live as long as postgres expects. TODO more info

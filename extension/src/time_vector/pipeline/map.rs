@@ -3,7 +3,7 @@ use std::{
     ptr,
 };
 
-use pgx::*;
+use pgrx::*;
 
 use super::*;
 
@@ -169,11 +169,11 @@ pub fn map_data_pipeline_element<'e>(
         error!("invalid number of mapping function arguments, expected fn(double precision) RETURNS double precision")
     }
 
-    if unsafe { *argtypes } != pgx::PgBuiltInOids::FLOAT8OID.value() {
+    if unsafe { *argtypes } != pgrx::PgBuiltInOids::FLOAT8OID.value() {
         error!("invalid argument type, expected fn(double precision) RETURNS double precision")
     }
 
-    if rettype != pgx::PgBuiltInOids::FLOAT8OID.value() {
+    if rettype != pgrx::PgBuiltInOids::FLOAT8OID.value() {
         error!("invalid return type, expected fn(double precision) RETURNS double precision")
     }
 
@@ -248,8 +248,8 @@ pub fn map_series(series: &mut Timevector_TSTZ_F64<'_>, mut func: impl FnMut(f64
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgx::*;
-    use pgx_macros::pg_test;
+    use pgrx::*;
+    use pgrx_macros::pg_test;
 
     #[pg_test]
     fn test_pipeline_map_lambda() {

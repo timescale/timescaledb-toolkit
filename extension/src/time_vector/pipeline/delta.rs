@@ -1,4 +1,4 @@
-use pgx::*;
+use pgrx::*;
 
 use super::*;
 
@@ -61,8 +61,8 @@ pub fn timevector_delta<'s>(series: &Timevector_TSTZ_F64<'s>) -> Timevector_TSTZ
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgx::*;
-    use pgx_macros::pg_test;
+    use pgrx::*;
+    use pgrx_macros::pg_test;
 
     #[pg_test]
     fn test_pipeline_delta() {

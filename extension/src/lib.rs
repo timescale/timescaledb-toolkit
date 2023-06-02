@@ -4,11 +4,11 @@
 #![allow(clippy::extra_unused_lifetimes)]
 // every function calling in_aggregate_context should be unsafe
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
-// since 0.5 pgx requires non-elided lifetimes on extern functions: https://github.com/tcdi/pgx/issues/721
+// since 0.5 pgrx requires non-elided lifetimes on extern functions: https://github.com/tcdi/pgrx/issues/721
 #![allow(clippy::needless_lifetimes)]
 // triggered by pg_extern macros
 #![allow(clippy::useless_conversion)]
-// caused by pgx
+// caused by pgrx
 #![allow(clippy::unnecessary_lazy_evaluations)]
 
 pub mod accessors;
@@ -46,9 +46,9 @@ mod type_builder;
 #[cfg(any(test, feature = "pg_test"))]
 mod aggregate_builder_tests;
 
-use pgx::*;
+use pgrx::*;
 
-pgx::pg_module_magic!();
+pgrx::pg_module_magic!();
 
 #[pg_guard]
 pub extern "C" fn _PG_init() {

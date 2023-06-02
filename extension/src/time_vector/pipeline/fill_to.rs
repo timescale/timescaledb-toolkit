@@ -1,4 +1,4 @@
-use pgx::*;
+use pgrx::*;
 
 use flat_serialize_macro::FlatSerializable;
 
@@ -141,8 +141,8 @@ pub fn fill_to<'s>(
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgx::*;
-    use pgx_macros::pg_test;
+    use pgrx::*;
+    use pgrx_macros::pg_test;
 
     #[pg_test]
     fn test_pipeline_fill_to() {

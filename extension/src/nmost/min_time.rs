@@ -68,10 +68,16 @@ pub fn min_n_time_rollup_trans(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn min_n_time_combine(state1: Internal, state2: Internal) -> Option<Internal> {
-    nmost_trans_combine(unsafe { state1.to_inner::<MinTimeTransType>() }, unsafe {
-        state2.to_inner::<MinTimeTransType>()
-    })
+pub fn min_n_time_combine(
+    state1: Internal,
+    state2: Internal,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal> {
+    nmost_trans_combine(
+        unsafe { state1.to_inner::<MinTimeTransType>() },
+        unsafe { state2.to_inner::<MinTimeTransType>() },
+        fcinfo,
+    )
     .internal()
 }
 

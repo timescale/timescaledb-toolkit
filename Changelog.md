@@ -9,6 +9,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 #### New experimental features
 
 #### Bug fixes
+- [#761](https://github.com/timescale/timescaledb-toolkit/pull/761): Make sure nmost combine uses correct memctx
 
 #### Other notable changes
 

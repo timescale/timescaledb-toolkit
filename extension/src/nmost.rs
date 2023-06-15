@@ -119,20 +119,23 @@ fn nmost_rollup_trans_function<T: Ord + Copy>(
 fn nmost_trans_combine<T: Clone + Ord + Copy>(
     first: Option<Inner<NMostTransState<T>>>,
     second: Option<Inner<NMostTransState<T>>>,
+    fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<NMostTransState<T>>> {
-    match (first, second) {
-        (None, None) => None,
-        (None, Some(only)) | (Some(only), None) => unsafe {
-            Internal::new(only.clone()).to_inner()
-        },
-        (Some(a), Some(b)) => {
-            let mut a = a.clone();
-            // This could be made more efficient by iterating in the appropriate order with an early exit, but would requiring ordering the other heap
-            for entry in b.heap.iter() {
-                a.new_entry(*entry);
+    unsafe {
+        in_aggregate_context(fcinfo, || {
+            match (first, second) {
+                (None, None) => None,
+                (None, Some(only)) | (Some(only), None) => Internal::new(only.clone()).to_inner(),
+                (Some(a), Some(b)) => {
+                    let mut a = a.clone();
+                    // This could be made more efficient by iterating in the appropriate order with an early exit, but would requiring ordering the other heap
+                    for entry in b.heap.iter() {
+                        a.new_entry(*entry);
+                    }
+                    Internal::new(a).to_inner()
+                }
             }
-            unsafe { Internal::new(a).to_inner() }
-        }
+        })
     }
 }
 

@@ -81,10 +81,16 @@ pub fn min_n_float_rollup_trans(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn min_n_float_combine(state1: Internal, state2: Internal) -> Option<Internal> {
-    nmost_trans_combine(unsafe { state1.to_inner::<MinFloatTransType>() }, unsafe {
-        state2.to_inner::<MinFloatTransType>()
-    })
+pub fn min_n_float_combine(
+    state1: Internal,
+    state2: Internal,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal> {
+    nmost_trans_combine(
+        unsafe { state1.to_inner::<MinFloatTransType>() },
+        unsafe { state2.to_inner::<MinFloatTransType>() },
+        fcinfo,
+    )
     .internal()
 }
 

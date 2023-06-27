@@ -92,7 +92,6 @@ pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {
                 str.as_ptr(),
                 b"timestamptz\0".as_ptr().cast::<c_char>(),
             );
-            return 0;
         }
 
         match dtype as u32 {

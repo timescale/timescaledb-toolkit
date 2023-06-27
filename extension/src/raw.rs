@@ -145,7 +145,7 @@ impl From<i64> for Interval {
         //                                                 IntervalPGetDatum(result)));
         // So if we want the same behavior, we need to call interval_justify_hours too:
         let function_args = vec![Some(pg_sys::Datum::from(interval))];
-        unsafe { pgrx::direct_function_call(pg_sys::interval_justify_hours, function_args) }
+        unsafe { pgrx::direct_function_call(pg_sys::interval_justify_hours, &function_args) }
             .expect("interval_justify_hours does not return None")
     }
 }

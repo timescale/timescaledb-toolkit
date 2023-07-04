@@ -137,6 +137,7 @@ struct VariableLenFieldInfo {
     is_optional: bool,
 }
 
+#[allow(clippy::redundant_clone)] // triggers incorrectly
 fn flat_serialize_struct(input: FlatSerializeStruct) -> TokenStream2 {
     let ident = input.ident.clone();
 

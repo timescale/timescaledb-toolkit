@@ -393,7 +393,7 @@ impl SpaceSavingTransState {
         }
 
         // TODO: get this into_iter working without making temp.0 public
-        let mut entries: Vec<SpaceSavingEntry> = temp.0.into_iter().map(|(_, v)| v).collect();
+        let mut entries: Vec<SpaceSavingEntry> = temp.0.into_values().collect();
         entries.sort_by(|a, b| b.count.partial_cmp(&a.count).unwrap()); // swap a and b for descending
 
         entries.truncate(one.max_size as usize);
@@ -545,7 +545,7 @@ impl<'input>
         } else {
             SpaceSavingTransState::mcv_agg_from_type_id(
                 agg.freq_param,
-                agg.topn as u32,
+                agg.topn,
                 pg_sys::INT8OID,
                 collation,
             )

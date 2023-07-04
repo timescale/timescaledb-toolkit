@@ -26,7 +26,7 @@ use hyperloglogplusplus::{HyperLogLog as HLL, HyperLogLogStorage};
 #[derive(Debug, Copy, Clone, PartialEq)]
 struct HashableDatum(Datum);
 impl Eq for HashableDatum {}
-#[allow(clippy::derive_hash_xor_eq)] // partialeq and hash implementations match
+#[allow(clippy::derived_hash_with_manual_eq)] // partialeq and hash implementations match
 impl Hash for HashableDatum {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.value().hash(state)
@@ -979,7 +979,7 @@ mod tests {
         const MAX_TRIAL_ERROR: f64 = 0.05;
         Spi::connect(|mut client| {
             // This should match THRESHOLD_DATA_VEC from b=12-18
-            let thresholds = vec![3100, 6500, 11500, 20000, 50000, 120000, 350000];
+            let thresholds = [3100, 6500, 11500, 20000, 50000, 120000, 350000];
             let rand_precision: Uniform<usize> = Uniform::new_inclusive(12, 18);
             let mut rng = rand::thread_rng();
             for _ in 0..NUM_BIAS_TRIALS {

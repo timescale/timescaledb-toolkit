@@ -288,7 +288,7 @@ pub fn lttb(data: &[TSPoint], threshold: usize) -> Cow<'_, [TSPoint]> {
         let avg_range_length = (avg_range_end - avg_range_start) as f64;
 
         for i in 0..(avg_range_end - avg_range_start) {
-            let idx = (avg_range_start + i) as usize;
+            let idx = avg_range_start + i;
             avg_x += data[idx].ts;
             avg_y += data[idx].val;
         }
@@ -306,7 +306,7 @@ pub fn lttb(data: &[TSPoint], threshold: usize) -> Cow<'_, [TSPoint]> {
         let mut max_area = -1f64;
         let mut next_a = range_offs;
         for i in 0..(range_to - range_offs) {
-            let idx = (range_offs + i) as usize;
+            let idx = range_offs + i;
 
             // Calculate triangle area over three buckets.
             let area = ((point_a_x - avg_x) as f64 * (data[idx].val - point_a_y)
@@ -375,7 +375,7 @@ pub fn lttb_ts(data: Timevector_TSTZ_F64, threshold: usize) -> Timevector_TSTZ_F
         let avg_range_length = (avg_range_end - avg_range_start) as f64;
 
         for i in 0..(avg_range_end - avg_range_start) {
-            let idx = (avg_range_start + i) as usize;
+            let idx = avg_range_start + i;
             let point = data.get(idx).unwrap();
             avg_x += point.ts;
             avg_y += point.val;
@@ -394,7 +394,7 @@ pub fn lttb_ts(data: Timevector_TSTZ_F64, threshold: usize) -> Timevector_TSTZ_F
         let mut max_area = -1f64;
         let mut next_a = range_offs;
         for i in 0..(range_to - range_offs) {
-            let idx = (range_offs + i) as usize;
+            let idx = range_offs + i;
 
             // Calculate triangle area over three buckets.
             let area = ((point_a_x - avg_x) as f64 * (data.get(idx).unwrap().val - point_a_y)

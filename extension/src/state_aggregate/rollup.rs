@@ -472,11 +472,11 @@ mod tests {
             durations: vec![
                 DurationInState {
                     duration: 500,
-                    state: StateEntry::from_integer(555_2),
+                    state: StateEntry::from_integer(5_552),
                 },
                 DurationInState {
                     duration: 400,
-                    state: StateEntry::from_integer(555_1),
+                    state: StateEntry::from_integer(5_551),
                 },
             ],
             combined_durations: vec![],
@@ -492,11 +492,11 @@ mod tests {
             durations: vec![
                 DurationInState {
                     duration: 500,
-                    state: StateEntry::from_integer(555_2),
+                    state: StateEntry::from_integer(5_552),
                 },
                 DurationInState {
                     duration: 400,
-                    state: StateEntry::from_integer(555_1),
+                    state: StateEntry::from_integer(5_551),
                 },
             ],
             combined_durations: vec![],
@@ -512,11 +512,11 @@ mod tests {
             durations: vec![
                 DurationInState {
                     duration: 500,
-                    state: StateEntry::from_integer(555_2),
+                    state: StateEntry::from_integer(5_552),
                 },
                 DurationInState {
                     duration: 400,
-                    state: StateEntry::from_integer(555_1),
+                    state: StateEntry::from_integer(5_551),
                 },
             ],
             combined_durations: vec![],
@@ -532,11 +532,11 @@ mod tests {
             durations: vec![
                 DurationInState {
                     duration: 500 * 3 + 12345,
-                    state: StateEntry::from_integer(555_2),
+                    state: StateEntry::from_integer(5_552),
                 },
                 DurationInState {
                     duration: 400 * 3,
-                    state: StateEntry::from_integer(555_1),
+                    state: StateEntry::from_integer(5_551),
                 },
             ],
             combined_durations: vec![],

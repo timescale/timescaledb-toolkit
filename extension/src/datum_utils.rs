@@ -153,7 +153,7 @@ impl DatumHashBuilder {
         // 1 argument for the key, 1 argument for the seed
         let size =
             size_of::<pg_sys::FunctionCallInfoBaseData>() + size_of::<pg_sys::NullableDatum>() * 2;
-        let mut info = pg_sys::palloc0(size) as pg_sys::FunctionCallInfo;
+        let info = pg_sys::palloc0(size) as pg_sys::FunctionCallInfo;
 
         (*info).flinfo = flinfo as *const pg_sys::FmgrInfo as *mut pg_sys::FmgrInfo;
         (*info).context = std::ptr::null_mut();

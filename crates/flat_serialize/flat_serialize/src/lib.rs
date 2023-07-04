@@ -573,7 +573,7 @@ where
         if !<T as FlatSerializable>::TRIVIAL_COPY {
             return len_of_iterable::<T, _, _>(self.iter(), count);
         }
-        ::std::mem::size_of::<T>() * count as usize
+        ::std::mem::size_of::<T>() * count
     }
 }
 
@@ -686,7 +686,7 @@ fn len_of_iterable<'i, T: FlatSerializable<'i>, V: ValOrRef<T>, I: Iterator<Item
 #[inline(always)]
 fn aligning_len(ptr: *const MaybeUninit<u8>, align: usize) -> usize {
     let current_ptr = ptr as usize;
-    if current_ptr as usize % align == 0 {
+    if current_ptr % align == 0 {
         return 0;
     }
     align - (current_ptr % align)

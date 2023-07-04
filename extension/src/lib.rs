@@ -1,3 +1,5 @@
+// so we can allow very new Clippy lints
+#![allow(unknown_lints)]
 // flat_serialize! alignment checks hit this for any single byte field (of which all pg_types! have two by default)
 #![allow(clippy::modulo_one)]
 // some disagreement between clippy and the rust compiler about when lifetime are and are not needed
@@ -10,6 +12,8 @@
 #![allow(clippy::useless_conversion)]
 // caused by pgrx
 #![allow(clippy::unnecessary_lazy_evaluations)]
+// clippy triggers an internal complier error checking this
+#![allow(clippy::unnecessary_literal_unwrap)]
 
 pub mod accessors;
 pub mod asap;

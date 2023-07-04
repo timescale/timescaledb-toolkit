@@ -1385,7 +1385,9 @@ pub enum Method {
 pub fn method_kind(method: &str) -> Method {
     match as_method(method) {
         Some(method) => method,
-        None => pgrx::error!("unknown analysis method. Valid methods are 'population' and 'sample'"),
+        None => {
+            pgrx::error!("unknown analysis method. Valid methods are 'population' and 'sample'")
+        }
     }
 }
 

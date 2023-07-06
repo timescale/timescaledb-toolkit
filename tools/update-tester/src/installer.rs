@@ -7,6 +7,14 @@ use xshell::{cmd, cp, mkdir_p, pushd, read_dir};
 
 use crate::{defer, quietly_run};
 
+fn pgrx_name(version: &Version) -> &'static str {
+    if version >= &Version::new(0, 7, 4) {
+        "pgx"
+    } else {
+        "pgrx"
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn install_all_versions(
     root_dir: &str,
@@ -21,9 +29,10 @@ pub fn install_all_versions(
     let extension_dir = path!(root_dir / "extension");
     let install_toolkit = |pgrx_version: Version| -> xshell::Result<()> {
         let _d = pushd(&extension_dir)?;
+        let pgrx_name = pgrx_name(&pgrx_version);
         match pgrx_version >= Version::new(0, 4, 0) {
-            true => quietly_run(cmd!("{cargo_pgrx} pgrx install -c {pg_config}")),
-            false => quietly_run(cmd!("{cargo_pgrx_old} pgrx install -c {pg_config}")),
+            true => quietly_run(cmd!("{cargo_pgrx} {pgrx_name} install -c {pg_config}")),
+            false => quietly_run(cmd!("{cargo_pgrx_old} {pgrx_name} install -c {pg_config}")),
         }
     };
     let post_install = || -> xshell::Result<()> {
@@ -98,7 +107,11 @@ fn get_pgrx_version(cargo_toml_contents: &str) -> Version {
         .parse::<Document>()
         .expect("invalid Cargo.toml");
 
-    cargo["dependencies"]["pgrx"]
+    let pgrx_dependency = cargo["dependencies"]
+        .get("pgrx")
+        // check old name if no pgrx found
+        .unwrap_or_else(|| &cargo["dependencies"]["pgx"]);
+    pgrx_dependency
         .as_str()
         .expect("expected pgrx to only have a version")
         .trim_start_matches(['=', '^', '~'].as_slice())

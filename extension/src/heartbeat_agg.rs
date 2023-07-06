@@ -1,5 +1,5 @@
-use pgx::iter::TableIterator;
-use pgx::*;
+use pgrx::iter::TableIterator;
+use pgrx::*;
 
 use crate::{
     accessors::{
@@ -101,7 +101,7 @@ impl HeartbeatTransState {
         if self.end < new_end && self.last + self.interval_len > self.end {
             assert!(!self.liveness.is_empty()); // above condition should be impossible without liveness data
 
-            let mut last_interval = self.liveness.last_mut().unwrap();
+            let last_interval = self.liveness.last_mut().unwrap();
             last_interval.1 = min(self.last + self.interval_len, new_end);
         }
         self.end = new_end;

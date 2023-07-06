@@ -315,9 +315,9 @@ fn validate_self_fields<'a>(fields: impl Iterator<Item = &'a mut FlatSerializeFi
     }
 }
 
-fn validate_self_field<'a>(
+fn validate_self_field(
     expr: &Expr,
-    seen_fields: &HashSet<&'a Ident>,
+    seen_fields: &HashSet<&Ident>,
 ) -> std::result::Result<(), TokenStream2> {
     let mut validate_fields = ValidateLenFields(None, seen_fields);
     validate_fields.visit_expr(expr);

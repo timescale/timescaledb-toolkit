@@ -173,7 +173,7 @@ impl<'s> Storage<'s> {
         self.compressed.num_bytes()
     }
 
-    pub fn merge_in<'o>(&mut self, other: &Storage<'o>) -> Overflowing {
+    pub fn merge_in(&mut self, other: &Storage<'_>) -> Overflowing {
         assert!(
             self.precision == other.precision,
             "precision must be equal (left={}, right={})",

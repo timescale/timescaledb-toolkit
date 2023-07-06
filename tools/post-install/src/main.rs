@@ -211,7 +211,7 @@ fn add_version_to_install_script(
     transform_file_to(&install_script, &versioned_script, |line| {
         assert!(
             !line.contains("CREATE OR REPLACE FUNCTION"),
-            "pgx should not generate CREATE OR REPLACE in functions"
+            "pgrx should not generate CREATE OR REPLACE in functions"
         );
         if line.contains("MODULE_PATHNAME") {
             return line.replace("MODULE_PATHNAME", &module_path);

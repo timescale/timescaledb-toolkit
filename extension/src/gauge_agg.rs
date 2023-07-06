@@ -1,4 +1,4 @@
-use pgx::*;
+use pgrx::*;
 
 use serde::{Deserialize, Serialize};
 
@@ -149,7 +149,7 @@ impl GaugeSummaryTransState {
         for p in iter {
             summary
                 .add_point(p)
-                .unwrap_or_else(|e| pgx::error!("{}", e));
+                .unwrap_or_else(|e| pgrx::error!("{}", e));
         }
         self.point_buffer.clear();
         // TODO build method should check validity
@@ -180,7 +180,7 @@ impl GaugeSummaryTransState {
         for sum in sum_iter {
             new_summary
                 .combine(&sum)
-                .unwrap_or_else(|e| pgx::error!("{}", e));
+                .unwrap_or_else(|e| pgrx::error!("{}", e));
         }
         self.summary_buffer.push(new_summary.build());
     }
@@ -689,7 +689,7 @@ impl From<MetricSummary> for GaugeSummary<'_> {
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgx_macros::pg_test;
+    use pgrx_macros::pg_test;
 
     use crate::counter_agg::testing::*;
 

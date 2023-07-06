@@ -10,7 +10,7 @@ use flat_serialize::{impl_flat_serializable, FlatSerializable, WrapErr};
 use serde::{Deserialize, Serialize};
 
 use pg_sys::{Datum, Oid};
-use pgx::*;
+use pgrx::*;
 
 /// `PgProcId` provides provides the ability to serialize and deserialize
 /// regprocedures as `namespace.name(args)`
@@ -20,7 +20,7 @@ pub struct PgProcId(pub Oid);
 
 impl_flat_serializable!(PgProcId);
 
-// FIXME upstream to pgx
+// FIXME upstream to pgrx
 // TODO use this or regprocedureout()?
 extern "C" {
     pub fn format_procedure_qualified(procedure_oid: pg_sys::Oid) -> *const c_char;
@@ -48,7 +48,7 @@ impl<'de> Deserialize<'de> for PgProcId {
     where
         D: serde::Deserializer<'de>,
     {
-        // FIXME pgx wraps all functions in rust wrappers, which makes them
+        // FIXME pgrx wraps all functions in rust wrappers, which makes them
         //       uncallable with DirectFunctionCall(). Is there a way to
         //       export both?
         extern "C" {

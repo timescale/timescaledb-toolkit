@@ -7,23 +7,32 @@ use xshell::{cmd, cp, mkdir_p, pushd, read_dir};
 
 use crate::{defer, quietly_run};
 
+fn pgrx_name(version: &Version) -> &'static str {
+    if version >= &Version::new(0, 7, 4) {
+        "pgx"
+    } else {
+        "pgrx"
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn install_all_versions(
     root_dir: &str,
     cache_dir: Option<&str>,
     pg_config: &str,
-    cargo_pgx: &str,
-    cargo_pgx_old: &str,
+    cargo_pgrx: &str,
+    cargo_pgrx_old: &str,
     current_version: &str,
     old_versions: &[String],
     reinstall: &HashSet<&str>,
 ) -> xshell::Result<()> {
     let extension_dir = path!(root_dir / "extension");
-    let install_toolkit = |pgx_version: Version| -> xshell::Result<()> {
+    let install_toolkit = |pgrx_version: Version| -> xshell::Result<()> {
         let _d = pushd(&extension_dir)?;
-        match pgx_version >= Version::new(0, 4, 0) {
-            true => quietly_run(cmd!("{cargo_pgx} pgx install -c {pg_config}")),
-            false => quietly_run(cmd!("{cargo_pgx_old} pgx install -c {pg_config}")),
+        let pgrx_name = pgrx_name(&pgrx_version);
+        match pgrx_version >= Version::new(0, 4, 0) {
+            true => quietly_run(cmd!("{cargo_pgrx} {pgrx_name} install -c {pg_config}")),
+            false => quietly_run(cmd!("{cargo_pgrx_old} {pgrx_name} install -c {pg_config}")),
         }
     };
     let post_install = || -> xshell::Result<()> {
@@ -39,7 +48,7 @@ pub fn install_all_versions(
 
     {
         let base_checkout = get_current_checkout()?;
-        let pgx_version = get_pgx_version(
+        let pgrx_version = get_pgrx_version(
             &std::fs::read_to_string("extension/Cargo.toml").expect("unable to read Cargo.toml"),
         );
         // Install the versions in reverse-time order.
@@ -56,11 +65,11 @@ pub fn install_all_versions(
             quietly_run(cmd!("git fetch origin tag {tag_version}"))?;
             quietly_run(cmd!("git checkout tags/{tag_version}"))?;
             let _d = defer(|| quietly_run(cmd!("git checkout {base_checkout}")));
-            let pgx_version = get_pgx_version(
+            let pgrx_version = get_pgrx_version(
                 &std::fs::read_to_string("extension/Cargo.toml")
                     .expect("unable to read Cargo.toml"),
             );
-            install_toolkit(pgx_version)?;
+            install_toolkit(pgrx_version)?;
             post_install()?;
             eprintln!("{} {}", "Finished".bold().green(), version);
         }
@@ -75,7 +84,7 @@ pub fn install_all_versions(
             current_version,
             base_checkout
         );
-        install_toolkit(pgx_version)?;
+        install_toolkit(pgrx_version)?;
     }
     post_install()?;
     eprintln!("{}", "Finished Current".bold().green());
@@ -93,17 +102,21 @@ fn get_current_checkout() -> xshell::Result<String> {
     cmd!("git rev-parse --verify HEAD").read()
 }
 
-fn get_pgx_version(cargo_toml_contents: &str) -> Version {
+fn get_pgrx_version(cargo_toml_contents: &str) -> Version {
     let cargo = cargo_toml_contents
         .parse::<Document>()
         .expect("invalid Cargo.toml");
 
-    cargo["dependencies"]["pgx"]
+    let pgrx_dependency = cargo["dependencies"]
+        .get("pgrx")
+        // check old name if no pgrx found
+        .unwrap_or_else(|| &cargo["dependencies"]["pgx"]);
+    pgrx_dependency
         .as_str()
-        .expect("expected pgx to only have a version")
+        .expect("expected pgrx to only have a version")
         .trim_start_matches(['=', '^', '~'].as_slice())
         .parse()
-        .expect("cannot parse pgx version")
+        .expect("cannot parse pgrx version")
 }
 
 // We were unprincipled with some of our old versions, so the version from

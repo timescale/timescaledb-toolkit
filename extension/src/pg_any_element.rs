@@ -4,7 +4,7 @@ use std::{
     mem::size_of,
 };
 
-use pgx::*;
+use pgrx::*;
 
 use pg_sys::{Datum, Oid};
 
@@ -43,12 +43,12 @@ impl PartialEq for PgAnyElement {
                 let flinfo = if (*tentry).eq_opr_finfo.fn_addr.is_some() {
                     &(*tentry).eq_opr_finfo
                 } else {
-                    pgx::error!("no equality function");
+                    pgrx::error!("no equality function");
                 };
 
                 let size = size_of::<pg_sys::FunctionCallInfoBaseData>()
                     + size_of::<pg_sys::NullableDatum>() * 2;
-                let mut info = pg_sys::palloc0(size) as pg_sys::FunctionCallInfo;
+                let info = pg_sys::palloc0(size) as pg_sys::FunctionCallInfo;
 
                 (*info).flinfo = flinfo as *const pg_sys::FmgrInfo as *mut pg_sys::FmgrInfo;
                 (*info).context = std::ptr::null_mut();

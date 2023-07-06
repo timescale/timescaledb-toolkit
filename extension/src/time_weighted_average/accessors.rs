@@ -1,4 +1,4 @@
-use pgx::*;
+use pgrx::*;
 
 use crate::time_weighted_average::DurationUnit;
 use crate::{
@@ -92,7 +92,7 @@ fn time_weight_interpolated_integral_accessor<'a>(
 
     let unit = match DurationUnit::from_str(&unit) {
         Some(unit) => unit.microseconds(),
-        None => pgx::error!(
+        None => pgrx::error!(
             "Unrecognized duration unit: {}. Valid units are: usecond, msecond, second, minute, hour",
             unit,
         ),

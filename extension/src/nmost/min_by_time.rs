@@ -1,4 +1,4 @@
-use pgx::{iter::TableIterator, *};
+use pgrx::{iter::TableIterator, *};
 
 use crate::nmost::min_time::*;
 use crate::nmost::*;
@@ -129,7 +129,7 @@ extension_sql!(
 #[pg_schema]
 mod tests {
     use super::*;
-    use pgx_macros::pg_test;
+    use pgrx_macros::pg_test;
 
     #[pg_test]
     fn min_by_time_correctness() {

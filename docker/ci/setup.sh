@@ -69,7 +69,7 @@ if $privileged; then
                     #  differences here rather than also in package-rpm.sh -
                     #  maybe install wrappers in /usr/local/bin or setup ~/.profile .
                     #  For now, most the knowledge is split.
-                    # Here, we only need `cc` for installing cargo-pgx below.
+                    # Here, we only need `cc` for installing cargo-pgrx below.
                     set +e      # scl_source has unchecked yet harmless errors?!  ¯\_(ツ)_/¯
                     . scl_source enable devtoolset-7
                     # And rh-ruby26 for gem install fpm below.
@@ -99,7 +99,7 @@ if $privileged; then
                     ;;
             esac
 
-            # pgx needs:
+            # pgrx needs:
             # - gcc (specifically; clang won't do!)
             # - openssl-devel
             # - make
@@ -152,7 +152,7 @@ EOF
             # any of those right now.
             export DEBIAN_FRONTEND=noninteractive
 
-            # pgx needs:
+            # pgrx needs:
             # - gcc (specifically; clang won't do!)
             # - libssl-dev
             # - make
@@ -234,18 +234,18 @@ fi
 curl -s https://sh.rustup.rs |
     sh -s -- -q -y --no-modify-path --default-toolchain $RUST_TOOLCHAIN --profile $RUST_PROFILE -c $RUST_COMPONENTS
 
-# Install pgx
-cargo install cargo-pgx --version =$PGX_VERSION
+# Install pgrx
+cargo install cargo-pgrx --version =$PGRX_VERSION
 
-# Configure pgx
-## `cargo pgx init` is not additive; must specify all versions in one command.
+# Configure pgrx
+## `cargo pgrx init` is not additive; must specify all versions in one command.
 for pg in $PG_VERSIONS; do
     init_flags="$init_flags --pg$pg $PG_BASE$pg/bin/pg_config"
 done
-cargo pgx init $init_flags
-## Initialize pgx-managed databases so we can add the timescaledb load.
+cargo pgrx init $init_flags
+## Initialize pgrx-managed databases so we can add the timescaledb load.
 for pg in $PG_VERSIONS; do
-    echo "shared_preload_libraries = 'timescaledb'" >> ~/.pgx/data-$pg/postgresql.conf
+    echo "shared_preload_libraries = 'timescaledb'" >> ~/.pgrx/data-$pg/postgresql.conf
 done
 
 # Clone and fetch dependencies so we builds have less work to do.

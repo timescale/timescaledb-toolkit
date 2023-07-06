@@ -146,7 +146,7 @@ where
         }
     }
 
-    pub fn merge_in<'o>(&mut self, other: &HyperLogLog<'o, T, B>) {
+    pub fn merge_in(&mut self, other: &HyperLogLog<'_, T, B>) {
         use HyperLogLogStorage::*;
         match (&mut self.storage, &other.storage) {
             (Sparse(s), Sparse(o)) => {

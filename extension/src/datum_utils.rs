@@ -12,7 +12,7 @@ use serde::{
 };
 
 use pg_sys::{Datum, Oid};
-use pgx::*;
+use pgrx::*;
 
 use crate::serialization::{PgCollationId, ShortTypeId};
 
@@ -147,13 +147,13 @@ impl DatumHashBuilder {
         let flinfo = if (*tentry).hash_extended_proc_finfo.fn_addr.is_some() {
             &(*tentry).hash_extended_proc_finfo
         } else {
-            pgx::error!("no hash function");
+            pgrx::error!("no hash function");
         };
 
         // 1 argument for the key, 1 argument for the seed
         let size =
             size_of::<pg_sys::FunctionCallInfoBaseData>() + size_of::<pg_sys::NullableDatum>() * 2;
-        let mut info = pg_sys::palloc0(size) as pg_sys::FunctionCallInfo;
+        let info = pg_sys::palloc0(size) as pg_sys::FunctionCallInfo;
 
         (*info).flinfo = flinfo as *const pg_sys::FmgrInfo as *mut pg_sys::FmgrInfo;
         (*info).context = std::ptr::null_mut();
@@ -646,7 +646,7 @@ mod tests {
     use super::*;
     use crate::{build, palloc::Inner, pg_type, ron_inout_funcs};
     use aggregate_builder::*;
-    use pgx_macros::pg_test;
+    use pgrx_macros::pg_test;
 
     #[pg_schema]
     pub mod toolkit_experimental {

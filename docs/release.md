@@ -28,7 +28,7 @@ The latter two are arguably out of place here.
 
 Testing upgrades is now handled by `testbin` (below), but the version here was
 useful for Mac.  That has now degraded as it would need to support a third
-pgx...
+pgrx...
 
 Installing is only relevant for local development.
 
@@ -61,7 +61,7 @@ between released binaries (deb and rpm).
 Installation is a two-step process currently duplicated in three places.
 The two steps are:
 
-1. `cargo pgx install --release` OR `cargo pgx package`
+1. `cargo pgrx install --release` OR `cargo pgrx package`
 2. `tools/post-install`
 
 These steps are repeated in:
@@ -75,8 +75,8 @@ These steps are repeated in:
 `package-deb.sh` and `package-rpm.sh` could run `tools/build package` (which
 doesn't yet exist).
 
-`cargo pgx install` installs the extension into the directory specified by
-`pg_config`.  `cargo pgx package` installs into a directory under
+`cargo pgrx install` installs the extension into the directory specified by
+`pg_config`.  `cargo pgrx package` installs into a directory under
 `$CARGO_TARGET_DIR` where we pick it up and pack it into deb and rpm packages.
 
 `tools/post-install` performs miscellaneous install-time procedures:
@@ -244,7 +244,7 @@ do the work:
 - Install necessary build tools and libraries
 - Install postgresql and timescaledb
 - Install `gh` github command-line tool used by `tools/release`
-- Install Rust and PGX
+- Install Rust and PGRX
 - Pre-fetch toolkit's crate dependencies to minimize work done at CI time
 
 ## Maintenance tasks
@@ -257,7 +257,7 @@ of course not; don't be ridiculous.
 These are the sorts of things we have to do from time to time:
 
 - Update Rust.  It moves pretty fast.
-- Update PGX.  It moves even faster.
+- Update PGRX.  It moves even faster.
 - Update other crates.  `cargo audit` and `cargo update` are our friends.
 - Update OS versions.  Labels such as `rockylinux:9` eventually point to
   something different or disappear entirely.  The former actually surprised us

@@ -59,10 +59,10 @@ send_to_postgres(format!("INSERT INTO digests VALUES ({})", digester.build().for
 
 In order to provide that API, we must first reorganize the tdigest
 implementation so that all business logic is in the tdigest crate.  Some is
-currently in the pgx extension crate.
+currently in the pgrx extension crate.
 
 For each aggregate, the transient state is actually a Builder pattern hidden
-hidden behind pgx machinery.
+hidden behind pgrx machinery.
 
 On this branch, I've moved TDigestTransState into tdigest::Builder.
 

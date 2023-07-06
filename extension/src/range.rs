@@ -1,5 +1,5 @@
 use counter_agg::range::I64Range;
-use pgx::{extension_sql, pg_sys};
+use pgrx::{extension_sql, pg_sys};
 use serde::{Deserialize, Serialize};
 use std::convert::TryInto;
 use std::slice;
@@ -45,10 +45,10 @@ pub unsafe fn get_range(range: tstzrange) -> Option<I64Range> {
 
 unsafe fn get_toasted_bytes(ptr: &pg_sys::varlena) -> &[u8] {
     let mut ptr = pg_sys::pg_detoast_datum_packed(ptr as *const _ as *mut _);
-    if pgx::varatt_is_1b(ptr) {
+    if pgrx::varatt_is_1b(ptr) {
         ptr = pg_sys::pg_detoast_datum_copy(ptr as *const _ as *mut _);
     }
-    let data_len = pgx::varsize_any(ptr);
+    let data_len = pgrx::varsize_any(ptr);
     slice::from_raw_parts(ptr as *mut u8, data_len)
 }
 

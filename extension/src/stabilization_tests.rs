@@ -1,13 +1,13 @@
 #[cfg(any(test, feature = "pg_test"))]
-use pgx::*;
+use pgrx::*;
 
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
     use std::collections::HashSet;
 
-    use pgx::*;
-    use pgx_macros::pg_test;
+    use pgrx::*;
+    use pgrx_macros::pg_test;
 
     // Test that any new features are added to the the experimental schema
     #[pg_test]
@@ -40,7 +40,7 @@ mod tests {
                     if let Some(schema) = val.strip_prefix("schema ") {
                         // the only schemas we should define are
                         // `toolkit_experimental` our experimental schema, and
-                        // `tests` which contains our pgx-style regression tests
+                        // `tests` which contains our pgrx-style regression tests
                         // (including the function currently running)
                         match schema {
                             "toolkit_experimental" => return None,

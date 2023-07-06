@@ -129,7 +129,7 @@ impl<'s> Registers<'s> {
         self.0.len()
     }
 
-    pub fn merge<'a, 'b>(a: &Registers<'a>, b: &Registers<'b>) -> Self {
+    pub fn merge(a: &Registers<'_>, b: &Registers<'_>) -> Self {
         if a.0.len() != b.0.len() {
             panic!(
                 "different register size in merge: {} != {}",
@@ -254,7 +254,7 @@ mod test {
     fn quick_test(exp: u8, ops: Vec<(usize, u8)>) -> quickcheck::TestResult {
         use quickcheck::TestResult;
         use std::cmp::max;
-        if exp < 4 || exp > 16 {
+        if !(4..=16).contains(&exp) {
             return TestResult::discard();
         }
 
@@ -312,7 +312,7 @@ mod test {
         ops_b: Vec<(usize, u8)>,
     ) -> quickcheck::TestResult {
         use quickcheck::TestResult;
-        if exp < 4 || exp > 16 {
+        if !(4..=16).contains(&exp) {
             return TestResult::discard();
         }
 

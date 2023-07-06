@@ -1,4 +1,4 @@
-use pgx::*;
+use pgrx::*;
 use twofloat::TwoFloat;
 
 use crate::{
@@ -1385,7 +1385,9 @@ pub enum Method {
 pub fn method_kind(method: &str) -> Method {
     match as_method(method) {
         Some(method) => method,
-        None => pgx::error!("unknown analysis method. Valid methods are 'population' and 'sample'"),
+        None => {
+            pgrx::error!("unknown analysis method. Valid methods are 'population' and 'sample'")
+        }
     }
 }
 
@@ -1402,7 +1404,7 @@ pub fn as_method(method: &str) -> Option<Method> {
 // mod tests {
 
 //     use approx::assert_relative_eq;
-//     use pgx::*;
+//     use pgrx::*;
 //     use super::*;
 
 //     macro_rules! select_one {
@@ -1447,7 +1449,7 @@ mod tests {
     use super::*;
     use approx::relative_eq;
 
-    use pgx_macros::pg_test;
+    use pgrx_macros::pg_test;
     use rand::rngs::SmallRng;
     use rand::seq::SliceRandom;
     use rand::{self, Rng, SeedableRng};
@@ -1642,7 +1644,7 @@ mod tests {
 
             let control = state.unwrap();
             let buffer = stats1d_trans_serialize(Inner::from(control.clone()).internal().unwrap());
-            let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0.cast_mut_ptr());
+            let buffer = pgrx::varlena::varlena_to_byte_slice(buffer.0.cast_mut_ptr());
 
             let expected = [
                 1, 1, 1, 5, 0, 0, 0, 0, 0, 0, 0, 144, 194, 245, 40, 92, 143, 73, 64, 100, 180, 142,
@@ -1651,7 +1653,7 @@ mod tests {
             ];
             assert_eq!(buffer, expected);
 
-            let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
+            let expected = pgrx::varlena::rust_byte_slice_to_bytea(&expected);
             let new_state =
                 stats1d_trans_deserialize_inner(bytea(pg_sys::Datum::from(expected.as_ptr())));
 
@@ -1734,7 +1736,7 @@ mod tests {
     #[allow(clippy::float_cmp)]
     fn check_agg_equivalence(
         state: &TestState,
-        client: &mut pgx::spi::SpiClient,
+        client: &mut pgrx::spi::SpiClient,
         pg_cmd: &str,
         tk_cmd: &str,
         allowed_diff: f64,

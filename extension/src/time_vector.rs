@@ -2,7 +2,7 @@
 
 use crate::pg_sys::timestamptz_to_str;
 use core::str::Utf8Error;
-use pgx::{iter::TableIterator, *};
+use pgrx::{iter::TableIterator, *};
 use std::ffi::CStr;
 use tera::{Context, Tera};
 
@@ -523,8 +523,8 @@ pub fn arrow_timevector_asof<'a>(
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgx::*;
-    use pgx_macros::pg_test;
+    use pgrx::*;
+    use pgrx_macros::pg_test;
 
     #[pg_test]
     pub fn test_unnest() {

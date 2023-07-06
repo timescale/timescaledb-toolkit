@@ -4,8 +4,8 @@ use encodings::{delta, prefix_varint};
 
 use super::Encoded;
 
-pub fn decompression_iter<'a, 'b>(
-    Compressed(bytes): &'a Compressed<'b>,
+pub fn decompression_iter<'a>(
+    Compressed(bytes): &'a Compressed<'_>,
 ) -> impl Iterator<Item = Encoded> + 'a {
     prefix_varint::u64_decompressor(bytes)
         .map(delta::u64_decoder())

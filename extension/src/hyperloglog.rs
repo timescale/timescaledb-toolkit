@@ -8,7 +8,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use pg_sys::{Datum, Oid};
-use pgx::*;
+use pgrx::*;
 
 use crate::{
     accessors::{AccessorDistinctCount, AccessorStderror},
@@ -22,11 +22,11 @@ use crate::{
 
 use hyperloglogplusplus::{HyperLogLog as HLL, HyperLogLogStorage};
 
-// pgx doesn't implement Eq/Hash but it's okay here since we treat Datums as raw bytes
+// pgrx doesn't implement Eq/Hash but it's okay here since we treat Datums as raw bytes
 #[derive(Debug, Copy, Clone, PartialEq)]
 struct HashableDatum(Datum);
 impl Eq for HashableDatum {}
-#[allow(clippy::derive_hash_xor_eq)] // partialeq and hash implementations match
+#[allow(clippy::derived_hash_with_manual_eq)] // partialeq and hash implementations match
 impl Hash for HashableDatum {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.0.value().hash(state)
@@ -50,7 +50,7 @@ pub fn hyperloglog_trans(
 ) -> Option<Internal> {
     // let state: Internal = Internal::from_polymorphic_datum();
     hyperloglog_trans_inner(unsafe { state.to_inner() }, size, value, fc, unsafe {
-        pgx::pg_getarg_type(fc, 2)
+        pgrx::pg_getarg_type(fc, 2)
     })
     .internal()
 }
@@ -71,7 +71,7 @@ pub fn approx_count_distinct_trans(
         APPROX_COUNT_DISTINCT_DEFAULT_SIZE,
         value,
         fc,
-        unsafe { pgx::pg_getarg_type(fc, 1) },
+        unsafe { pgrx::pg_getarg_type(fc, 1) },
     )
     .internal()
 }
@@ -483,7 +483,7 @@ fn unflatten_log(hyperloglog: HyperLogLog) -> HLL<HashableDatum, DatumHashBuilde
 mod tests {
     use super::*;
 
-    use pgx_macros::pg_test;
+    use pgrx_macros::pg_test;
     use rand::distributions::{Distribution, Uniform};
 
     #[pg_test]
@@ -658,7 +658,7 @@ mod tests {
             ));
 
             let buffer = hyperloglog_serialize(Inner::from(control.clone()).internal().unwrap());
-            let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0.cast_mut_ptr());
+            let buffer = pgrx::varlena::varlena_to_byte_slice(buffer.0.cast_mut_ptr());
 
             let mut expected = vec![
                 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 0, 0, 0, 0, 0, 0, 0, 136, 136, 9, 7,
@@ -671,7 +671,7 @@ mod tests {
             .unwrap();
             assert_eq!(buffer, expected);
 
-            let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
+            let expected = pgrx::varlena::rust_byte_slice_to_bytea(&expected);
             let new_state =
                 hyperloglog_deserialize_inner(bytea(pg_sys::Datum::from(expected.as_ptr())));
 
@@ -686,7 +686,7 @@ mod tests {
             }
 
             let buffer = hyperloglog_serialize(Inner::from(control.clone()).internal().unwrap());
-            let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0.cast_mut_ptr());
+            let buffer = pgrx::varlena::varlena_to_byte_slice(buffer.0.cast_mut_ptr());
 
             let mut expected = vec![
                 1, 1, 1, 0, 0, 0, 49, 0, 0, 0, 0, 0, 0, 0, 20, 65, 2, 12, 48, 199, 20, 33, 4, 12,
@@ -701,7 +701,7 @@ mod tests {
             .unwrap();
             assert_eq!(buffer, expected);
 
-            let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
+            let expected = pgrx::varlena::rust_byte_slice_to_bytea(&expected);
             let new_state =
                 hyperloglog_deserialize_inner(bytea(pg_sys::Datum::from(expected.as_ptr())));
 
@@ -979,7 +979,7 @@ mod tests {
         const MAX_TRIAL_ERROR: f64 = 0.05;
         Spi::connect(|mut client| {
             // This should match THRESHOLD_DATA_VEC from b=12-18
-            let thresholds = vec![3100, 6500, 11500, 20000, 50000, 120000, 350000];
+            let thresholds = [3100, 6500, 11500, 20000, 50000, 120000, 350000];
             let rand_precision: Uniform<usize> = Uniform::new_inclusive(12, 18);
             let mut rng = rand::thread_rng();
             for _ in 0..NUM_BIAS_TRIALS {

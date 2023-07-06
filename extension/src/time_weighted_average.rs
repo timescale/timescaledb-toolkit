@@ -1,6 +1,6 @@
 #![allow(non_camel_case_types)]
 
-use pgx::*;
+use pgrx::*;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -470,7 +470,7 @@ pub fn time_weighted_average_integral<'a>(
 ) -> Option<f64> {
     let unit = match DurationUnit::from_str(&unit) {
         Some(unit) => unit,
-        None => pgx::error!(
+        None => pgrx::error!(
             "Unrecognized duration unit: {}. Valid units are: usecond, msecond, second, minute, hour",
             unit,
         ),
@@ -589,7 +589,7 @@ pub fn arrow_time_weighted_average_interpolated_integral<'a>(
 mod tests {
     use super::*;
 
-    use pgx_macros::pg_test;
+    use pgrx_macros::pg_test;
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {
             $client
@@ -850,7 +850,7 @@ mod tests {
             let mut control = state.unwrap();
             let buffer =
                 time_weight_trans_serialize(Inner::from(control.clone()).internal().unwrap());
-            let buffer = pgx::varlena::varlena_to_byte_slice(buffer.0.cast_mut_ptr());
+            let buffer = pgrx::varlena::varlena_to_byte_slice(buffer.0.cast_mut_ptr());
 
             let expected = [
                 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 96, 194, 134, 7, 62, 2, 0,
@@ -859,7 +859,7 @@ mod tests {
             ];
             assert_eq!(buffer, expected);
 
-            let expected = pgx::varlena::rust_byte_slice_to_bytea(&expected);
+            let expected = pgrx::varlena::rust_byte_slice_to_bytea(&expected);
             let new_state =
                 time_weight_trans_deserialize_inner(bytea(pg_sys::Datum::from(expected.as_ptr())));
 

@@ -1,6 +1,6 @@
 use std::convert::TryInto as _;
 
-use pgx::*;
+use pgrx::*;
 
 use counter_agg::range::I64Range;
 

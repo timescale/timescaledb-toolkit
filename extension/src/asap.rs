@@ -1,5 +1,5 @@
 use asap::*;
-use pgx::*;
+use pgrx::*;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -195,8 +195,8 @@ extension_sql!(
 #[pg_schema]
 mod tests {
     use approx::assert_relative_eq;
-    use pgx::*;
-    use pgx_macros::pg_test;
+    use pgrx::*;
+    use pgrx_macros::pg_test;
 
     #[pg_test]
     fn test_against_reference() {

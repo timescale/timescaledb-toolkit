@@ -6,7 +6,7 @@
 
 #![allow(non_camel_case_types)]
 
-use pgx::{iter::TableIterator, *};
+use pgrx::{iter::TableIterator, *};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 
@@ -272,7 +272,7 @@ pub mod toolkit_experimental {
             prev: Option<CompactStateAgg>,
         ) -> CompactStateAgg {
             if self.durations.is_empty() {
-                pgx::error!("unable to interpolate interval on state aggregate with no data");
+                pgrx::error!("unable to interpolate interval on state aggregate with no data");
             }
             if let Some(ref prev) = prev {
                 assert_eq!(
@@ -345,7 +345,7 @@ pub mod toolkit_experimental {
                             time: interval_start,
                         }
                     } else {
-                        pgx::error!("unable to interpolate interval on state aggregate where previous agg has no data")
+                        pgrx::error!("unable to interpolate interval on state aggregate where previous agg has no data")
                     }
                 }
                 _ => Record {
@@ -360,7 +360,7 @@ pub mod toolkit_experimental {
                 let last_interval = interval_start + interval_len - self.last_time;
                 match durations.get_mut(self.last_state as usize) {
                     None => {
-                        pgx::error!("poorly formed state aggregate, last_state out of starts")
+                        pgrx::error!("poorly formed state aggregate, last_state out of starts")
                     }
                     Some(dis) => {
                         dis.duration += last_interval;
@@ -540,11 +540,11 @@ extension_sql!(
 );
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 fn compact_state_agg_int_trans(
-    __inner: pgx::Internal,
+    __inner: pgrx::Internal,
     ts: TimestampTz,
     value: Option<i64>,
     __fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<pgx::Internal> {
+) -> Option<pgrx::Internal> {
     // expanded from #[aggregate] transition function
     use crate::palloc::{Inner, InternalAsValue, ToInternal};
     type State = CompactStateAggTransState;
@@ -666,11 +666,11 @@ extension_sql!(
 );
 #[pg_extern(immutable, parallel_safe)]
 fn state_agg_int_trans(
-    __inner: pgx::Internal,
+    __inner: pgrx::Internal,
     ts: TimestampTz,
     value: Option<i64>,
     __fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<pgx::Internal> {
+) -> Option<pgrx::Internal> {
     // expanded from #[aggregate] transition function
     use crate::palloc::{Inner, InternalAsValue, ToInternal};
     type State = CompactStateAggTransState;
@@ -957,7 +957,7 @@ fn interpolated_duration_in_inner<'a>(
     prev: Option<CompactStateAgg<'a>>,
 ) -> crate::raw::Interval {
     match aggregate {
-        None => pgx::error!(
+        None => pgrx::error!(
             "when interpolating data between grouped data, all groups must contain some data"
         ),
         Some(aggregate) => {
@@ -1116,7 +1116,7 @@ fn duration_in_bad_args_inner() -> ! {
     panic!("The start and interval parameters cannot be used for duration_in with a compact state aggregate")
 }
 
-#[allow(unused_variables)] // can't underscore-prefix since argument names are used by pgx
+#[allow(unused_variables)] // can't underscore-prefix since argument names are used by pgrx
 #[pg_extern(
     immutable,
     parallel_safe,
@@ -1131,7 +1131,7 @@ pub fn duration_in_bad_args<'a>(
 ) -> crate::raw::Interval {
     duration_in_bad_args_inner()
 }
-#[allow(unused_variables)] // can't underscore-prefix since argument names are used by pgx
+#[allow(unused_variables)] // can't underscore-prefix since argument names are used by pgrx
 #[pg_extern(
     immutable,
     parallel_safe,
@@ -1153,8 +1153,8 @@ pub fn into_values<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(state, String),
-        pgx::name!(duration, crate::raw::Interval),
+        pgrx::name!(state, String),
+        pgrx::name!(duration, crate::raw::Interval),
     ),
 > {
     agg.assert_str();
@@ -1172,8 +1172,8 @@ pub fn into_int_values<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(state, i64),
-        pgx::name!(duration, crate::raw::Interval),
+        pgrx::name!(state, i64),
+        pgrx::name!(duration, crate::raw::Interval),
     ),
 > {
     agg.assert_int();
@@ -1192,8 +1192,8 @@ pub fn into_values_tl<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(state, String),
-        pgx::name!(duration, crate::raw::Interval),
+        pgrx::name!(state, String),
+        pgrx::name!(duration, crate::raw::Interval),
     ),
 > {
     agg.assert_str();
@@ -1205,8 +1205,8 @@ pub fn into_values_tl_int<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(state, i64),
-        pgx::name!(duration, crate::raw::Interval),
+        pgrx::name!(state, i64),
+        pgrx::name!(duration, crate::raw::Interval),
     ),
 > {
     agg.assert_int();
@@ -1220,8 +1220,8 @@ pub fn arrow_state_agg_into_values<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(state, String),
-        pgx::name!(duration, crate::raw::Interval),
+        pgrx::name!(state, String),
+        pgrx::name!(duration, crate::raw::Interval),
     ),
 > {
     into_values_tl(agg)
@@ -1234,8 +1234,8 @@ pub fn arrow_state_agg_into_int_values<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(state, i64),
-        pgx::name!(duration, crate::raw::Interval),
+        pgrx::name!(state, i64),
+        pgrx::name!(duration, crate::raw::Interval),
     ),
 > {
     into_values_tl_int(agg)
@@ -1246,9 +1246,9 @@ fn state_timeline_inner<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(state, String),
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(state, String),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     assert!(
@@ -1274,9 +1274,9 @@ fn state_int_timeline_inner<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(state, i64),
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(state, i64),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     assert!(
@@ -1305,9 +1305,9 @@ pub fn state_timeline<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(state, String),
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(state, String),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     agg.assert_str();
@@ -1319,9 +1319,9 @@ pub fn state_int_timeline<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(state, i64),
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(state, i64),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     agg.assert_int();
@@ -1336,9 +1336,9 @@ pub fn arrow_state_agg_state_timeline<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(state, String),
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(state, String),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     state_timeline(agg)
@@ -1351,9 +1351,9 @@ pub fn arrow_state_agg_state_int_timeline<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(state, i64),
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(state, i64),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     state_int_timeline(agg)
@@ -1367,16 +1367,16 @@ fn interpolated_state_timeline_inner<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(state, String),
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(state, String),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     if let Some(ref agg) = agg {
         agg.assert_str()
     };
     match agg {
-        None => pgx::error!(
+        None => pgrx::error!(
             "when interpolating data between grouped data, all groups must contain some data"
         ),
         Some(agg) => TableIterator::new(
@@ -1398,16 +1398,16 @@ fn interpolated_state_int_timeline_inner<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(state, i64),
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(state, i64),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     if let Some(ref agg) = agg {
         agg.assert_int()
     };
     match agg {
-        None => pgx::error!(
+        None => pgrx::error!(
             "when interpolating data between grouped data, all groups must contain some data"
         ),
         Some(agg) => TableIterator::new(
@@ -1430,9 +1430,9 @@ pub fn interpolated_state_timeline<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(state, String),
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(state, String),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     let interval = crate::datum_utils::interval_to_ms(&start, &interval);
@@ -1447,9 +1447,9 @@ pub fn interpolated_state_int_timeline<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(state, i64),
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(state, i64),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     let interval = crate::datum_utils::interval_to_ms(&start, &interval);
@@ -1463,9 +1463,9 @@ pub fn arrow_state_agg_interpolated_state_timeline<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(state, String),
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(state, String),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     interpolated_state_timeline_inner(
@@ -1487,9 +1487,9 @@ pub fn arrow_state_agg_interpolated_state_int_timeline<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(state, i64),
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(state, i64),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     interpolated_state_int_timeline_inner(
@@ -1510,8 +1510,8 @@ fn state_periods_inner<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     assert!(
@@ -1543,8 +1543,8 @@ pub fn state_periods<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     agg.assert_str();
@@ -1558,8 +1558,8 @@ pub fn state_int_periods<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     agg.assert_int();
@@ -1577,8 +1577,8 @@ pub fn arrow_state_agg_state_periods_string<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     let state = MaterializedState::String(
@@ -1594,8 +1594,8 @@ pub fn arrow_state_agg_state_periods_int<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     let state = MaterializedState::Integer(accessor.state);
@@ -1611,12 +1611,12 @@ fn interpolated_state_periods_inner<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     match aggregate {
-        None => pgx::error!(
+        None => pgrx::error!(
             "when interpolating data between grouped data, all groups must contain some data"
         ),
         Some(aggregate) => TableIterator::new(
@@ -1636,8 +1636,8 @@ pub fn interpolated_state_periods<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     if let Some(ref agg) = agg {
@@ -1662,8 +1662,8 @@ pub fn interpolated_state_periods_int<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     if let Some(ref agg) = agg {
@@ -1686,8 +1686,8 @@ pub fn arrow_state_agg_interpolated_state_periods_string<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     let state = MaterializedState::String(
@@ -1713,8 +1713,8 @@ pub fn arrow_state_agg_interpolated_state_periods_int<'a>(
 ) -> TableIterator<
     'a,
     (
-        pgx::name!(start_time, TimestampTz),
-        pgx::name!(end_time, TimestampTz),
+        pgrx::name!(start_time, TimestampTz),
+        pgrx::name!(end_time, TimestampTz),
     ),
 > {
     let state = MaterializedState::Integer(accessor.state);
@@ -1847,7 +1847,7 @@ mod tests {
     use std::sync::atomic::Ordering::Relaxed;
 
     use super::*;
-    use pgx_macros::pg_test;
+    use pgrx_macros::pg_test;
 
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {

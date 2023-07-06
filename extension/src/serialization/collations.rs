@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use once_cell::sync::Lazy;
 
 use pg_sys::Oid;
-use pgx::*;
+use pgrx::*;
 
 // TODO short collation serializer?
 
@@ -82,7 +82,7 @@ static DEFAULT_COLLATION_NAME: Lazy<CString> = Lazy::new(|| unsafe {
         pg_sys::Datum::from(pg_sys::MyDatabaseId),
     );
     if tuple.is_null() {
-        pgx::error!("no database info");
+        pgrx::error!("no database info");
     }
 
     let database_tuple: Form_pg_database = get_struct(tuple);
@@ -114,14 +114,14 @@ impl Serialize for PgCollationId {
                 pg_sys::Datum::from(self.0),
             );
             if tuple.is_null() {
-                pgx::error!("no collation info for oid {}", self.0);
+                pgrx::error!("no collation info for oid {}", self.0);
             }
 
             let collation_tuple: Form_pg_collation = get_struct(tuple);
 
             let namespace = pg_sys::get_namespace_name((*collation_tuple).collnamespace);
             if namespace.is_null() {
-                pgx::error!("invalid schema oid {}", (*collation_tuple).collnamespace);
+                pgrx::error!("invalid schema oid {}", (*collation_tuple).collnamespace);
             }
 
             let namespace_len = CStr::from_ptr(namespace).to_bytes().len();
@@ -254,7 +254,7 @@ unsafe fn get_struct<T>(tuple: pg_sys::HeapTuple) -> *mut T {
 mod tests {
 
     use super::PgCollationId;
-    use pgx::{pg_sys, pg_test};
+    use pgrx::{pg_sys, pg_test};
 
     const COLLATION_ID_950: PgCollationId =
         PgCollationId(unsafe { pg_sys::Oid::from_u32_unchecked(950) });

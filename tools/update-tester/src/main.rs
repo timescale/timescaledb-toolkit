@@ -77,8 +77,8 @@ fn main() {
             .arg(Arg::new("CACHE").short('c').long("cache").takes_value(true))
             .arg(Arg::new("REINSTALL").long("reinstall").takes_value(true))
             .arg(Arg::new("PG_CONFIG").takes_value(true))
-            .arg(Arg::new("CARGO_PGX").takes_value(true))
-            .arg(Arg::new("CARGO_PGX_OLD").takes_value(true)),
+            .arg(Arg::new("CARGO_PGRX").takes_value(true))
+            .arg(Arg::new("CARGO_PGRX_OLD").takes_value(true)),
     )
 	.subcommand(
 	    Command::new("create-test-objects")
@@ -179,12 +179,12 @@ fn main() {
             let pg_config = full_update_matches
                 .value_of("PG_CONFIG")
                 .expect("missing pg_config");
-            let cargo_pgx = full_update_matches
-                .value_of("CARGO_PGX")
-                .expect("missing cargo_pgx");
-            let cargo_pgx_old = full_update_matches
-                .value_of("CARGO_PGX_OLD")
-                .expect("missing cargo_pgx_old");
+            let cargo_pgrx = full_update_matches
+                .value_of("CARGO_PGRX")
+                .expect("missing cargo_pgrx");
+            let cargo_pgrx_old = full_update_matches
+                .value_of("CARGO_PGRX_OLD")
+                .expect("missing cargo_pgrx_old");
 
             let mut num_errors = 0;
             let on_error = |test: parser::Test, error: testrunner::TestError| {
@@ -203,8 +203,8 @@ fn main() {
                 cache_dir,
                 &connection_config,
                 pg_config,
-                cargo_pgx,
-                cargo_pgx_old,
+                cargo_pgrx,
+                cargo_pgrx_old,
                 reinstall,
                 on_error,
             );
@@ -303,8 +303,8 @@ fn try_main<OnErr: FnMut(parser::Test, testrunner::TestError)>(
     cache_dir: Option<&str>,
     db_conn: &ConnectionConfig<'_>,
     pg_config: &str,
-    cargo_pgx: &str,
-    cargo_pgx_old: &str,
+    cargo_pgrx: &str,
+    cargo_pgrx_old: &str,
     reinstall: HashSet<&str>,
     on_error: OnErr,
 ) -> xshell::Result<()> {
@@ -319,8 +319,8 @@ fn try_main<OnErr: FnMut(parser::Test, testrunner::TestError)>(
         root_dir,
         cache_dir,
         pg_config,
-        cargo_pgx,
-        cargo_pgx_old,
+        cargo_pgrx,
+        cargo_pgrx_old,
         &current_version,
         &old_versions,
         &reinstall,

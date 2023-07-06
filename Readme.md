@@ -38,7 +38,7 @@ As for other platforms:  patches welcome!
 
 ### 🔧 Tools Setup ###
 
-Building the extension requires valid [rust](https://www.rust-lang.org/) (we build and test on 1.65), [rustfmt](https://github.com/rust-lang/rustfmt), and clang installs, along with the postgres headers for whichever version of postgres you are running, and pgx.
+Building the extension requires valid [rust](https://www.rust-lang.org/) (we build and test on 1.65), [rustfmt](https://github.com/rust-lang/rustfmt), and clang installs, along with the postgres headers for whichever version of postgres you are running, and pgrx.
 We recommend installing rust using the [official instructions](https://www.rust-lang.org/tools/install):
 ```bash
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
@@ -49,17 +49,17 @@ For Ubuntu you can follow the [postgres install instructions](https://www.postgr
 sudo apt-get install make gcc pkg-config clang postgresql-server-dev-14 libssl-dev
 ```
 
-Next you need [cargo-pgx](https://github.com/tcdi/pgx), which can be installed with
+Next you need [cargo-pgrx](https://github.com/tcdi/pgrx), which can be installed with
 ```bash
-cargo install --version '=0.7.1' --force cargo-pgx
+cargo install --version '=0.9.7' --force cargo-pgrx
 ```
 
-You must reinstall cargo-pgx whenever you update your Rust compiler, since cargo-pgx needs to be built with the same compiler as Toolkit.
+You must reinstall cargo-pgrx whenever you update your Rust compiler, since cargo-pgrx needs to be built with the same compiler as Toolkit.
 
-Finally, setup the pgx development environment with
+Finally, setup the pgrx development environment with
 
 ```bash
-cargo pgx init --pg14 pg_config
+cargo pgrx init --pg14 pg_config
 ```
 
 
@@ -74,7 +74,7 @@ cd timescaledb-toolkit/extension
 ```
 Then run
 ```
-cargo pgx install --release && \
+cargo pgrx install --release && \
 cargo run --manifest-path ../tools/post-install/Cargo.toml -- pg_config
 ```
 
@@ -99,7 +99,7 @@ See above for prerequisites and installation instructions.
 You can run tests against a postgres version `pg12`, `pg13`, `pg14`, or `pg15` using
 
 ```
-cargo pgx test ${postgres_version}
+cargo pgrx test ${postgres_version}
 ```
 
 

@@ -28,10 +28,10 @@ set -ex
 MIN_DEB_ARM=1.10.1
 # We added 1: epoch at 1.7.0.
 MIN_DEB_EPOCH=1.7.0
-# TODO Unfortunate that pgx allows neither specifying nor querying the port it
+# TODO Unfortunate that pgrx allows neither specifying nor querying the port it
 #   starts postgres on, so we duplicate that knowledge.  Watch out for
 #   that changing!
-PGX_PORT_BASE=28800
+PGRX_PORT_BASE=28800
 CONTROL=extension/timescaledb_toolkit.control
 
 # For PG_VERSIONS default.
@@ -55,18 +55,18 @@ usage() {
 }
 
 # Requires:
-# - PGX_PORT_BASE
+# - PGRX_PORT_BASE
 # - PG_VERSION
 # Sets:
 # - PG_PORT
 select_pg() {
-    PG_PORT=$(( $PGX_PORT_BASE + $PG_VERSION ))
+    PG_PORT=$(( $PGRX_PORT_BASE + $PG_VERSION ))
 }
 
 # Start postgres and run the first half (old toolkit) of the test.
 # Must select_pg first.
 start_test() {
-    $nop cargo pgx start --package timescaledb_toolkit pg$PG_VERSION
+    $nop cargo pgrx start --package timescaledb_toolkit pg$PG_VERSION
     $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- create-test-objects -u $LOGNAME -h 127.1 -p $PG_PORT
 }
 
@@ -74,7 +74,7 @@ start_test() {
 # Must select_pg first.
 finish_test() {
     $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- validate-test-objects -u $LOGNAME -h 127.1 -p $PG_PORT
-    $nop cargo pgx stop --package timescaledb_toolkit pg$PG_VERSION
+    $nop cargo pgrx stop --package timescaledb_toolkit pg$PG_VERSION
 }
 
 deb_init() {
@@ -234,7 +234,7 @@ cleanup() {
     set +e
     for PG_VERSION in $PG_VERSIONS; do
         select_pg $PG_VERSION
-        $nop cargo pgx stop --package timescaledb_toolkit pg$PG_VERSION
+        $nop cargo pgrx stop --package timescaledb_toolkit pg$PG_VERSION
     done
 }
 

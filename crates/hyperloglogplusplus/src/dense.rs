@@ -52,12 +52,12 @@ impl<'s> Storage<'s> {
 
     pub fn add_hash(&mut self, hash: u64) {
         let (idx, count) = self.idx_count_from_hash(hash);
-        self.registers.set_max(idx as usize, count as u8);
+        self.registers.set_max(idx, count);
     }
 
     pub fn add_encoded(&mut self, encoded: crate::sparse::Encoded) {
         let (idx, count) = self.idx_count_from_encoded(encoded);
-        self.registers.set_max(idx as usize, count);
+        self.registers.set_max(idx, count);
     }
 
     fn idx_count_from_hash(&self, hash: u64) -> (usize, u8) {
@@ -206,7 +206,7 @@ impl<'s> Storage<'s> {
         }
     }
 
-    pub fn merge_in<'o>(&mut self, other: &Storage<'o>) {
+    pub fn merge_in(&mut self, other: &Storage<'_>) {
         assert!(
             self.precision == other.precision,
             "precision must be equal (left={}, right={})",

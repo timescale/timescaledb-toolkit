@@ -1,15 +1,19 @@
+// so we can allow very new Clippy lints
+#![allow(unknown_lints)]
 // flat_serialize! alignment checks hit this for any single byte field (of which all pg_types! have two by default)
 #![allow(clippy::modulo_one)]
 // some disagreement between clippy and the rust compiler about when lifetime are and are not needed
 #![allow(clippy::extra_unused_lifetimes)]
 // every function calling in_aggregate_context should be unsafe
 #![allow(clippy::not_unsafe_ptr_arg_deref)]
-// since 0.5 pgx requires non-elided lifetimes on extern functions: https://github.com/tcdi/pgx/issues/721
+// since 0.5 pgrx requires non-elided lifetimes on extern functions: https://github.com/tcdi/pgrx/issues/721
 #![allow(clippy::needless_lifetimes)]
 // triggered by pg_extern macros
 #![allow(clippy::useless_conversion)]
-// caused by pgx
+// caused by pgrx
 #![allow(clippy::unnecessary_lazy_evaluations)]
+// clippy triggers an internal complier error checking this
+#![allow(clippy::unnecessary_literal_unwrap)]
 
 pub mod accessors;
 pub mod asap;
@@ -46,9 +50,9 @@ mod type_builder;
 #[cfg(any(test, feature = "pg_test"))]
 mod aggregate_builder_tests;
 
-use pgx::*;
+use pgrx::*;
 
-pgx::pg_module_magic!();
+pgrx::pg_module_magic!();
 
 #[pg_guard]
 pub extern "C" fn _PG_init() {

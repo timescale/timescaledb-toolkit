@@ -16,7 +16,6 @@ use crate::{
 };
 
 use std::cmp::{max, min};
-use statrs::statistics::Statistics;
 
 mod accessors;
 
@@ -405,7 +404,32 @@ pub fn average_downtime(agg: HeartbeatAgg<'static>) -> f64 {
 #[pg_extern]
 pub fn average_uptime(agg: HeartbeatAgg<'static>) -> f64 {
     let num_intervals = agg.num_intervals;
-    agg.sum_live_intervals() as f64 / num_intervals  as f64
+    agg.sum_live_intervals() as f64 / num_intervals as f64
+}
+
+fn mean(data: &Vec<i64>) -> Option<f64> {
+    let sum = data.iter().sum::<i64>() as f64;
+    let count = data.len();
+
+    match count {
+        positive if positive > 0 => Some(sum / count as f64),
+        _ => None,
+    }
+}
+
+fn std_deviation(data: &Vec<i64>) -> Option<f64> {
+    match (mean(data), data.len()) {
+        (Some(data_mean), count) if count > 0 => {
+            let variance = data.iter().map(|value| {
+                let diff = data_mean - (*value as f64);
+
+                diff * diff
+            }).sum::<f64>() / count as f64;
+
+            Some(variance.sqrt())
+        },
+        _ => None
+    }
 }
 
 #[pg_extern]
@@ -428,56 +452,22 @@ pub fn stddev_downtime(agg: HeartbeatAgg<'static>) -> Option<f64> {
         ends.push(agg.end_time);
     }
 
-    let data: Vec<f64> = vec![];
+    let mut data: Vec<i64> = vec![];
     for i in 0..agg.num_intervals as usize {
-        vec![].push(ends[i] - starts[i]);
+        data.push(ends[i] - starts[i]);
     }
-    let count = data.clone().len();
-    let data_mean = data.clone().mean();
-    if count > 0 {
-            let variance = data
-                .iter()
-                .map(|value| {
-                    let diff = data_mean - (*value as f64);
-
-                    diff * diff
-                })
-                .sum::<f64>()
-                / count as f64;
-
-            Some(variance.sqrt())
-        }
-    else {
-        None
-    }
+    std_deviation(&data)
 }
 
 #[pg_extern]
 pub fn stddev_uptime(agg: HeartbeatAgg<'static>) -> Option<f64> {
     let starts = agg.interval_starts.as_slice();
     let ends = agg.interval_ends.as_slice();
-    let data: Vec<f64> = vec![];
+    let mut data: Vec<i64> = vec![];
     for i in 0..agg.num_intervals as usize {
-        vec![].push(ends[i] - starts[i]);
+        data.push(ends[i] - starts[i]);
     }
-    let count = data.clone().len();
-    let data_mean = data.clone().mean();
-    if count > 0 {
-            let variance = data
-                .iter()
-                .map(|value| {
-                    let diff = data_mean - (*value as f64);
-
-                    diff * diff
-                })
-                .sum::<f64>()
-                / count as f64;
-
-            Some(variance.sqrt())
-        }
-    else {
-        None
-    }
+    std_deviation(&data)
 }
 
 #[pg_operator(immutable, parallel_safe)]

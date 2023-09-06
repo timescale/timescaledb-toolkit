@@ -395,7 +395,6 @@ pub fn uptime(agg: HeartbeatAgg<'static>) -> Interval {
     agg.sum_live_intervals().into()
 }
 
-
 #[pg_extern]
 pub fn average_downtime(agg: HeartbeatAgg<'static>) -> Option<f64> {
     (agg.end_time - agg.start_time - agg.sum_live_intervals()).into() / agg.num_intervals
@@ -407,8 +406,8 @@ pub fn average_uptime(agg: HeartbeatAgg<'static>) -> Option<f64> {
 }
 
 #[pg_extern]
-pub fn stddev_downtime(agg: HeartbeatAgg<'static>) -> Option<f64>  {
-// Dead ranges are the opposite of the intervals stored in the aggregate
+pub fn stddev_downtime(agg: HeartbeatAgg<'static>) -> Option<f64> {
+    // Dead ranges are the opposite of the intervals stored in the aggregate
     let mut starts = agg.interval_ends.clone().into_vec();
     let mut ends = agg.interval_starts.clone().into_vec();
 
@@ -432,15 +431,19 @@ pub fn stddev_downtime(agg: HeartbeatAgg<'static>) -> Option<f64>  {
     }
     match (mean(data), data.len()) {
         (Some(data_mean), count) if count > 0 => {
-            let variance = data.iter().map(|value| {
-                let diff = data_mean - (*value as f32);
+            let variance = data
+                .iter()
+                .map(|value| {
+                    let diff = data_mean - (*value as f32);
 
-                diff * diff
-            }).sum::<f64>() / count as f64;
+                    diff * diff
+                })
+                .sum::<f64>()
+                / count as f64;
 
             Some(variance.sqrt())
-        },
-        _ => None
+        }
+        _ => None,
     }
 }
 
@@ -454,18 +457,21 @@ pub fn stddev_uptime(agg: HeartbeatAgg<'static>) -> Option<f64> {
     }
     match (mean(data), data.len()) {
         (Some(data_mean), count) if count > 0 => {
-            let variance = data.iter().map(|value| {
-                let diff = data_mean - (*value as f32);
+            let variance = data
+                .iter()
+                .map(|value| {
+                    let diff = data_mean - (*value as f32);
 
-                diff * diff
-            }).sum::<f64>() / count as f64;
+                    diff * diff
+                })
+                .sum::<f64>()
+                / count as f64;
 
             Some(variance.sqrt())
-        },
-        _ => None
+        }
+        _ => None,
     }
 }
-
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]

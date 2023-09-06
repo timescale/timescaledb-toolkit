@@ -16,6 +16,7 @@ use crate::{
 };
 
 use std::cmp::{max, min};
+use statrs::statistics::Statistics;
 
 mod accessors;
 
@@ -429,7 +430,7 @@ pub fn stddev_downtime(agg: HeartbeatAgg<'static>) -> Option<f64> {
     for i in 0..agg.num_intervals as usize {
         vec![].push(ends[i] - starts[i]);
     }
-    match (mean(data), data.len()) {
+    match (data.mean(), data.len()) {
         (Some(data_mean), count) if count > 0 => {
             let variance = data
                 .iter()
@@ -455,7 +456,7 @@ pub fn stddev_uptime(agg: HeartbeatAgg<'static>) -> Option<f64> {
     for i in 0..agg.num_intervals as usize {
         vec![].push(ends[i] - starts[i]);
     }
-    match (mean(data), data.len()) {
+    match (data.mean(), data.len()) {
         (Some(data_mean), count) if count > 0 => {
             let variance = data
                 .iter()

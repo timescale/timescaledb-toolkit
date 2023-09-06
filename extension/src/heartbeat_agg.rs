@@ -398,12 +398,14 @@ pub fn uptime(agg: HeartbeatAgg<'static>) -> Interval {
 
 #[pg_extern]
 pub fn average_downtime(agg: HeartbeatAgg<'static>) -> f64 {
-    (agg.end_time - agg.start_time - agg.sum_live_intervals()) as f64 / agg.num_intervals as f64
+    let num_intervals = agg.num_intervals;
+    (agg.end_time - agg.start_time - agg.sum_live_intervals()) as f64 / num_intervals as f64
 }
 
 #[pg_extern]
 pub fn average_uptime(agg: HeartbeatAgg<'static>) -> f64 {
-    agg.sum_live_intervals() as f64 / agg.num_intervals  as f64
+    let num_intervals = agg.num_intervals;
+    agg.sum_live_intervals() as f64 / num_intervals  as f64
 }
 
 #[pg_extern]
@@ -426,16 +428,17 @@ pub fn stddev_downtime(agg: HeartbeatAgg<'static>) -> Option<f64> {
         ends.push(agg.end_time);
     }
 
-    let mut data: Vec<f64> = vec![];
+    let data: Vec<f64> = vec![];
     for i in 0..agg.num_intervals as usize {
         vec![].push(ends[i] - starts[i]);
     }
-    match (data.mean(), data.len()) {
-        (Some(data_mean), count) if count > 0 => {
+    let count = data.clone().len();
+    let data_mean = data.clone().mean();
+    if count > 0 {
             let variance = data
                 .iter()
                 .map(|value| {
-                    let diff = data_mean - (*value as f32);
+                    let diff = data_mean - (*value as f64);
 
                     diff * diff
                 })
@@ -444,7 +447,8 @@ pub fn stddev_downtime(agg: HeartbeatAgg<'static>) -> Option<f64> {
 
             Some(variance.sqrt())
         }
-        _ => None,
+    else {
+        None
     }
 }
 
@@ -452,16 +456,17 @@ pub fn stddev_downtime(agg: HeartbeatAgg<'static>) -> Option<f64> {
 pub fn stddev_uptime(agg: HeartbeatAgg<'static>) -> Option<f64> {
     let starts = agg.interval_starts.as_slice();
     let ends = agg.interval_ends.as_slice();
-    let mut data = vec![];
+    let data: Vec<f64> = vec![];
     for i in 0..agg.num_intervals as usize {
         vec![].push(ends[i] - starts[i]);
     }
-    match (data.mean(), data.len()) {
-        (Some(data_mean), count) if count > 0 => {
+    let count = data.clone().len();
+    let data_mean = data.clone().mean();
+    if count > 0 {
             let variance = data
                 .iter()
                 .map(|value| {
-                    let diff = data_mean - (*value as f32);
+                    let diff = data_mean - (*value as f64);
 
                     diff * diff
                 })
@@ -470,7 +475,8 @@ pub fn stddev_uptime(agg: HeartbeatAgg<'static>) -> Option<f64> {
 
             Some(variance.sqrt())
         }
-        _ => None,
+    else {
+        None
     }
 }
 

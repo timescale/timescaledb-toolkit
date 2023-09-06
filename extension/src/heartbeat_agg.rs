@@ -397,13 +397,13 @@ pub fn uptime(agg: HeartbeatAgg<'static>) -> Interval {
 }
 
 #[pg_extern]
-pub fn average_downtime(agg: HeartbeatAgg<'static>) -> Option<f64> {
-    (agg.end_time - agg.start_time - agg.sum_live_intervals()).into() / agg.num_intervals
+pub fn average_downtime(agg: HeartbeatAgg<'static>) -> f64 {
+    (agg.end_time - agg.start_time - agg.sum_live_intervals()) as f64 / agg.num_intervals as f64
 }
 
 #[pg_extern]
-pub fn average_uptime(agg: HeartbeatAgg<'static>) -> Option<f64> {
-    (agg.sum_live_intervals()).into() / agg.num_intervals
+pub fn average_uptime(agg: HeartbeatAgg<'static>) -> f64 {
+    agg.sum_live_intervals() as f64 / agg.num_intervals  as f64
 }
 
 #[pg_extern]

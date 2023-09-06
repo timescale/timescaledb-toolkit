@@ -426,7 +426,7 @@ pub fn stddev_downtime(agg: HeartbeatAgg<'static>) -> Option<f64> {
         ends.push(agg.end_time);
     }
 
-    let mut data = vec![];
+    let mut data: Vec<f64> = vec![];
     for i in 0..agg.num_intervals as usize {
         vec![].push(ends[i] - starts[i]);
     }

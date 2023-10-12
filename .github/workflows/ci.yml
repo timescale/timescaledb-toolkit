@@ -39,43 +39,47 @@ jobs:
       fail-fast: false
       max-parallel: 12
       matrix:
-        pgversion: [12, 13, 14, 15]
-        container: "${{ \
-          ( \
-            inputs.all-platforms || \
-            ( \
-              github.event_name == 'schedule' && \
-              github.event.schedule == '0 6 * * 1-4' \
-            ) \
-          ) && \
-          fromJSON('[ \
-            { \"os\": \"debian\", \"version\": \"10\", \"image\": \"debian-10-amd64\" }, \
-            { \"os\": \"debian\", \"version\": \"11\", \"image\": \"debian-11-amd64\" }, \
-            { \"os\": \"rockylinux\", \"version\": \"8\", \"image\": \"rockylinux-8-x86_64\" }, \
-            { \"os\": \"rockylinux\", \"version\": \"9\", \"image\": \"rockylinux-9-x86_64\" }, \
-            { \"os\": \"centos\", \"version\": \"7\", \"image\": \"centos-7-x86_64\" }, \
-            { \"os\": \"ubuntu\", \"version\": \"20.04\", \"image\": \"ubuntu-20.04-amd64\" }, \
-            { \"os\": \"ubuntu\", \"version\": \"22.04\", \"image\": \"ubuntu-22.04-amd64\" } \
-          ]') \
-          || fromJSON('[ \
-            { \"os\": \"debian\", \"version\": \"11\", \"image\": \"debian-11-amd64\" }, \
-            { \"os\": \"rockylinux\", \"version\": \"9\", \"image\": \"rockylinux-9-x86_64\" }, \
-            { \"os\": \"centos\", \"version\": \"7\", \"image\": \"centos-7-x86_64\" } \
-          ]') \
-        }}"
-        # Building TSDB in CI is only supported on Debian/Ubuntu
-        exclude: "${{ \
-          ( \
-            (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') \
-            || inputs.tsdb-commit != '' \
-          ) && \
-            fromJSON('[ \
-              {\"container\": {\"os\": \"centos\"}}, \
-              {\"container\": {\"os\": \"rockylinux\"}} \
-            ]') || \
-            fromJSON('[]') \
-        }}"
+        pgversion: [12, 13, 14, 15, 16]
+        container:
+        - os: rockylinux
+          version: "9"
+          image: rockylinux-9-x86_64
+          # Building TSDB in CI is only supported on Debian/Ubuntu
+          skip: ${{ inputs.tsdb-commit != '' }}
+          schedule: ${{ !(github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') }}
+        - os: centos
+          version: "7"
+          image: centos-7-x86_64
+          # Building TSDB in CI is only supported on Debian/Ubuntu
+          skip: ${{ inputs.tsdb-commit != '' }}
+          schedule: ${{ !(github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') }}
+        - os: debian
+          version: "11"
+          image: debian-11-amd64
+          schedule: true
+        - os: debian
+          version: "10"
+          image: debian-10-amd64
+          schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
+        - os: ubuntu
+          version: "20.04"
+          image: ubuntu-20.04-amd64
+          schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
+        - os: ubuntu
+          version: "22.04"
+          image: ubuntu-22.04-amd64
+          schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
 
+        exclude:
+        - container:
+            skip: true
+        - container:
+            schedule: false
+        # CentOS 7 does not have PostgreSQL 16 packages
+        - container:
+            os: centos
+            version: "7"
+          pgversion: 16
     env:
       # TODO Why?  Cargo default is to pass `-C incremental` to rustc; why don't we want that?
       #   https://doc.rust-lang.org/rustc/codegen-options/index.html#incremental

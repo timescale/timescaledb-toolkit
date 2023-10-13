@@ -116,7 +116,7 @@ while [ $# -gt 0 ]; do
         test-doc)
             find_profile
             require_pg_version
-            $nop cargo pgrx start --package timescaledb_toolkit $pg
+            $nop cargo pgrx start --package timescaledb_toolkit $pg || (cat /home/postgres/.pgrx/${pg_version}.log; false)
             $nop cargo run --profile $profile -p sql-doctester -- \
                  -h localhost \
                  -p $pg_port \
@@ -130,7 +130,7 @@ while [ $# -gt 0 ]; do
             find_pg_config
             require_cargo_pgrx
             require_cargo_pgrx_old
-            $nop cargo pgrx start --package timescaledb_toolkit $pg
+            $nop cargo pgrx start --package timescaledb_toolkit $pg || (cat /home/postgres/.pgrx/${pg_version}.log; false)
             $nop cargo run --profile $profile --manifest-path tools/update-tester/Cargo.toml -- full-update-test-source \
                  -h localhost \
                  -p $pg_port \

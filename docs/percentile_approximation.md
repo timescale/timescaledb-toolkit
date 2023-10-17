@@ -200,7 +200,7 @@ Let's do this with our example, we can't use `percentile_disc` anymore as ordere
 
 ```SQL , non-transactional, ignore-output
 CREATE MATERIALIZED VIEW response_times_hourly
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS SELECT
     time_bucket('1 h'::interval, ts) as bucket,
     api_id,
@@ -379,7 +379,7 @@ They are often used to create [continuous aggregates]() after which we can use m
 
 ```SQL ,ignore
 CREATE MATERIALIZED VIEW foo_hourly
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS SELECT
     time_bucket('1 h'::interval, ts) as bucket,
     percentile_agg(value) as pct_agg

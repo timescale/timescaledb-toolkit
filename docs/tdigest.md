@@ -108,7 +108,7 @@ Next a materialized view with the timescaledb.continuous property is added.  Thi
 including the tdigest in this case, up to date as data is added to the table.
 ```SQL ,non-transactional,ignore-output
 CREATE MATERIALIZED VIEW weekly_sketch
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS SELECT
     time_bucket('7 day'::interval, time) as week,
     tdigest(100, value) as digest

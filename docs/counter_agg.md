@@ -79,7 +79,7 @@ Now we can make our continuous aggregate:
 
 ```SQL ,ignore
 CREATE MATERIALIZED VIEW foo_15
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS SELECT measure_id,
     time_bucket('15 min'::interval, ts) as bucket,
     counter_agg(ts, val, bounds => time_bucket_range('15 min'::interval, ts))

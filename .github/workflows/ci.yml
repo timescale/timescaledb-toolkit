@@ -138,7 +138,7 @@ jobs:
 
     - name: Run doc tests
       # depends on TSDB, which requires PG >=13
-      if: ${{ matrix.pgversion >= 13 && (matrix.pgversion >= 13 && (matrix.pgversion <= 16 || ((github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || inputs.tsdb-commit != ''))) }}
+      if: ${{ matrix.pgversion >= 13 && (matrix.pgversion >= 13 && (matrix.pgversion <= 15 || ((github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || inputs.tsdb-commit != ''))) }}
       run: su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-doc 2>&1'
 
     - name: Run binary update tests (deb)

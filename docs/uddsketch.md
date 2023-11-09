@@ -126,7 +126,7 @@ SELECT create_hypertable('test', 'time');
 Now we'll create a continuous aggregate which will group all the points for each week into a UddSketch:
 ```SQL ,non-transactional,ignore-output
 CREATE MATERIALIZED VIEW weekly_sketch
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS SELECT
     time_bucket('7 day'::interval, time) as week,
     uddsketch(100, 0.005, value) as sketch

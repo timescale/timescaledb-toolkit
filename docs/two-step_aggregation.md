@@ -127,7 +127,7 @@ Two-step aggregates expose the internal, re-aggregateable form to the user so th
 
 ```SQL , ignore
 CREATE MATERIALIZED VIEW foo_15
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS SELECT id,
     time_bucket('15 min'::interval, ts) as bucket,
     sum(val),

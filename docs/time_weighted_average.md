@@ -102,7 +102,7 @@ Now we can make our continuous aggregate:
 
 ```SQL ,non-transactional, ignore-output
 CREATE MATERIALIZED VIEW foo_5
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS SELECT measure_id,
     time_bucket('5 min'::interval, ts) as bucket,
     time_weight('LOCF', ts, val)

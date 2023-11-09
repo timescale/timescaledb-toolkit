@@ -103,8 +103,9 @@ skip_from_version() {
 # - FROM_VERSION
 # - PG_VERSION
 skip_from_version_pg_version() {
-    # skip versions without PG15 binaries
+    # skip versions without binaries for this PostgreSQL version
     [ $PG_VERSION -gt 14 ] && [ `cmp_version $FROM_VERSION` -lt 011301 ] && return
+    [ $PG_VERSION -gt 15 ] && [ `cmp_version $FROM_VERSION` -lt 011801 ] && return
 }
 
 # Requires:

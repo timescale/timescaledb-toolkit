@@ -749,7 +749,7 @@ VALUES
 
 ```SQL ,non-transactional,ignore-output
 CREATE MATERIALIZED VIEW sa
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket('1 minute'::interval, ts) AS bucket,
   id,
   state_agg(ts, status) AS agg

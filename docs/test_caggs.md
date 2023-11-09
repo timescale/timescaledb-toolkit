@@ -17,7 +17,7 @@ SELECT create_hypertable('test', 'time');
 ## Setup continuous aggs
 ```SQL ,non-transactional,ignore-output
 CREATE MATERIALIZED VIEW weekly_aggs
-WITH (timescaledb.continuous)
+WITH (timescaledb.continuous, timescaledb.materialized_only=false)
 AS SELECT
     time_bucket('7 day'::interval, time) as week,
     hyperloglog(64, value1) as hll,

@@ -15,7 +15,7 @@ SELECT create_hypertable('stocks_real_time','time');
 ## Setup Continuous Aggs
 ```SQL,non-transactional,ignore-output
 CREATE MATERIALIZED VIEW cs
-WITH (timescaledb.continuous) AS
+WITH (timescaledb.continuous, timescaledb.materialized_only=false) AS
 SELECT time_bucket('1 minute'::interval, "time") AS ts,
   symbol,
   candlestick_agg("time", price, day_volume) AS candlestick

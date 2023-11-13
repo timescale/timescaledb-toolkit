@@ -134,7 +134,7 @@ jobs:
           set -e
         fi
 
-        su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-extension 2>&1'
+        su postgres -c 'PGRX_BINDGEN_NO_DETECT_INCLUDES=please sh tools/build -pg${{ matrix.pgversion }} test-extension 2>&1'
 
     - name: Run doc tests
       # depends on TSDB, which requires PG >=13

@@ -150,7 +150,7 @@ EOF
         # Debian family
         debian | ubuntu)
             # TimescaleDB does not have packages for Debian 12
-            if [[ $OS_VERSION -ge 12 ]]; then
+            if [ $OS_VERSION -ge 12 ]; then
                 export TSDB_PG_VERSIONS="13 14 15"
             fi
 
@@ -204,28 +204,28 @@ EOF
 
             apt-get -qq update
 
-        for pg in $PG_VERSIONS; do
-            apt-get -qq install \
-                    postgresql-$pg \
-                    postgresql-server-dev-$pg
-            # We install as user postgres, so that needs write access to these.
-            chown $BUILDER_USERNAME $PG_BASE$pg/lib /usr/share/postgresql/$pg/extension
-        done
+            for pg in $PG_VERSIONS; do
+                apt-get -qq install \
+                        postgresql-$pg \
+                        postgresql-server-dev-$pg
+                # We install as user postgres, so that needs write access to these.
+                chown $BUILDER_USERNAME $PG_BASE$pg/lib /usr/share/postgresql/$pg/extension
+            done
 
-        for pg in $TSDB_PG_VERSIONS; do
-            # timescaledb packages Recommend toolkit, which we don't want here.
-            apt-get -qq install --no-install-recommends timescaledb-2-postgresql-$pg
-        done
+            for pg in $TSDB_PG_VERSIONS; do
+                # timescaledb packages Recommend toolkit, which we don't want here.
+                apt-get -qq install --no-install-recommends timescaledb-2-postgresql-$pg
+            done
 
-        # Ubuntu is the only system we want an image for that sticks an extra
-        # copy of the default PATH into PAM's /etc/environment and we su or sudo
-        # to $BUILDER_USERNAME thereby picking up that PATH and clobbering the
-        # one we set in Dockerfile.  There's nothing else in here, so at first I
-        # thought to remove it.  That works on 20.04 and 22.04, but still leaves
-        # a busted PATH on 18.04!  On 18.04, we get clobbered by ENV_PATH in
-        # /etc/login.defs .  We fix all three by setting our PATH here:
-        echo > /etc/environment "PATH=$PATH"
-        ;;
+            # Ubuntu is the only system we want an image for that sticks an extra
+            # copy of the default PATH into PAM's /etc/environment and we su or sudo
+            # to $BUILDER_USERNAME thereby picking up that PATH and clobbering the
+            # one we set in Dockerfile.  There's nothing else in here, so at first I
+            # thought to remove it.  That works on 20.04 and 22.04, but still leaves
+            # a busted PATH on 18.04!  On 18.04, we get clobbered by ENV_PATH in
+            # /etc/login.defs .  We fix all three by setting our PATH here:
+            echo > /etc/environment "PATH=$PATH"
+            ;;
     esac
 
     # Phase 3 - cross-platform privileged tasks after package installation
@@ -252,13 +252,20 @@ cargo install cargo-pgrx --version =$PGRX_VERSION
 
 # Configure pgrx
 ## `cargo pgrx init` is not additive; must specify all versions in one command.
-for pg in $PG_VERSIONS; do
-    init_flags="$init_flags --pg$pg $PG_BASE$pg/bin/pg_config"
+for pg_config in $(find /usr -name 'pg_config' -type f | grep "${PG_BASE}"); do
+    pg="$(${pg_config} --version | awk -F '[ .]' '{print $2'})"
+    init_flags="$init_flags --pg$pg ${pg_config}"
 done
 cargo pgrx init $init_flags
-## Initialize pgrx-managed databases so we can add the timescaledb load.
-for pg in $TSDB_PG_VERSIONS; do
-    echo "shared_preload_libraries = 'timescaledb'" >> ~/.pgrx/data-$pg/postgresql.conf
+
+## Initialize pgrx-managed databases so we can add the timescaledb load, but only
+## for those PostgreSQL versions that have the timescaledb.so library available.
+for pg_config in $(find /usr -name 'pg_config' -type f | grep "${PG_BASE}"); do
+    pg="$(${pg_config} --version | awk -F '[ .]' '{print $2'})"
+    lib="$(find "${PG_BASE}${pg}" -type f -name 'timescaledb.so')"
+    if [ "${lib}" != "" ]; then
+        echo "shared_preload_libraries = 'timescaledb'" >> ~/.pgrx/data-$pg/postgresql.conf
+    fi
 done
 
 # Clone and fetch dependencies so we builds have less work to do.

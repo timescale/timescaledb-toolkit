@@ -54,6 +54,8 @@ if $privileged; then
         centos | rockylinux)
             case $OS_VERSION in
                 7)
+                    export PG_VERSIONS="13 14 15"
+                    export TSDB_PG_VERSIONS="13 14 15"
                     # Postgresql packages require both
                     # - llvm-toolset-7-clang from centos-release-scl-rh
                     # - llvm5.0-devel from epel-release

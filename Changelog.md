@@ -20,11 +20,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 #### New experimental features
 
-#### Bug fixes
-
-#### Other notable changes
-
-#### Shout-outs
+- [#776](https://github.com/timescale/timescaledb-toolkit/pull/776): PostgreSQL 16 support
 
 **Full Changelog**: [TODO]
 

@@ -16,6 +16,14 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 **Full Changelog**: [TODO]
 
+## [1.18.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.18.0) (2023-11-28)
+
+#### New experimental features
+
+- [#776](https://github.com/timescale/timescaledb-toolkit/pull/776): PostgreSQL 16 support
+
+**Full Changelog**: [TODO]
+
 ## [1.17.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.17.0) (2023-07-06)
 
 #### New experimental features

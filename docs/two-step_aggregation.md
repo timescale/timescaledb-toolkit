@@ -140,7 +140,7 @@ And I want to do a second level of aggregation, say over a day, I can do it over
 ```SQL , ignore
 SELECT id, time_bucket('1 day'::interval, bucket) as bucket,
     sum(sum),
-    approx_percentile(percentile_agg(percentile_agg), 0.5) as median
+    approx_percentile(0.5, percentile_agg(percentile_agg)) as median
 FROM foo_15
 GROUP BY id, time_bucket('1 day'::interval, bucket)
 ```

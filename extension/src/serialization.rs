@@ -1,6 +1,6 @@
 pub use self::collations::PgCollationId;
 pub use self::functions::PgProcId;
-pub use self::types::{PgTypId, ShortTypeId};
+pub use self::types::ShortTypeId;
 use std::{
     convert::TryInto,
     os::raw::{c_char, c_int},

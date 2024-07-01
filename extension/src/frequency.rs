@@ -462,14 +462,14 @@ impl<'input> From<(&SpaceSavingAggregate<'input>, &pg_sys::FunctionCallInfo)>
         let mut trans = if agg.topn == 0 {
             SpaceSavingTransState::freq_agg_from_type_id(
                 agg.freq_param,
-                unsafe { Oid::from_u32_unchecked(agg.type_oid) },
+                pg_sys::Oid::from(agg.type_oid),
                 collation,
             )
         } else {
             SpaceSavingTransState::mcv_agg_from_type_id(
                 agg.freq_param,
                 agg.topn as u32,
-                unsafe { Oid::from_u32_unchecked(agg.type_oid) },
+                pg_sys::Oid::from(agg.type_oid),
                 collation,
             )
         };
@@ -1279,7 +1279,7 @@ pub fn freq_iter<'a>(
                 let value = AnyElement::from_polymorphic_datum(
                     value,
                     false,
-                    Oid::from_u32_unchecked(agg.type_oid),
+                    pg_sys::Oid::from(agg.type_oid),
                 )
                 .unwrap();
                 let min_freq = (count - overcount) as f64 / total;
@@ -1427,7 +1427,7 @@ pub fn topn(
         )
         // TODO Shouldn't failure to convert to AnyElement cause error, not early stop?
         .map_while(move |value| unsafe {
-            AnyElement::from_polymorphic_datum(value, false, Oid::from_u32_unchecked(type_oid))
+            AnyElement::from_polymorphic_datum(value, false, pg_sys::Oid::from(type_oid))
         }),
     )
 }
@@ -1547,7 +1547,7 @@ pub fn max_frequency(agg: SpaceSavingAggregate<'_>, value: AnyElement) -> f64 {
     match agg
         .datums
         .iter()
-        .position(|datum| value == (datum, unsafe { Oid::from_u32_unchecked(agg.type_oid) }).into())
+        .position(|datum| value == (datum, pg_sys::Oid::from(agg.type_oid)).into())
     {
         Some(idx) => agg.counts.slice()[idx] as f64 / agg.values_seen as f64,
         None => 0.,
@@ -1560,7 +1560,7 @@ pub fn min_frequency(agg: SpaceSavingAggregate<'_>, value: AnyElement) -> f64 {
     match agg
         .datums
         .iter()
-        .position(|datum| value == (datum, unsafe { Oid::from_u32_unchecked(agg.type_oid) }).into())
+        .position(|datum| value == (datum, pg_sys::Oid::from(agg.type_oid)).into())
     {
         Some(idx) => {
             (agg.counts.slice()[idx] - agg.overcounts.slice()[idx]) as f64 / agg.values_seen as f64

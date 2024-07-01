@@ -47,12 +47,6 @@ jobs:
           # Building TSDB in CI is only supported on Debian/Ubuntu
           skip: ${{ inputs.tsdb-commit != '' }}
           schedule: ${{ !(github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') }}
-        - os: centos
-          version: "7"
-          image: centos-7-x86_64
-          # Building TSDB in CI is only supported on Debian/Ubuntu
-          skip: ${{ inputs.tsdb-commit != '' }}
-          schedule: ${{ !(github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') }}
         - os: debian
           version: "11"
           image: debian-11-amd64
@@ -75,11 +69,6 @@ jobs:
             skip: true
         - container:
             schedule: false
-        # CentOS 7 does not have PostgreSQL 16 packages
-        - container:
-            os: centos
-            version: "7"
-          pgversion: 16
         # TimescaleDB as of 2.12.0 no longer supports PostgreSQL 12.
         # To allow us to do run CI against PostgreSQL 12, we therefore explicitly
         # remove all CI's, except if we are run against the latest supported TimescaleDB

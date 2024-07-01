@@ -132,8 +132,6 @@ pub fn run_tests<OnErr: FnMut(Test, TestError)>(
                     .expect("could not run init script");
             }
 
-            let deferred = deferred;
-
             tests.tests.into_iter().map(move |test| {
                 let output = if test.transactional {
                     run_transactional_test(&mut client, &test)
@@ -276,8 +274,8 @@ fn stringify_delta(left: &[Vec<String>], right: &[Vec<String>]) -> String {
     let mut width = vec![
         0;
         max(
-            left.get(0).map(Vec::len).unwrap_or(0),
-            right.get(0).map(Vec::len).unwrap_or(0)
+            left.first().map(Vec::len).unwrap_or(0),
+            right.first().map(Vec::len).unwrap_or(0)
         )
     ];
     let num_rows = max(left.len(), right.len());

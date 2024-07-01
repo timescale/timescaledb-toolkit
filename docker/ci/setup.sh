@@ -85,7 +85,7 @@ if $privileged; then
                     dnf -qy module disable postgresql
                     # fpm suddenly requires newer public_suffix that requires newer ruby
                     # https://github.com/jordansissel/fpm/issues/1923 ¯\_(ツ)_/¯
-                    dnf -qy module enable ruby:2.6
+                    dnf -qy module enable ruby:3.0
                     dnf -qy install ruby-devel rubygems
                     ;;
 

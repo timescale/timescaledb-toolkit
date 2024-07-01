@@ -290,7 +290,7 @@ fn tdigest_compound_final(
     _fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<TDigest<'static>> {
     let state: Option<&InternalTDigest> = unsafe { state.get() };
-    state.map(|state| TDigest::from_internal_tdigest(state.deref()))
+    state.map(TDigest::from_internal_tdigest)
 }
 
 #[pg_extern(immutable, parallel_safe)]

@@ -14,7 +14,7 @@ TSDB_PG_VERSIONS='12 13 14 15'
 CARGO_EDIT=0.11.2
 
 # Keep synchronized with extension/Cargo.toml and `cargo install --version N.N.N cargo-pgrx` in Readme.md .
-PGRX_VERSION=0.11.4
+PGRX_VERSION=0.12.0-beta.2
 
 RUST_TOOLCHAIN=1.74.0
 RUST_PROFILE=minimal

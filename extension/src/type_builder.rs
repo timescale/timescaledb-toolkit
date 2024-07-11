@@ -100,6 +100,7 @@ macro_rules! pg_type_impl {
             $(#[$attrs])*
             #[derive(pgrx::PostgresType, Clone)]
             #[inoutfuncs]
+            #[bikeshed_postgres_type_manually_impl_from_into_datum] // otherwise we would need to impl Serialize and Deserialize
             pub struct $name<$lifetemplate>(pub [<$name Data>] $(<$inlife>)?, $crate::type_builder::CachedDatum<$lifetemplate>);
 
             flat_serialize_macro::flat_serialize! {
@@ -176,46 +177,46 @@ macro_rules! pg_type_impl {
                 }
             }
 
-            impl<$lifetemplate> pgrx::FromDatum for $name<$lifetemplate> {
-                unsafe fn from_polymorphic_datum(datum: pgrx::pg_sys::Datum, is_null: bool, _: pg_sys::Oid) -> Option<Self>
-                where
-                    Self: Sized,
-                {
-                    use flat_serialize::FlatSerializable as _;
-                    if is_null {
-                        return None;
-                    }
+            // impl<$lifetemplate> pgrx::FromDatum for $name<$lifetemplate> {
+            //     unsafe fn from_polymorphic_datum(datum: pgrx::pg_sys::Datum, is_null: bool, _: pg_sys::Oid) -> Option<Self>
+            //     where
+            //         Self: Sized,
+            //     {
+            //         use flat_serialize::FlatSerializable as _;
+            //         if is_null {
+            //             return None;
+            //         }
 
-                    let mut ptr = pg_sys::pg_detoast_datum_packed(datum.cast_mut_ptr());
-                    //TODO is there a better way to do this?
-                    if pgrx::varatt_is_1b(ptr) {
-                        ptr = pg_sys::pg_detoast_datum_copy(ptr);
-                    }
-                    let data_len = pgrx::varsize_any(ptr);
-                    let bytes = std::slice::from_raw_parts(ptr as *mut u8, data_len);
-                    let (data, _) = match [<$name Data>]::try_ref(bytes) {
-                        Ok(wrapped) => wrapped,
-                        Err(e) => error!(concat!("invalid ", stringify!($name), " {:?}, got len {}"), e, bytes.len()),
-                    };
+            //         let mut ptr = pg_sys::pg_detoast_datum_packed(datum.cast_mut_ptr());
+            //         //TODO is there a better way to do this?
+            //         if pgrx::varatt_is_1b(ptr) {
+            //             ptr = pg_sys::pg_detoast_datum_copy(ptr);
+            //         }
+            //         let data_len = pgrx::varsize_any(ptr);
+            //         let bytes = std::slice::from_raw_parts(ptr as *mut u8, data_len);
+            //         let (data, _) = match [<$name Data>]::try_ref(bytes) {
+            //             Ok(wrapped) => wrapped,
+            //             Err(e) => error!(concat!("invalid ", stringify!($name), " {:?}, got len {}"), e, bytes.len()),
+            //         };
 
-                    $name(data, $crate::type_builder::CachedDatum::FromInput(bytes)).into()
-                }
-            }
+            //         $name(data, $crate::type_builder::CachedDatum::FromInput(bytes)).into()
+            //     }
+            // }
 
-            impl<$lifetemplate> pgrx::IntoDatum for $name<$lifetemplate> {
-                fn into_datum(self) -> Option<pgrx::pg_sys::Datum> {
-                    use $crate::type_builder::CachedDatum::*;
-                    let datum = match self.1 {
-                        Flattened(bytes) => pg_sys::Datum::from(bytes.as_ptr()),
-                        FromInput(..) | None => pg_sys::Datum::from(self.0.to_pg_bytes().as_ptr()),
-                    };
-                    Some(datum)
-                }
+            // impl<$lifetemplate> pgrx::IntoDatum for $name<$lifetemplate> {
+            //     fn into_datum(self) -> Option<pgrx::pg_sys::Datum> {
+            //         use $crate::type_builder::CachedDatum::*;
+            //         let datum = match self.1 {
+            //             Flattened(bytes) => pg_sys::Datum::from(bytes.as_ptr()),
+            //             FromInput(..) | None => pg_sys::Datum::from(self.0.to_pg_bytes().as_ptr()),
+            //         };
+            //         Some(datum)
+            //     }
 
-                fn type_oid() -> pg_sys::Oid {
-                    rust_regtypein::<Self>()
-                }
-            }
+            //     fn type_oid() -> pg_sys::Oid {
+            //         rust_regtypein::<Self>()
+            //     }
+            // }
 
             impl<$lifetemplate> ::std::ops::Deref for $name <$lifetemplate> {
                 type Target=[<$name Data>] $(<$inlife>)?;

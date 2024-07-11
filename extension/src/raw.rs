@@ -49,9 +49,9 @@ macro_rules! raw_type {
             fn type_oid() -> pg_sys::Oid {
                 $tyid
             }
-            fn array_type_oid() -> pg_sys::Oid {
-                $arrayid
-            }
+            // fn array_type_oid() -> pg_sys::Oid {
+            //     $arrayid
+            // }
         }
 
         impl From<pg_sys::Datum> for $name {
@@ -73,6 +73,18 @@ macro_rules! raw_type {
             }
             fn return_sql() -> Result<Returns, ReturnsError> {
                 Ok(Returns::One(SqlMapping::literal(stringify!($name))))
+            }
+        }
+
+        unsafe impl pgrx::callconv::BoxRet for $name {
+            unsafe fn box_in_fcinfo(self, fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum {
+                self.into_datum().unwrap_or_else(|| unsafe { pg_return_null(fcinfo) })
+            }
+        }
+
+        unsafe impl pgrx::callconv::ArgAbi<'_> for $name {
+            unsafe fn unbox_arg_unchecked(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum {
+                self.into_datum().unwrap_or_else(|| unsafe { pg_return_null(fcinfo) })
             }
         }
     };

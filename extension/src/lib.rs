@@ -15,6 +15,8 @@
 // clippy triggers an internal complier error checking this
 #![allow(clippy::unnecessary_literal_unwrap)]
 
+#![allow(warnings)]
+
 pub mod accessors;
 pub mod asap;
 pub mod candlestick;

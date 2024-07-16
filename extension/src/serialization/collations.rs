@@ -41,7 +41,9 @@ impl PgCollationId {
 #[allow(non_upper_case_globals)]
 const Anum_pg_collation_oid: u32 = 1;
 // https://github.com/postgres/postgres/blob/e955bd4b6c2bcdbd253837f6cf4c7520b98e69d4/src/include/catalog/pg_collation.dat
-pub(crate) const DEFAULT_COLLATION_OID: Oid = unsafe { pg_sys::Oid::from_u32_unchecked(100) };
+
+#[allow(deprecated)]
+pub(crate) const DEFAULT_COLLATION_OID: Oid = unsafe { Oid::from_u32_unchecked(100) };
 
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone)]
@@ -254,12 +256,14 @@ unsafe fn get_struct<T>(tuple: pg_sys::HeapTuple) -> *mut T {
 mod tests {
 
     use super::PgCollationId;
+    use pgrx::pg_sys::Oid;
     use pgrx::{pg_sys, pg_test};
 
-    const COLLATION_ID_950: PgCollationId =
-        PgCollationId(unsafe { pg_sys::Oid::from_u32_unchecked(950) });
-    const COLLATION_ID_951: PgCollationId =
-        PgCollationId(unsafe { pg_sys::Oid::from_u32_unchecked(951) });
+    #[allow(deprecated)]
+    const COLLATION_ID_950: PgCollationId = PgCollationId(unsafe { Oid::from_u32_unchecked(950) });
+
+    #[allow(deprecated)]
+    const COLLATION_ID_951: PgCollationId = PgCollationId(unsafe { Oid::from_u32_unchecked(951) });
 
     // TODO is there a way we can test more of this without making it flaky?
     #[pg_test]

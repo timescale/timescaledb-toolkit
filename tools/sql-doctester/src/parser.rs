@@ -24,6 +24,7 @@ pub fn extract_tests_from_string(s: &str, file_stem: &str) -> TestFile {
         ($parser: ident yields $end: pat => $action: expr) => {
             for (event, _) in &mut parser {
                 match event {
+                    #[allow(clippy::redundant_closure_call)]
                     Event::Text(text) => $action(text),
                     $end => break,
                     _ => (),

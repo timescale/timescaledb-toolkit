@@ -186,7 +186,7 @@ pub(crate) unsafe fn pipeline_support_helper(
 
     let input = input.unwrap().unwrap();
     let input: *mut pg_sys::Node = input.cast_mut_ptr();
-    if !pgrx::is_a(input, pg_sys::NodeTag_T_SupportRequestSimplify) {
+    if !pgrx::is_a(input, pg_sys::NodeTag::T_SupportRequestSimplify) {
         return no_change();
     }
 
@@ -198,10 +198,10 @@ pub(crate) unsafe fn pipeline_support_helper(
     let arg1 = original_args.head().unwrap();
     let arg2 = original_args.tail().unwrap();
 
-    let (executor_id, lhs_args) = if is_a(arg1, pg_sys::NodeTag_T_OpExpr) {
+    let (executor_id, lhs_args) = if is_a(arg1, pg_sys::NodeTag::T_OpExpr) {
         let old_executor: *mut pg_sys::OpExpr = arg1.cast();
         ((*old_executor).opfuncid, (*old_executor).args)
-    } else if is_a(arg1, pg_sys::NodeTag_T_FuncExpr) {
+    } else if is_a(arg1, pg_sys::NodeTag::T_FuncExpr) {
         let old_executor: *mut pg_sys::FuncExpr = arg1.cast();
         ((*old_executor).funcid, (*old_executor).args)
     } else {
@@ -244,13 +244,13 @@ pub(crate) unsafe fn pipeline_support_helper(
     let old_series = lhs_args.head().unwrap();
     let old_const = lhs_args.tail().unwrap();
 
-    if !is_a(old_const, pg_sys::NodeTag_T_Const) {
+    if !is_a(old_const, pg_sys::NodeTag::T_Const) {
         return no_change();
     }
 
     let old_const: *mut pg_sys::Const = old_const.cast();
 
-    if !is_a(arg2, pg_sys::NodeTag_T_Const) {
+    if !is_a(arg2, pg_sys::NodeTag::T_Const) {
         return no_change();
     }
 

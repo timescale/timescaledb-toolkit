@@ -186,6 +186,7 @@ where
         //       uncallable with DirectFunctionCall(). Is there a way to
         //       export both?
         // TODO This is fixed in a newer pgrx version, should remove after upgrade
+        #[allow(improper_ctypes)]
         extern "C" {
             fn interval_pl(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
             fn interval_mi(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;

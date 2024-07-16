@@ -52,6 +52,7 @@ impl<'de> Deserialize<'de> for PgProcId {
         //       uncallable with DirectFunctionCall(). Is there a way to
         //       export both?
         extern "C" {
+            #[allow(improper_ctypes)]
             fn regprocedurein(fcinfo: pg_sys::FunctionCallInfo) -> Datum;
         }
         let qualified_name = <&str>::deserialize(deserializer)?;
@@ -64,6 +65,6 @@ impl<'de> Deserialize<'de> for PgProcId {
             )
         };
 
-        Ok(Self(unsafe { Oid::from_u32_unchecked(oid.value() as _) }))
+        Ok(Self(Oid::from(oid.value() as u32)))
     }
 }

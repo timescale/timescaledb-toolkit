@@ -26,7 +26,7 @@ pub mod toolkit_experimental {
 
     impl CountMinSketch<'_> {
         fn new(width: u32, depth: u32, counters: Vec<i64>) -> Self {
-            let counters_arr = counters.try_into().unwrap();
+            let counters_arr = counters.into();
             unsafe {
                 flatten!(CountMinSketch {
                     width,

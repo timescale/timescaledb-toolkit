@@ -5,7 +5,7 @@ extern crate quickcheck;
 extern crate quickcheck_macros;
 
 use std::{
-    hash::{BuildHasher, Hash, Hasher},
+    hash::{BuildHasher, Hash},
     marker::PhantomData,
 };
 
@@ -131,9 +131,7 @@ where
     pub fn add(&mut self, value: &T) {
         use HyperLogLogStorage::*;
 
-        let mut hasher = self.buildhasher.build_hasher();
-        value.hash(&mut hasher);
-        let hash = hasher.finish();
+        let hash = self.buildhasher.hash_one(value);
         match &mut self.storage {
             Sparse(s) => {
                 let overflowing = s.add_hash(hash);

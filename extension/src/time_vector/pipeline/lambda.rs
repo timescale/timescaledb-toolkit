@@ -361,6 +361,7 @@ impl PartialOrd for Value {
         use Value::*;
 
         extern "C" {
+            #[allow(improper_ctypes)]
             fn interval_cmp(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
         }
 
@@ -392,6 +393,7 @@ impl PartialEq for Value {
         use std::mem::discriminant;
         use Value::*;
         extern "C" {
+            #[allow(improper_ctypes)]
             fn interval_eq(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
         }
 

@@ -232,7 +232,7 @@ impl TDigest {
             max: self.max(),
             centroids: centroids.to_vec(),
         })
-        .unwrap()
+        .expect("could not create a ron string")
     }
 }
 
@@ -293,8 +293,8 @@ impl TDigest {
         let mut result = TDigest::new_with_size(self.max_size());
         result.count = self.count() + (sorted_values.len() as u64);
 
-        let maybe_min = OrderedFloat::from(*sorted_values.first().unwrap());
-        let maybe_max = OrderedFloat::from(*sorted_values.last().unwrap());
+        let maybe_min = OrderedFloat::from(*sorted_values.first().expect("invalid sorted pair - missing first"));
+        let maybe_max = OrderedFloat::from(*sorted_values.last().expect("invalid sorted pair - missing second"));
 
         if self.count() > 0 {
             result.min = std::cmp::min(self.min, maybe_min);
@@ -315,14 +315,14 @@ impl TDigest {
         let mut iter_sorted_values = sorted_values.iter().peekable();
 
         let mut curr: Centroid = if let Some(c) = iter_centroids.peek() {
-            let curr = **iter_sorted_values.peek().unwrap();
+            let curr = **iter_sorted_values.peek().expect("sorted value list must not be empty");
             if c.mean() < curr {
-                iter_centroids.next().unwrap().clone()
+                iter_centroids.next().expect("next centroid to clone must exist").clone()
             } else {
-                Centroid::new(*iter_sorted_values.next().unwrap(), 1)
+                Centroid::new(*iter_sorted_values.next().expect("next sorted value to use as centroid mean must exist"), 1)
             }
         } else {
-            Centroid::new(*iter_sorted_values.next().unwrap(), 1)
+            Centroid::new(*iter_sorted_values.next().expect("next value after an empty value must exist (oh?)"), 1)
         };
 
         let mut weight_so_far: u64 = curr.weight();
@@ -333,14 +333,14 @@ impl TDigest {
         while iter_centroids.peek().is_some() || iter_sorted_values.peek().is_some() {
             let next: Centroid = if let Some(c) = iter_centroids.peek() {
                 if iter_sorted_values.peek().is_none()
-                    || c.mean() < **iter_sorted_values.peek().unwrap()
+                    || c.mean() < **iter_sorted_values.peek().expect("this was already checked in this condition")
                 {
-                    iter_centroids.next().unwrap().clone()
+                    iter_centroids.next().expect("the next centroid after an empty sorted value must exist (but the loop says ||)").clone()
                 } else {
-                    Centroid::new(*iter_sorted_values.next().unwrap(), 1)
+                    Centroid::new(*iter_sorted_values.next().expect("this was logically guarded in the preceding condition"), 1)
                 }
             } else {
-                Centroid::new(*iter_sorted_values.next().unwrap(), 1)
+                Centroid::new(*iter_sorted_values.next().expect("the next sorted value after a missing centroid must exist (but the loop says ||)"), 1)
             };
 
             let next_sum: f64 = next.mean() * next.weight() as f64;
@@ -424,7 +424,8 @@ impl TDigest {
         }
 
         // TODO should this be the smaller of the sizes?
-        let max_size = digests.first().unwrap().max_size;
+        // TODO: should this be configurable? Should it make sure it's at least some reasonable size?
+        let max_size = digests.first().expect("there was no digest to merge").max_size;
         let mut centroids: Vec<Centroid> = Vec::with_capacity(n_centroids);
         let mut starts: Vec<usize> = Vec::with_capacity(digests.len());
 
@@ -475,7 +476,7 @@ impl TDigest {
         let mut q_limit_times_count: f64 = Self::k_to_q(k_limit, max_size as f64) * (count as f64);
 
         let mut iter_centroids = centroids.iter_mut();
-        let mut curr = iter_centroids.next().unwrap();
+        let mut curr = iter_centroids.next().expect("we made a centroid list with contents from the digests list");
         let mut weight_so_far: u64 = curr.weight();
         let mut sums_to_merge: f64 = 0.0;
         let mut weights_to_merge: u64 = 0;
@@ -1048,7 +1049,7 @@ mod tests {
             .chain(batch4.iter())
             .copied()
             .collect();
-        master.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        master.sort_by(|a, b| a.partial_cmp(b).expect("a comparison must exist"));
 
         if master.len() < 100 {
             return TestResult::discard();

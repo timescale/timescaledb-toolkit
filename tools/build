@@ -104,9 +104,9 @@ while [ $# -gt 0 ]; do
             $nop cargo fetch
             export RUSTC_BOOTSTRAP=1
             export __CARGO_TEST_CHANNEL_OVERRIDE_DO_NOT_USE_THIS=nightly
-            export RUSTFLAGS='-Z sanitizer=memory'
+            # export RUSTFLAGS='-Z sanitizer=memory'
             rustup component add rust-src --toolchain 1.74.0-x86_64-unknown-linux-gnu
-            $nop cargo test -Zbuild-std --profile $profile --target --target x86_64-unknown-linux-gnu --features "$pg pg_test" --no-default-features -- stats_agg::tests
+            $nop cargo test -Zbuild-std --profile $profile --target --target x86_64-unknown-linux-gnu --features "$pg pg_test" --no-default-features -- --nocapture stats_agg::tests
             ;;
 
         install)

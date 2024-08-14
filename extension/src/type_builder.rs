@@ -362,7 +362,11 @@ macro_rules! do_serialize {
                 let len = writer.position().try_into().expect("serialized size too large");
                 ::pgrx::set_varsize(writer.get_mut().as_mut_ptr() as *mut _, len);
             }
-            $crate::raw::bytea::from(pg_sys::Datum::from(writer.into_inner().as_mut_ptr()))
+
+            let raw_bytes = writer.into_inner();
+            println!("debug serializer output:\n{:?}", raw_bytes);
+            crate::raw::bytea::from(pg_sys::Datum::from(raw_bytes.as_mut_ptr()))
+            // $crate::raw::bytea::from(pg_sys::Datum::from(writer.into_inner().as_mut_ptr()))
         }
     };
 }
@@ -373,6 +377,10 @@ macro_rules! do_deserialize {
 
         let state: $t = unsafe {
             let input: $crate::raw::bytea = $bytes;
+            let slice_for_test =
+                pgrx::varlena::varlena_to_byte_slice(input.0.cast_mut_ptr::<pg_sys::varlena>());
+            println!("bytes entering into decoder:\n{:?}", slice_for_test);
+
             let input: pgrx::pg_sys::Datum = input.into();
             let detoasted = pg_sys::pg_detoast_datum_packed(input.cast_mut_ptr());
             let len = pgrx::varsize_any_exhdr(detoasted);
@@ -393,6 +401,7 @@ macro_rules! do_deserialize {
                     bytes[1]
                 )
             }
+            println!("bytes just before decoding:\n{:?}", bytes);
             bincode::deserialize(&bytes[2..])
                 .unwrap_or_else(|e| pgrx::error!("deserialization error {}", e))
         };

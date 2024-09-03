@@ -13,7 +13,7 @@ pub unsafe fn get_collation(fcinfo: pg_sys::FunctionCallInfo) -> Option<pg_sys::
 
 pub fn get_collation_or_default(fcinfo: pg_sys::FunctionCallInfo) -> Option<pg_sys::Oid> {
     if fcinfo.is_null() {
-        Some(unsafe { pg_sys::Oid::from_u32_unchecked(100) }) // TODO: default OID, there should be a constant for this
+        Some(pg_sys::Oid::from(100)) // TODO: default OID, there should be a constant for this
     } else {
         unsafe { get_collation(fcinfo) }
     }

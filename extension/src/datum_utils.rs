@@ -45,6 +45,7 @@ pub fn ts_interval_sum_to_ms(
     ref_time: &crate::raw::TimestampTz,
     interval: &crate::raw::Interval,
 ) -> i64 {
+    #[allow(improper_ctypes)]
     extern "C" {
         fn timestamptz_pl_interval(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
     }
@@ -329,8 +330,7 @@ impl<'a, 'de> Deserialize<'de> for DatumStore<'a> {
             where
                 A: SeqAccess<'de>,
             {
-                let oid =
-                    unsafe { Oid::from_u32_unchecked(seq.next_element::<u32>().unwrap().unwrap()) }; // TODO: error handling
+                let oid = pg_sys::Oid::from(seq.next_element::<u32>().unwrap().unwrap()); // TODO: error handling
 
                 // TODO separate human-readable and binary forms
                 let mut reader = DatumFromSerializedTextReader::from_oid(oid);

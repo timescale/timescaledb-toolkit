@@ -2,7 +2,7 @@
 
 use pgrx::*;
 use pgrx_sql_entity_graph::metadata::{
-    ArgumentError, Returns, ReturnsError, SqlMapping, SqlTranslatable,
+    ArgumentError, Returns, ReturnsError, SqlMapping, SqlTranslatable
 };
 
 extension_sql!(
@@ -74,6 +74,10 @@ macro_rules! raw_type {
             fn return_sql() -> Result<Returns, ReturnsError> {
                 Ok(Returns::One(SqlMapping::literal(stringify!($name))))
             }
+        }
+
+        impl RetAbi from $name {
+
         }
     };
 }

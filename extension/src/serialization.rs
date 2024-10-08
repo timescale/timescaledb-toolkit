@@ -6,7 +6,10 @@ use std::{
     os::raw::{c_char, c_int},
 };
 
-#[cfg(feature = "pg16")]
+#[cfg(any(
+    feature = "pg16",
+    feature = "pg17"
+))]
 use pgrx::pg_sys::DateTimeErrorExtra;
 use pgrx::pg_sys::{self};
 
@@ -96,7 +99,10 @@ pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {
                 &mut tz,
             )
         }
-        #[cfg(feature = "pg16")]
+        #[cfg(any(
+            feature = "pg16",
+            feature = "pg17"
+        ))]
         if dterr == 0 {
             let mut extra = DateTimeErrorExtra::default();
             dterr = pg_sys::DecodeDateTime(
@@ -125,7 +131,10 @@ pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {
                 b"timestamptz\0".as_ptr().cast::<c_char>(),
             );
         }
-        #[cfg(feature = "pg16")]
+        #[cfg(any(
+            feature = "pg16",
+            feature = "pg17"
+        ))]
         if dterr != 0 {
             pg_sys::DateTimeParseError(
                 dterr,

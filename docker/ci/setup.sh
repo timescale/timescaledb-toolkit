@@ -54,8 +54,8 @@ if $privileged; then
         centos | rockylinux)
             case $OS_VERSION in
                 7)
-                    export PG_VERSIONS="13 14 15"
-                    export TSDB_PG_VERSIONS="13 14 15"
+                    export PG_VERSIONS="13 14 15 16 17"
+                    export TSDB_PG_VERSIONS="13 14 15 16 17"
                     # Postgresql packages require both
                     # - llvm-toolset-7-clang from centos-release-scl-rh
                     # - llvm5.0-devel from epel-release
@@ -151,7 +151,7 @@ EOF
         debian | ubuntu)
             # TimescaleDB does not have packages for Debian 12
             if [ $OS_VERSION -ge 12 ]; then
-                export TSDB_PG_VERSIONS="13 14 15"
+                export TSDB_PG_VERSIONS="13 14 15 16 17"
             fi
 
             # Image comes in with no package lists so we have to start with this.

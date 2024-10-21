@@ -19,9 +19,9 @@ pg_test = ["approx"]
 [dependencies]
 # Keep synchronized with `cargo install --version N.N.N cargo-pgrx` in Readme.md and docker/ci/Dockerfile
 # Also `pgrx-tests` down below in `dev-dependencies`.
-pgrx = "=0.12.16"
-pgrx-macros = "=0.12.16"
-pgrx-sql-entity-graph = "=0.12.16"
+pgrx = "=0.12.6"
+pgrx-macros = "=0.12.6"
+pgrx-sql-entity-graph = "=0.12.6"
 encodings = {path="../crates/encodings"}
 flat_serialize = {path="../crates/flat_serialize/flat_serialize"}
 flat_serialize_macro = {path="../crates/flat_serialize/flat_serialize_macro"}
@@ -58,5 +58,5 @@ spfunc = "0.1.0"
 statrs = "0.15.0"
 
 [dev-dependencies]
-pgrx-tests = "=0.12.16"
+pgrx-tests = "=0.12.6"
 approx = "0.4.0"

@@ -16,7 +16,7 @@ CARGO_EDIT=0.11.2
 # Keep synchronized with extension/Cargo.toml and `cargo install --version N.N.N cargo-pgrx` in Readme.md .
 PGRX_VERSION=0.12.6
 
-RUST_TOOLCHAIN=1.70.0
+RUST_TOOLCHAIN=1.76.0
 RUST_PROFILE=minimal
 RUST_COMPONENTS=clippy,rustfmt
 

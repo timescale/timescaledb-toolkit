@@ -22,7 +22,7 @@ jobs:
     name: Release
     runs-on: ubuntu-20.04
     container:
-      image: timescaledev/toolkit-builder:debian-11-amd64
+      image: timescaledev/toolkit-builder-test:debian-11-amd64
 
     steps:
     - name: Checkout Repository

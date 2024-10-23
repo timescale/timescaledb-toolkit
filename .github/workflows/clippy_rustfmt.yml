@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-20.04
     container:
       # Duplicated from ci.yml
-      image: ${{ inputs.container-image || 'timescaledev/toolkit-builder:debian-11-amd64' }}
+      image: ${{ inputs.container-image || 'timescaledev/toolkit-builder-test:debian-11-amd64' }}
       env:
         # TODO: See TODOs on duplicate block in ci.yml
         CARGO_INCREMENTAL: 0

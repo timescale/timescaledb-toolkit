@@ -34,7 +34,7 @@ jobs:
     name: Test Postgres
     runs-on: ubuntu-20.04
     container:
-      image: ${{ inputs.container-image || 'timescaledev/toolkit-builder' }}:${{ matrix.container.image }}
+      image: ${{ inputs.container-image || 'timescaledev/toolkit-builder-test' }}:${{ matrix.container.image }}
     strategy:
       fail-fast: false
       max-parallel: 12

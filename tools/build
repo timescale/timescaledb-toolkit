@@ -45,6 +45,8 @@ find_profile() {
 
 [ $# -ge 1 ] || usage
 
+rustc --version
+
 while [ $# -gt 0 ]; do
     arg="$1"
     shift

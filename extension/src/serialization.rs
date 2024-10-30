@@ -79,7 +79,6 @@ pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {
             &mut nf,
         );
         #[cfg(any(
-            feature = "pg11",
             feature = "pg12",
             feature = "pg13",
             feature = "pg14",
@@ -96,7 +95,10 @@ pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {
                 &mut tz,
             )
         }
-        #[cfg(feature = "pg16")]
+        #[cfg(any(
+            feature = "pg16",
+            feature = "pg17"
+        ))]
         if dterr == 0 {
             let mut extra = DateTimeErrorExtra::default();
             dterr = pg_sys::DecodeDateTime(
@@ -112,7 +114,6 @@ pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {
         }
 
         #[cfg(any(
-            feature = "pg11",
             feature = "pg12",
             feature = "pg13",
             feature = "pg14",
@@ -125,7 +126,10 @@ pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {
                 b"timestamptz\0".as_ptr().cast::<c_char>(),
             );
         }
-        #[cfg(feature = "pg16")]
+        #[cfg(any(
+            feature = "pg16",
+            feature = "pg17"
+        ))]
         if dterr != 0 {
             pg_sys::DateTimeParseError(
                 dterr,
@@ -163,7 +167,7 @@ pub enum EncodedStr<'s> {
 }
 
 pub fn str_to_db_encoding(s: &str) -> EncodedStr {
-    if unsafe { pg_sys::GetDatabaseEncoding() == pg_sys::pg_enc_PG_UTF8 as i32 } {
+    if unsafe { pg_sys::GetDatabaseEncoding() == pg_sys::pg_enc::PG_UTF8 as i32 } {
         return EncodedStr::Utf8(s);
     }
 
@@ -172,7 +176,7 @@ pub fn str_to_db_encoding(s: &str) -> EncodedStr {
         pg_sys::pg_any_to_server(
             bytes.as_ptr() as *const c_char,
             bytes.len().try_into().unwrap(),
-            pg_sys::pg_enc_PG_UTF8 as _,
+            pg_sys::pg_enc::PG_UTF8 as _,
         )
     };
     if encoded as usize == bytes.as_ptr() as usize {
@@ -184,13 +188,13 @@ pub fn str_to_db_encoding(s: &str) -> EncodedStr {
 }
 
 pub fn str_from_db_encoding(s: &CStr) -> &str {
-    if unsafe { pg_sys::GetDatabaseEncoding() == pg_sys::pg_enc_PG_UTF8 as i32 } {
+    if unsafe { pg_sys::GetDatabaseEncoding() == pg_sys::pg_enc::PG_UTF8 as i32 } {
         return s.to_str().unwrap();
     }
 
     let str_len = s.to_bytes().len().try_into().unwrap();
     let encoded =
-        unsafe { pg_sys::pg_server_to_any(s.as_ptr(), str_len, pg_sys::pg_enc_PG_UTF8 as _) };
+        unsafe { pg_sys::pg_server_to_any(s.as_ptr(), str_len, pg_sys::pg_enc::PG_UTF8 as _) };
     if encoded as usize == s.as_ptr() as usize {
         //TODO redundant check?
         return s.to_str().unwrap();

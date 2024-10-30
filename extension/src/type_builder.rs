@@ -1,13 +1,25 @@
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, serde::Serialize)]
 pub enum CachedDatum<'r> {
+// pub enum CachedDatum {
     None,
     FromInput(&'r [u8]),
     Flattened(&'r [u8]),
+    // FromInput(pgrx::pgbox::PgBox<[u8]>),
+    // Flattened(pgrx::pgbox::PgBox<[u8]>),
 }
 
 impl PartialEq for CachedDatum<'_> {
     fn eq(&self, _: &Self) -> bool {
         true
+    }
+}
+
+impl<'de> serde::Deserialize<'de> for CachedDatum<'_> {
+    fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::de::Deserializer<'de>,
+    {
+        Ok(CachedDatum::None)
     }
 }
 
@@ -24,8 +36,9 @@ macro_rules! pg_type {
     ) => {
         $crate::pg_type_impl!{
             'input
-            $(#[$attrs])*
-            struct $name $(<$inlife>)? {
+            $(#[$attrs])* 
+            struct $name $(<$inlife>)?
+            {
                 $($($vals)*)?
             }
         }
@@ -73,6 +86,7 @@ macro_rules! pg_type {
         }
         $crate::pg_type!{
             $(#[$attrs])*
+            #[derive(serde::Serialize, serde::Deserialize)]
             struct $name $(<$inlife>)? {
                 $($tail)*
             }
@@ -98,7 +112,8 @@ macro_rules! pg_type_impl {
     ) => {
         ::paste::paste! {
             $(#[$attrs])*
-            #[derive(pgrx::PostgresType, Clone)]
+            #[derive(pgrx::PostgresType, Clone, serde::Serialize, serde::Deserialize)]
+            #[bikeshed_postgres_type_manually_impl_from_into_datum]
             #[inoutfuncs]
             pub struct $name<$lifetemplate>(pub [<$name Data>] $(<$inlife>)?, $crate::type_builder::CachedDatum<$lifetemplate>);
 
@@ -170,7 +185,7 @@ macro_rules! pg_type_impl {
                         let rem = self.fill_slice(slice);
                         debug_assert_eq!(rem.len(), 0);
 
-                        ::pgrx::set_varsize(memory.cast(), len as i32);
+                        ::pgrx::set_varsize_4b(memory.cast(), len as i32);
                         slice::from_raw_parts(memory.cast(), len)
                     }
                 }
@@ -214,6 +229,32 @@ macro_rules! pg_type_impl {
 
                 fn type_oid() -> pg_sys::Oid {
                     rust_regtypein::<Self>()
+                }
+            }
+
+            unsafe impl<$lifetemplate> ::pgrx::callconv::BoxRet for $name<$lifetemplate> {
+                unsafe fn box_into<'fcx>(
+                    self,
+                    fcinfo: &mut ::pgrx::callconv::FcInfo<'fcx>,
+                ) -> ::pgrx::datum::Datum<'fcx> {
+                    match ::pgrx::datum::IntoDatum::into_datum(self) {
+                        None => fcinfo.return_null(),
+                        Some(datum) => unsafe { fcinfo.return_raw_datum(datum) }
+                    }
+                }
+            }
+
+            unsafe impl<'fcx, $lifetemplate> callconv::ArgAbi<'fcx> for $name<$lifetemplate>
+            where
+                Self: 'fcx,
+            {
+                unsafe fn unbox_arg_unchecked(arg: callconv::Arg<'_, 'fcx>) -> Self {
+                    let index = arg.index();
+                    unsafe { arg.unbox_arg_using_from_datum().unwrap_or_else(|| panic!("argument {index} must not be null")) }
+                }
+
+                unsafe fn unbox_nullable_arg(arg: callconv::Arg<'_, 'fcx>) -> nullable::Nullable<Self> {
+                    unsafe { arg.unbox_arg_using_from_datum().into() }
                 }
             }
 
@@ -360,12 +401,13 @@ macro_rules! do_serialize {
                 .unwrap_or_else(|e| pgrx::error!("serialization error {}", e));
             unsafe {
                 let len = writer.position().try_into().expect("serialized size too large");
-                ::pgrx::set_varsize(writer.get_mut().as_mut_ptr() as *mut _, len);
+                ::pgrx::set_varsize_4b(writer.get_mut().as_mut_ptr() as *mut _, len);
             }
             $crate::raw::bytea::from(pg_sys::Datum::from(writer.into_inner().as_mut_ptr()))
         }
     };
 }
+
 #[macro_export]
 macro_rules! do_deserialize {
     ($bytes: expr, $t: ty) => {{

@@ -330,7 +330,7 @@ impl<'a, 'de> Deserialize<'de> for DatumStore<'a> {
                 A: SeqAccess<'de>,
             {
                 let oid =
-                    unsafe { Oid::from_u32_unchecked(seq.next_element::<u32>().unwrap().unwrap()) }; // TODO: error handling
+                    Oid::from(seq.next_element::<u32>().unwrap().unwrap()); // TODO: error handling
 
                 // TODO separate human-readable and binary forms
                 let mut reader = DatumFromSerializedTextReader::from_oid(oid);

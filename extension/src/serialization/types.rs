@@ -214,25 +214,25 @@ impl Serialize for PgTypId {
     {
         unsafe {
             let tuple = pg_sys::SearchSysCache1(
-                pg_sys::SysCacheIdentifier_TYPEOID as _,
+                pg_sys::SysCacheIdentifier::TYPEOID as _,
                 pg_sys::Datum::from(self.0),
             );
             if tuple.is_null() {
-                pgrx::error!("no type info for oid {}", self.0);
+                pgrx::error!("no type info for oid {}", self.0.as_u32());
             }
 
             let type_tuple: pg_sys::Form_pg_type = get_struct(tuple);
 
             let namespace = pg_sys::get_namespace_name((*type_tuple).typnamespace);
             if namespace.is_null() {
-                pgrx::error!("invalid schema oid {}", (*type_tuple).typnamespace);
+                pgrx::error!("invalid schema oid {}", (*type_tuple).typnamespace.as_u32());
             }
 
             let namespace_len = CStr::from_ptr(namespace).to_bytes().len();
             let namespace = pg_sys::pg_server_to_any(
                 namespace,
                 namespace_len as _,
-                pg_sys::pg_enc_PG_UTF8 as _,
+                pg_sys::pg_enc::PG_UTF8 as _,
             );
             let namespace = CStr::from_ptr(namespace);
             let namespace = namespace.to_str().unwrap();
@@ -242,7 +242,7 @@ impl Serialize for PgTypId {
             let type_name = pg_sys::pg_server_to_any(
                 type_name,
                 type_name_len as _,
-                pg_sys::pg_enc_PG_UTF8 as _,
+                pg_sys::pg_enc::PG_UTF8 as _,
             );
             let type_name = CStr::from_ptr(type_name);
             let type_name = type_name.to_str().unwrap();
@@ -272,12 +272,12 @@ impl<'de> Deserialize<'de> for PgTypId {
             let namespace = pg_sys::pg_any_to_server(
                 namespace.as_ptr(),
                 namespace_len as _,
-                pg_sys::pg_enc_PG_UTF8 as _,
+                pg_sys::pg_enc::PG_UTF8 as _,
             );
             let namespace = CStr::from_ptr(namespace);
 
             let name =
-                pg_sys::pg_any_to_server(name.as_ptr(), name_len as _, pg_sys::pg_enc_PG_UTF8 as _);
+                pg_sys::pg_any_to_server(name.as_ptr(), name_len as _, pg_sys::pg_enc::PG_UTF8 as _);
             let name = CStr::from_ptr(name);
 
             let namespace_id = pg_sys::LookupExplicitNamespace(namespace.as_ptr(), true);
@@ -289,7 +289,7 @@ impl<'de> Deserialize<'de> for PgTypId {
             }
 
             let type_id = pg_sys::GetSysCacheOid(
-                pg_sys::SysCacheIdentifier_TYPENAMENSP as _,
+                pg_sys::SysCacheIdentifier::TYPENAMENSP as _,
                 pg_sys::Anum_pg_type_oid as _,
                 pg_sys::Datum::from(name.as_ptr()),
                 pg_sys::Datum::from(namespace_id),

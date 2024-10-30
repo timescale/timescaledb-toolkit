@@ -41,7 +41,7 @@ impl PgCollationId {
 #[allow(non_upper_case_globals)]
 const Anum_pg_collation_oid: u32 = 1;
 // https://github.com/postgres/postgres/blob/e955bd4b6c2bcdbd253837f6cf4c7520b98e69d4/src/include/catalog/pg_collation.dat
-pub(crate) const DEFAULT_COLLATION_OID: Oid = unsafe { pg_sys::Oid::from_u32_unchecked(100) };
+pub(crate) const DEFAULT_COLLATION_OID: Oid = pg_sys::Oid::from(100);
 
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone)]
@@ -78,7 +78,7 @@ type Form_pg_database = *mut FormData_pg_database;
 
 static DEFAULT_COLLATION_NAME: Lazy<CString> = Lazy::new(|| unsafe {
     let tuple = pg_sys::SearchSysCache1(
-        pg_sys::SysCacheIdentifier_DATABASEOID as _,
+        pg_sys::SysCacheIdentifier::DATABASEOID as _,
         pg_sys::Datum::from(pg_sys::MyDatabaseId),
     );
     if tuple.is_null() {
@@ -91,7 +91,7 @@ static DEFAULT_COLLATION_NAME: Lazy<CString> = Lazy::new(|| unsafe {
     let collation_name = pg_sys::pg_server_to_any(
         collation_name,
         collation_name_len as _,
-        pg_sys::pg_enc_PG_UTF8 as _,
+        pg_sys::pg_enc::PG_UTF8 as _,
     );
     let collation_name = CStr::from_ptr(collation_name);
     pg_sys::ReleaseSysCache(tuple);
@@ -110,25 +110,25 @@ impl Serialize for PgCollationId {
             }
 
             let tuple = pg_sys::SearchSysCache1(
-                pg_sys::SysCacheIdentifier_COLLOID as _,
+                pg_sys::SysCacheIdentifier::COLLOID as _,
                 pg_sys::Datum::from(self.0),
             );
             if tuple.is_null() {
-                pgrx::error!("no collation info for oid {}", self.0);
+                pgrx::error!("no collation info for oid {}", self.0.as_u32());
             }
 
             let collation_tuple: Form_pg_collation = get_struct(tuple);
 
             let namespace = pg_sys::get_namespace_name((*collation_tuple).collnamespace);
             if namespace.is_null() {
-                pgrx::error!("invalid schema oid {}", (*collation_tuple).collnamespace);
+                pgrx::error!("invalid schema oid {}", (*collation_tuple).collnamespace.as_u32());
             }
 
             let namespace_len = CStr::from_ptr(namespace).to_bytes().len();
             let namespace = pg_sys::pg_server_to_any(
                 namespace,
                 namespace_len as _,
-                pg_sys::pg_enc_PG_UTF8 as _,
+                pg_sys::pg_enc::PG_UTF8 as _,
             );
             let namespace = CStr::from_ptr(namespace);
             let namespace = namespace.to_str().unwrap();
@@ -143,7 +143,7 @@ impl Serialize for PgCollationId {
                 let collation_name = pg_sys::pg_server_to_any(
                     collation_name,
                     collation_name_len as _,
-                    pg_sys::pg_enc_PG_UTF8 as _,
+                    pg_sys::pg_enc::PG_UTF8 as _,
                 );
                 CStr::from_ptr(collation_name)
             };
@@ -181,12 +181,12 @@ impl<'de> Deserialize<'de> for PgCollationId {
             let namespace = pg_sys::pg_any_to_server(
                 namespace.as_ptr(),
                 namespace_len as _,
-                pg_sys::pg_enc_PG_UTF8 as _,
+                pg_sys::pg_enc::PG_UTF8 as _,
             );
             let namespace = CStr::from_ptr(namespace);
 
             let name =
-                pg_sys::pg_any_to_server(name.as_ptr(), name_len as _, pg_sys::pg_enc_PG_UTF8 as _);
+                pg_sys::pg_any_to_server(name.as_ptr(), name_len as _, pg_sys::pg_enc::PG_UTF8 as _);
             let name = CStr::from_ptr(name);
 
             let namespace_id = pg_sys::LookupExplicitNamespace(namespace.as_ptr(), true);
@@ -206,7 +206,7 @@ impl<'de> Deserialize<'de> for PgCollationId {
             //   https://github.com/postgres/postgres/blob/e955bd4b6c2bcdbd253837f6cf4c7520b98e69d4/src/backend/commands/collationcmds.c#L246
 
             let mut collation_id = pg_sys::GetSysCacheOid(
-                pg_sys::SysCacheIdentifier_COLLNAMEENCNSP as _,
+                pg_sys::SysCacheIdentifier::COLLNAMEENCNSP as _,
                 Anum_pg_collation_oid as _,
                 pg_sys::Datum::from(name.as_ptr()),
                 pg_sys::Datum::from(pg_sys::GetDatabaseEncoding()),
@@ -216,7 +216,7 @@ impl<'de> Deserialize<'de> for PgCollationId {
 
             if collation_id == pg_sys::InvalidOid {
                 collation_id = pg_sys::GetSysCacheOid(
-                    pg_sys::SysCacheIdentifier_COLLNAMEENCNSP as _,
+                    pg_sys::SysCacheIdentifier::COLLNAMEENCNSP as _,
                     Anum_pg_collation_oid as _,
                     pg_sys::Datum::from(name.as_ptr()),
                     pg_sys::Datum::from((-1isize) as usize),

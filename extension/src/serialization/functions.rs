@@ -35,7 +35,7 @@ impl Serialize for PgProcId {
             let qualified_name = format_procedure_qualified(self.0);
             let len = CStr::from_ptr(qualified_name).to_bytes().len();
             let qualified_name =
-                pg_sys::pg_server_to_any(qualified_name, len as _, pg_sys::pg_enc_PG_UTF8 as _);
+                pg_sys::pg_server_to_any(qualified_name, len as _, pg_sys::pg_enc::PG_UTF8 as _);
             let qualified_name = CStr::from_ptr(qualified_name);
             let qualified_name = qualified_name.to_str().unwrap();
             qualified_name.serialize(serializer)
@@ -64,6 +64,6 @@ impl<'de> Deserialize<'de> for PgProcId {
             )
         };
 
-        Ok(Self(unsafe { Oid::from_u32_unchecked(oid.value() as _) }))
+        Ok(Self(Oid::from(oid.value() as u32)))
     }
 }

@@ -604,10 +604,10 @@ pub fn stats2d_combine_inner<'s, 'v>(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-fn stats1d_final<'s>(
+fn stats1d_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<StatsSummary1D<'s>> {
+) -> Option<StatsSummary1D<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || match state.get() {
             None => None,
@@ -620,11 +620,11 @@ fn stats1d_final<'s>(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-fn stats1d_tf_final<'s>(
+fn stats1d_tf_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
     // return a normal stats summary here
-) -> Option<StatsSummary1D<'s>> {
+) -> Option<StatsSummary1D<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || match state.get() {
             None => None,
@@ -640,10 +640,10 @@ fn stats1d_tf_final<'s>(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-fn stats2d_final<'s>(
+fn stats2d_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<StatsSummary2D<'s>> {
+) -> Option<StatsSummary2D<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || match state.get() {
             None => None,
@@ -656,10 +656,10 @@ fn stats2d_final<'s>(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-fn stats2d_tf_final<'s>(
+fn stats2d_tf_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<StatsSummary2D<'s>> {
+) -> Option<StatsSummary2D<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || match state.get() {
             None => None,
@@ -741,7 +741,13 @@ extension_sql!(
     );\n\
 ",
     name = "stats_agg_no_inv",
-    requires = [stats1d_trans, stats1d_final, stats1d_combine],
+    requires = [
+        stats1d_trans,
+        stats1d_final,
+        stats1d_combine,
+        stats1d_trans_serialize,
+        stats1d_trans_deserialize
+    ],
 );
 
 // same things for the 2d case
@@ -769,9 +775,9 @@ extension_sql!(
         stats2d_combine,
         stats2d_trans_serialize,
         stats2d_trans_deserialize,
-        stats2d_trans,
-        stats2d_inv_trans,
-        stats2d_final
+        stats2d_tf_trans,
+        stats2d_tf_inv_trans,
+        stats2d_tf_final,
     ],
 );
 
@@ -808,7 +814,13 @@ extension_sql!(
     );\n\
 ",
     name = "stats_agg2_no_inv",
-    requires = [stats2d_trans, stats2d_final, stats2d_combine],
+    requires = [
+        stats2d_trans,
+        stats2d_final,
+        stats2d_combine,
+        stats2d_trans_serialize,
+        stats2d_trans_deserialize
+    ],
 );
 
 //  Currently, rollup does not have the inverse function so if you want the behavior where we don't use the inverse,

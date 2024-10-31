@@ -9,9 +9,9 @@ use super::*;
     name = "filter",
     schema = "toolkit_experimental"
 )]
-pub fn filter_lambda_pipeline_element<'l, 'e>(
+pub fn filter_lambda_pipeline_element<'l>(
     lambda: toolkit_experimental::Lambda<'l>,
-) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     let expression = lambda.parse();
     if expression.ty() != &lambda::Type::Bool {
         panic!("invalid lambda type: the lambda must return a BOOLEAN")

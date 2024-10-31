@@ -41,7 +41,7 @@ impl PgCollationId {
 #[allow(non_upper_case_globals)]
 const Anum_pg_collation_oid: u32 = 1;
 // https://github.com/postgres/postgres/blob/e955bd4b6c2bcdbd253837f6cf4c7520b98e69d4/src/include/catalog/pg_collation.dat
-pub(crate) const DEFAULT_COLLATION_OID: Oid = pg_sys::Oid::from(100);
+pub(crate) const DEFAULT_COLLATION_OID: Oid = unsafe { Oid::from_u32_unchecked(100) };
 
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone)]

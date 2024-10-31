@@ -114,7 +114,7 @@ macro_rules! pg_type_impl {
             $(#[$attrs])*
             #[derive(pgrx::PostgresType, Clone, serde::Serialize, serde::Deserialize)]
             #[bikeshed_postgres_type_manually_impl_from_into_datum]
-            #[inoutfuncs]
+            // #[inoutfuncs]
             pub struct $name<$lifetemplate>(pub [<$name Data>] $(<$inlife>)?, $crate::type_builder::CachedDatum<$lifetemplate>);
 
             flat_serialize_macro::flat_serialize! {
@@ -128,6 +128,25 @@ macro_rules! pg_type_impl {
                     padding: [u8; 3],
                     $($(#[$fattrs])* $field: $typ $(<$life>)?),*
                 }
+            }
+
+            #[::pgrx::pgrx_macros::pg_extern(immutable,parallel_safe)]
+            pub fn [<$name:lower _in>](input: Option<&::core::ffi::CStr>) -> Option<$name<'static>> {
+                input.map_or_else(|| {
+                    while let Some(m) = <$name as ::pgrx::inoutfuncs::InOutFuncs>::NULL_ERROR_MESSAGE {
+                    // for m in <$name as ::pgrx::inoutfuncs::InOutFuncs>::NULL_ERROR_MESSAGE {
+                        ::pgrx::pg_sys::error!("{m}");
+                    }
+                    None
+                }, |i| Some(<$name as ::pgrx::inoutfuncs::InOutFuncs>::input(i)))
+            }
+
+            #[::pgrx::pgrx_macros::pg_extern(immutable,parallel_safe)]
+            pub fn [<$name:lower _out>](input: $name) -> ::pgrx::ffi::CString {
+                let mut buffer = ::pgrx::stringinfo::StringInfo::new();
+                ::pgrx::inoutfuncs::InOutFuncs::output(&input, &mut buffer);
+                // SAFETY: We just constructed this StringInfo ourselves
+                unsafe { buffer.leak_cstr().to_owned() }
             }
 
             impl<'input> $name<'input> {

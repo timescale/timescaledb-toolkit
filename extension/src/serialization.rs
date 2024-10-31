@@ -100,7 +100,7 @@ pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {
             feature = "pg17"
         ))]
         if dterr == 0 {
-            let mut extra = DateTimeErrorExtra::default();
+            let mut extra = pgrx::pg_sys::DateTimeErrorExtra::default();
             dterr = pg_sys::DecodeDateTime(
                 field.as_mut_ptr(),
                 ftype.as_mut_ptr(),
@@ -109,7 +109,7 @@ pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {
                 tm,
                 &mut fsec,
                 &mut tz,
-                &mut extra as *mut DateTimeErrorExtra,
+                &mut extra as *mut pgrx::pg_sys::DateTimeErrorExtra,
             )
         }
 

@@ -16,9 +16,9 @@ use crate::serialization::PgProcId;
     name = "map",
     schema = "toolkit_experimental"
 )]
-pub fn map_lambda_pipeline_element<'l, 'e>(
+pub fn map_lambda_pipeline_element<'l>(
     lambda: toolkit_experimental::Lambda<'l>,
-) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     let expression = lambda.parse();
     if expression.ty() != &lambda::Type::Double && !expression.ty_is_ts_point() {
         panic!("invalid lambda type: the lambda must return a DOUBLE PRECISION or (TimestampTZ, DOUBLE PRECISION)")
@@ -86,9 +86,9 @@ pub fn map_lambda_over_series(
     name = "map_series",
     schema = "toolkit_experimental"
 )]
-pub fn map_series_pipeline_element<'e>(
+pub fn map_series_pipeline_element(
     function: crate::raw::regproc,
-) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     map_series_element(crate::raw::regproc::from(function.0)).flatten()
 }
 
@@ -152,9 +152,9 @@ pub fn apply_to_series(
     name = "map_data",
     schema = "toolkit_experimental"
 )]
-pub fn map_data_pipeline_element<'e>(
+pub fn map_data_pipeline_element(
     function: crate::raw::regproc,
-) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     let mut argtypes: *mut pg_sys::Oid = ptr::null_mut();
     let mut nargs: ::std::os::raw::c_int = 0;
     let rettype = unsafe {

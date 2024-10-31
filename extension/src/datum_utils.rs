@@ -46,6 +46,7 @@ pub fn ts_interval_sum_to_ms(
     interval: &crate::raw::Interval,
 ) -> i64 {
     extern "C" {
+        #[allow(improper_ctypes)]
         fn timestamptz_pl_interval(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
     }
     let bound = unsafe {

@@ -360,7 +360,16 @@ impl PartialOrd for Value {
         use std::mem::discriminant;
         use Value::*;
 
+        // XXX `NodeTag` somewhere inside `pg_sys::FunctionCallInfo` triggers
+        // `improper_ctypes` lint. The `pgrx` author explains the issue in
+        // details here:
+        //
+        // https://github.com/rust-lang/rust/issues/116831
+        //
+        // For now it seems OK to suppress these warnings here and below with
+        // #[allow(improper_ctypes)]
         extern "C" {
+            #[allow(improper_ctypes)]
             fn interval_cmp(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
         }
 
@@ -392,6 +401,7 @@ impl PartialEq for Value {
         use std::mem::discriminant;
         use Value::*;
         extern "C" {
+            #[allow(improper_ctypes)]
             fn interval_eq(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
         }
 

@@ -369,6 +369,7 @@ fn parse_timestamptz(val: &str) -> i64 {
     //       uncallable with DirectFunctionCall(). Is there a way to
     //       export both?
     extern "C" {
+        #[allow(improper_ctypes)]
         fn timestamptz_in(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
     }
 
@@ -390,6 +391,7 @@ fn parse_interval(val: &str) -> *mut pg_sys::Interval {
     //       uncallable with DirectFunctionCall(). Is there a way to
     //       export both?
     extern "C" {
+        #[allow(improper_ctypes)]
         fn interval_in(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
     }
 

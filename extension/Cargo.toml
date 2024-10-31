@@ -3,8 +3,12 @@ name = "timescaledb_toolkit"
 version = "1.19.0-dev"
 edition = "2021"
 
+[[bin]]
+name = "pgrx_embed_timescaledb_toolkit"
+path = "./src/bin/pgrx_embed.rs"
+
 [lib]
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "lib"]
 
 [features]
 default = ["pg16"]

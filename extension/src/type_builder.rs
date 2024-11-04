@@ -1,11 +1,8 @@
 #[derive(Copy, Clone, Debug, serde::Serialize)]
 pub enum CachedDatum<'r> {
-// pub enum CachedDatum {
     None,
     FromInput(&'r [u8]),
     Flattened(&'r [u8]),
-    // FromInput(pgrx::pgbox::PgBox<[u8]>),
-    // Flattened(pgrx::pgbox::PgBox<[u8]>),
 }
 
 impl PartialEq for CachedDatum<'_> {
@@ -14,12 +11,16 @@ impl PartialEq for CachedDatum<'_> {
     }
 }
 
+// XXX Required by [`pgrx::PostgresType`] for default [`pgrx::FromDatum`]
+// implementation but isn't used since we implement [`pgrx::FromDatum`]
+// ourselves. We need a custom implementation because with the default one the
+// compiler complains that `'input` and `'de` lifetimes are incompatible.
 impl<'de> serde::Deserialize<'de> for CachedDatum<'_> {
     fn deserialize<D>(_deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::de::Deserializer<'de>,
     {
-        Ok(CachedDatum::None)
+        unimplemented!();
     }
 }
 
@@ -134,7 +135,6 @@ macro_rules! pg_type_impl {
             pub fn [<$name:lower _in>](input: Option<&::core::ffi::CStr>) -> Option<$name<'static>> {
                 input.map_or_else(|| {
                     while let Some(m) = <$name as ::pgrx::inoutfuncs::InOutFuncs>::NULL_ERROR_MESSAGE {
-                    // for m in <$name as ::pgrx::inoutfuncs::InOutFuncs>::NULL_ERROR_MESSAGE {
                         ::pgrx::pg_sys::error!("{m}");
                     }
                     None

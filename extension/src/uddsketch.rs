@@ -179,10 +179,8 @@ impl SerializedUddSketch {
 
 // PG object for the sketch.
 pg_type! {
-    //#[derive(Debug, serde::Serialize, serde::Deserialize)]
     #[derive(Debug)]
     struct UddSketch<'input> {
-    // struct UddSketch {
         alpha: f64,
         max_buckets: u32,
         num_buckets: u32,
@@ -265,7 +263,6 @@ impl<'a, 'b> From<&'a ReadableUddSketch> for UddSketch<'b> {
 }
 
 impl<'input> InOutFuncs for UddSketch<'input> {
-// impl InOutFuncs for UddSketch {
     fn output(&self, buffer: &mut StringInfo) {
         use crate::serialization::{str_to_db_encoding, EncodedStr::*};
 
@@ -289,7 +286,6 @@ impl<'input> InOutFuncs for UddSketch<'input> {
 }
 
 impl<'input> UddSketch<'input> {
-// impl UddSketch {
     fn keys(&self) -> impl Iterator<Item = SketchHashKey> + '_ {
         // FIXME does this really need a slice?
         decompress_keys(
@@ -354,7 +350,6 @@ impl<'input> UddSketch<'input> {
 }
 
 impl<'input> FromIterator<f64> for UddSketch<'input> {
-// impl FromIterator<f64> for UddSketch {
     fn from_iter<T: IntoIterator<Item = f64>>(iter: T) -> Self {
         let mut sketch = UddSketchInternal::new(
             PERCENTILE_AGG_DEFAULT_SIZE.into(),

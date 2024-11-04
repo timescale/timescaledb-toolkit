@@ -193,21 +193,16 @@ where
         //
         // https://github.com/rust-lang/rust/issues/116831
         //
-        // For now it seems OK to suppress these warnings here and below with
+        // For now it seems OK to suppress these warnings here with
         // #[allow(improper_ctypes)]
+        #[allow(improper_ctypes)]
         extern "C" {
-            #[allow(improper_ctypes)]
             fn interval_pl(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
-            #[allow(improper_ctypes)]
             fn interval_mi(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
-            #[allow(improper_ctypes)]
             fn interval_mul(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
-            #[allow(improper_ctypes)]
             fn interval_div(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
 
-            #[allow(improper_ctypes)]
             fn timestamptz_pl_interval(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
-            #[allow(improper_ctypes)]
             fn timestamptz_mi_interval(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
         }
 

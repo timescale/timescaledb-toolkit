@@ -98,7 +98,6 @@ unsafe impl pgrx::callconv::BoxRet for bytea {
     unsafe fn box_into<'fcx>(self, fcinfo: &mut pgrx::callconv::FcInfo<'fcx>)
         -> pgrx::datum::Datum<'fcx>
     {
-        // self.0
         unsafe { fcinfo.return_raw_datum(self.0) }
     }
 }
@@ -152,7 +151,6 @@ unsafe impl pgrx::callconv::BoxRet for Interval {
     unsafe fn box_into<'fcx>(self, fcinfo: &mut pgrx::callconv::FcInfo<'fcx>)
         -> pgrx::datum::Datum<'fcx>
     {
-        // self.0
         unsafe { fcinfo.return_raw_datum(self.0) }
     }
 }

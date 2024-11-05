@@ -16,7 +16,6 @@ macro_rules! accessor {
             $crate::pg_type!{
                 // TODO Move into pg_type as we don't care to vary it.
                 #[derive(Debug)]
-                // #[derive(serde::Serialize, serde::Deserialize)]
                 struct [<Accessor $name:camel>] {
                 $($field: $typ,)*
                 }

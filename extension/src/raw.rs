@@ -49,9 +49,6 @@ macro_rules! raw_type {
             fn type_oid() -> pg_sys::Oid {
                 $tyid
             }
-            // fn array_type_oid() -> pg_sys::Oid {
-            //     $arrayid
-            // }
         }
 
         impl From<pg_sys::Datum> for $name {

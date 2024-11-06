@@ -324,10 +324,10 @@ pub fn state_agg_rollup_trans<'a>(
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-fn compact_state_agg_rollup_final<'a>(
+fn compact_state_agg_rollup_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<CompactStateAgg<'a>> {
+) -> Option<CompactStateAgg<'static>> {
     compact_state_agg_rollup_final_inner(unsafe { state.to_inner() }, fcinfo)
 }
 
@@ -350,10 +350,10 @@ fn compact_state_agg_rollup_final_inner<'a>(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-fn state_agg_rollup_final<'a>(
+fn state_agg_rollup_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<StateAgg<'a>> {
+) -> Option<StateAgg<'static>> {
     state_agg_rollup_final_inner(unsafe { state.to_inner() }, fcinfo)
 }
 

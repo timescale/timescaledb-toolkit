@@ -55,10 +55,10 @@ impl FillToMethod {
     name = "fill_to",
     schema = "toolkit_experimental"
 )]
-pub fn fillto_pipeline_element<'e>(
+pub fn fillto_pipeline_element(
     interval: crate::raw::Interval,
     fill_method: String,
-) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     unsafe {
         let interval = interval.0.cast_mut_ptr::<pg_sys::Interval>() as *const pg_sys::Interval;
         // TODO: store the postgres interval object and use postgres timestamp/interval functions

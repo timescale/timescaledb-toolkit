@@ -186,6 +186,16 @@ where
         //       uncallable with DirectFunctionCall(). Is there a way to
         //       export both?
         // TODO This is fixed in a newer pgrx version, should remove after upgrade
+
+        // XXX `NodeTag` somewhere inside `pg_sys::FunctionCallInfo` triggers
+        // `improper_ctypes` lint. The `pgrx` author explains the issue in
+        // details here:
+        //
+        // https://github.com/rust-lang/rust/issues/116831
+        //
+        // For now it seems OK to suppress these warnings here with
+        // #[allow(improper_ctypes)]
+        #[allow(improper_ctypes)]
         extern "C" {
             fn interval_pl(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
             fn interval_mi(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;

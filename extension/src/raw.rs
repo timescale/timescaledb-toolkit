@@ -49,9 +49,6 @@ macro_rules! raw_type {
             fn type_oid() -> pg_sys::Oid {
                 $tyid
             }
-            fn array_type_oid() -> pg_sys::Oid {
-                $arrayid
-            }
         }
 
         impl From<pg_sys::Datum> for $name {
@@ -75,6 +72,17 @@ macro_rules! raw_type {
                 Ok(Returns::One(SqlMapping::literal(stringify!($name))))
             }
         }
+
+        unsafe impl<'fcx> callconv::ArgAbi<'fcx> for $name {
+            unsafe fn unbox_arg_unchecked(arg: callconv::Arg<'_, 'fcx>) -> Self {
+                let index = arg.index();
+                unsafe { arg.unbox_arg_using_from_datum().unwrap_or_else(|| panic!("argument {index} must not be null")) }
+            }
+
+            unsafe fn unbox_nullable_arg(arg: callconv::Arg<'_, 'fcx>) -> nullable::Nullable<Self> {
+                unsafe { arg.unbox_arg_using_from_datum().into() }
+            }
+        }
     };
 }
 
@@ -82,6 +90,14 @@ macro_rules! raw_type {
 pub struct bytea(pub pg_sys::Datum);
 
 raw_type!(bytea, pg_sys::BYTEAOID, pg_sys::BYTEAARRAYOID);
+
+unsafe impl pgrx::callconv::BoxRet for bytea {
+    unsafe fn box_into<'fcx>(self, fcinfo: &mut pgrx::callconv::FcInfo<'fcx>)
+        -> pgrx::datum::Datum<'fcx>
+    {
+        unsafe { fcinfo.return_raw_datum(self.0) }
+    }
+}
 
 #[derive(Clone, Copy)]
 pub struct text(pub pg_sys::Datum);
@@ -95,6 +111,14 @@ raw_type!(
     pg_sys::TIMESTAMPTZOID,
     pg_sys::TIMESTAMPTZARRAYOID
 );
+
+unsafe impl pgrx::callconv::BoxRet for TimestampTz {
+    unsafe fn box_into<'fcx>(self, fcinfo: &mut pgrx::callconv::FcInfo<'fcx>)
+        -> pgrx::datum::Datum<'fcx>
+    {
+        unsafe { fcinfo.return_raw_datum(self.0) }
+    }
+}
 
 impl From<TimestampTz> for pg_sys::TimestampTz {
     fn from(tstz: TimestampTz) -> Self {
@@ -119,6 +143,14 @@ raw_type!(tstzrange, pg_sys::TSTZRANGEOID, pg_sys::TSTZRANGEARRAYOID);
 pub struct Interval(pub pg_sys::Datum);
 
 raw_type!(Interval, pg_sys::INTERVALOID, pg_sys::INTERVALARRAYOID);
+
+unsafe impl pgrx::callconv::BoxRet for Interval {
+    unsafe fn box_into<'fcx>(self, fcinfo: &mut pgrx::callconv::FcInfo<'fcx>)
+        -> pgrx::datum::Datum<'fcx>
+    {
+        unsafe { fcinfo.return_raw_datum(self.0) }
+    }
+}
 
 impl From<i64> for Interval {
     fn from(interval: i64) -> Self {

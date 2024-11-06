@@ -73,7 +73,7 @@ pub fn apply(
     name = "add",
     schema = "toolkit_experimental"
 )]
-pub fn pipeline_add<'e>(rhs: f64) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+pub fn pipeline_add(rhs: f64) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     Arithmetic { function: Add, rhs }.flatten()
 }
 
@@ -83,7 +83,7 @@ pub fn pipeline_add<'e>(rhs: f64) -> toolkit_experimental::UnstableTimevectorPip
     name = "sub",
     schema = "toolkit_experimental"
 )]
-pub fn pipeline_sub<'e>(rhs: f64) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+pub fn pipeline_sub(rhs: f64) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     Arithmetic { function: Sub, rhs }.flatten()
 }
 
@@ -93,7 +93,7 @@ pub fn pipeline_sub<'e>(rhs: f64) -> toolkit_experimental::UnstableTimevectorPip
     name = "mul",
     schema = "toolkit_experimental"
 )]
-pub fn pipeline_mul<'e>(rhs: f64) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+pub fn pipeline_mul(rhs: f64) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     Arithmetic { function: Mul, rhs }.flatten()
 }
 
@@ -103,7 +103,7 @@ pub fn pipeline_mul<'e>(rhs: f64) -> toolkit_experimental::UnstableTimevectorPip
     name = "div",
     schema = "toolkit_experimental"
 )]
-pub fn pipeline_div<'e>(rhs: f64) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+pub fn pipeline_div(rhs: f64) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     Arithmetic { function: Div, rhs }.flatten()
 }
 
@@ -113,7 +113,7 @@ pub fn pipeline_div<'e>(rhs: f64) -> toolkit_experimental::UnstableTimevectorPip
     name = "mod",
     schema = "toolkit_experimental"
 )]
-pub fn pipeline_mod<'e>(rhs: f64) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+pub fn pipeline_mod(rhs: f64) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     Arithmetic { function: Mod, rhs }.flatten()
 }
 
@@ -123,7 +123,7 @@ pub fn pipeline_mod<'e>(rhs: f64) -> toolkit_experimental::UnstableTimevectorPip
     name = "power",
     schema = "toolkit_experimental"
 )]
-pub fn pipeline_power<'e>(rhs: f64) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+pub fn pipeline_power(rhs: f64) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     Arithmetic {
         function: Power,
         rhs,
@@ -138,7 +138,7 @@ pub fn pipeline_power<'e>(rhs: f64) -> toolkit_experimental::UnstableTimevectorP
     name = "logn",
     schema = "toolkit_experimental"
 )]
-pub fn pipeline_log_n<'e>(rhs: f64) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+pub fn pipeline_log_n(rhs: f64) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     Arithmetic {
         function: LogN,
         rhs,
@@ -156,7 +156,7 @@ pub fn pipeline_log_n<'e>(rhs: f64) -> toolkit_experimental::UnstableTimevectorP
     name = "abs",
     schema = "toolkit_experimental"
 )]
-pub fn pipeline_abs<'e>() -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+pub fn pipeline_abs() -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     Arithmetic {
         function: Abs,
         rhs: 0.0,
@@ -170,7 +170,7 @@ pub fn pipeline_abs<'e>() -> toolkit_experimental::UnstableTimevectorPipeline<'e
     name = "cbrt",
     schema = "toolkit_experimental"
 )]
-pub fn pipeline_cbrt<'e>() -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+pub fn pipeline_cbrt() -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     Arithmetic {
         function: Cbrt,
         rhs: 0.0,
@@ -184,7 +184,7 @@ pub fn pipeline_cbrt<'e>() -> toolkit_experimental::UnstableTimevectorPipeline<'
     name = "ceil",
     schema = "toolkit_experimental"
 )]
-pub fn pipeline_ceil<'e>() -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+pub fn pipeline_ceil() -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     Arithmetic {
         function: Ceil,
         rhs: 0.0,
@@ -198,7 +198,7 @@ pub fn pipeline_ceil<'e>() -> toolkit_experimental::UnstableTimevectorPipeline<'
     name = "floor",
     schema = "toolkit_experimental"
 )]
-pub fn pipeline_floor<'e>() -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+pub fn pipeline_floor() -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     Arithmetic {
         function: Floor,
         rhs: 0.0,
@@ -207,7 +207,7 @@ pub fn pipeline_floor<'e>() -> toolkit_experimental::UnstableTimevectorPipeline<
 }
 
 #[pg_extern(immutable, parallel_safe, name = "ln", schema = "toolkit_experimental")]
-pub fn pipeline_ln<'e>() -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+pub fn pipeline_ln() -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     Arithmetic {
         function: Ln,
         rhs: 0.0,
@@ -221,7 +221,7 @@ pub fn pipeline_ln<'e>() -> toolkit_experimental::UnstableTimevectorPipeline<'e>
     name = "log10",
     schema = "toolkit_experimental"
 )]
-pub fn pipeline_log10<'e>() -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+pub fn pipeline_log10() -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     Arithmetic {
         function: Log10,
         rhs: 0.0,
@@ -235,7 +235,7 @@ pub fn pipeline_log10<'e>() -> toolkit_experimental::UnstableTimevectorPipeline<
     name = "round",
     schema = "toolkit_experimental"
 )]
-pub fn pipeline_round<'e>() -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+pub fn pipeline_round() -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     Arithmetic {
         function: Round,
         rhs: 0.0,
@@ -249,7 +249,7 @@ pub fn pipeline_round<'e>() -> toolkit_experimental::UnstableTimevectorPipeline<
     name = "sign",
     schema = "toolkit_experimental"
 )]
-pub fn pipeline_sign<'e>() -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+pub fn pipeline_sign() -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     Arithmetic {
         function: Sign,
         rhs: 0.0,
@@ -263,7 +263,7 @@ pub fn pipeline_sign<'e>() -> toolkit_experimental::UnstableTimevectorPipeline<'
     name = "sqrt",
     schema = "toolkit_experimental"
 )]
-pub fn pipeline_sqrt<'e>() -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+pub fn pipeline_sqrt() -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     Arithmetic {
         function: Sqrt,
         rhs: 0.0,
@@ -277,7 +277,7 @@ pub fn pipeline_sqrt<'e>() -> toolkit_experimental::UnstableTimevectorPipeline<'
     name = "trunc",
     schema = "toolkit_experimental"
 )]
-pub fn pipeline_trunc<'e>() -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+pub fn pipeline_trunc() -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     Arithmetic {
         function: Trunc,
         rhs: 0.0,

@@ -34,12 +34,12 @@ jobs:
     name: Test Postgres
     runs-on: ubuntu-20.04
     container:
-      image: ${{ inputs.container-image || 'timescaledev/toolkit-builder' }}:${{ matrix.container.image }}
+      image: ${{ inputs.container-image || 'timescaledev/toolkit-builder-test' }}:${{ matrix.container.image }}
     strategy:
       fail-fast: false
       max-parallel: 12
       matrix:
-        pgversion: [13, 14, 15, 16]
+        pgversion: [14, 15, 16, 17]
         container:
         - os: rockylinux
           version: "9"
@@ -69,7 +69,6 @@ jobs:
           version: "22.04"
           image: ubuntu-22.04-amd64
           schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
-
         exclude:
         - container:
             skip: true
@@ -80,17 +79,27 @@ jobs:
             os: centos
             version: "7"
           pgversion: 16
+        include:
         # TimescaleDB as of 2.12.0 no longer supports PostgreSQL 12.
         # To allow us to do run CI against PostgreSQL 12, we therefore explicitly
         # remove all CI's, except if we are run against the latest supported TimescaleDB
         # version for PostgreSQL 12, which is 2.11.2
-        include:
         - pgversion: 12
           container:
             image: debian-11-amd64
             os: debian
             version: "11" 
           tsdb_commit: 2.11.2
+        # TimescaleDB as of 2.16.0 no longer supports PostgreSQL 13.
+        # To allow us to do run CI against PostgreSQL 13, we therefore explicitly
+        # remove all CI's, except if we are run against the latest supported TimescaleDB
+        # version for PostgreSQL 13, which is 2.15.3
+        - pgversion: 13
+          container:
+            image: debian-11-amd64
+            os: debian
+            version: "11" 
+          tsdb_commit: 2.15.3
     env:
       # TODO Why?  Cargo default is to pass `-C incremental` to rustc; why don't we want that?
       #   https://doc.rust-lang.org/rustc/codegen-options/index.html#incremental
@@ -124,7 +133,7 @@ jobs:
 
     - name: Build and install TimescaleDB
       if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || inputs.tsdb-commit != '' }}
-      run: ./tools/install-timescaledb '${{ matrix.pgversion }}' '${{ matrix.tsdb_commit || inputs.tsdb-repo || 'https://github.com/timescale/timescaledb.git' }}' '${{ inputs.tsdb-commit == '' && 'main' || matrix.tsdb_commit || inputs.tsdb-commit }}'
+      run: ./tools/install-timescaledb '${{ matrix.pgversion }}' '${{ inputs.tsdb-repo || 'https://github.com/timescale/timescaledb.git' }}' '${{ inputs.tsdb-commit == '' && 'main' || matrix.tsdb_commit || inputs.tsdb-commit }}'
 
     # TODO After the container image contains a primed target dir, is this still worth it?
     #   Only possible advantage is this one is per-pg-version but what's the impact?

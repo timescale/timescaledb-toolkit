@@ -9,7 +9,7 @@ use super::*;
     name = "sort",
     schema = "toolkit_experimental"
 )]
-pub fn sort_pipeline_element<'p, 'e>() -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+pub fn sort_pipeline_element<'p>() -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     Element::Sort {}.flatten()
 }
 

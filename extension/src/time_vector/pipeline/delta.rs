@@ -11,9 +11,9 @@ use crate::accessors::AccessorDelta;
     name = "delta_cast",
     schema = "toolkit_experimental"
 )]
-pub fn delta_pipeline_element<'p, 'e>(
+pub fn delta_pipeline_element<'p>(
     accessor: AccessorDelta<'p>,
-) -> toolkit_experimental::UnstableTimevectorPipeline<'e> {
+) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     let _ = accessor;
     Element::Delta {}.flatten()
 }
@@ -25,6 +25,7 @@ extension_sql!(
         AS IMPLICIT;
 "#,
     name = "accessor_delta_cast",
+    requires = [delta_pipeline_element]
 );
 
 pub fn timevector_delta<'s>(series: &Timevector_TSTZ_F64<'s>) -> Timevector_TSTZ_F64<'s> {

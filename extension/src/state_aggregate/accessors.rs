@@ -197,7 +197,7 @@ pg_type! {
 ron_inout_funcs!(AccessorDurationInInt);
 
 #[pg_extern(immutable, parallel_safe, name = "duration_in")]
-fn accessor_state_agg_duration_in<'a>(state: String) -> AccessorDurationIn<'a> {
+fn accessor_state_agg_duration_in(state: String) -> AccessorDurationIn<'static> {
     crate::build! {
         AccessorDurationIn {
             state_len: state.len().try_into().unwrap(),
@@ -206,7 +206,7 @@ fn accessor_state_agg_duration_in<'a>(state: String) -> AccessorDurationIn<'a> {
     }
 }
 #[pg_extern(immutable, parallel_safe, name = "duration_in")]
-fn accessor_state_agg_duration_in_int<'a>(state: i64) -> AccessorDurationInInt<'a> {
+fn accessor_state_agg_duration_in_int(state: i64) -> AccessorDurationInInt<'static> {
     crate::build! {
         AccessorDurationInInt {
             state,
@@ -229,7 +229,7 @@ pg_type! {
 ron_inout_funcs!(AccessorStatePeriodsInt);
 
 #[pg_extern(immutable, parallel_safe, name = "state_periods")]
-fn accessor_state_agg_state_periods<'a>(state: String) -> AccessorStatePeriods<'a> {
+fn accessor_state_agg_state_periods<'a>(state: String) -> AccessorStatePeriods<'static> {
     crate::build! {
         AccessorStatePeriods {
             state_len: state.len().try_into().unwrap(),
@@ -238,7 +238,7 @@ fn accessor_state_agg_state_periods<'a>(state: String) -> AccessorStatePeriods<'
     }
 }
 #[pg_extern(immutable, parallel_safe, name = "state_periods")]
-fn accessor_state_agg_state_periods_int<'a>(state: i64) -> AccessorStatePeriodsInt<'a> {
+fn accessor_state_agg_state_periods_int(state: i64) -> AccessorStatePeriodsInt<'static> {
     crate::build! {
         AccessorStatePeriodsInt {
             state,
@@ -266,11 +266,11 @@ pg_type! {
 ron_inout_funcs!(AccessorDurationInRangeInt);
 
 #[pg_extern(immutable, parallel_safe, name = "duration_in")]
-fn accessor_state_agg_duration_in_range<'a>(
+fn accessor_state_agg_duration_in_range(
     state: String,
     start: TimestampTz,
     interval: default!(Option<crate::raw::Interval>, "NULL"),
-) -> AccessorDurationInRange<'a> {
+) -> AccessorDurationInRange<'static> {
     let interval = interval
         .map(|interval| crate::datum_utils::interval_to_ms(&start, &interval))
         .unwrap_or(NO_INTERVAL_MARKER);
@@ -285,11 +285,11 @@ fn accessor_state_agg_duration_in_range<'a>(
     }
 }
 #[pg_extern(immutable, parallel_safe, name = "duration_in")]
-fn accessor_state_agg_duration_in_range_int<'a>(
+fn accessor_state_agg_duration_in_range_int(
     state: i64,
     start: TimestampTz,
     interval: default!(Option<crate::raw::Interval>, "NULL"),
-) -> AccessorDurationInRangeInt<'a> {
+) -> AccessorDurationInRangeInt<'static> {
     let interval = interval
         .map(|interval| crate::datum_utils::interval_to_ms(&start, &interval))
         .unwrap_or(NO_INTERVAL_MARKER);
@@ -310,7 +310,7 @@ pg_type! {
 ron_inout_funcs!(AccessorStateAt);
 
 #[pg_extern(immutable, parallel_safe, name = "state_at")]
-fn accessor_state_agg_state_at<'a>(time: TimestampTz) -> AccessorStateAt<'a> {
+fn accessor_state_agg_state_at(time: TimestampTz) -> AccessorStateAt<'static> {
     crate::build! {
         AccessorStateAt {
             time: time.into(),
@@ -326,7 +326,7 @@ pg_type! {
 ron_inout_funcs!(AccessorStateAtInt);
 
 #[pg_extern(immutable, parallel_safe, name = "state_at_int")]
-fn accessor_state_agg_state_at_int<'a>(time: TimestampTz) -> AccessorStateAtInt<'a> {
+fn accessor_state_agg_state_at_int(time: TimestampTz) -> AccessorStateAtInt<'static> {
     crate::build! {
         AccessorStateAtInt {
             time: time.into(),

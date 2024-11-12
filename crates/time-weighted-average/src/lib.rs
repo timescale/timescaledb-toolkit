@@ -114,10 +114,10 @@ impl TimeWeightSummary {
     /// The initial aggregate will only have points within the time bucket, but outside of it, you will either have a point that you select
     /// or a TimeWeightSummary where the first or last point can be used depending on which bound you are extrapolating to.
     /// 1. The start_prev parameter is optional, but if a start is provided a previous point must be
-    /// provided (for both linear and locf weighting methods).
+    ///    provided (for both linear and locf weighting methods).
     /// 2. The end_next parameter is also optional, if an end is provided and the locf weighting
-    /// method is specified, a next parameter isn't needed, with the linear method, the next
-    /// point is needed and we will error if it is not provided.
+    ///    method is specified, a next parameter isn't needed, with the linear method, the next
+    ///    point is needed and we will error if it is not provided.
     pub fn with_bounds(
         &self,
         start_prev: Option<(i64, TSPoint)>,

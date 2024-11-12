@@ -41,6 +41,7 @@ impl PgCollationId {
 #[allow(non_upper_case_globals)]
 const Anum_pg_collation_oid: u32 = 1;
 // https://github.com/postgres/postgres/blob/e955bd4b6c2bcdbd253837f6cf4c7520b98e69d4/src/include/catalog/pg_collation.dat
+#[allow(deprecated)] // From::from is non-const
 pub(crate) const DEFAULT_COLLATION_OID: Oid = unsafe { Oid::from_u32_unchecked(100) };
 
 #[allow(non_camel_case_types)]
@@ -121,7 +122,10 @@ impl Serialize for PgCollationId {
 
             let namespace = pg_sys::get_namespace_name((*collation_tuple).collnamespace);
             if namespace.is_null() {
-                pgrx::error!("invalid schema oid {}", (*collation_tuple).collnamespace.as_u32());
+                pgrx::error!(
+                    "invalid schema oid {}",
+                    (*collation_tuple).collnamespace.as_u32()
+                );
             }
 
             let namespace_len = CStr::from_ptr(namespace).to_bytes().len();
@@ -185,8 +189,11 @@ impl<'de> Deserialize<'de> for PgCollationId {
             );
             let namespace = CStr::from_ptr(namespace);
 
-            let name =
-                pg_sys::pg_any_to_server(name.as_ptr(), name_len as _, pg_sys::pg_enc::PG_UTF8 as _);
+            let name = pg_sys::pg_any_to_server(
+                name.as_ptr(),
+                name_len as _,
+                pg_sys::pg_enc::PG_UTF8 as _,
+            );
             let name = CStr::from_ptr(name);
 
             let namespace_id = pg_sys::LookupExplicitNamespace(namespace.as_ptr(), true);
@@ -256,8 +263,10 @@ mod tests {
     use super::PgCollationId;
     use pgrx::{pg_sys, pg_test};
 
+    #[allow(deprecated)] // no const version
     const COLLATION_ID_950: PgCollationId =
         PgCollationId(unsafe { pg_sys::Oid::from_u32_unchecked(950) });
+    #[allow(deprecated)] // no const version
     const COLLATION_ID_951: PgCollationId =
         PgCollationId(unsafe { pg_sys::Oid::from_u32_unchecked(951) });
 

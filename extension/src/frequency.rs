@@ -1276,12 +1276,9 @@ pub fn freq_iter<'a>(
         TableIterator::new(agg.datums.clone().into_iter().zip(counts).map_while(
             move |(value, (&count, &overcount))| {
                 let total = agg.values_seen as f64;
-                let value = AnyElement::from_polymorphic_datum(
-                    value,
-                    false,
-                    Oid::from(agg.type_oid),
-                )
-                .unwrap();
+                let value =
+                    AnyElement::from_polymorphic_datum(value, false, Oid::from(agg.type_oid))
+                        .unwrap();
                 let min_freq = (count - overcount) as f64 / total;
                 let max_freq = count as f64 / total;
                 Some((value, min_freq, max_freq))

@@ -76,7 +76,10 @@ macro_rules! raw_type {
         unsafe impl<'fcx> callconv::ArgAbi<'fcx> for $name {
             unsafe fn unbox_arg_unchecked(arg: callconv::Arg<'_, 'fcx>) -> Self {
                 let index = arg.index();
-                unsafe { arg.unbox_arg_using_from_datum().unwrap_or_else(|| panic!("argument {index} must not be null")) }
+                unsafe {
+                    arg.unbox_arg_using_from_datum()
+                        .unwrap_or_else(|| panic!("argument {index} must not be null"))
+                }
             }
 
             unsafe fn unbox_nullable_arg(arg: callconv::Arg<'_, 'fcx>) -> nullable::Nullable<Self> {
@@ -92,9 +95,10 @@ pub struct bytea(pub pg_sys::Datum);
 raw_type!(bytea, pg_sys::BYTEAOID, pg_sys::BYTEAARRAYOID);
 
 unsafe impl pgrx::callconv::BoxRet for bytea {
-    unsafe fn box_into<'fcx>(self, fcinfo: &mut pgrx::callconv::FcInfo<'fcx>)
-        -> pgrx::datum::Datum<'fcx>
-    {
+    unsafe fn box_into<'fcx>(
+        self,
+        fcinfo: &mut pgrx::callconv::FcInfo<'fcx>,
+    ) -> pgrx::datum::Datum<'fcx> {
         unsafe { fcinfo.return_raw_datum(self.0) }
     }
 }
@@ -113,9 +117,10 @@ raw_type!(
 );
 
 unsafe impl pgrx::callconv::BoxRet for TimestampTz {
-    unsafe fn box_into<'fcx>(self, fcinfo: &mut pgrx::callconv::FcInfo<'fcx>)
-        -> pgrx::datum::Datum<'fcx>
-    {
+    unsafe fn box_into<'fcx>(
+        self,
+        fcinfo: &mut pgrx::callconv::FcInfo<'fcx>,
+    ) -> pgrx::datum::Datum<'fcx> {
         unsafe { fcinfo.return_raw_datum(self.0) }
     }
 }
@@ -145,9 +150,10 @@ pub struct Interval(pub pg_sys::Datum);
 raw_type!(Interval, pg_sys::INTERVALOID, pg_sys::INTERVALARRAYOID);
 
 unsafe impl pgrx::callconv::BoxRet for Interval {
-    unsafe fn box_into<'fcx>(self, fcinfo: &mut pgrx::callconv::FcInfo<'fcx>)
-        -> pgrx::datum::Datum<'fcx>
-    {
+    unsafe fn box_into<'fcx>(
+        self,
+        fcinfo: &mut pgrx::callconv::FcInfo<'fcx>,
+    ) -> pgrx::datum::Datum<'fcx> {
         unsafe { fcinfo.return_raw_datum(self.0) }
     }
 }

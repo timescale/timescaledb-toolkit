@@ -32,7 +32,7 @@ BUILDER_HOME=$6
 
 # Phase 0 - set platform-specific parameters
 case $OS_NAME in
-    centos | rockylinux)
+    rockylinux)
         PG_BASE=/usr/pgsql-
         ;;
     debian | ubuntu)
@@ -51,34 +51,8 @@ if $privileged; then
     # Phase 2 - platform-specific package installation
     case $OS_NAME in
         # Red Hat Enterprise derivatives
-        centos | rockylinux)
+        rockylinux)
             case $OS_VERSION in
-                7)
-                    export PG_VERSIONS="13 14 15 16 17"
-                    export TSDB_PG_VERSIONS="13 14 15 16 17"
-                    # Postgresql packages require both
-                    # - llvm-toolset-7-clang from centos-release-scl-rh
-                    # - llvm5.0-devel from epel-release
-                    # ¯\_(ツ)_/¯
-                    yum -q -y install centos-release-scl-rh epel-release
-                    yum -q -y install devtoolset-7-gcc llvm-toolset-7-clang-devel llvm-toolset-7-clang-libs
-                    # devtoolset-7 includes a BROKEN sudo!  It even leads with a TODO about its brokenness!
-                    rm -f /opt/rh/devtoolset-7/root/usr/bin/sudo
-                    # for fpm
-                    yum -q -y install rh-ruby26-ruby-devel
-
-                    # TODO Would be nice to be able to resolve all system
-                    #  differences here rather than also in package-rpm.sh -
-                    #  maybe install wrappers in /usr/local/bin or setup ~/.profile .
-                    #  For now, most the knowledge is split.
-                    # Here, we only need `cc` for installing cargo-pgrx below.
-                    set +e      # scl_source has unchecked yet harmless errors?!  ¯\_(ツ)_/¯
-                    . scl_source enable devtoolset-7
-                    # And rh-ruby26 for gem install fpm below.
-                    . scl_source enable rh-ruby26
-                    set -e
-                    ;;
-
                 8)
                     yum -qy install dnf-plugins-core
                     dnf config-manager --enable powertools

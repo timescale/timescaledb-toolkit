@@ -96,7 +96,6 @@ skip_from_version() {
     [ $FROM_VERSION = 1.10.0-dev ] && return
     [ $OS_NAME = debian ] && [ $OS_VERSION = 10 ] && [ `cmp_version $FROM_VERSION` -lt 011100 ] && return
     [ $OS_NAME = ubuntu ] && [ $OS_VERSION = 22.04 ] && [ `cmp_version $FROM_VERSION` -lt 010600 ] && return
-    [ $OS_NAME = centos ] && [ $OS_VERSION = 7 ] && [ `cmp_version $FROM_VERSION` -ge 010800 ] && [ `cmp_version $FROM_VERSION` -le 011100 ] && return
 }
 
 # Requires:

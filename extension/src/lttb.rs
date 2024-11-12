@@ -117,6 +117,7 @@ pub fn gp_lttb_trans(
 
     let mut trans = lttb_trans_inner(state, time, val, resolution, fcinfo);
     if needs_interval {
+        #[allow(clippy::manual_inspect)] // need to mutate s
         trans.as_mut().map(|s| {
             s.gap_interval = gap_val;
             s

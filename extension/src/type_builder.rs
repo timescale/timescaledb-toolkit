@@ -37,7 +37,7 @@ macro_rules! pg_type {
     ) => {
         $crate::pg_type_impl!{
             'input
-            $(#[$attrs])* 
+            $(#[$attrs])*
             struct $name $(<$inlife>)?
             {
                 $($($vals)*)?
@@ -431,8 +431,8 @@ macro_rules! do_deserialize {
     ($bytes: expr, $t: ty) => {{
         use $crate::type_builder::SerializationType;
 
+        let input: $crate::raw::bytea = $bytes;
         let state: $t = unsafe {
-            let input: $crate::raw::bytea = $bytes;
             let input: pgrx::pg_sys::Datum = input.into();
             let detoasted = pg_sys::pg_detoast_datum_packed(input.cast_mut_ptr());
             let len = pgrx::varsize_any_exhdr(detoasted);

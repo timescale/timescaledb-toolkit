@@ -49,9 +49,9 @@ pub struct XYPair<T: FloatLike> {
 // but then the cost of recalculation is low, compared to when there are many values in a rolling calculation, so we
 // test early in the function for whether we need to recalculate and pass NULL quickly so that we don't affect those
 // cases too heavily.
-#[cfg(not(any(test, feature = "pg_test")))]
+#[cfg(not(test))]
 const INV_FLOATING_ERROR_THRESHOLD: f64 = 0.99;
-#[cfg(any(test, feature = "pg_test"))] // don't have a threshold for tests, to ensure the inverse function is better tested
+#[cfg(test)] // don't have a threshold for tests, to ensure the inverse function is better tested
 const INV_FLOATING_ERROR_THRESHOLD: f64 = f64::INFINITY;
 
 pub mod stats1d;

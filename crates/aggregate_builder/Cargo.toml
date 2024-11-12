@@ -10,3 +10,6 @@ proc-macro = true
 syn = {version="1.0", features=["extra-traits", "visit", "visit-mut", "full"]}
 quote = "1.0"
 proc-macro2 = "1.0"
+
+[features]
+print-generated = []

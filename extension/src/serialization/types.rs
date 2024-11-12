@@ -276,8 +276,11 @@ impl<'de> Deserialize<'de> for PgTypId {
             );
             let namespace = CStr::from_ptr(namespace);
 
-            let name =
-                pg_sys::pg_any_to_server(name.as_ptr(), name_len as _, pg_sys::pg_enc::PG_UTF8 as _);
+            let name = pg_sys::pg_any_to_server(
+                name.as_ptr(),
+                name_len as _,
+                pg_sys::pg_enc::PG_UTF8 as _,
+            );
             let name = CStr::from_ptr(name);
 
             let namespace_id = pg_sys::LookupExplicitNamespace(namespace.as_ptr(), true);

@@ -6,8 +6,6 @@ use std::{
     os::raw::{c_char, c_int},
 };
 
-#[cfg(feature = "pg16")]
-use pgrx::pg_sys::DateTimeErrorExtra;
 use pgrx::pg_sys::{self};
 
 use std::ffi::CStr;
@@ -78,12 +76,7 @@ pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {
             pg_sys::MAXDATEFIELDS as i32,
             &mut nf,
         );
-        #[cfg(any(
-            feature = "pg12",
-            feature = "pg13",
-            feature = "pg14",
-            feature = "pg15"
-        ))]
+        #[cfg(any(feature = "pg12", feature = "pg13", feature = "pg14", feature = "pg15"))]
         if dterr == 0 {
             dterr = pg_sys::DecodeDateTime(
                 field.as_mut_ptr(),
@@ -95,10 +88,7 @@ pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {
                 &mut tz,
             )
         }
-        #[cfg(any(
-            feature = "pg16",
-            feature = "pg17"
-        ))]
+        #[cfg(any(feature = "pg16", feature = "pg17"))]
         if dterr == 0 {
             let mut extra = pgrx::pg_sys::DateTimeErrorExtra::default();
             dterr = pg_sys::DecodeDateTime(
@@ -113,12 +103,7 @@ pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {
             )
         }
 
-        #[cfg(any(
-            feature = "pg12",
-            feature = "pg13",
-            feature = "pg14",
-            feature = "pg15"
-        ))]
+        #[cfg(any(feature = "pg12", feature = "pg13", feature = "pg14", feature = "pg15"))]
         if dterr != 0 {
             pg_sys::DateTimeParseError(
                 dterr,
@@ -126,10 +111,7 @@ pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {
                 b"timestamptz\0".as_ptr().cast::<c_char>(),
             );
         }
-        #[cfg(any(
-            feature = "pg16",
-            feature = "pg17"
-        ))]
+        #[cfg(any(feature = "pg16", feature = "pg17"))]
         if dterr != 0 {
             pg_sys::DateTimeParseError(
                 dterr,

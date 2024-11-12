@@ -710,7 +710,7 @@ mod tests {
             sketch.add_value(*value);
         }
 
-        let quantile_tests = vec![0.01, 0.1, 0.25, 0.5, 0.6, 0.8, 0.95];
+        let quantile_tests = [0.01, 0.1, 0.25, 0.5, 0.6, 0.8, 0.95];
 
         master.sort_by(|a, b| a.partial_cmp(b).unwrap());
 

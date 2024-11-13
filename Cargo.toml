@@ -13,3 +13,9 @@ members = [
 lto = "fat"
 debug = true
 codegen-units = 1
+
+[patch.crates-io]
+pgrx = { path = "../pgrx/pgrx" }
+pgrx-macros = { path = "../pgrx/pgrx-macros" }
+pgrx-sql-entity-graph = { path = "../pgrx/pgrx-sql-entity-graph" }
+pgrx-tests = { path = "../pgrx/pgrx-tests" }

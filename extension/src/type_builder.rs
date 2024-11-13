@@ -115,6 +115,7 @@ macro_rules! pg_type_impl {
             $(#[$attrs])*
             #[derive(pgrx::PostgresType, Clone, serde::Serialize, serde::Deserialize)]
             #[bikeshed_postgres_type_manually_impl_from_into_datum]
+            #[pgrx(alignment = "on")]
             pub struct $name<$lifetemplate>(pub [<$name Data>] $(<$inlife>)?, $crate::type_builder::CachedDatum<$lifetemplate>);
 
             flat_serialize_macro::flat_serialize! {

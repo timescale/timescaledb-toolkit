@@ -225,7 +225,35 @@ macro_rules! pg_type_impl {
                         ptr = pg_sys::pg_detoast_datum_copy(ptr);
                     }
                     let data_len = pgrx::varsize_any(ptr);
-                    let bytes = std::slice::from_raw_parts(ptr as *mut u8, data_len);
+
+                    // NOTE: varlena types are aligned according to the `ALIGNMENT` with which they
+                    // are configured in CREATE TYPE. We have (historically) not configured the
+                    // `ALIGNMENT` of our types, resulting in them having the default (for varlena)
+                    // 4-byte alignment.
+                    // Some types can only be safely deserialized by `flat_serialize::try_ref` if
+                    // they are 8-byte aligned (structs which contain slices of 8-byte aligned data,
+                    // because of `flat_serialize::try_ref`'s usage of `slice::from_raw_parts`).
+                    //
+                    // To correct for this, when the data is not aligned, we copy it into a new,
+                    // aligned, memory location.
+                    // XXX: Technically, we're going to copy more frequently than strictly necessary
+                    // because `flat_serialize::try_ref` _can_ safely deserialize types which are
+                    // not 8-byte aligned, but contain fields which require 8-byte alignment (as
+                    // long as they're not slices) because it uses `ptr::read_unaligned`.
+                    let is_aligned = ptr.cast::<$name>().is_aligned();
+                    let bytes = if !is_aligned {
+                        let unaligned_bytes = std::slice::from_raw_parts(ptr as *mut u8, data_len);
+                        let new_bytes = pgrx::pg_sys::palloc0(data_len);
+
+                        // Note: we assume that fresh allocations are 8-byte aligned
+                        debug_assert!(new_bytes.cast::<$name>().is_aligned());
+
+                        let new_slice: &mut [u8] = std::slice::from_raw_parts_mut(new_bytes.cast(), data_len);
+                        new_slice.copy_from_slice(unaligned_bytes);
+                        new_slice
+                    } else {
+                        std::slice::from_raw_parts(ptr as *mut u8, data_len)
+                    };
                     let (data, _) = match [<$name Data>]::try_ref(bytes) {
                         Ok(wrapped) => wrapped,
                         Err(e) => error!(concat!("invalid ", stringify!($name), " {:?}, got len {}"), e, bytes.len()),

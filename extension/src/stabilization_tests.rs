@@ -55,7 +55,11 @@ mod tests {
                             return None;
                         }
 
-                        if stable_types.contains(ty) {
+                        // PG17 started automatically creating an array type for types, so we need
+                        // to take those into account.
+                        let ty_no_array = ty.replace("[]", "");
+
+                        if stable_types.contains(ty) || stable_types.contains(&ty_no_array) {
                             return None;
                         }
 

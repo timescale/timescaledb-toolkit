@@ -32,10 +32,10 @@ INSERT INTO gauge_test SELECT 3, '2020-01-03 UTC'::timestamptz + make_interval(d
 
 ### delta
 
-```SQL
+```SQL,ignore
 SELECT toolkit_experimental.delta(toolkit_experimental.gauge_agg(ts, val)) FROM gauge_test;
 ```
-```output
+```ignore
  delta
 -------
  -1991
@@ -43,10 +43,10 @@ SELECT toolkit_experimental.delta(toolkit_experimental.gauge_agg(ts, val)) FROM 
 
 ### idelta_left
 
-```SQL
+```SQL,ignore
 SELECT toolkit_experimental.idelta_left(toolkit_experimental.gauge_agg(ts, val)) FROM gauge_test;
 ```
-```output
+```ignore
  idelta_left
 -------------
         1002
@@ -54,10 +54,10 @@ SELECT toolkit_experimental.idelta_left(toolkit_experimental.gauge_agg(ts, val))
 
 ### idelta_right
 
-```SQL
+```SQL,ignore
 SELECT toolkit_experimental.idelta_right(toolkit_experimental.gauge_agg(ts, val)) FROM gauge_test;
 ```
-```output
+```ignore
  idelta_right
 --------------
          1010

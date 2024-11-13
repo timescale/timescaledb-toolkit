@@ -137,7 +137,7 @@ CALL refresh_continuous_aggregate('weekly_sketch', NULL, NULL);
 </div>
 
 Finally, a query is run over the aggregate to see various approximate percentiles from different weeks.
-```SQL
+```SQL,ignore
 SELECT
     week,
     approx_percentile(0.01, digest) AS low,
@@ -146,7 +146,7 @@ SELECT
 FROM weekly_sketch
 ORDER BY week;
 ```
-```output
+```ignore
          week          |        low        |        mid         |        high
 -----------------------+-------------------+--------------------+--------------------
 2019-12-30 00:00:00+00 | 783.2075197029583 | 1030.4505832620227 | 1276.7865808567146
@@ -158,14 +158,14 @@ ORDER BY week;
 ```
 
 It is also possible to combine the weekly aggregates to run queries on the entire data:
-```SQL
+```SQL,ignore
 SELECT
     approx_percentile(0.01, combined.digest) AS low,
     approx_percentile(0.5, combined.digest) AS mid,
     approx_percentile(0.99, combined.digest) AS high
 FROM (SELECT rollup(digest) AS digest FROM weekly_sketch) AS combined;
 ```
-```output
+```ignore
        low        |        mid         |        high
 ------------------+--------------------+--------------------
 746.7844638729881 | 1026.6100299252928 | 1294.5391132795592

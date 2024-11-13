@@ -189,8 +189,8 @@ pub fn arrow_timevector_unnest<'a>(
 
 #[pg_extern(immutable, parallel_safe, strict)]
 pub fn timevector_serialize(state: Internal) -> bytea {
-    // FIXME: This might duplicate the version and padding bits
-    let state: &Timevector_TSTZ_F64Data = unsafe { state.get().unwrap() };
+    let state: &Timevector_TSTZ_F64 = unsafe { state.get().unwrap() };
+    let state: &Timevector_TSTZ_F64Data = &state.0;
     crate::do_serialize!(state)
 }
 

@@ -110,7 +110,8 @@ impl<'input> StatsSummary2D<'input> {
 
 #[pg_extern(immutable, parallel_safe, strict)]
 pub fn stats1d_trans_serialize(state: Internal) -> bytea {
-    let ser: &StatsSummary1DData = unsafe { state.get().unwrap() };
+    let ser: &StatsSummary1D = unsafe { state.get().unwrap() };
+    let ser: &StatsSummary1DData = &ser.0;
     crate::do_serialize!(ser)
 }
 
@@ -125,7 +126,8 @@ pub fn stats1d_trans_deserialize_inner(bytes: bytea) -> Inner<StatsSummary1D<'st
 
 #[pg_extern(immutable, parallel_safe, strict)]
 pub fn stats2d_trans_serialize(state: Internal) -> bytea {
-    let ser: &StatsSummary2DData = unsafe { state.get().unwrap() };
+    let ser: &StatsSummary2D = unsafe { state.get().unwrap() };
+    let ser: &StatsSummary2DData = &ser.0;
     crate::do_serialize!(ser)
 }
 
@@ -1654,9 +1656,9 @@ mod tests {
             let state = stats1d_trans_inner(state, Some(39.42), ptr::null_mut());
             let state = stats1d_trans_inner(state, Some(-43.0), ptr::null_mut());
 
-            let control = state.unwrap();
+            let control = (*state.unwrap()).clone();
             let buffer = stats1d_trans_serialize(Inner::from(control.clone()).internal().unwrap());
-            let buffer = pgrx::varlena::varlena_to_byte_slice(buffer.0.cast_mut_ptr());
+            let buffer = varlena_to_byte_slice(buffer.0.cast_mut_ptr());
 
             let expected = [
                 1, 1, 1, 5, 0, 0, 0, 0, 0, 0, 0, 144, 194, 245, 40, 92, 143, 73, 64, 100, 180, 142,
@@ -1669,7 +1671,7 @@ mod tests {
             let new_state =
                 stats1d_trans_deserialize_inner(bytea(pg_sys::Datum::from(expected.as_ptr())));
 
-            assert_eq!(&*new_state, &*control);
+            assert_eq!(*new_state, control);
         }
     }
 

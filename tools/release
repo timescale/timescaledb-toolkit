@@ -227,6 +227,7 @@ $nop git show
 # 3. Run tests.
 for pg in $PG_VERSIONS; do
     $nop tools/build -pg$pg test-extension
+    $nop rm -rf target # we only have limited disk space on github's runner
 done
 assert_clean || die 'tools/build should not dirty the working directory'
 

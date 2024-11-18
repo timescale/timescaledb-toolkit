@@ -26,7 +26,7 @@ require_pg_version() {
 find_pg_config() {
     if [ -z "$pg_config" ]; then
         require_pg_version
-        pg_config=`sed -ne 's/"//g' -e s/^pg$pg_version=//p ~/.pgrx/config.toml`
+        pg_config=`which $(sed -ne 's/"//g' -e "s/^pg$pg_version *= *//p" ~/.pgrx/config.toml)`
     fi
     [ -x "$pg_config" ] || die "$pg_config not executable"
 }

@@ -12,7 +12,7 @@ TimescaleDB Toolkit provides an implementation of the [t-digest data structure](
 
 ## Details <a id="tdigest-details"></a>
 
-Timescale's t-digest is implemented as an aggregate function in PostgreSQL.  They do not support moving-aggregate mode, and are not ordered-set aggregates.  Presently they are restricted to float values, but the goal is to make them polymorphic.  They are partializable and are good candidates for [continuous aggregation](https://docs.timescale.com/latest/using-timescaledb/continuous-aggregates).
+Timescale's t-digest is implemented as an aggregate function in PostgreSQL.  They do not support moving-aggregate mode, and are not ordered-set aggregates.  Presently they are restricted to float values, but the goal is to make them polymorphic.  They are partializable and are good candidates for [continuous aggregation](https://docs.timescale.com/use-timescale/latest/continuous-aggregates/).
 
 One additional thing to note about TDigests is that they are somewhat dependent on the order of inputs.  The percentile approximations should be nearly equal for the same underlying data, especially at the extremes of the quantile range where the TDigest is inherently more accurate, they are unlikely to be identical if built in a different order.  While this should have little effect on the accuracy of the estimates, it is worth noting that repeating the creation of the TDigest might have subtle differences if the call is being parallelized by Postgres.  Similarly, building a TDigest by combining several subdigests using the [summary aggregate](#tdigest-summary) is likely to produce a subtley different result than combining all of the underlying data using a single [point aggregate](#tdigest).
 
@@ -94,7 +94,7 @@ FROM high_temp;
 ```
 
 ## Example Using TimeScale Continuous Aggregates (tdigest-cagg-example)
-Timescale [continuous aggregates](https://docs.timescale.com/latest/using-timescaledb/continuous-aggregates)
+Timescale [continuous aggregates](https://docs.timescale.com/use-timescale/latest/continuous-aggregates/)
 provide an easy way to keep a tdigest up to date as more data is added to a table.  The following example
 shows how this might look in practice.  The first step is to create a Timescale hypertable to store our data.
 

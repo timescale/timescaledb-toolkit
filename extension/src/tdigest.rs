@@ -416,6 +416,12 @@ pub fn tdigest_mean<'a>(digest: TDigest<'a>) -> f64 {
     }
 }
 
+/// Total sum of all the values entered in the digest.
+#[pg_extern(immutable, parallel_safe, name = "total")]
+pub fn tdigest_sum(digest: TDigest<'_>) -> f64 {
+    digest.sum
+}
+
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {

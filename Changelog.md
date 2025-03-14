@@ -11,6 +11,8 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 #### Bug fixes
 
 #### Other notable changes
+- [#847](https://github.com/timescale/timescaledb-toolkit/pull/847): Added `total` accessor for tdigest and uddsketch
+
 
 #### Shout-outs
 

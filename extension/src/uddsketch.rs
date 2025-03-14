@@ -671,6 +671,12 @@ pub fn uddsketch_mean<'a>(sketch: UddSketch<'a>) -> f64 {
     }
 }
 
+// Total sum of all the values entered in the sketch.
+#[pg_extern(immutable, parallel_safe, name = "total")]
+pub fn uddsketch_sum(sketch: UddSketch<'_>) -> f64 {
+    sketch.sum
+}
+
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_uddsketch_error<'a>(sketch: UddSketch<'a>, _accessor: AccessorError<'a>) -> f64 {

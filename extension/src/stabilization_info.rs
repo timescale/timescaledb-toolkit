@@ -11,6 +11,10 @@
 
 crate::functions_stabilized_at! {
     STABLE_FUNCTIONS
+    "1.20.0" => {
+        total(tdigest),
+        total(uddsketch),
+    }
     "1.16.0" => {
         approx_count_distinct(anyelement),
         approx_count_distinct_trans(internal,anyelement),

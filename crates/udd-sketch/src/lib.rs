@@ -154,13 +154,11 @@ impl SketchHashMap {
     // Combine adjacent buckets
     fn compact(&mut self) {
         let mut target = self.head;
-        // TODO can we do without this additional map?
-        let old_map = std::mem::take(&mut self.map);
 
         self.head = self.head.compact_key();
 
         while target != SketchHashKey::Invalid {
-            let old_entry = &old_map[&target];
+            let old_entry = &self.map[&target];
             let new_key = target.compact_key();
             // it doesn't matter where buckets are absolutely, their relative
             // positions will remain unchanged unless two buckets are compacted
@@ -168,18 +166,25 @@ impl SketchHashMap {
             let new_next = if old_entry.next.compact_key() == new_key {
                 // the old `next` bucket is going to be compacted into the same
                 // one as `target`
-                old_map[&old_entry.next].next.compact_key()
+                self.map[&old_entry.next].next.compact_key()
             } else {
                 old_entry.next.compact_key()
             };
+
+            let old_count = old_entry.count;
+            if new_key != target {
+                self.map.remove(&target);
+            }
+
             self.map
                 .entry(new_key)
                 .or_insert(SketchHashEntry {
-                    count: 0,
+                    count: old_count,
                     next: new_next,
                 })
-                .count += old_entry.count;
-            target = old_map[&target].next;
+                .count += old_count;
+
+            target = self.map[&target].next;
         }
     }
 }

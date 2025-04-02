@@ -307,14 +307,24 @@ impl UDDSketch {
             return;
         }
 
-        let mut other = other.clone();
-
-        while self.compactions > other.compactions {
-            other.compact_buckets();
-        }
-        while other.compactions > self.compactions {
-            self.compact_buckets();
-        }
+        let mut tmp: UDDSketch;
+        // We only need to fully clone the other sketch
+        // if we need to compact it. Not doing it
+        // is useful, as it doesn't require us to
+        // allocate any more memory.
+        // We optimize here, as this is code is called frequently
+        let other = if self.compactions > other.compactions {
+            tmp = other.clone();
+            while self.compactions > tmp.compactions {
+                tmp.compact_buckets();
+            }
+            &tmp
+        } else {
+            while other.compactions > self.compactions {
+                self.compact_buckets();
+            }
+            other
+        };
 
         for entry in other.buckets.iter() {
             let (key, value) = entry;

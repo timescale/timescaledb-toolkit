@@ -161,11 +161,15 @@ impl SketchHashMap {
 
     // Combine adjacent buckets
     fn compact(&mut self) {
-        self.compact_new()
+        self.compact_with_swap(&mut Vec::new())
     }
 
-    fn compact_new(&mut self) {
-        let mut swap = Vec::with_capacity(self.map.len());
+    /// `compact_with_swap` will reuse the provided swap Vec. When
+    /// this function is called in a loop, this reuse of the Vec ensures
+    /// we dont malloc/free multiple times, but reuse that piece of memory
+    fn compact_with_swap(&mut self, swap: &mut Vec<(SketchHashKey, u64)>) {
+        debug_assert!(swap.is_empty());
+        swap.reserve(self.map.len());
 
         for (k, v) in self.map.drain() {
             swap.push((k.compact_key(), v.count));
@@ -323,8 +327,8 @@ impl UDDSketch {
         key(value, self.gamma)
     }
 
-    pub fn compact_buckets(&mut self) {
-        self.buckets.compact();
+    pub fn compact_buckets(&mut self, swap: &mut Vec<(SketchHashKey, u64)>) {
+        self.buckets.compact_with_swap(swap);
 
         self.compactions += 1;
         self.gamma *= self.gamma; // See https://arxiv.org/pdf/2004.08604.pdf Equation 3
@@ -341,7 +345,7 @@ impl UDDSketch {
         self.buckets.increment(self.key(value));
 
         while self.buckets.len() > self.max_buckets as usize {
-            self.compact_buckets();
+            self.compact_buckets(&mut Vec::new());
         }
 
         self.num_values += 1;
@@ -370,6 +374,10 @@ impl UDDSketch {
             return;
         }
 
+        // We can reuse this Heap allocated Vec every time
+        // we compact.
+        let mut swap = Vec::new();
+
         let mut tmp: UDDSketch;
         // We only need to fully clone the other sketch
         // if we need to compact it. Not doing it
@@ -379,12 +387,12 @@ impl UDDSketch {
         let other = if self.compactions > other.compactions {
             tmp = other.clone();
             while self.compactions > tmp.compactions {
-                tmp.compact_buckets();
+                tmp.compact_buckets(&mut swap);
             }
             &tmp
         } else {
             while other.compactions > self.compactions {
-                self.compact_buckets();
+                self.compact_buckets(&mut swap);
             }
             other
         };
@@ -395,7 +403,7 @@ impl UDDSketch {
         }
 
         while self.buckets.len() > self.max_buckets as usize {
-            self.compact_buckets();
+            self.compact_buckets(&mut swap);
         }
 
         self.num_values += other.num_values;
@@ -602,7 +610,7 @@ mod tests {
         let mut sketch2 = sketch1.clone();
 
         sketch1.buckets.compact_old();
-        sketch2.buckets.compact_new();
+        sketch2.buckets.compact_with_swap(&mut Vec::new());
 
         assert_eq!(sketch1.buckets.head, sketch2.buckets.head);
 

@@ -169,6 +169,64 @@ impl SketchHashMap {
 
     // Combine adjacent buckets
     fn compact(&mut self) {
+        self.compact_new()
+    }
+
+    fn compact_new(&mut self) {
+        debug_assert!(self.swap.is_empty());
+        self.swap.reserve(self.map.len());
+
+        for (k, v) in self.map.drain() {
+            self.swap.push((k.compact_key(), v.count));
+        }
+
+        eprintln!("BEFORE SORT: {0:?}", self.swap);
+
+        // We need to sort the Vec as we want to recreate the linked list style
+        // in the Hash Map
+        // We use the `unstable` variant, as it does not allocate, and its
+        // properties are fine for our use-case, and should perform
+        // better than the non-stable variant.
+        // > This sort is unstable (i.e., may reorder equal elements),
+        // > in-place (i.e., does not allocate), and O(n * log(n)) worst-case.
+        self.swap.sort_unstable_by_key(|k| k.0);
+
+        let mut swap_iter = self.swap.drain(..);
+
+        let Some(mut current) = swap_iter.next() else {
+            return;
+        };
+
+        while let Some(next) = swap_iter.next() {
+            // This combines those buckets that compact into the same one
+            // For example, Positive(9) and Positive(8) both
+            // compact into Positive(4)
+            if current.0 == next.0 {
+                current.1 += next.1;
+            } else {
+                self.map.insert(
+                    current.0,
+                    SketchHashEntry {
+                        count: current.1,
+                        next: next.0,
+                    },
+                );
+                current = next;
+            }
+        }
+
+        // And the final one ...
+        self.map.insert(
+            current.0,
+            SketchHashEntry {
+                count: current.1,
+                next: Invalid,
+            },
+        );
+        self.head = self.head.compact_key();
+    }
+    // Combine adjacent buckets (former implementation)
+    fn compact_old(&mut self) {
         let mut target = self.head;
         // TODO can we do without this additional map?
         let old_map = std::mem::take(&mut self.map);
@@ -529,6 +587,33 @@ mod tests {
 
         assert_eq!(sketch.count(), 30);
         assert_eq!(sketch.max_error(), a2);
+    }
+
+    // A temporary test to ensure we do the right thing.
+    #[ignore]
+    #[test]
+    fn merge_buckets_compact_implementations() {
+        let mut sketch1 = UDDSketch::new(20, 0.1);
+        sketch1.add_value(1.1); // Bucket #1
+        sketch1.add_value(1.5); // Bucket #3
+        sketch1.add_value(1.6); // Bucket #3
+        sketch1.add_value(1.3); // Bucket #2
+        sketch1.add_value(4.2); // Bucket #8
+
+        let mut sketch2 = sketch1.clone();
+
+        sketch1.buckets.compact_old();
+        sketch2.buckets.compact_new();
+
+        assert_eq!(sketch1.buckets.head, sketch2.buckets.head);
+        assert_eq!(sketch1.buckets.swap, sketch2.buckets.swap);
+
+        let mut b1 = sketch1.buckets.map.into_iter().collect::<Vec<_>>();
+        let mut b2 = sketch2.buckets.map.into_iter().collect::<Vec<_>>();
+
+        b1.sort_unstable_by_key(|k| k.0);
+        b2.sort_unstable_by_key(|k| k.0);
+        assert_eq!(b1, b2);
     }
 
     #[test]

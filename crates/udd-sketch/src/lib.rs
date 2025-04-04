@@ -74,6 +74,13 @@ struct SketchHashEntry {
 struct SketchHashMap {
     map: HashMap<SketchHashKey, SketchHashEntry>,
     head: SketchHashKey,
+    #[serde(skip)]
+    /// swap is used whenever we need to compact. If no compaction is needed,
+    /// this vec won't be heap allocated.
+    /// However, once it *does* compact, it is likely that we will compact
+    /// again and again. For that use case, we want to then carry around the swap Vec
+    /// so we don't need to reallocate every single time.
+    swap: Vec<(SketchHashKey, u64)>,
 }
 
 impl std::ops::Index<SketchHashKey> for SketchHashMap {
@@ -110,6 +117,7 @@ impl SketchHashMap {
         SketchHashMap {
             map: HashMap::new(),
             head: SketchHashKey::Invalid,
+            swap: Vec::new(),
         }
     }
 

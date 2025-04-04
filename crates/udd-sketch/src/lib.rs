@@ -82,13 +82,6 @@ struct SketchHashEntry {
 struct SketchHashMap {
     map: HashMap<SketchHashKey, SketchHashEntry>,
     head: SketchHashKey,
-    #[serde(skip)]
-    /// swap is used whenever we need to compact. If no compaction is needed,
-    /// this vec won't be heap allocated.
-    /// However, once it *does* compact, it is likely that we will compact
-    /// again and again. For that use case, we want to then carry around the swap Vec
-    /// so we don't need to reallocate every single time.
-    swap: Vec<(SketchHashKey, u64)>,
 }
 
 impl std::ops::Index<SketchHashKey> for SketchHashMap {
@@ -125,7 +118,6 @@ impl SketchHashMap {
         SketchHashMap {
             map: HashMap::new(),
             head: SketchHashKey::Invalid,
-            swap: Vec::new(),
         }
     }
 
@@ -173,14 +165,11 @@ impl SketchHashMap {
     }
 
     fn compact_new(&mut self) {
-        debug_assert!(self.swap.is_empty());
-        self.swap.reserve(self.map.len());
+        let mut swap = Vec::with_capacity(self.map.len());
 
         for (k, v) in self.map.drain() {
-            self.swap.push((k.compact_key(), v.count));
+            swap.push((k.compact_key(), v.count));
         }
-
-        eprintln!("BEFORE SORT: {0:?}", self.swap);
 
         // We need to sort the Vec as we want to recreate the linked list style
         // in the Hash Map
@@ -189,9 +178,9 @@ impl SketchHashMap {
         // better than the non-stable variant.
         // > This sort is unstable (i.e., may reorder equal elements),
         // > in-place (i.e., does not allocate), and O(n * log(n)) worst-case.
-        self.swap.sort_unstable_by_key(|k| k.0);
+        swap.sort_unstable_by_key(|k| k.0);
 
-        let mut swap_iter = self.swap.drain(..);
+        let mut swap_iter = swap.drain(..);
 
         let Some(mut current) = swap_iter.next() else {
             return;
@@ -616,7 +605,6 @@ mod tests {
         sketch2.buckets.compact_new();
 
         assert_eq!(sketch1.buckets.head, sketch2.buckets.head);
-        assert_eq!(sketch1.buckets.swap, sketch2.buckets.swap);
 
         let mut b1 = sketch1.buckets.map.into_iter().collect::<Vec<_>>();
         let mut b2 = sketch2.buckets.map.into_iter().collect::<Vec<_>>();

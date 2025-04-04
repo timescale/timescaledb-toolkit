@@ -473,6 +473,8 @@ pub fn gamma(alpha: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
+    use std::{thread, time::Duration};
+
     use rand::{Rng, SeedableRng};
 
     use super::*;
@@ -511,6 +513,32 @@ mod tests {
 
         assert_eq!(sketch.count(), 30);
         assert_eq!(sketch.max_error(), a2);
+    }
+
+    #[test]
+    fn merge_sketches_malloc() {
+        let mut sketch1 = UDDSketch::new(20, 0.1);
+        sketch1.add_value(1.1); // Bucket #1
+        sketch1.add_value(1.5); // Bucket #3
+        sketch1.add_value(1.6); // Bucket #3
+        sketch1.add_value(1.3); // Bucket #2
+        sketch1.add_value(4.2); // Bucket #8
+
+        let mut sketch2 = UDDSketch::new(20, 0.1);
+        let mut sketch3 = UDDSketch::new(20, 0.1);
+        let mut a = 1.0;
+        let mut b = 0.008;
+        for _ in 0..200 {
+            a *= 1.33;
+            b *= 2.987;
+            sketch2.add_value(a);
+            sketch3.add_value(b);
+        }
+
+        for _ in 0..10_000 {
+            sketch1.merge_sketch(&sketch2);
+            sketch1.merge_sketch(&sketch3);
+        }
     }
 
     #[test]

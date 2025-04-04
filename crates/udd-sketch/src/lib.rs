@@ -2,12 +2,15 @@
 //! Based on the paper: https://arxiv.org/abs/2004.08604
 
 use serde::{Deserialize, Serialize};
+use std::cmp::Ordering;
 use std::collections::HashMap;
 
+use crate::SketchHashKey::{Invalid, Zero};
 #[cfg(test)]
 use ordered_float::OrderedFloat;
 #[cfg(test)]
 use std::collections::HashSet;
+
 #[cfg(test)]
 extern crate quickcheck;
 #[cfg(test)]
@@ -26,8 +29,8 @@ pub enum SketchHashKey {
 }
 
 // Invalid is treated as greater than valid values (making it a nice boundary value for list end)
-impl std::cmp::PartialOrd for SketchHashKey {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+impl Ord for SketchHashKey {
+    fn cmp(&self, other: &Self) -> Ordering {
         use self::SketchHashKey::*;
         use std::cmp::Ordering::*;
         match (self, other) {
@@ -37,12 +40,17 @@ impl std::cmp::PartialOrd for SketchHashKey {
             (Zero, Zero) => Equal,
             (Positive(a), Positive(b)) => a.cmp(b),
             (Negative(a), Negative(b)) => a.cmp(b).reverse(),
-            (_, Positive(_)) => Less,
-            (Positive(_), _) => Greater,
-            (_, Negative(_)) => Greater,
-            (Negative(_), _) => Less,
+            (Negative(_) | Zero, Positive(_)) => Less,
+            (Positive(_), Negative(_) | Zero) => Greater,
+            (Zero, Negative(_)) => Greater,
+            (Negative(_), Zero) => Less,
         }
         .into()
+    }
+}
+impl PartialOrd for SketchHashKey {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -57,7 +65,7 @@ impl SketchHashKey {
             Positive(i64::MAX) => *self,
             Negative(x) => Negative(if x > 0 { x + 1 } else { x } / 2),
             Positive(x) => Positive(if x > 0 { x + 1 } else { x } / 2),
-            x => x, // Zero and Invalid don't compact
+            Invalid | Zero => *self, // Zero and Invalid don't compact
         }
     }
 }

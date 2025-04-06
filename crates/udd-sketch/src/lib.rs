@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
+use crate::compactor::{compact_from_iter, ArrayCompactor};
 use crate::SketchHashKey::{Invalid, Zero};
 #[cfg(test)]
 use ordered_float::OrderedFloat;
@@ -16,6 +17,8 @@ extern crate quickcheck;
 #[cfg(test)]
 #[macro_use(quickcheck)]
 extern crate quickcheck_macros;
+
+mod compactor;
 
 // This is used to index the buckets of the UddSketch.  In particular, because UddSketch stores values
 // based on a logarithmic scale, we need to track negative values separately from positive values, and
@@ -65,6 +68,21 @@ impl SketchHashKey {
             Positive(i64::MAX) => *self,
             Negative(x) => Negative(if x > 0 { x + 1 } else { x } / 2),
             Positive(x) => Positive(if x > 0 { x + 1 } else { x } / 2),
+            Invalid | Zero => *self, // Zero and Invalid don't compact
+        }
+    }
+
+    /// Compact the key multiple times. Useful for repeated compaction calls,
+    /// which may occur when merging two sketches
+    fn compact_key_multiple(&self, times: i64) -> SketchHashKey {
+        debug_assert!(times >= 0);
+        use SketchHashKey::*;
+
+        match *self {
+            Negative(i64::MAX) => *self, // Infinite buckets remain infinite
+            Positive(i64::MAX) => *self,
+            Negative(x) => Negative(if x > 0 { x + times } else { x } / 2^times),
+            Positive(x) => Positive(if x > 0 { x + times } else { x } / 2^times),
             Invalid | Zero => *self, // Zero and Invalid don't compact
         }
     }
@@ -168,6 +186,15 @@ impl SketchHashMap {
     /// this function is called in a loop, this reuse of the Vec ensures
     /// we dont malloc/free multiple times, but reuse that piece of memory
     fn compact_with_swap(&mut self, swap: &mut Vec<(SketchHashKey, u64)>) {
+        match self.map.len() {
+            0 => return,
+            1..=100 => return ArrayCompactor::<100>::compact(self),
+            100..=500 => return ArrayCompactor::<1000>::compact(self),
+            1000..=2000 => return ArrayCompactor::<2000>::compact(self),
+            2000..=10000 => return ArrayCompactor::<10_000>::compact(self),
+            _ => (),
+        };
+
         debug_assert!(swap.is_empty());
         swap.reserve(self.map.len());
 
@@ -186,37 +213,7 @@ impl SketchHashMap {
 
         let mut swap_iter = swap.drain(..);
 
-        let Some(mut current) = swap_iter.next() else {
-            return;
-        };
-
-        while let Some(next) = swap_iter.next() {
-            // This combines those buckets that compact into the same one
-            // For example, Positive(9) and Positive(8) both
-            // compact into Positive(4)
-            if current.0 == next.0 {
-                current.1 += next.1;
-            } else {
-                self.map.insert(
-                    current.0,
-                    SketchHashEntry {
-                        count: current.1,
-                        next: next.0,
-                    },
-                );
-                current = next;
-            }
-        }
-
-        // And the final one ...
-        self.map.insert(
-            current.0,
-            SketchHashEntry {
-                count: current.1,
-                next: Invalid,
-            },
-        );
-        self.head = self.head.compact_key();
+        compact_from_iter(&mut swap_iter, self)
     }
     // Combine adjacent buckets (former implementation)
     fn compact_old(&mut self) {

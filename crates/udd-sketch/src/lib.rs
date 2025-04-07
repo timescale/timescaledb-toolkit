@@ -74,15 +74,16 @@ impl SketchHashKey {
 
     /// Compact the key multiple times. Useful for repeated compaction calls,
     /// which may occur when merging two sketches
-    fn compact_key_multiple(&self, times: i64) -> SketchHashKey {
-        debug_assert!(times >= 0);
+    fn compact_key_multiple(&self, times: u32) -> SketchHashKey {
         use SketchHashKey::*;
 
         match *self {
-            Negative(i64::MAX) => *self, // Infinite buckets remain infinite
-            Positive(i64::MAX) => *self,
-            Negative(x) => Negative(if x > 0 { x + times } else { x } / 2^times),
-            Positive(x) => Positive(if x > 0 { x + times } else { x } / 2^times),
+            Negative(i64::MAX | 0) => *self, // Infinite buckets remain infinite
+            Positive(i64::MAX | 0) => *self,
+            Negative(x) if x > 0 => Negative(x.saturating_add(i64::from(times))),
+            Positive(x) if x > 0 => Positive(x.saturating_add(i64::from(times))),
+            Positive(x) => Positive(x / 2_i64.saturating_pow(times)),
+            Negative(x) => Negative(x / 2_i64.saturating_pow(times)),
             Invalid | Zero => *self, // Zero and Invalid don't compact
         }
     }

@@ -1,10 +1,10 @@
-use std::collections::VecDeque;
-use crate::{SketchHashEntry, SketchHashKey, SketchHashMap};
 use crate::SketchHashKey::Invalid;
+use crate::{SketchHashEntry, SketchHashKey, SketchHashMap};
+use std::collections::VecDeque;
 
 pub enum SketchHashContainer {
     Map(SketchHashMap),
-    Vec(SketchHashVec)
+    Vec(SketchHashVec),
 }
 
 impl SketchHashMap {
@@ -22,18 +22,14 @@ impl SketchHashMap {
 #[derive(Copy, Clone)]
 struct SketchBucket {
     bucket: SketchHashKey,
-    count: u64
+    count: u64,
 }
 
 impl SketchBucket {
     const fn new(bucket: SketchHashKey, count: u64) -> Self {
-        Self {
-            bucket,
-            count
-        }
+        Self { bucket, count }
     }
 }
-
 
 /// A `SketchHashVec` contains the buckets of a `UDDSketch`.
 /// It may contain duplicate buckets, for example, after compacting or merging.
@@ -44,7 +40,6 @@ pub struct SketchHashVec {
 }
 
 impl SketchHashVec {
-
     /// Compact the values in this `SketchHashVec`.
     pub fn compact(&mut self, compactions: u32) {
         for entry in self.inner.iter_mut() {
@@ -65,26 +60,26 @@ impl SketchHashVec {
         let mut new_idx = 0;
         let mut current = self.inner[0];
 
-        // SAFETY: While we loop over the Vec, we also modify it.
-        // we know this is safe, as we old_idx > new_idx always
-        unsafe {
-            for old_idx in 1..self.inner.len() {
-                debug_assert!(old_idx > new_idx);
+        // We're both taking values from the same Vec and populating
+        // the Vec. That could be frowned upon, however, we ensure that
+        // - new_idx < old_idx all the time
+        // - number of new elements <= number of old elements
+        for old_idx in 1..self.inner.len() {
+            debug_assert!(new_idx < old_idx);
 
-                let next = self.inner[old_idx];
-                if next.bucket != current.bucket {
-                    self.inner[new_idx] = current;
-                    current = next;
-                    new_idx += 1;
-                } else {
-                    current.count += next.count;
-                }
+            let next = self.inner[old_idx];
+            if next.bucket != current.bucket {
+                self.inner[new_idx] = current;
+                current = next;
+                new_idx += 1;
+            } else {
+                current.count += next.count;
             }
-
-            // Final one
-            self.inner[new_idx] = current;
-            self.inner.set_len(new_idx + 1);
         }
+
+        // Final one
+        self.inner[new_idx] = current;
+        self.inner.truncate(new_idx + 1);
     }
 
     /// Populate the linked-list style of the Map  using this Vec.

@@ -141,6 +141,13 @@ impl SketchHashMap {
         }
     }
 
+    fn with_capacity(capacity: usize) -> SketchHashMap {
+        SketchHashMap {
+            map: HashMap::with_capacity(capacity),
+            head: SketchHashKey::Invalid,
+        }
+    }
+
     // Increment the count at a key, creating the entry if needed.
     fn increment(&mut self, key: SketchHashKey) {
         self.entry(key).count += 1;
@@ -188,15 +195,6 @@ impl SketchHashMap {
     /// this function is called in a loop, this reuse of the Vec ensures
     /// we dont malloc/free multiple times, but reuse that piece of memory
     fn compact_with_swap(&mut self, swap: &mut Vec<(SketchHashKey, u64)>) {
-        match self.map.len() {
-            0 => return,
-            1..=101 => return ArrayCompactor::<100>::compact(self),
-            101..=500 => return ArrayCompactor::<1000>::compact(self),
-            501..=2000 => return ArrayCompactor::<2000>::compact(self),
-            2001..=10000 => return ArrayCompactor::<10_000>::compact(self),
-            _ => (),
-        };
-
         debug_assert!(swap.is_empty());
         swap.reserve(self.map.len());
 
@@ -275,18 +273,20 @@ impl UDDSketch {
         }
     }
 
-    // This constructor is used to recreate a UddSketch from it's component data
+    /// This constructor is used to recreate a UddSketch from its component data
+    /// it assumes the provided keys/counts are ordered by the keys.
     pub fn new_from_data(
         max_buckets: u64,
         current_error: f64,
         compactions: u64,
+        num_buckets: u32,
         values: u64,
         sum: f64,
         keys: impl Iterator<Item = SketchHashKey>,
         counts: impl Iterator<Item = u64>,
     ) -> Self {
         let mut sketch = UDDSketch {
-            buckets: SketchHashMap::new(),
+            buckets: SketchHashMap::with_capacity(num_buckets as usize),
             alpha: current_error,
             gamma: gamma(current_error),
             compactions: compactions as u32,
@@ -294,27 +294,23 @@ impl UDDSketch {
             num_values: values,
             values_sum: sum,
         };
-        // TODO
-        let keys: Vec<_> = keys.collect();
-        let counts: Vec<_> = counts.collect();
-        assert_eq!(keys.len(), counts.len());
-        // assert!(keys.is_sorted());
-        for i in 0..keys.len() {
+
+        let mut iter = keys.into_iter().zip(counts.into_iter()).peekable();
+        sketch.buckets.head = iter.peek().map(|p| p.0).unwrap_or(Invalid);
+
+        while let Some((key, count)) = iter.next() {
             sketch
                 .buckets
                 .map
-                .entry(keys[i])
+                .entry(key)
+                .and_modify(|e| e.count += count)
                 .or_insert(SketchHashEntry {
-                    count: 0,
-                    next: if i == keys.len() - 1 {
-                        SketchHashKey::Invalid
-                    } else {
-                        keys[i + 1]
-                    },
-                })
-                .count = counts[i];
+                    count,
+                    next: iter.peek().map(|p| p.0).unwrap_or(SketchHashKey::Invalid),
+                });
         }
-        sketch.buckets.head = keys[0];
+
+        //assert_eq!(num_buckets as usize, sketch.buckets.map.len());
 
         sketch
     }

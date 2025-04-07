@@ -2,6 +2,10 @@ use crate::SketchHashKey::Invalid;
 use crate::{SketchHashEntry, SketchHashKey, SketchHashMap};
 use std::mem::MaybeUninit;
 
+pub struct SketchHashVec {
+
+}
+
 type T = (SketchHashKey, u64);
 pub struct ArrayCompactor<const N: usize> {}
 

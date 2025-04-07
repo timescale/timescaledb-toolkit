@@ -19,6 +19,7 @@ extern crate quickcheck;
 extern crate quickcheck_macros;
 
 mod compactor;
+mod sketchhashvec;
 
 // This is used to index the buckets of the UddSketch.  In particular, because UddSketch stores values
 // based on a logarithmic scale, we need to track negative values separately from positive values, and
@@ -189,10 +190,10 @@ impl SketchHashMap {
     fn compact_with_swap(&mut self, swap: &mut Vec<(SketchHashKey, u64)>) {
         match self.map.len() {
             0 => return,
-            1..=100 => return ArrayCompactor::<100>::compact(self),
-            100..=500 => return ArrayCompactor::<1000>::compact(self),
-            1000..=2000 => return ArrayCompactor::<2000>::compact(self),
-            2000..=10000 => return ArrayCompactor::<10_000>::compact(self),
+            1..=101 => return ArrayCompactor::<100>::compact(self),
+            101..=500 => return ArrayCompactor::<1000>::compact(self),
+            501..=2000 => return ArrayCompactor::<2000>::compact(self),
+            2001..=10000 => return ArrayCompactor::<10_000>::compact(self),
             _ => (),
         };
 

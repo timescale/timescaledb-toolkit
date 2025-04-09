@@ -5,7 +5,8 @@ use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 
-use crate::compactor::{compact_from_iter, ArrayCompactor};
+use crate::compactor::compact_from_iter;
+use crate::swap::Swap;
 use crate::SketchHashKey::{Invalid, Zero};
 #[cfg(test)]
 use ordered_float::OrderedFloat;
@@ -252,6 +253,8 @@ impl SketchHashMap {
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct UDDSketch {
     buckets: SketchHashMap,
+    #[serde(skip)]
+    swap: Swap,
     alpha: f64,
     gamma: f64,
     compactions: u32, // should always be smaller than 64
@@ -271,6 +274,7 @@ impl UDDSketch {
             max_buckets,
             num_values: 0,
             values_sum: 0.0,
+            swap: Swap::default(),
         }
     }
 
@@ -294,6 +298,7 @@ impl UDDSketch {
             max_buckets,
             num_values: values,
             values_sum: sum,
+            swap: Swap::default(),
         };
 
         let mut iter = keys.into_iter().zip(counts.into_iter()).peekable();

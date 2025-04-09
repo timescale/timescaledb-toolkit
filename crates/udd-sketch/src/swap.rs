@@ -1,23 +1,36 @@
+use crate::swap::Kind::Aggregated;
 use crate::SketchHashKey::Invalid;
 use crate::{SketchHashEntry, SketchHashKey, SketchHashMap};
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct SketchBucket {
-    key: SketchHashKey,
-    count: u64,
+    pub key: SketchHashKey,
+    pub count: u64,
 }
+
+#[derive(Debug, Clone, PartialEq)]
 enum Kind {
     Ordered,
     Unordered,
     Aggregated,
 }
+
+#[derive(Debug, Clone, PartialEq)]
 pub struct Swap {
     kind: Kind,
-    buckets: Vec<SketchBucket>,
+    pub buckets: Vec<SketchBucket>,
+}
+
+impl Default for Swap {
+    fn default() -> Self {
+        Self {
+            kind: Aggregated,
+            buckets: Vec::new(),
+        }
+    }
 }
 
 impl Swap {
-
     /// Populates the `Swap` from the given `SketchHashMap`. Will empty the `SketchHashMap`
     pub fn from_map(map: &mut SketchHashMap, additional_compactions: u32, capacity: usize) -> Self {
         let mut buckets = Vec::with_capacity(capacity);
@@ -25,7 +38,10 @@ impl Swap {
             for _ in 0..additional_compactions {
                 key = key.compact_key();
             }
-            buckets.push(SketchBucket { key, count: entry.count });
+            buckets.push(SketchBucket {
+                key,
+                count: entry.count,
+            });
         }
 
         Self {
@@ -164,7 +180,6 @@ impl Swap {
         let mut current = *current;
 
         let mut new_idx = 0;
-
 
         // We're both taking values from the same Vec and populating
         // the Vec. That could be frowned upon, however, we ensure that

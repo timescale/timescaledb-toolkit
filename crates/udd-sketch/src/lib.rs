@@ -21,9 +21,6 @@ extern crate quickcheck_macros;
 mod compactor;
 mod sketchhashvec;
 mod swap;
-mod rollup;
-
-pub use rollup::UDDSketchRollup;
 
 // This is used to index the buckets of the UddSketch.  In particular, because UddSketch stores values
 // based on a logarithmic scale, we need to track negative values separately from positive values, and

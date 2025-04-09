@@ -190,35 +190,24 @@ impl SketchHashMap {
 
     // Combine adjacent buckets
     fn compact(&mut self) {
-        self.compact_with_swap(&mut Vec::new())
+        self.compact_with_swap(&mut Swap::default())
     }
 
-    /// `compact_with_swap` will reuse the provided swap Vec. When
-    /// this function is called in a loop, this reuse of the Vec ensures
-    /// we dont malloc/free multiple times, but reuse that piece of memory
-    fn compact_with_swap(&mut self, swap: &mut Vec<SwapBucket>) {
-        debug_assert!(swap.is_empty());
-        swap.reserve(self.map.len());
+    /// `compact_with_swap` will reuse the provided `Swap`. When
+    /// this function is called in a loop, this reuse of the `Swap` ensures
+    /// we don't malloc/free multiple times, but reuse that piece of memory
+    fn compact_with_swap(&mut self, swap: &mut Swap) {
+        debug_assert!(swap.buckets.is_empty());
+        swap.buckets.reserve(self.map.len());
 
         for (k, v) in self.map.drain() {
-            swap.push(SwapBucket {
+            swap.buckets.push(SwapBucket {
                 key: k.compact_key(),
                 count: v.count,
             });
         }
 
-        // We need to sort the Vec as we want to recreate the linked list style
-        // in the Hash Map
-        // We use the `unstable` variant, as it does not allocate, and its
-        // properties are fine for our use-case, and should perform
-        // better than the non-stable variant.
-        // > This sort is unstable (i.e., may reorder equal elements),
-        // > in-place (i.e., does not allocate), and O(n * log(n)) worst-case.
-        swap.sort_unstable_by_key(|k| k.key);
-
-        let mut swap_iter = swap.drain(..);
-
-        compact_from_iter(&mut swap_iter, self)
+        swap.populate(self)
     }
     // Combine adjacent buckets (former implementation)
     fn compact_old(&mut self) {
@@ -332,7 +321,7 @@ impl UDDSketch {
     }
 
     pub fn compact_buckets(&mut self) {
-        let swap = &mut self.swap.buckets;
+        let swap = &mut self.swap;
         self.buckets.compact_with_swap(swap);
 
         self.compactions += 1;

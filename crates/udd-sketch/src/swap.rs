@@ -15,6 +15,9 @@ enum Kind {
     Aggregated,
 }
 
+/// `Swap` is used for merging sketches. By making it part of the `UDDSketch`, we prevent
+/// repeated allocations if it is needed.
+/// If it is never used (no aggregations are done) it doesn't heap allocate.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Swap {
     kind: Kind,
@@ -30,23 +33,21 @@ impl Default for Swap {
     }
 }
 
+
 impl Swap {
     /// Populates the `Swap` from the given `SketchHashMap`. Will empty the `SketchHashMap`
-    pub fn from_map(map: &mut SketchHashMap, additional_compactions: u32, capacity: usize) -> Self {
-        let mut buckets = Vec::with_capacity(capacity);
+    pub fn populate_from_map(&mut self, map: &mut SketchHashMap, additional_compactions: u32, capacity: usize) {
+        assert!(self.buckets.is_empty());
+        self.buckets.reserve(map.len());
+
         for (mut key, entry) in map.map.drain() {
             for _ in 0..additional_compactions {
                 key = key.compact_key();
             }
-            buckets.push(SwapBucket {
+            self.buckets.push(SwapBucket {
                 key,
                 count: entry.count,
             });
-        }
-
-        Self {
-            kind: Kind::Unordered,
-            buckets,
         }
     }
 
@@ -73,19 +74,20 @@ impl Swap {
     /// Append the keys and counts to the Swap
     /// Returns the number of compactions that were required to be able
     /// to stay below `max_buckets`
-    #[must_use]
     pub fn append(
         &mut self,
         keys: impl Iterator<Item = SketchHashKey>,
         counts: impl Iterator<Item = u64>,
         compactions_to_apply_to_keys: u32,
-        max_buckets: usize,
-    ) -> u32 {
+    ) {
         let mut iter = keys.zip(counts);
 
         let Some(mut current) = iter.next() else {
-            return 0;
+            return;
         };
+
+        // As we're adding items to our Vec, our ordering is chaos.
+        self.kind = Kind::Unordered;
 
         for _ in 0..compactions_to_apply_to_keys {
             current.0 = current.0.compact_key();
@@ -112,27 +114,20 @@ impl Swap {
             key: current.0,
             count: current.1,
         });
-        self.kind = Kind::Unordered;
-
-        self.reduce_buckets(max_buckets)
     }
 
     /// Populate the `SketchHashMap` with the values from the Swap
-    /// Returns the amount of compactions required in order to make it fit
-    #[must_use]
-    pub fn populate(&mut self, map: &mut SketchHashMap, max_buckets: usize) -> u32 {
+    /// Drains the `Swap`
+    pub fn populate(&mut self, map: &mut SketchHashMap) {
         debug_assert!(map.map.is_empty());
 
-        let compactions = self.reduce_buckets(max_buckets);
         self.aggregate();
 
-        debug_assert!(matches!(self.kind, Kind::Aggregated));
-
-        let mut iter = self.buckets.iter().peekable();
+        let mut iter = self.buckets.drain(..).peekable();
 
         map.head = iter.peek().map(|i| i.key).unwrap_or(Invalid);
 
-        for i in &self.buckets {
+        while let Some(i) = iter.next() {
             map.map.insert(
                 i.key,
                 SketchHashEntry {
@@ -141,8 +136,6 @@ impl Swap {
                 },
             );
         }
-
-        compactions
     }
 
     /// Sort the values

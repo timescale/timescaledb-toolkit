@@ -528,7 +528,6 @@ pub fn uddsketch_compound_trans_inner(
 
             let keys = value.keys();
             let counts = value.counts();
-            let num_values = value.num_buckets;
             state.merge_items(
                 keys,
                 counts,

@@ -46,6 +46,15 @@ impl std::cmp::PartialOrd for SketchHashKey {
     }
 }
 
+/// `UDDSketchMetadata` was created to avoid passing along many parameters
+/// to function calls.
+pub struct UDDSketchMetadata {
+    pub max_buckets: u32,
+    pub current_error: f64,
+    pub compactions: u32,
+    pub values: u64,
+    pub sum: f64,
+}
 impl SketchHashKey {
     /// This is the key corresponding to the current key after the SketchHashMap it refers to has gone through one compaction.
     /// Note that odd buckets get combined with the bucket after them (i.e. old buckets -3 and -2 become new bucket -1, {-1, 0} -> 0, {1, 2} -> 1)
@@ -211,22 +220,18 @@ impl UDDSketch {
 
     // This constructor is used to recreate a UddSketch from it's component data
     pub fn new_from_data(
-        max_buckets: u64,
-        current_error: f64,
-        compactions: u64,
-        values: u64,
-        sum: f64,
+        metadata: &UDDSketchMetadata,
         keys: impl Iterator<Item = SketchHashKey>,
         counts: impl Iterator<Item = u64>,
     ) -> Self {
         let mut sketch = UDDSketch {
             buckets: SketchHashMap::new(),
-            alpha: current_error,
-            gamma: gamma(current_error),
-            compactions: compactions as u32,
-            max_buckets,
-            num_values: values,
-            values_sum: sum,
+            alpha: metadata.current_error,
+            gamma: gamma(metadata.current_error),
+            compactions: metadata.compactions,
+            max_buckets: metadata.max_buckets as u64,
+            num_values: metadata.values,
+            values_sum: metadata.sum,
         };
         // TODO
         let keys: Vec<_> = keys.collect();
@@ -283,6 +288,51 @@ impl UDDSketch {
 
         self.num_values += 1;
         self.values_sum += value;
+    }
+
+    /// `merge_items` will merge these values into the current sketch
+    /// it requires less memory than `merge_sketch`, as that needs a fully serialized
+    /// `UDDSketch`, whereas this function relies on iterators to do its job.
+    pub fn merge_items(
+        &mut self,
+        other: &UDDSketchMetadata,
+        mut keys: impl Iterator<Item = SketchHashKey>,
+        mut counts: impl Iterator<Item = u64>,
+    ) {
+        let other_gamma = gamma(other.current_error);
+        // Require matching initial parameters
+        debug_assert!(
+            (self
+                .gamma
+                .powf(1.0 / f64::powi(2.0, self.compactions as i32))
+                - other_gamma.powf(1.0 / f64::powi(2.0, other.compactions as i32)))
+            .abs()
+                < 1e-9 // f64::EPSILON too small, see issue #396
+        );
+        debug_assert_eq!(self.max_buckets, other.max_buckets as u64);
+
+        if other.values == 0 {
+            return;
+        }
+
+        while self.compactions < other.compactions {
+            self.compact_buckets();
+        }
+
+        let extra_compactions = self.compactions - other.compactions;
+        while let (Some(mut key), Some(count)) = (keys.next(), counts.next()) {
+            for _ in 0..extra_compactions {
+                key = key.compact_key();
+            }
+            self.buckets.entry(key).count += count;
+        }
+
+        while self.buckets.len() > self.max_buckets as usize {
+            self.compact_buckets();
+        }
+
+        self.num_values += other.values;
+        self.values_sum += other.sum;
     }
 
     pub fn merge_sketch(&mut self, other: &UDDSketch) {

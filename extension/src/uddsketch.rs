@@ -2,7 +2,7 @@ use pgrx::*;
 
 use encodings::{delta, prefix_varint};
 
-use uddsketch::{SketchHashKey, UDDSketch as UddSketchInternal};
+use uddsketch::{SketchHashKey, UDDSketch as UddSketchInternal, UDDSketchMetadata};
 
 use crate::{
     accessors::{
@@ -148,11 +148,13 @@ impl From<&UddSketchInternal> for SerializedUddSketch {
 impl From<SerializedUddSketch> for UddSketchInternal {
     fn from(sketch: SerializedUddSketch) -> Self {
         UddSketchInternal::new_from_data(
-            sketch.max_buckets as u64,
-            sketch.alpha,
-            sketch.compactions as u64,
-            sketch.count,
-            sketch.sum,
+            &UDDSketchMetadata {
+                max_buckets: sketch.max_buckets,
+                current_error: sketch.alpha,
+                compactions: sketch.compactions,
+                values: sketch.count,
+                sum: sketch.sum,
+            },
             sketch.keys(),
             sketch.counts(),
         )
@@ -304,16 +306,18 @@ impl<'input> UddSketch<'input> {
         )
     }
 
+    fn metadata(&self) -> UDDSketchMetadata {
+        UDDSketchMetadata {
+            max_buckets: self.max_buckets,
+            current_error: self.alpha,
+            compactions: self.compactions as u32,
+            values: self.count,
+            sum: self.sum,
+        }
+    }
+
     fn to_uddsketch(&self) -> UddSketchInternal {
-        UddSketchInternal::new_from_data(
-            self.max_buckets as u64,
-            self.alpha,
-            self.compactions,
-            self.count,
-            self.sum,
-            self.keys(),
-            self.counts(),
-        )
+        UddSketchInternal::new_from_data(&self.metadata(), self.keys(), self.counts())
     }
 
     fn from_internal(state: &UddSketchInternal) -> Self {
@@ -520,15 +524,12 @@ pub fn uddsketch_compound_trans_inner(
 ) -> Option<Inner<UddSketchInternal>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
-            let value = match value {
-                None => return state,
-                Some(value) => value.to_uddsketch(),
+            let Some(value) = value else { return state };
+            let Some(mut state) = state else {
+                return Some(value.to_uddsketch().into());
             };
-            let mut state = match state {
-                None => return Some(value.into()),
-                Some(state) => state,
-            };
-            state.merge_sketch(&value);
+
+            state.merge_items(&value.metadata(), value.keys(), value.counts());
             state.into()
         })
     }

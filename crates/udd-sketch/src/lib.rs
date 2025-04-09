@@ -332,7 +332,7 @@ impl UDDSketch {
     }
 
     pub fn compact_buckets(&mut self) {
-        let mut swap = &mut self.swap.buckets;
+        let swap = &mut self.swap.buckets;
         self.buckets.compact_with_swap(swap);
 
         self.compactions += 1;
@@ -357,6 +357,59 @@ impl UDDSketch {
         self.values_sum += value;
     }
 
+
+    /// `merge_items` will merge these values into the current sketch
+    /// it requires less memory than `merge_sketch`, as that needs a fully serialized
+    /// `UDDSketch`, whereas this function relies on iterators to do its job.
+    pub fn merge_items(
+        &mut self,
+        mut keys: impl Iterator<Item = SketchHashKey>,
+        mut counts: impl Iterator<Item = u64>,
+        // We take a lot of values as input, mainly to ensure we can run the
+        // asserts that are also present in other parts of the codebase.
+        other_alpha: f64,
+        other_compactions: u64,
+        other_values: u64,
+        other_sum: f64,
+        other_max_buckets: u32,
+    ) {
+        let other_gamma = gamma(other_alpha);
+        // Require matching initial parameters
+        debug_assert!(
+            (self
+                .gamma
+                .powf(1.0 / f64::powi(2.0, self.compactions as i32))
+                - other_gamma
+                .powf(1.0 / f64::powi(2.0, other_compactions as i32)))
+                .abs()
+                < 1e-9 // f64::EPSILON too small, see issue #396
+        );
+        debug_assert_eq!(self.max_buckets as u32, other_max_buckets);
+
+
+        if other_values == 0 {
+            return;
+        }
+
+        while self.compactions < other_compactions as u32 {
+            self.compact_buckets();
+        }
+
+        let extra_compactions = self.compactions - other_compactions as u32;
+        while let ((Some(mut key), Some(count))) = (keys.next(), counts.next()) {
+            for _ in 0..extra_compactions {
+                key = key.compact_key();
+            }
+            self.buckets.entry(key).count += count as u64;
+        }
+
+        while self.buckets.len() > self.max_buckets as usize {
+            self.compact_buckets();
+        }
+
+        self.num_values += other_values;
+        self.values_sum += other_sum;
+    }
     pub fn merge_sketch(&mut self, other: &UDDSketch) {
         // Require matching initial parameters
         assert!(

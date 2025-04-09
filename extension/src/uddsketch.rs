@@ -2,7 +2,7 @@ use pgrx::*;
 
 use encodings::{delta, prefix_varint};
 
-use uddsketch::{SketchHashKey, UDDSketch as UddSketchInternal};
+use uddsketch::{gamma, SketchHashKey, UDDSketch as UddSketchInternal};
 
 use crate::{
     accessors::{
@@ -92,11 +92,10 @@ pub fn uddsketch_combine_inner(
         in_aggregate_context(fcinfo, || match (state1, state2) {
             (None, None) => None,
             (None, Some(state2)) => Some(state2.clone().into()),
-            (Some(state1), None) => Some(state1.clone().into()),
-            (Some(state1), Some(state2)) => {
-                let mut sketch = state1.clone();
-                sketch.merge_sketch(&state2);
-                Some(sketch.into())
+            (Some(state1), None) => Some(state1.into()),
+            (Some(mut state1), Some(state2)) => {
+                state1.merge_sketch(&state2);
+                Some(state1.into())
             }
         })
     }
@@ -522,15 +521,23 @@ pub fn uddsketch_compound_trans_inner(
 ) -> Option<Inner<UddSketchInternal>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
-            let value = match value {
-                None => return state,
-                Some(value) => value.to_uddsketch(),
+            let Some(value) = value else { return state };
+            let Some(mut state) = state else {
+                return Some(value.to_uddsketch().into());
             };
-            let mut state = match state {
-                None => return Some(value.into()),
-                Some(state) => state,
-            };
-            state.merge_sketch(&value);
+
+            let keys = value.keys();
+            let counts = value.counts();
+            let num_values = value.num_buckets;
+            state.merge_items(
+                keys,
+                counts,
+                value.alpha,
+                value.compactions,
+                value.count,
+                value.sum,
+                value.max_buckets,
+            );
             state.into()
         })
     }

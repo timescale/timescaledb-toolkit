@@ -331,7 +331,8 @@ impl UDDSketch {
         key(value, self.gamma)
     }
 
-    pub fn compact_buckets(&mut self, swap: &mut Vec<SwapBucket>) {
+    pub fn compact_buckets(&mut self) {
+        let mut swap = &mut self.swap.buckets;
         self.buckets.compact_with_swap(swap);
 
         self.compactions += 1;
@@ -349,7 +350,7 @@ impl UDDSketch {
         self.buckets.increment(self.key(value));
 
         while self.buckets.len() > self.max_buckets as usize {
-            self.compact_buckets(&mut Vec::new());
+            self.compact_buckets();
         }
 
         self.num_values += 1;
@@ -378,10 +379,6 @@ impl UDDSketch {
             return;
         }
 
-        // We can reuse this Heap allocated Vec every time
-        // we compact.
-        let mut swap = Vec::new();
-
         let mut tmp: UDDSketch;
         // We only need to fully clone the other sketch
         // if we need to compact it. Not doing it
@@ -391,12 +388,12 @@ impl UDDSketch {
         let other = if self.compactions > other.compactions {
             tmp = other.clone();
             while self.compactions > tmp.compactions {
-                tmp.compact_buckets(&mut swap);
+                tmp.compact_buckets();
             }
             &tmp
         } else {
             while other.compactions > self.compactions {
-                self.compact_buckets(&mut swap);
+                self.compact_buckets();
             }
             other
         };
@@ -407,7 +404,7 @@ impl UDDSketch {
         }
 
         while self.buckets.len() > self.max_buckets as usize {
-            self.compact_buckets(&mut swap);
+            self.compact_buckets();
         }
 
         self.num_values += other.num_values;

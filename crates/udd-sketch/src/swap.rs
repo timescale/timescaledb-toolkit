@@ -3,7 +3,7 @@ use crate::SketchHashKey::Invalid;
 use crate::{SketchHashEntry, SketchHashKey, SketchHashMap};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-struct SketchBucket {
+pub struct SwapBucket {
     pub key: SketchHashKey,
     pub count: u64,
 }
@@ -18,7 +18,7 @@ enum Kind {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Swap {
     kind: Kind,
-    pub buckets: Vec<SketchBucket>,
+    pub buckets: Vec<SwapBucket>,
 }
 
 impl Default for Swap {
@@ -38,7 +38,7 @@ impl Swap {
             for _ in 0..additional_compactions {
                 key = key.compact_key();
             }
-            buckets.push(SketchBucket {
+            buckets.push(SwapBucket {
                 key,
                 count: entry.count,
             });
@@ -97,7 +97,7 @@ impl Swap {
             }
 
             if current.0 != next.0 {
-                self.buckets.push(SketchBucket {
+                self.buckets.push(SwapBucket {
                     key: current.0,
                     count: current.1,
                 });
@@ -108,7 +108,7 @@ impl Swap {
         }
 
         // Final one
-        self.buckets.push(SketchBucket {
+        self.buckets.push(SwapBucket {
             key: current.0,
             count: current.1,
         });

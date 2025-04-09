@@ -6,7 +6,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 
 use crate::compactor::compact_from_iter;
-use crate::swap::Swap;
+use crate::swap::{Swap, SwapBucket};
 use crate::SketchHashKey::{Invalid, Zero};
 #[cfg(test)]
 use ordered_float::OrderedFloat;
@@ -196,12 +196,15 @@ impl SketchHashMap {
     /// `compact_with_swap` will reuse the provided swap Vec. When
     /// this function is called in a loop, this reuse of the Vec ensures
     /// we dont malloc/free multiple times, but reuse that piece of memory
-    fn compact_with_swap(&mut self, swap: &mut Vec<(SketchHashKey, u64)>) {
+    fn compact_with_swap(&mut self, swap: &mut Vec<SwapBucket>) {
         debug_assert!(swap.is_empty());
         swap.reserve(self.map.len());
 
         for (k, v) in self.map.drain() {
-            swap.push((k.compact_key(), v.count));
+            swap.push(SwapBucket {
+                key: k.compact_key(),
+                count: v.count,
+            });
         }
 
         // We need to sort the Vec as we want to recreate the linked list style
@@ -211,7 +214,7 @@ impl SketchHashMap {
         // better than the non-stable variant.
         // > This sort is unstable (i.e., may reorder equal elements),
         // > in-place (i.e., does not allocate), and O(n * log(n)) worst-case.
-        swap.sort_unstable_by_key(|k| k.0);
+        swap.sort_unstable_by_key(|k| k.key);
 
         let mut swap_iter = swap.drain(..);
 
@@ -328,7 +331,7 @@ impl UDDSketch {
         key(value, self.gamma)
     }
 
-    pub fn compact_buckets(&mut self, swap: &mut Vec<(SketchHashKey, u64)>) {
+    pub fn compact_buckets(&mut self, swap: &mut Vec<SwapBucket>) {
         self.buckets.compact_with_swap(swap);
 
         self.compactions += 1;

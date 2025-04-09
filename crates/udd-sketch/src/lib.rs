@@ -563,6 +563,35 @@ mod tests {
         assert_eq!(sketch.max_error(), a2);
     }
 
+    /// We create this `merge_verifier` so that every test we run also tests
+    /// the multiple implementations we have for merging sketches.
+    /// It is a drop-in replacement for `merge_sketches`, with additional asserts.
+    fn merge_verifier(sketch: &mut UDDSketch, other: &UDDSketch) {
+        let mut second = sketch.clone();
+
+        sketch.merge_sketch(other);
+
+        let mut keys = Vec::with_capacity(other.num_values as usize);
+        let mut counts = Vec::with_capacity(other.num_values as usize);
+        for (key, count) in other.buckets.iter() {
+            keys.push(key);
+            counts.push(count);
+        }
+
+        let metadata = UDDSketchMetadata {
+            max_buckets: other.max_buckets as u32,
+            current_error: other.alpha,
+            compactions: other.compactions,
+            values: other.num_values,
+            sum: other.values_sum,
+        };
+
+        second.merge_items(&metadata, keys.into_iter(), counts.into_iter());
+
+        // Both methods should result in the same end result.
+        assert_eq!(*sketch, second);
+    }
+
     #[test]
     fn merge_sketches() {
         let a1 = 0.1; // alpha for up to 20 buckets
@@ -590,7 +619,7 @@ mod tests {
 
         assert_eq!(sketch2.max_error(), a1);
 
-        sketch1.merge_sketch(&sketch2);
+        merge_verifier(&mut sketch1, &sketch2);
         assert_eq!(sketch1.count(), 10);
         assert_eq!(sketch1.max_error(), a1);
 
@@ -603,7 +632,7 @@ mod tests {
 
         assert_eq!(sketch3.max_error(), a1);
 
-        sketch1.merge_sketch(&sketch3);
+        merge_verifier(&mut sketch1, &sketch3);
         assert_eq!(sketch1.count(), 15);
         assert_eq!(sketch1.max_error(), a1);
 
@@ -620,7 +649,8 @@ mod tests {
 
         assert_eq!(sketch4.max_error(), a1);
 
-        sketch1.merge_sketch(&sketch4);
+        merge_verifier(&mut sketch1, &sketch4);
+
         assert_eq!(sketch1.count(), 24);
         assert_eq!(sketch1.max_error(), a2);
 
@@ -631,7 +661,8 @@ mod tests {
 
         assert_eq!(sketch5.max_error(), a4);
 
-        sketch1.merge_sketch(&sketch5);
+        merge_verifier(&mut sketch1, &sketch5);
+
         assert_eq!(sketch1.count(), 144);
         assert_eq!(sketch1.max_error(), a5); // Note that each compaction doesn't always result in half the numbers of buckets, hence a5 here instead of a4
     }

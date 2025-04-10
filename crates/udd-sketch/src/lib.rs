@@ -2,12 +2,14 @@
 //! Based on the paper: https://arxiv.org/abs/2004.08604
 
 use serde::{Deserialize, Serialize};
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
 #[cfg(test)]
 use ordered_float::OrderedFloat;
 #[cfg(test)]
 use std::collections::HashSet;
+
 #[cfg(test)]
 extern crate quickcheck;
 #[cfg(test)]
@@ -122,9 +124,9 @@ impl SketchHashMap {
         }
     }
 
-    // Increment the count at a key, creating the entry if needed.
+    /// Increment the count at a key, creating the entry if needed.
     fn increment(&mut self, key: SketchHashKey) {
-        self.entry(key).count += 1;
+        self.entry_upsert(key, 1);
     }
 
     fn iter(&self) -> SketchHashIterator {
@@ -134,26 +136,72 @@ impl SketchHashMap {
         }
     }
 
-    // Returns the entry for a given key.
-    // If the entry doesn't yet exist, this function will create it
-    // with 0 count and ensure the list of keys is correctly updated.
-    fn entry(&mut self, key: SketchHashKey) -> &mut SketchHashEntry {
-        let mut next = self.head;
-        if !self.map.contains_key(&key) {
-            if key < self.head {
-                self.head = key;
-            } else {
-                let mut prev = SketchHashKey::Invalid;
-                while key > next {
-                    prev = next;
-                    next = self.map[&next].next;
-                }
-                self.map.get_mut(&prev).expect("Invalid key found").next = key;
+    /// Splits an entry if `key` is supposed to come right after it
+    /// Returns the key *after* the one that was split.
+    #[inline]
+    #[must_use] // The caller should really do something with this information.
+    fn entry_split(&mut self, key: SketchHashKey) -> SketchHashKey {
+        debug_assert_ne!(
+            key,
+            SketchHashKey::Invalid,
+            "Invalid should never be used as a key into the SketchHashMap"
+        );
+
+        let next: SketchHashKey;
+
+        // Special case, if we're actually in front of the Head,
+        // we're not really splitting the linked list, but prepending.
+        if key < self.head {
+            next = self.head;
+            self.head = key;
+            return next;
+        }
+
+        // Unfortunately, we'll now have to walk the whole map in order
+        // to find the location where we should be inserted
+        // into the single-linked list
+        for (k, e) in self.map.iter_mut() {
+            if *k < key && e.next > key {
+                next = e.next;
+                e.next = key;
+                return next;
             }
         }
-        self.map
-            .entry(key)
-            .or_insert(SketchHashEntry { count: 0, next })
+
+        unreachable!("Invalid key found");
+    }
+
+    /// Upsert the given key/count into our map. This function
+    /// ensures the Linked List is in good shape afterwards.
+    #[inline]
+    fn entry_upsert(&mut self, key: SketchHashKey, count: u64) {
+        match self.map.entry(key) {
+            Entry::Occupied(mut o) => {
+                o.get_mut().count += count;
+                // Great, we don't have to update the Linked List
+                return;
+            }
+            Entry::Vacant(v) if self.head > key => {
+                v.insert(SketchHashEntry {
+                    count,
+                    next: self.head,
+                });
+                self.head = key;
+                // Great, we don't have to update the Linked List
+                return;
+            }
+            Entry::Vacant(_) => (), // We need to release our &mut map here, as we need to update 2 entries
+        };
+
+        // We've just inserted a new value, but need to ensure we fix the linked list again.
+        let new_next = self.entry_split(key);
+        self.map.insert(
+            key,
+            SketchHashEntry {
+                count,
+                next: new_next,
+            },
+        );
     }
 
     fn len(&self) -> usize {
@@ -324,7 +372,8 @@ impl UDDSketch {
             for _ in 0..extra_compactions {
                 key = key.compact_key();
             }
-            self.buckets.entry(key).count += count;
+
+            self.buckets.entry_upsert(key, count);
         }
 
         while self.buckets.len() > self.max_buckets as usize {
@@ -368,7 +417,7 @@ impl UDDSketch {
 
         for entry in other.buckets.iter() {
             let (key, value) = entry;
-            self.buckets.entry(key).count += value;
+            self.buckets.entry_upsert(key, value);
         }
 
         while self.buckets.len() > self.max_buckets as usize {
@@ -768,19 +817,30 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
+    fn test_entry_invalid_hashmap_key() {
+        let mut map = SketchHashMap {
+            map: HashMap::new(),
+            head: Invalid,
+        };
+
+        map.entry_upsert(Invalid, 0);
+    }
+
+    #[test]
     fn test_entry_insertion_order() {
         let mut map = SketchHashMap {
             map: HashMap::new(),
             head: Invalid,
         };
 
-        map.entry(SketchHashKey::Negative(i64::MIN)).count += 5;
-        map.entry(SketchHashKey::Negative(10)).count += 1;
-        map.entry(SketchHashKey::Positive(i64::MAX - 100)).count += 17;
-        map.entry(SketchHashKey::Zero).count += 7;
-        map.entry(SketchHashKey::Positive(-10)).count += 11;
-        map.entry(SketchHashKey::Negative(-10)).count += 3;
-        map.entry(SketchHashKey::Positive(10)).count += 13;
+        map.entry_upsert(SketchHashKey::Negative(i64::MIN), 5);
+        map.entry_upsert(SketchHashKey::Negative(10), 1);
+        map.entry_upsert(SketchHashKey::Positive(i64::MAX - 100), 17);
+        map.entry_upsert(SketchHashKey::Zero, 7);
+        map.entry_upsert(SketchHashKey::Positive(-10), 11);
+        map.entry_upsert(SketchHashKey::Negative(-10), 3);
+        map.entry_upsert(SketchHashKey::Positive(10), 13);
 
         let keys: Vec<_> = map.iter().collect::<Vec<_>>();
         assert_eq!(
@@ -798,12 +858,12 @@ mod tests {
 
         // We add some things before the current head, insert some new ones,
         // add some to the end, and again inbetween some others
-        map.entry(SketchHashKey::Negative(i64::MAX)).count += 3;
-        map.entry(SketchHashKey::Negative(-10)).count += 23;
-        map.entry(SketchHashKey::Positive(10)).count += 123;
-        map.entry(SketchHashKey::Positive(9)).count += 29;
-        map.entry(SketchHashKey::Positive(11)).count += 31;
-        map.entry(SketchHashKey::Positive(i64::MAX)).count += 8;
+        map.entry_upsert(SketchHashKey::Negative(i64::MAX), 3);
+        map.entry_upsert(SketchHashKey::Negative(-10), 23);
+        map.entry_upsert(SketchHashKey::Positive(9), 29);
+        map.entry_upsert(SketchHashKey::Positive(i64::MAX), 8);
+        map.entry_upsert(SketchHashKey::Positive(10), 123);
+        map.entry_upsert(SketchHashKey::Positive(11), 31);
 
         let keys: Vec<_> = map.iter().collect::<Vec<_>>();
         assert_eq!(

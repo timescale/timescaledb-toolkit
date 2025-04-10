@@ -674,6 +674,7 @@ mod tests {
         }
     }
 
+    use crate::SketchHashKey::Invalid;
     use quickcheck::*;
 
     #[derive(Hash, PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Debug)]
@@ -683,6 +684,63 @@ mod tests {
         fn arbitrary(g: &mut Gen) -> Self {
             OrderedF64(f64::arbitrary(g).into())
         }
+    }
+
+    #[test]
+    fn test_entry_insertion_order() {
+        let mut map = SketchHashMap {
+            map: HashMap::new(),
+            head: Invalid,
+        };
+
+        map.entry(SketchHashKey::Negative(i64::MIN)).count += 5;
+        map.entry(SketchHashKey::Negative(10)).count += 1;
+        map.entry(SketchHashKey::Positive(i64::MAX - 100)).count += 17;
+        map.entry(SketchHashKey::Zero).count += 7;
+        map.entry(SketchHashKey::Positive(-10)).count += 11;
+        map.entry(SketchHashKey::Negative(-10)).count += 3;
+        map.entry(SketchHashKey::Positive(10)).count += 13;
+
+        let keys: Vec<_> = map.iter().collect::<Vec<_>>();
+        assert_eq!(
+            keys,
+            vec![
+                (SketchHashKey::Negative(10), 1),
+                (SketchHashKey::Negative(-10), 3),
+                (SketchHashKey::Negative(i64::MIN), 5),
+                (SketchHashKey::Zero, 7),
+                (SketchHashKey::Positive(-10), 11),
+                (SketchHashKey::Positive(10), 13),
+                (SketchHashKey::Positive(i64::MAX - 100), 17),
+            ]
+        );
+
+        // We add some things before the current head, insert some new ones,
+        // add some to the end, and again inbetween some others
+        map.entry(SketchHashKey::Negative(i64::MAX)).count += 3;
+        map.entry(SketchHashKey::Negative(-10)).count += 23;
+        map.entry(SketchHashKey::Positive(10)).count += 123;
+        map.entry(SketchHashKey::Positive(9)).count += 29;
+        map.entry(SketchHashKey::Positive(11)).count += 31;
+        map.entry(SketchHashKey::Positive(i64::MAX)).count += 8;
+
+        let keys: Vec<_> = map.iter().collect::<Vec<_>>();
+        assert_eq!(
+            keys,
+            vec![
+                (SketchHashKey::Negative(i64::MAX), 3),
+                (SketchHashKey::Negative(10), 1),
+                (SketchHashKey::Negative(-10), 26), // 3 + 23
+                (SketchHashKey::Negative(i64::MIN), 5),
+                (SketchHashKey::Zero, 7),
+                (SketchHashKey::Positive(-10), 11),
+                (SketchHashKey::Positive(9), 29),
+                (SketchHashKey::Positive(10), 136), // 13 + 123
+                (SketchHashKey::Positive(11), 31),
+                (SketchHashKey::Positive(i64::MAX - 100), 17),
+                (SketchHashKey::Positive(i64::MAX), 8),
+            ]
+        );
     }
 
     #[quickcheck]

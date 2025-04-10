@@ -91,7 +91,7 @@ pub struct SketchHashIterator<'a> {
     next_key: SketchHashKey,
 }
 
-impl<'a> Iterator for SketchHashIterator<'a> {
+impl Iterator for SketchHashIterator<'_> {
     type Item = (SketchHashKey, u64);
 
     fn next(&mut self) -> Option<(SketchHashKey, u64)> {

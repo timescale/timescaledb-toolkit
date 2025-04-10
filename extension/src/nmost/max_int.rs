@@ -112,7 +112,7 @@ pub fn max_n_int_to_array(agg: MaxInts<'static>) -> Vec<i64> {
 }
 
 #[pg_extern(name = "into_values", immutable, parallel_safe)]
-pub fn max_n_int_to_values(agg: MaxInts<'static>) -> SetOfIterator<i64> {
+pub fn max_n_int_to_values(agg: MaxInts<'static>) -> SetOfIterator<'static, i64> {
     SetOfIterator::new(agg.values.clone().into_iter())
 }
 

@@ -123,7 +123,7 @@ impl<'s, T, B> HyperLogLog<'s, T, B> {
     }
 }
 
-impl<'s, T, B> HyperLogLog<'s, T, B>
+impl<T, B> HyperLogLog<'_, T, B>
 where
     T: Hash + ?Sized,
     B: BuildHasher,

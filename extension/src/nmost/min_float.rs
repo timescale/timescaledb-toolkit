@@ -117,7 +117,7 @@ pub fn min_n_float_to_array(agg: MinFloats<'static>) -> Vec<f64> {
 }
 
 #[pg_extern(name = "into_values", immutable, parallel_safe)]
-pub fn min_n_float_to_values(agg: MinFloats<'static>) -> SetOfIterator<f64> {
+pub fn min_n_float_to_values(agg: MinFloats<'static>) -> SetOfIterator<'static, f64> {
     SetOfIterator::new(agg.values.clone().into_iter())
 }
 

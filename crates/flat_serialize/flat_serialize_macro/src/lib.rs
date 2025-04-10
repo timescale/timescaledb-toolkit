@@ -1392,7 +1392,7 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
                         Ok(meta) => meta,
                         _ => return None,
                     };
-                    let has_repr = meta.path().get_ident().map_or(false, |id| id == "repr");
+                    let has_repr = meta.path().get_ident().is_some_and(|id| id == "repr");
                     if !has_repr {
                         return None;
                     }
@@ -1501,7 +1501,7 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
                 Ok(meta) => meta,
                 _ => return None,
             };
-            let has_repr = meta.path().get_ident().map_or(false, |id| id == "repr");
+            let has_repr = meta.path().get_ident().is_some_and(|id| id == "repr");
             if !has_repr {
                 return None;
             }

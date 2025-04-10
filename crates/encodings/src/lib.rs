@@ -107,21 +107,21 @@ pub mod zigzag {
 }
 
 pub mod prefix_varint {
-    /// Similar to [LEB128](https://en.wikipedia.org/wiki/LEB128), but it moves
-    /// all the tag bits to the LSBs of the first byte, which ends up looking
-    /// like this (`x` is a value bit, the rest are tag bits):
-    /// ```python,ignore,no_run
-    /// xxxxxxx1  7 bits in 1 byte
-    /// xxxxxx10 14 bits in 2 bytes
-    /// xxxxx100 21 bits in 3 bytes
-    /// xxxx1000 28 bits in 4 bytes
-    /// xxx10000 35 bits in 5 bytes
-    /// xx100000 42 bits in 6 bytes
-    /// x1000000 49 bits in 7 bytes
-    /// 10000000 56 bits in 8 bytes
-    /// 00000000 64 bits in 9 bytes
-    /// ```
-    /// based on https://github.com/stoklund/varint
+    //! Similar to [LEB128](https://en.wikipedia.org/wiki/LEB128), but it moves
+    //! all the tag bits to the LSBs of the first byte, which ends up looking
+    //! like this (`x` is a value bit, the rest are tag bits):
+    //! ```python,ignore,no_run
+    //! xxxxxxx1  7 bits in 1 byte
+    //! xxxxxx10 14 bits in 2 bytes
+    //! xxxxx100 21 bits in 3 bytes
+    //! xxxx1000 28 bits in 4 bytes
+    //! xxx10000 35 bits in 5 bytes
+    //! xx100000 42 bits in 6 bytes
+    //! x1000000 49 bits in 7 bytes
+    //! 10000000 56 bits in 8 bytes
+    //! 00000000 64 bits in 9 bytes
+    //! ```
+    //! based on https://github.com/stoklund/varint
 
     pub fn size_vec<I: Iterator<Item = u64>>(bytes: &mut Vec<u8>, values: I) {
         let size: usize = values.map(|v| bytes_for_value(v) as usize).sum();

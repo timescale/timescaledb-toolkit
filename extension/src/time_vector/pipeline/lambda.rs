@@ -54,7 +54,7 @@ impl<'input> InOutFuncs for Lambda<'input> {
         unsafe {
             flatten! {
                 Lambda {
-                    len: s.as_bytes().len() as _,
+                    len: s.len() as _,
                     string: s.as_bytes().into(),
                 }
             }

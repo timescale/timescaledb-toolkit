@@ -117,7 +117,7 @@ fn asap_final_inner(
                 })
                 .collect();
 
-            let nulls_len = (points.len() + 7) / 8;
+            let nulls_len = points.len().div_ceil(8);
 
             Some(crate::build! {
                 Timevector_TSTZ_F64 {
@@ -165,7 +165,7 @@ pub fn asap_on_timevector(
         })
         .collect();
 
-    let nulls_len = (points.len() + 7) / 8;
+    let nulls_len = points.len().div_ceil(8);
 
     Some(crate::build! {
         Timevector_TSTZ_F64 {

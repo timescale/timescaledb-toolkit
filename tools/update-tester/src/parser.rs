@@ -269,7 +269,7 @@ fn parse_code_block_info(info: &str) -> CodeBlockInfo {
             "creation" => info.creation = true,
             "validation" => info.validation = true,
             "output" => info.kind = BlockKind::Output,
-            s if s.to_ascii_lowercase() == "sql" => info.kind = BlockKind::Sql,
+            s if s.eq_ignore_ascii_case("sql") => info.kind = BlockKind::Sql,
             p if p.starts_with("precision") => {
                 // syntax `precision(col: bytes)`
                 let precision_err =

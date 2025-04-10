@@ -519,7 +519,7 @@ fn arrow_with_bounds<'a>(
 }
 
 #[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
-fn with_bounds<'a>(summary: GaugeSummary<'a>, bounds: tstzrange) -> GaugeSummary {
+fn with_bounds<'a>(summary: GaugeSummary<'_>, bounds: tstzrange) -> GaugeSummary {
     // TODO dedup with previous by using apply_bounds
     unsafe {
         let ptr = bounds.0.cast_mut_ptr();

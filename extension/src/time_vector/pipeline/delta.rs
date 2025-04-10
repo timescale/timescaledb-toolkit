@@ -48,7 +48,7 @@ pub fn timevector_delta<'s>(series: &Timevector_TSTZ_F64<'s>) -> Timevector_TSTZ
         prev = pt.val;
     }
 
-    let nulls_len = (delta_points.len() + 7) / 8;
+    let nulls_len = delta_points.len().div_ceil(8);
 
     build!(Timevector_TSTZ_F64 {
         num_points: delta_points.len() as u32,

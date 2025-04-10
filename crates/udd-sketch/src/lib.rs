@@ -134,26 +134,39 @@ impl SketchHashMap {
         }
     }
 
+    /// Splits an entry if `key` is supposed to come right after it
+    /// Returns the key *after* the one that was split.
+    #[inline]
+    fn entry_split(&mut self, key: SketchHashKey) -> SketchHashKey {
+        for (k, e) in self.map.iter_mut() {
+            if *k < key && e.next > key {
+                let next = e.next;
+                e.next = key;
+                return next;
+            }
+        }
+        unreachable!("Invalid key found");
+    }
+
     // Returns the entry for a given key.
     // If the entry doesn't yet exist, this function will create it
     // with 0 count and ensure the list of keys is correctly updated.
     fn entry(&mut self, key: SketchHashKey) -> &mut SketchHashEntry {
-        let mut next = self.head;
-        if !self.map.contains_key(&key) {
-            if key < self.head {
-                self.head = key;
-            } else {
-                let mut prev = SketchHashKey::Invalid;
-                while key > next {
-                    prev = next;
-                    next = self.map[&next].next;
-                }
-                self.map.get_mut(&prev).expect("Invalid key found").next = key;
-            }
+        let mut new_entry = SketchHashEntry {
+            count: 0,
+            next: self.head,
+        };
+
+        if key < self.head {
+            self.head = key;
+        } else if !self.map.contains_key(&key) {
+            // Unfortunately, we'll now have to walk the whole map in order
+            // to find the location where we should be inserted
+            // into the single-linked list
+            new_entry.next = self.entry_split(key);
         }
-        self.map
-            .entry(key)
-            .or_insert(SketchHashEntry { count: 0, next })
+
+        self.map.entry(key).or_insert(new_entry)
     }
 
     fn len(&self) -> usize {

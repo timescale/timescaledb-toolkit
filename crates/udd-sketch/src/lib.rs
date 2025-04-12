@@ -124,6 +124,13 @@ impl SketchHashMap {
         }
     }
 
+    fn with_capacity(capacity: usize) -> SketchHashMap {
+        SketchHashMap {
+            map: HashMap::with_capacity(capacity),
+            head: SketchHashKey::Invalid,
+        }
+    }
+
     /// Increment the count at a key, creating the entry if needed.
     fn increment(&mut self, key: SketchHashKey) {
         self.entry_upsert(key, 1);
@@ -273,7 +280,7 @@ impl UDDSketch {
         counts: impl Iterator<Item = u64>,
     ) -> Self {
         let mut sketch = UDDSketch {
-            buckets: SketchHashMap::new(),
+            buckets: SketchHashMap::with_capacity(metadata.values as usize),
             alpha: metadata.current_error,
             gamma: gamma(metadata.current_error),
             compactions: metadata.compactions,

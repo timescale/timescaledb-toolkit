@@ -154,6 +154,7 @@ impl From<SerializedUddSketch> for UddSketchInternal {
                 compactions: sketch.compactions,
                 values: sketch.count,
                 sum: sketch.sum,
+                buckets: sketch.num_buckets,
             },
             sketch.keys(),
             sketch.counts(),
@@ -313,6 +314,7 @@ impl<'input> UddSketch<'input> {
             compactions: self.compactions as u32,
             values: self.count,
             sum: self.sum,
+            buckets: self.num_buckets,
         }
     }
 

@@ -1135,14 +1135,14 @@ mod tests {
             let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
             let delta = select_one!(client, stmt, f64);
             assert!((delta - 100.).abs() < f64::EPSILON);
-            let stmt = format!("SELECT delta('{}')", expected);
+            let stmt = format!("SELECT delta('{}' ::CounterSummary)", expected);
             let delta_test = select_one!(client, &stmt, f64);
             assert!((delta - delta_test).abs() < f64::EPSILON);
 
             let stmt = "SELECT num_resets(counter_agg(ts, val)) FROM test";
             let resets = select_one!(client, stmt, i64);
             assert_eq!(resets, 4);
-            let stmt = format!("SELECT num_resets('{}')", expected);
+            let stmt = format!("SELECT num_resets('{}' ::CounterSummary)", expected);
             let resets_test = select_one!(client, &stmt, i64);
             assert_eq!(resets, resets_test);
         });

@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
+use crate::SketchHashKey::Zero;
 #[cfg(test)]
 use ordered_float::OrderedFloat;
 #[cfg(test)]
@@ -28,23 +29,28 @@ pub enum SketchHashKey {
 }
 
 // Invalid is treated as greater than valid values (making it a nice boundary value for list end)
-impl std::cmp::PartialOrd for SketchHashKey {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+impl std::cmp::Ord for SketchHashKey {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         use self::SketchHashKey::*;
         use std::cmp::Ordering::*;
+
         match (self, other) {
-            (Invalid, Invalid) => Equal,
-            (Invalid, _) => Greater,
-            (_, Invalid) => Less,
-            (Zero, Zero) => Equal,
             (Positive(a), Positive(b)) => a.cmp(b),
             (Negative(a), Negative(b)) => a.cmp(b).reverse(),
-            (_, Positive(_)) => Less,
-            (Positive(_), _) => Greater,
-            (_, Negative(_)) => Greater,
-            (Negative(_), _) => Less,
+            (Positive(_), Negative(_) | Zero) => Greater,
+            (Negative(_) | Zero, Positive(_)) => Less,
+            (Zero, Negative(_)) => Greater,
+            (Negative(_), Zero) => Less,
+            (Zero, Zero) => Equal,
+            (Invalid, Invalid) => Equal,
+            (Invalid, Negative(_) | Zero | Positive(_)) => Greater,
+            (Negative(_) | Zero | Positive(_), Invalid) => Less,
         }
-        .into()
+    }
+}
+impl std::cmp::PartialOrd for SketchHashKey {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
     }
 }
 

@@ -56,6 +56,7 @@ pub struct UDDSketchMetadata {
     pub compactions: u32,
     pub values: u64,
     pub sum: f64,
+    pub buckets: u32,
 }
 impl SketchHashKey {
     /// This is the key corresponding to the current key after the SketchHashMap it refers to has gone through one compaction.
@@ -279,8 +280,9 @@ impl UDDSketch {
         mut keys: impl Iterator<Item = SketchHashKey>,
         mut counts: impl Iterator<Item = u64>,
     ) -> Self {
+        let capacity = metadata.buckets as usize;
         let mut sketch = UDDSketch {
-            buckets: SketchHashMap::with_capacity(metadata.values as usize),
+            buckets: SketchHashMap::with_capacity(capacity),
             alpha: metadata.current_error,
             gamma: gamma(metadata.current_error),
             compactions: metadata.compactions,
@@ -292,6 +294,7 @@ impl UDDSketch {
         while let (Some(key), Some(count)) = (keys.next(), counts.next()) {
             sketch.buckets.entry_upsert(key, count);
         }
+        debug_assert_eq!(sketch.buckets.map.len(), capacity);
 
         sketch
     }
@@ -623,6 +626,7 @@ mod tests {
             compactions: other.compactions,
             values: other.num_values,
             sum: other.values_sum,
+            buckets: other.buckets.map.len() as u32,
         };
 
         second.merge_items(&metadata, keys.into_iter(), counts.into_iter());

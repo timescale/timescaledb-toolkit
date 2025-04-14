@@ -38,17 +38,13 @@ pub struct FlatSummary {
     bounds: I64RangeWrapper,
 }
 
-#[pg_schema]
-mod toolkit_experimental {
-    use super::*;
-
-    pg_type! {
-        #[derive(Debug, PartialEq)]
-        struct GaugeSummary {
-            #[flat_serialize::flatten]
-            summary: FlatSummary,
-        }
+pg_type! {
+    #[derive(Debug, PartialEq)]
+    struct GaugeSummary {
+        #[flat_serialize::flatten]
+        summary: FlatSummary,
     }
+}
 
     impl GaugeSummary {
         pub(super) fn interpolate(
@@ -62,55 +58,52 @@ mod toolkit_experimental {
             let prev = prev.map(MetricSummary::from);
             let next = next.map(MetricSummary::from);
 
-            let prev = if this.first.ts > interval_start {
-                prev.map(|summary| {
-                    time_weighted_average::TimeWeightMethod::Linear
-                        .interpolate(summary.last, Some(this.first), interval_start)
-                        .expect("unable to interpolate lower bound")
-                })
-            } else {
-                None
-            };
-
-            let next = next.map(|summary| {
+        let prev = if this.first.ts > interval_start {
+            prev.map(|summary| {
                 time_weighted_average::TimeWeightMethod::Linear
-                    .interpolate(
-                        this.last,
-                        Some(summary.first),
-                        interval_start + interval_len,
-                    )
-                    .expect("unable to interpolate upper bound")
-            });
+                    .interpolate(summary.last, Some(this.first), interval_start)
+                    .expect("unable to interpolate lower bound")
+            })
+        } else {
+            None
+        };
 
-            let builder = prev.map(|pt| GaugeSummaryBuilder::new(&pt, None));
-            let mut builder = builder.map_or_else(
-                || {
-                    let mut summary = this.clone();
-                    summary.bounds = None;
-                    summary.into()
-                },
-                |mut builder| {
-                    builder
-                        .combine(&this)
-                        .expect("unable to add data to interpolation");
-                    builder
-                },
-            );
+        let next = next.map(|summary| {
+            time_weighted_average::TimeWeightMethod::Linear
+                .interpolate(
+                    this.last,
+                    Some(summary.first),
+                    interval_start + interval_len,
+                )
+                .expect("unable to interpolate upper bound")
+        });
 
-            if let Some(next) = next {
+        let builder = prev.map(|pt| GaugeSummaryBuilder::new(&pt, None));
+        let mut builder = builder.map_or_else(
+            || {
+                let mut summary = this.clone();
+                summary.bounds = None;
+                summary.into()
+            },
+            |mut builder| {
                 builder
-                    .add_point(&next)
-                    .expect("unable to add final interpolated point");
-            }
+                    .combine(&this)
+                    .expect("unable to add data to interpolation");
+                builder
+            },
+        );
 
-            builder.build().into()
+        if let Some(next) = next {
+            builder
+                .add_point(&next)
+                .expect("unable to add final interpolated point");
         }
-    }
 
-    ron_inout_funcs!(GaugeSummary);
+        builder.build().into()
+    }
 }
 
-use toolkit_experimental::*;
+ron_inout_funcs!(GaugeSummary);
 
 // TODO reunify with crate::counter_agg::CounterSummaryTransSate
 // TODO move to crate::metrics::TransState (taking FnOnce()->MetricSummaryBuilder to support both)
@@ -186,7 +179,7 @@ impl GaugeSummaryTransState {
     }
 }
 
-#[pg_extern(immutable, parallel_safe, strict, schema = "toolkit_experimental")]
+#[pg_extern(immutable, parallel_safe, strict)]
 fn gauge_summary_trans_serialize(state: Internal) -> bytea {
     let mut state = state;
     let state: &mut GaugeSummaryTransState = unsafe { state.get_mut().unwrap() };
@@ -194,7 +187,7 @@ fn gauge_summary_trans_serialize(state: Internal) -> bytea {
     crate::do_serialize!(state)
 }
 
-#[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn gauge_summary_trans_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
     gauge_summary_trans_deserialize_inner(bytes).internal()
 }
@@ -203,7 +196,7 @@ fn gauge_summary_trans_deserialize_inner(bytes: bytea) -> Inner<GaugeSummaryTran
     c.into()
 }
 
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(immutable, parallel_safe)]
 fn gauge_agg_trans(
     state: Internal,
     ts: Option<crate::raw::TimestampTz>,
@@ -245,7 +238,7 @@ fn gauge_agg_trans_inner(
     }
 }
 
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(immutable, parallel_safe)]
 fn gauge_agg_trans_no_bounds(
     state: Internal,
     ts: Option<crate::raw::TimestampTz>,
@@ -255,7 +248,7 @@ fn gauge_agg_trans_no_bounds(
     gauge_agg_trans_inner(unsafe { state.to_inner() }, ts, val, None, fcinfo).internal()
 }
 
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(immutable, parallel_safe)]
 fn gauge_agg_summary_trans(
     state: Internal,
     value: Option<GaugeSummary>,
@@ -284,7 +277,7 @@ fn gauge_agg_summary_trans_inner(
     }
 }
 
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(immutable, parallel_safe)]
 fn gauge_agg_combine(
     state1: Internal,
     state2: Internal,
@@ -324,7 +317,7 @@ fn gauge_agg_combine_inner(
     }
 }
 
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(immutable, parallel_safe)]
 fn gauge_agg_final(state: Internal, fcinfo: pg_sys::FunctionCallInfo) -> Option<GaugeSummary> {
     gauge_agg_final_inner(unsafe { state.to_inner() }, fcinfo)
 }
@@ -356,14 +349,14 @@ fn gauge_agg_final_inner(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.gauge_agg( ts timestamptz, value DOUBLE PRECISION, bounds tstzrange )\n\
+    CREATE AGGREGATE gauge_agg( ts timestamptz, value DOUBLE PRECISION, bounds tstzrange )\n\
     (\n\
-        sfunc = toolkit_experimental.gauge_agg_trans,\n\
+        sfunc = gauge_agg_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.gauge_agg_final,\n\
-        combinefunc = toolkit_experimental.gauge_agg_combine,\n\
-        serialfunc = toolkit_experimental.gauge_summary_trans_serialize,\n\
-        deserialfunc = toolkit_experimental.gauge_summary_trans_deserialize,\n\
+        finalfunc = gauge_agg_final,\n\
+        combinefunc = gauge_agg_combine,\n\
+        serialfunc = gauge_summary_trans_serialize,\n\
+        deserialfunc = gauge_summary_trans_deserialize,\n\
         parallel = restricted\n\
     );\n",
     name = "gauge_agg",
@@ -379,14 +372,14 @@ extension_sql!(
 // allow calling gauge agg without bounds provided.
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.gauge_agg( ts timestamptz, value DOUBLE PRECISION )\n\
+    CREATE AGGREGATE gauge_agg( ts timestamptz, value DOUBLE PRECISION )\n\
     (\n\
-        sfunc = toolkit_experimental.gauge_agg_trans_no_bounds,\n\
+        sfunc = gauge_agg_trans_no_bounds,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.gauge_agg_final,\n\
-        combinefunc = toolkit_experimental.gauge_agg_combine,\n\
-        serialfunc = toolkit_experimental.gauge_summary_trans_serialize,\n\
-        deserialfunc = toolkit_experimental.gauge_summary_trans_deserialize,\n\
+        finalfunc = gauge_agg_final,\n\
+        combinefunc = gauge_agg_combine,\n\
+        serialfunc = gauge_summary_trans_serialize,\n\
+        deserialfunc = gauge_summary_trans_deserialize,\n\
         parallel = restricted\n\
     );\n\
 ",
@@ -402,14 +395,14 @@ extension_sql!(
 
 extension_sql!(
     "\n\
-    CREATE AGGREGATE toolkit_experimental.rollup(gs toolkit_experimental.GaugeSummary)\n\
+    CREATE AGGREGATE rollup(gs GaugeSummary)\n\
     (\n\
-        sfunc = toolkit_experimental.gauge_agg_summary_trans,\n\
+        sfunc = gauge_agg_summary_trans,\n\
         stype = internal,\n\
-        finalfunc = toolkit_experimental.gauge_agg_final,\n\
-        combinefunc = toolkit_experimental.gauge_agg_combine,\n\
-        serialfunc = toolkit_experimental.gauge_summary_trans_serialize,\n\
-        deserialfunc = toolkit_experimental.gauge_summary_trans_deserialize,\n\
+        finalfunc = gauge_agg_final,\n\
+        combinefunc = gauge_agg_combine,\n\
+        serialfunc = gauge_summary_trans_serialize,\n\
+        deserialfunc = gauge_summary_trans_deserialize,\n\
         parallel = restricted\n\
     );\n\
 ",
@@ -431,7 +424,7 @@ fn arrow_delta(sketch: GaugeSummary, _accessor: AccessorDelta) -> f64 {
     delta(sketch)
 }
 
-#[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn delta(summary: GaugeSummary) -> f64 {
     MetricSummary::from(summary).delta()
 }
@@ -442,7 +435,7 @@ fn arrow_gauge_agg_rate(sketch: GaugeSummary, _accessor: AccessorRate) -> Option
     rate(sketch)
 }
 
-#[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn rate(summary: GaugeSummary) -> Option<f64> {
     MetricSummary::from(summary).rate()
 }
@@ -453,7 +446,7 @@ fn arrow_time_delta(sketch: GaugeSummary, _accessor: AccessorTimeDelta) -> f64 {
     time_delta(sketch)
 }
 
-#[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn time_delta(summary: GaugeSummary) -> f64 {
     MetricSummary::from(summary).time_delta()
 }
@@ -464,7 +457,7 @@ fn arrow_irate_left(sketch: GaugeSummary, _accessor: AccessorIrateLeft) -> Optio
     irate_left(sketch)
 }
 
-#[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn irate_left(summary: GaugeSummary) -> Option<f64> {
     MetricSummary::from(summary).irate_left()
 }
@@ -475,7 +468,7 @@ fn arrow_irate_right(sketch: GaugeSummary, _accessor: AccessorIrateRight) -> Opt
     irate_right(sketch)
 }
 
-#[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn irate_right(summary: GaugeSummary) -> Option<f64> {
     MetricSummary::from(summary).irate_right()
 }
@@ -486,7 +479,7 @@ fn arrow_idelta_left(sketch: GaugeSummary, _accessor: AccessorIdeltaLeft) -> f64
     idelta_left(sketch)
 }
 
-#[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn idelta_left(summary: GaugeSummary) -> f64 {
     MetricSummary::from(summary).idelta_left()
 }
@@ -497,7 +490,7 @@ fn arrow_idelta_right(sketch: GaugeSummary, _accessor: AccessorIdeltaRight) -> f
     idelta_right(sketch)
 }
 
-#[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn idelta_right(summary: GaugeSummary) -> f64 {
     MetricSummary::from(summary).idelta_right()
 }
@@ -510,7 +503,7 @@ fn arrow_with_bounds(sketch: GaugeSummary, accessor: AccessorWithBounds) -> Gaug
     builder.build().into()
 }
 
-#[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn with_bounds(summary: GaugeSummary, bounds: tstzrange) -> GaugeSummary {
     // TODO dedup with previous by using apply_bounds
     unsafe {
@@ -530,12 +523,12 @@ fn arrow_extrapolated_delta(
     extrapolated_delta(sketch)
 }
 
-#[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn extrapolated_delta(summary: GaugeSummary) -> Option<f64> {
     MetricSummary::from(summary).prometheus_delta().unwrap()
 }
 
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(immutable, parallel_safe)]
 fn interpolated_delta(
     summary: GaugeSummary,
     start: crate::raw::TimestampTz,
@@ -556,12 +549,12 @@ fn arrow_extrapolated_rate(
     extrapolated_rate(sketch)
 }
 
-#[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn extrapolated_rate(summary: GaugeSummary) -> Option<f64> {
     MetricSummary::from(summary).prometheus_rate().unwrap()
 }
 
-#[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(immutable, parallel_safe)]
 fn interpolated_rate(
     summary: GaugeSummary,
     start: crate::raw::TimestampTz,
@@ -579,7 +572,7 @@ fn arrow_num_elements(sketch: GaugeSummary, _accessor: AccessorNumElements) -> i
     num_elements(sketch)
 }
 
-#[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn num_elements(summary: GaugeSummary) -> i64 {
     MetricSummary::from(summary).stats.n as i64
 }
@@ -590,7 +583,7 @@ fn arrow_num_changes(sketch: GaugeSummary, _accessor: AccessorNumChanges) -> i64
     num_changes(sketch)
 }
 
-#[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn num_changes(summary: GaugeSummary) -> i64 {
     MetricSummary::from(summary).num_changes as i64
 }
@@ -601,7 +594,7 @@ fn arrow_slope(sketch: GaugeSummary, _accessor: AccessorSlope) -> Option<f64> {
     slope(sketch)
 }
 
-#[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn slope(summary: GaugeSummary) -> Option<f64> {
     MetricSummary::from(summary).stats.slope()
 }
@@ -612,7 +605,7 @@ fn arrow_intercept(sketch: GaugeSummary, _accessor: AccessorIntercept) -> Option
     intercept(sketch)
 }
 
-#[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn intercept(summary: GaugeSummary) -> Option<f64> {
     MetricSummary::from(summary).stats.intercept()
 }
@@ -623,7 +616,7 @@ fn arrow_corr(sketch: GaugeSummary, _accessor: AccessorCorr) -> Option<f64> {
     corr(sketch)
 }
 
-#[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn corr(summary: GaugeSummary) -> Option<f64> {
     MetricSummary::from(summary).stats.corr()
 }
@@ -637,7 +630,7 @@ fn arrow_zero_time(
     gauge_zero_time(sketch)
 }
 
-#[pg_extern(strict, immutable, parallel_safe, schema = "toolkit_experimental")]
+#[pg_extern(strict, immutable, parallel_safe)]
 fn gauge_zero_time(summary: GaugeSummary) -> Option<crate::raw::TimestampTz> {
     Some(((MetricSummary::from(summary).stats.x_intercept()? * 1_000_000.0) as i64).into())
 }
@@ -759,7 +752,7 @@ mod tests {
                 expected,
                 select_one!(
                     client,
-                    "SELECT toolkit_experimental.gauge_agg(ts, val)::TEXT FROM test",
+                    "SELECT gauge_agg(ts, val)::TEXT FROM test",
                     String
                 )
             );
@@ -768,7 +761,7 @@ mod tests {
                 expected,
                 select_one!(
                     client,
-                    &format!("SELECT '{expected}'::toolkit_experimental.GaugeSummary::TEXT"),
+                    &format!("SELECT '{expected}'::GaugeSummary::TEXT"),
                     String
                 )
             );
@@ -779,7 +772,7 @@ mod tests {
     fn delta_after_gauge_decrease() {
         Spi::connect_mut(|client| {
             decrease(client);
-            let stmt = "SELECT toolkit_experimental.delta(toolkit_experimental.gauge_agg(ts, val)) FROM test";
+            let stmt = "SELECT delta(gauge_agg(ts, val)) FROM test";
             assert_eq!(-20.0, select_one!(client, stmt, f64));
         });
     }
@@ -788,7 +781,7 @@ mod tests {
     fn delta_after_gauge_increase() {
         Spi::connect_mut(|client| {
             increase(client);
-            let stmt = "SELECT toolkit_experimental.delta(toolkit_experimental.gauge_agg(ts, val)) FROM test";
+            let stmt = "SELECT delta(gauge_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
         });
     }
@@ -797,7 +790,7 @@ mod tests {
     fn delta_after_gauge_decrease_then_increase_to_same_value() {
         Spi::connect_mut(|client| {
             decrease_then_increase_to_same_value(client);
-            let stmt = "SELECT toolkit_experimental.delta(toolkit_experimental.gauge_agg(ts, val)) FROM test";
+            let stmt = "SELECT delta(gauge_agg(ts, val)) FROM test";
             assert_eq!(0.0, select_one!(client, stmt, f64));
         });
     }
@@ -806,7 +799,7 @@ mod tests {
     fn delta_after_gauge_increase_then_decrease_to_same_value() {
         Spi::connect_mut(|client| {
             increase_then_decrease_to_same_value(client);
-            let stmt = "SELECT toolkit_experimental.delta(toolkit_experimental.gauge_agg(ts, val)) FROM test";
+            let stmt = "SELECT delta(gauge_agg(ts, val)) FROM test";
             assert_eq!(0.0, select_one!(client, stmt, f64));
         });
     }
@@ -815,7 +808,7 @@ mod tests {
     fn idelta_left_after_gauge_decrease() {
         Spi::connect_mut(|client| {
             decrease(client);
-            let stmt = "SELECT toolkit_experimental.idelta_left(toolkit_experimental.gauge_agg(ts, val)) FROM test";
+            let stmt = "SELECT idelta_left(gauge_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
         });
     }
@@ -824,7 +817,7 @@ mod tests {
     fn idelta_left_after_gauge_increase() {
         Spi::connect_mut(|client| {
             increase(client);
-            let stmt = "SELECT toolkit_experimental.idelta_left(toolkit_experimental.gauge_agg(ts, val)) FROM test";
+            let stmt = "SELECT idelta_left(gauge_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
         });
     }
@@ -833,7 +826,7 @@ mod tests {
     fn idelta_left_after_gauge_increase_then_decrease_to_same_value() {
         Spi::connect_mut(|client| {
             increase_then_decrease_to_same_value(client);
-            let stmt = "SELECT toolkit_experimental.idelta_left(toolkit_experimental.gauge_agg(ts, val)) FROM test";
+            let stmt = "SELECT idelta_left(gauge_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
         });
     }
@@ -842,7 +835,7 @@ mod tests {
     fn idelta_left_after_gauge_decrease_then_increase_to_same_value() {
         Spi::connect_mut(|client| {
             decrease_then_increase_to_same_value(client);
-            let stmt = "SELECT toolkit_experimental.idelta_left(toolkit_experimental.gauge_agg(ts, val)) FROM test";
+            let stmt = "SELECT idelta_left(gauge_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
         });
     }
@@ -851,7 +844,7 @@ mod tests {
     fn idelta_right_after_gauge_decrease() {
         Spi::connect_mut(|client| {
             decrease(client);
-            let stmt = "SELECT toolkit_experimental.idelta_right(toolkit_experimental.gauge_agg(ts, val)) FROM test";
+            let stmt = "SELECT idelta_right(gauge_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
         });
     }
@@ -860,7 +853,7 @@ mod tests {
     fn idelta_right_after_gauge_increase() {
         Spi::connect_mut(|client| {
             increase(client);
-            let stmt = "SELECT toolkit_experimental.idelta_right(toolkit_experimental.gauge_agg(ts, val)) FROM test";
+            let stmt = "SELECT idelta_right(gauge_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
         });
     }
@@ -869,7 +862,7 @@ mod tests {
     fn idelta_right_after_gauge_increase_then_decrease_to_same_value() {
         Spi::connect_mut(|client| {
             increase_then_decrease_to_same_value(client);
-            let stmt = "SELECT toolkit_experimental.idelta_right(toolkit_experimental.gauge_agg(ts, val)) FROM test";
+            let stmt = "SELECT idelta_right(gauge_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
         });
     }
@@ -878,7 +871,7 @@ mod tests {
     fn idelta_right_after_gauge_decrease_then_increase_to_same_value() {
         Spi::connect_mut(|client| {
             decrease_then_increase_to_same_value(client);
-            let stmt = "SELECT toolkit_experimental.idelta_right(toolkit_experimental.gauge_agg(ts, val)) FROM test";
+            let stmt = "SELECT idelta_right(gauge_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
         });
     }
@@ -976,14 +969,14 @@ mod tests {
             let mut deltas = client
                 .update(
                     r#"SELECT
-                toolkit_experimental.interpolated_delta(
+                interpolated_delta(
                     agg,
                     bucket,
                     '1 day'::interval, 
                     LAG(agg) OVER (ORDER BY bucket), 
                     LEAD(agg) OVER (ORDER BY bucket)
                 ) FROM (
-                    SELECT bucket, toolkit_experimental.gauge_agg(time, value) as agg 
+                    SELECT bucket, gauge_agg(time, value) as agg 
                     FROM test 
                     GROUP BY bucket
                 ) s
@@ -1003,14 +996,14 @@ mod tests {
             let mut rates = client
                 .update(
                     r#"SELECT
-                toolkit_experimental.interpolated_rate(
+                interpolated_rate(
                     agg,
                     bucket,
                     '1 day'::interval, 
                     LAG(agg) OVER (ORDER BY bucket), 
                     LEAD(agg) OVER (ORDER BY bucket)
                 ) FROM (
-                    SELECT bucket, toolkit_experimental.gauge_agg(time, value) as agg 
+                    SELECT bucket, gauge_agg(time, value) as agg 
                     FROM test 
                     GROUP BY bucket
                 ) s
@@ -1063,14 +1056,14 @@ mod tests {
             let mut deltas = client
                 .update(
                     r#"SELECT
-                toolkit_experimental.interpolated_delta(
+                interpolated_delta(
                     agg,
                     bucket,
                     '1 day'::interval, 
                     LAG(agg) OVER (ORDER BY bucket), 
                     LEAD(agg) OVER (ORDER BY bucket)
                 ) FROM (
-                    SELECT bucket, toolkit_experimental.gauge_agg(time, value) as agg 
+                    SELECT bucket, gauge_agg(time, value) as agg 
                     FROM test 
                     GROUP BY bucket
                 ) s
@@ -1117,7 +1110,7 @@ mod tests {
             let stmt = "INSERT INTO test VALUES (NULL, NULL)";
             client.update(stmt, None, &[]).unwrap();
 
-            let stmt = "SELECT toolkit_experimental.gauge_agg(ts, val) FROM test";
+            let stmt = "SELECT gauge_agg(ts, val) FROM test";
             assert!(
                 client
                     .update(stmt, None, &[])

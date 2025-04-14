@@ -10,6 +10,7 @@ use crate::SketchHashKey::Zero;
 use ordered_float::OrderedFloat;
 #[cfg(test)]
 use std::collections::HashSet;
+use std::num::NonZeroU32;
 
 #[cfg(test)]
 extern crate quickcheck;
@@ -59,7 +60,7 @@ impl std::cmp::PartialOrd for SketchHashKey {
 pub struct UDDSketchMetadata {
     pub max_buckets: u32,
     pub current_error: f64,
-    pub compactions: u32,
+    pub compactions: u8,
     pub values: u64,
     pub sum: f64,
     pub buckets: u32,
@@ -260,21 +261,21 @@ pub struct UDDSketch {
     buckets: SketchHashMap,
     alpha: f64,
     gamma: f64,
-    compactions: u32, // should always be smaller than 64
-    max_buckets: u64,
+    compactions: u8, // should always be smaller than 64
+    max_buckets: NonZeroU32,
     num_values: u64,
     values_sum: f64,
 }
 
 impl UDDSketch {
-    pub fn new(max_buckets: u64, initial_error: f64) -> Self {
+    pub fn new(max_buckets: u32, initial_error: f64) -> Self {
         assert!((1e-12..1.0).contains(&initial_error));
         UDDSketch {
             buckets: SketchHashMap::new(),
             alpha: initial_error,
             gamma: (1.0 + initial_error) / (1.0 - initial_error),
             compactions: 0,
-            max_buckets,
+            max_buckets: NonZeroU32::new(max_buckets as u32).expect("max buckets should be greater than zero"),
             num_values: 0,
             values_sum: 0.0,
         }
@@ -291,8 +292,8 @@ impl UDDSketch {
             buckets: SketchHashMap::with_capacity(capacity),
             alpha: metadata.current_error,
             gamma: gamma(metadata.current_error),
-            compactions: metadata.compactions,
-            max_buckets: metadata.max_buckets as u64,
+            compactions: u8::try_from(metadata.compactions).expect("compactions cannot be higher than 65"),
+            max_buckets: NonZeroU32::new(metadata.max_buckets).expect("max buckets should be greater than zero"),
             num_values: metadata.values,
             values_sum: metadata.sum,
         };
@@ -329,7 +330,7 @@ impl UDDSketch {
     pub fn add_value(&mut self, value: f64) {
         self.buckets.increment(self.key(value));
 
-        while self.buckets.len() > self.max_buckets as usize {
+        while self.buckets.len() > self.max_buckets.get() as usize {
             self.compact_buckets();
         }
 
@@ -356,7 +357,7 @@ impl UDDSketch {
             .abs()
                 < 1e-9 // f64::EPSILON too small, see issue #396
         );
-        debug_assert_eq!(self.max_buckets, other.max_buckets as u64);
+        debug_assert_eq!(self.max_buckets.get(), other.max_buckets);
 
         if other.values == 0 {
             return;
@@ -375,7 +376,7 @@ impl UDDSketch {
             self.buckets.entry_upsert(key, count);
         }
 
-        while self.buckets.len() > self.max_buckets as usize {
+        while self.buckets.len() > self.max_buckets.get() as usize {
             self.compact_buckets();
         }
 
@@ -419,7 +420,7 @@ impl UDDSketch {
             self.buckets.entry_upsert(key, value);
         }
 
-        while self.buckets.len() > self.max_buckets as usize {
+        while self.buckets.len() > self.max_buckets.get() as usize {
             self.compact_buckets();
         }
 
@@ -427,11 +428,11 @@ impl UDDSketch {
         self.values_sum += other.values_sum;
     }
 
-    pub fn max_allowed_buckets(&self) -> u64 {
-        self.max_buckets
+    pub fn max_allowed_buckets(&self) -> u32 {
+        self.max_buckets.get()
     }
 
-    pub fn times_compacted(&self) -> u32 {
+    pub fn times_compacted(&self) -> u8 {
         self.compactions
     }
 
@@ -627,7 +628,7 @@ mod tests {
         }
 
         let metadata = UDDSketchMetadata {
-            max_buckets: other.max_buckets as u32,
+            max_buckets: other.max_buckets.get(),
             current_error: other.alpha,
             compactions: other.compactions,
             values: other.num_values,

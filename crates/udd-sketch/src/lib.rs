@@ -273,11 +273,11 @@ impl UDDSketch {
         }
     }
 
-    // This constructor is used to recreate a UddSketch from it's component data
+    // This constructor is used to recreate a UddSketch from its component data
     pub fn new_from_data(
         metadata: &UDDSketchMetadata,
-        keys: impl Iterator<Item = SketchHashKey>,
-        counts: impl Iterator<Item = u64>,
+        mut keys: impl Iterator<Item = SketchHashKey>,
+        mut counts: impl Iterator<Item = u64>,
     ) -> Self {
         let mut sketch = UDDSketch {
             buckets: SketchHashMap::with_capacity(metadata.values as usize),
@@ -288,27 +288,10 @@ impl UDDSketch {
             num_values: metadata.values,
             values_sum: metadata.sum,
         };
-        // TODO
-        let keys: Vec<_> = keys.collect();
-        let counts: Vec<_> = counts.collect();
-        assert_eq!(keys.len(), counts.len());
-        // assert!(keys.is_sorted());
-        for i in 0..keys.len() {
-            sketch
-                .buckets
-                .map
-                .entry(keys[i])
-                .or_insert(SketchHashEntry {
-                    count: 0,
-                    next: if i == keys.len() - 1 {
-                        SketchHashKey::Invalid
-                    } else {
-                        keys[i + 1]
-                    },
-                })
-                .count = counts[i];
+
+        while let (Some(key), Some(count)) = (keys.next(), counts.next()) {
+            sketch.buckets.entry_upsert(key, count);
         }
-        sketch.buckets.head = keys[0];
 
         sketch
     }

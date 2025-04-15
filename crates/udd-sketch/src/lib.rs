@@ -353,7 +353,7 @@ impl UDDSketch {
     // This constructor is used to recreate a UddSketch from its component data
     pub fn new_from_data(
         metadata: &UDDSketchMetadata,
-        mut keys: impl Iterator<Item = SketchHashKey>,
+        keys: impl Iterator<Item = SketchHashKey>,
         mut counts: impl Iterator<Item = u64>,
     ) -> Self {
         let capacity = metadata.buckets as usize;
@@ -361,14 +361,26 @@ impl UDDSketch {
             buckets: SketchHashMap::with_capacity(capacity),
             alpha: metadata.current_error,
             gamma: gamma(metadata.current_error),
-            compactions: u8::try_from(metadata.compactions).expect("compactions cannot be higher than 65"),
-            max_buckets: NonZeroU32::new(metadata.max_buckets).expect("max buckets should be greater than zero"),
+            compactions: u8::try_from(metadata.compactions)
+                .expect("compactions cannot be higher than 65"),
+            max_buckets: NonZeroU32::new(metadata.max_buckets)
+                .expect("max buckets should be greater than zero"),
             num_values: metadata.values,
             values_sum: metadata.sum,
         };
 
+        let mut keys = keys.into_iter().peekable();
+        if let Some(key) = keys.peek() {
+            sketch.buckets.head = *key;
+        }
+
+        // This assumes the keys are unique and sorted
         while let (Some(key), Some(count)) = (keys.next(), counts.next()) {
-            sketch.buckets.entry_upsert(key, count);
+            let next = keys.peek().map(|k| *k).unwrap_or(Invalid);
+            sketch
+                .buckets
+                .map
+                .insert(key, SketchHashEntry { next, count });
         }
         debug_assert_eq!(sketch.buckets.map.len(), capacity);
 

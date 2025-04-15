@@ -32,7 +32,7 @@ on:
 jobs:
   testpostgres:
     name: Test Postgres
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     container:
       image: ${{ inputs.container-image || 'timescaledev/toolkit-builder-test' }}:${{ matrix.container.image }}
     strategy:
@@ -56,8 +56,8 @@ jobs:
           image: debian-10-amd64
           schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
         - os: ubuntu
-          version: "20.04"
-          image: ubuntu-20.04-amd64
+          version: "24.04"
+          image: ubuntu-24.04-amd64
           schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
         - os: ubuntu
           version: "22.04"
@@ -162,7 +162,7 @@ jobs:
 
   testcrates:
     name: Test Crates
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     container:
       image: ${{ inputs.container-image || 'timescaledev/toolkit-builder' }}:debian-11-amd64
       env:

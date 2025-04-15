@@ -3,7 +3,7 @@
 # This script automates binary upgrade testing.
 
 # Sample run:
-# OS_NAME=ubuntu OS_VERSION=20.04 tools/testbin -version 1.11.0 -bindir .. -pgversions '13 14' deb
+# OS_NAME=ubuntu OS_VERSION=24.04 tools/testbin -version 1.11.0 -bindir .. -pgversions '13 14' deb
 
 # A released toolkit lists the versions it is upgradeable from in
 # extension/timescaledb_toolkit.control .  This script processes those entries

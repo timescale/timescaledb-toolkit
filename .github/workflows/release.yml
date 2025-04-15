@@ -20,7 +20,7 @@ on:
 jobs:
   release:
     name: Release
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     container:
       image: timescaledev/toolkit-builder-test:debian-11-amd64
 

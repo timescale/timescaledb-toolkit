@@ -15,7 +15,7 @@ on:
 jobs:
   clippy:
     name: Clippy/rustfmt Test
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     container:
       # Duplicated from ci.yml
       image: ${{ inputs.container-image || 'timescaledev/toolkit-builder-test:debian-11-amd64' }}

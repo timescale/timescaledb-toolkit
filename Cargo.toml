@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
 
-members = [
+members = [ 
     "crates/t-digest-lib",
     "extension",
     "tools/post-install",

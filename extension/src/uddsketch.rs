@@ -136,7 +136,7 @@ impl From<&UddSketchInternal> for SerializedUddSketch {
         let buckets = compress_buckets(sketch.bucket_iter());
         SerializedUddSketch {
             alpha: sketch.max_error(),
-            max_buckets: sketch.max_allowed_buckets() as u32,
+            max_buckets: sketch.max_allowed_buckets(),
             num_buckets: sketch.current_buckets_count() as u32,
             compactions: u32::from(sketch.times_compacted()),
             count: sketch.count(),
@@ -152,7 +152,8 @@ impl From<SerializedUddSketch> for UddSketchInternal {
             &UDDSketchMetadata {
                 max_buckets: sketch.max_buckets,
                 current_error: sketch.alpha,
-                compactions: u8::try_from(sketch.compactions).expect("compactions cannot be higher than 65"),
+                compactions: u8::try_from(sketch.compactions)
+                    .expect("compactions cannot be higher than 65"),
                 values: sketch.count,
                 sum: sketch.sum,
                 buckets: sketch.num_buckets,
@@ -312,7 +313,8 @@ impl<'input> UddSketch<'input> {
         UDDSketchMetadata {
             max_buckets: self.max_buckets,
             current_error: self.alpha,
-            compactions: u8::try_from(self.compactions).expect("compactions cannot be higher than 65"),
+            compactions: u8::try_from(self.compactions)
+                .expect("compactions cannot be higher than 65"),
             values: self.count,
             sum: self.sum,
             buckets: self.num_buckets,
@@ -337,7 +339,7 @@ impl<'input> UddSketch<'input> {
         unsafe {
             flatten!(UddSketch {
                 alpha: state.max_error(),
-                max_buckets: state.max_allowed_buckets() as u32,
+                max_buckets: state.max_allowed_buckets(),
                 num_buckets: state.current_buckets_count() as u32,
                 compactions: state.times_compacted() as u64,
                 count: state.count(),

@@ -108,7 +108,9 @@ pub fn min_n_time_to_array(agg: MinTimes<'static>) -> Vec<crate::raw::TimestampT
 }
 
 #[pg_extern(name = "into_values", immutable, parallel_safe)]
-pub fn min_n_time_to_values(agg: MinTimes<'static>) -> SetOfIterator<crate::raw::TimestampTz> {
+pub fn min_n_time_to_values(
+    agg: MinTimes<'static>,
+) -> SetOfIterator<'static, crate::raw::TimestampTz> {
     SetOfIterator::new(
         agg.values
             .clone()

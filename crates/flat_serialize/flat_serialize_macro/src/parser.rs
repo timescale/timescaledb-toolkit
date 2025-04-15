@@ -329,7 +329,7 @@ fn validate_self_field(
 
 struct ValidateLenFields<'a, 'b>(Option<TokenStream2>, &'b HashSet<&'a Ident>);
 
-impl<'a, 'b, 'ast> Visit<'ast> for ValidateLenFields<'a, 'b> {
+impl<'ast> Visit<'ast> for ValidateLenFields<'_, '_> {
     fn visit_expr(&mut self, expr: &'ast syn::Expr) {
         if self.0.is_some() {
             return;

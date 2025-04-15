@@ -204,7 +204,7 @@ fn parse_code_block_info(info: &str) -> CodeBlockInfo {
             "non-transactional" => info.transactional = false,
             "ignore-output" => info.ignore_output = true,
             "output" => info.kind = BlockKind::Output,
-            s if s.to_ascii_lowercase() == "sql" => info.kind = BlockKind::Sql,
+            s if s.eq_ignore_ascii_case("sql") => info.kind = BlockKind::Sql,
             p if p.starts_with("precision") => {
                 // syntax `precision(col: bytes)`
                 let precision_err =

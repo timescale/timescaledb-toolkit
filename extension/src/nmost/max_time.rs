@@ -117,7 +117,9 @@ pub fn max_n_time_to_array(agg: MaxTimes<'static>) -> Vec<crate::raw::TimestampT
 }
 
 #[pg_extern(name = "into_values", immutable, parallel_safe)]
-pub fn max_n_time_to_values(agg: MaxTimes<'static>) -> SetOfIterator<crate::raw::TimestampTz> {
+pub fn max_n_time_to_values(
+    agg: MaxTimes<'static>,
+) -> SetOfIterator<'static, crate::raw::TimestampTz> {
     SetOfIterator::new(
         agg.values
             .clone()

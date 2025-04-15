@@ -12,7 +12,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 #### Other notable changes
 - [#847](https://github.com/timescale/timescaledb-toolkit/pull/847): Added `total` accessor for tdigest and uddsketch
-
+- [#853](https://github.com/timescale/timescaledb-toolkit/pull/853): Performance improvements for `UDDSketch`
 
 #### Shout-outs
 

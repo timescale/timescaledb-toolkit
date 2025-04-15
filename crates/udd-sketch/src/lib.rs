@@ -344,7 +344,8 @@ impl UDDSketch {
             alpha: initial_error,
             gamma: (1.0 + initial_error) / (1.0 - initial_error),
             compactions: 0,
-            max_buckets: NonZeroU32::new(max_buckets as u32).expect("max buckets should be greater than zero"),
+            max_buckets: NonZeroU32::new(max_buckets as u32)
+                .expect("max buckets should be greater than zero"),
             num_values: 0,
             values_sum: 0.0,
         }
@@ -361,8 +362,10 @@ impl UDDSketch {
             buckets: SketchHashMap::with_capacity(capacity),
             alpha: metadata.current_error,
             gamma: gamma(metadata.current_error),
-            compactions: u8::try_from(metadata.compactions).expect("compactions cannot be higher than 65"),
-            max_buckets: NonZeroU32::new(metadata.max_buckets).expect("max buckets should be greater than zero"),
+            compactions: u8::try_from(metadata.compactions)
+                .expect("compactions cannot be higher than 65"),
+            max_buckets: NonZeroU32::new(metadata.max_buckets)
+                .expect("max buckets should be greater than zero"),
             num_values: metadata.values,
             values_sum: metadata.sum,
         };
@@ -864,13 +867,13 @@ mod tests {
 
         for i in 0..100 {
             assert!(((sketch.estimate_quantile((i as f64 + 1.0) / 100.0) / bounds[i]) - 1.0).abs() < sketch.max_error() * bounds[i].abs(),
-            "Failed to correct match {} quantile with seed {}.  Received: {}, Expected: {}, Error: {}, Expected error bound: {}",
-            (i as f64 + 1.0) / 100.0,
-            seed,
-            sketch.estimate_quantile((i as f64 + 1.0) / 100.0),
-            bounds[i],
-            ((sketch.estimate_quantile((i as f64 + 1.0) / 100.0) / bounds[i]) - 1.0).abs() / bounds[i].abs(),
-            sketch.max_error());
+                        "Failed to correct match {} quantile with seed {}.  Received: {}, Expected: {}, Error: {}, Expected error bound: {}",
+                        (i as f64 + 1.0) / 100.0,
+                        seed,
+                        sketch.estimate_quantile((i as f64 + 1.0) / 100.0),
+                        bounds[i],
+                        ((sketch.estimate_quantile((i as f64 + 1.0) / 100.0) / bounds[i]) - 1.0).abs() / bounds[i].abs(),
+                        sketch.max_error());
         }
     }
 

@@ -104,7 +104,7 @@ pub fn min_n_int_to_array(agg: MinInts<'static>) -> Vec<i64> {
 }
 
 #[pg_extern(name = "into_values", immutable, parallel_safe)]
-pub fn min_n_int_to_values(agg: MinInts<'static>) -> SetOfIterator<i64> {
+pub fn min_n_int_to_values(agg: MinInts<'static>) -> SetOfIterator<'static, i64> {
     SetOfIterator::new(agg.values.clone().into_iter())
 }
 

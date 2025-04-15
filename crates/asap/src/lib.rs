@@ -100,7 +100,7 @@ fn binary_search(
     let mut min_obj = min_obj;
     let mut window_size = window_size;
     while head <= tail {
-        let w = (head + tail + 1) / 2;
+        let w = (head + tail).div_ceil(2);
         let smoothed = sma(data, w, 1);
         let metrics = Metrics::new(&smoothed);
         if metrics.kurtosis() >= original_kurt {
@@ -238,7 +238,7 @@ struct Metrics<'a> {
     m: f64,
 }
 
-impl<'a> Metrics<'a> {
+impl Metrics<'_> {
     fn new(values: &[f64]) -> Metrics {
         Metrics {
             len: values.len() as u32,

@@ -477,7 +477,7 @@ pub fn live_at(agg: HeartbeatAgg<'static>, test: TimestampTz) -> bool {
         }
     }
     // Fall out the loop if test > start of last interval
-    return test < *agg.interval_ends.as_slice().last().unwrap();
+    test < *agg.interval_ends.as_slice().last().unwrap()
 }
 
 #[pg_operator(immutable, parallel_safe)]

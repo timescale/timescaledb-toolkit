@@ -269,7 +269,7 @@ impl<'de> Deserialize<'de> for DatumHashBuilder {
 
 #[inline]
 fn div_round_up(numerator: usize, divisor: usize) -> usize {
-    (numerator + divisor - 1) / divisor
+    numerator.div_ceil(divisor)
 }
 
 #[inline]

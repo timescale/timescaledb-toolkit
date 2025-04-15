@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 
-use crate::SketchHashKey::Zero;
+use crate::SketchHashKey::Invalid;
 #[cfg(test)]
 use ordered_float::OrderedFloat;
 #[cfg(test)]
@@ -110,7 +110,7 @@ pub struct SketchHashIterator<'a> {
     next_key: SketchHashKey,
 }
 
-impl<'a> Iterator for SketchHashIterator<'a> {
+impl Iterator for SketchHashIterator<'_> {
     type Item = (SketchHashKey, u64);
 
     fn next(&mut self) -> Option<(SketchHashKey, u64)> {
@@ -284,7 +284,7 @@ impl SketchHashMap {
         entries[old_index] = current;
 
         // We should only return the slice containing the aggregated values
-        let iter = entries.into_iter().take(old_index + 1).peekable();
+        let iter = entries.iter_mut().take(old_index + 1).peekable();
 
         let mut iter = iter.peekable();
         self.head = iter.peek().map(|p| p.0).unwrap_or(Invalid);
@@ -304,7 +304,7 @@ impl SketchHashMap {
     #[inline]
     fn compact(&mut self) {
         match self.len() {
-            0 => return,
+            0 => (),
             // PERCENTILE_AGG_DEFAULT_SIZE defaults to 200, so
             // this entry covers that case.
             1..=200 => self.compact_using_stack::<200>(),
@@ -344,7 +344,8 @@ impl UDDSketch {
             alpha: initial_error,
             gamma: (1.0 + initial_error) / (1.0 - initial_error),
             compactions: 0,
-            max_buckets: NonZeroU32::new(max_buckets as u32).expect("max buckets should be greater than zero"),
+            max_buckets: NonZeroU32::new(max_buckets)
+                .expect("max buckets should be greater than zero"),
             num_values: 0,
             values_sum: 0.0,
         }
@@ -361,8 +362,7 @@ impl UDDSketch {
             buckets: SketchHashMap::with_capacity(capacity),
             alpha: metadata.current_error,
             gamma: gamma(metadata.current_error),
-            compactions: u8::try_from(metadata.compactions)
-                .expect("compactions cannot be higher than 65"),
+            compactions: metadata.compactions,
             max_buckets: NonZeroU32::new(metadata.max_buckets)
                 .expect("max buckets should be greater than zero"),
             num_values: metadata.values,
@@ -376,7 +376,7 @@ impl UDDSketch {
 
         // This assumes the keys are unique and sorted
         while let (Some(key), Some(count)) = (keys.next(), counts.next()) {
-            let next = keys.peek().map(|k| *k).unwrap_or(Invalid);
+            let next = keys.peek().copied().unwrap_or(Invalid);
             sketch
                 .buckets
                 .map
@@ -876,13 +876,13 @@ mod tests {
 
         for i in 0..100 {
             assert!(((sketch.estimate_quantile((i as f64 + 1.0) / 100.0) / bounds[i]) - 1.0).abs() < sketch.max_error() * bounds[i].abs(),
-            "Failed to correct match {} quantile with seed {}.  Received: {}, Expected: {}, Error: {}, Expected error bound: {}",
-            (i as f64 + 1.0) / 100.0,
-            seed,
-            sketch.estimate_quantile((i as f64 + 1.0) / 100.0),
-            bounds[i],
-            ((sketch.estimate_quantile((i as f64 + 1.0) / 100.0) / bounds[i]) - 1.0).abs() / bounds[i].abs(),
-            sketch.max_error());
+                        "Failed to correct match {} quantile with seed {}.  Received: {}, Expected: {}, Error: {}, Expected error bound: {}",
+                        (i as f64 + 1.0) / 100.0,
+                        seed,
+                        sketch.estimate_quantile((i as f64 + 1.0) / 100.0),
+                        bounds[i],
+                        ((sketch.estimate_quantile((i as f64 + 1.0) / 100.0) / bounds[i]) - 1.0).abs() / bounds[i].abs(),
+                        sketch.max_error());
         }
     }
 

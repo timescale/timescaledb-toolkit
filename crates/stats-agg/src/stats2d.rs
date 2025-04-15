@@ -519,11 +519,12 @@ impl<T: FloatLike> StatsSummary2D<T> {
             y: self.sy / self.n64(),
         })
     }
+
     ///returns the count of inputs as an i64
     ///```
     /// use stats_agg::stats2d::StatsSummary2D;
     /// use stats_agg::XYPair;
-
+    ///
     /// let p = StatsSummary2D::new_from_vec(vec![XYPair{y:2.0, x:1.0,}, XYPair{y:4.0, x:2.0,}, XYPair{y:6.0, x:3.0,}]).unwrap();
     /// let s = 3;
     /// assert_eq!(p.count(), s);

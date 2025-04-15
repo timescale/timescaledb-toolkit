@@ -242,7 +242,7 @@ pub enum Iter<'input, 'borrow, T: 'input> {
     Owned(std::vec::IntoIter<T>),
 }
 
-impl<'input, 'borrow, T: 'input> Iterator for Iter<'input, 'borrow, T>
+impl<'input, T: 'input> Iterator for Iter<'input, '_, T>
 where
     T: FlatSerializable<'input> + Clone,
 {
@@ -288,7 +288,7 @@ where
     }
 }
 
-impl<'input, 'borrow, T: 'input> Iter<'input, 'borrow, T>
+impl<'input, T: 'input> Iter<'input, '_, T>
 where
     T: FlatSerializable<'input> + Clone,
 {
@@ -492,7 +492,7 @@ where
     }
 }
 
-impl<'de, 'i, T> serde::Deserialize<'de> for Slice<'i, T>
+impl<'de, T> serde::Deserialize<'de> for Slice<'_, T>
 where
     T: serde::Deserialize<'de>,
 {

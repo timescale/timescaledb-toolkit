@@ -126,7 +126,7 @@ pub fn fill_to<'s>(
     let mut result: Vec<TSPoint> = series.iter().chain(result.into_iter()).collect();
     result.sort_by_key(|p| p.ts);
 
-    let nulls_len = (result.len() + 7) / 8;
+    let nulls_len = result.len().div_ceil(8);
     build! {
         Timevector_TSTZ_F64 {
             num_points: result.len() as _,

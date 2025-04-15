@@ -190,7 +190,7 @@ ALTER FUNCTION "arrow_run_pipeline_then_stats_agg" SUPPORT toolkit_experimental.
     schema = "toolkit_experimental"
 )]
 pub fn sum_pipeline_element<'a>(
-    accessor: AccessorSum<'a>,
+    accessor: AccessorSum<'_>,
 ) -> toolkit_experimental::PipelineThenSum {
     let _ = accessor;
     build! {
@@ -277,8 +277,8 @@ ALTER FUNCTION "arrow_pipeline_then_sum" SUPPORT toolkit_experimental.pipeline_s
 );
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn average_pipeline_element<'a>(
-    accessor: AccessorAverage<'a>,
+pub fn average_pipeline_element(
+    accessor: AccessorAverage<'_>,
 ) -> toolkit_experimental::PipelineThenAverage {
     let _ = accessor;
     build! {
@@ -374,8 +374,8 @@ ALTER FUNCTION "arrow_pipeline_then_average" SUPPORT toolkit_experimental.pipeli
     name = "num_vals_cast",
     schema = "toolkit_experimental"
 )]
-pub fn num_vals_pipeline_element<'a>(
-    accessor: AccessorNumVals<'a>,
+pub fn num_vals_pipeline_element(
+    accessor: AccessorNumVals<'_>,
 ) -> toolkit_experimental::PipelineThenNumVals {
     let _ = accessor;
     build! {

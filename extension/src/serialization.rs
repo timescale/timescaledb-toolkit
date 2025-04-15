@@ -108,7 +108,7 @@ pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {
             pg_sys::DateTimeParseError(
                 dterr,
                 str.as_ptr(),
-                b"timestamptz\0".as_ptr().cast::<c_char>(),
+                c"timestamptz".as_ptr().cast::<c_char>(),
             );
         }
         #[cfg(any(feature = "pg16", feature = "pg17"))]
@@ -117,7 +117,7 @@ pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {
                 dterr,
                 core::ptr::null_mut(),
                 str.as_ptr(),
-                b"timestamptz\0".as_ptr().cast::<c_char>(),
+                c"timestamptz".as_ptr().cast::<c_char>(),
                 core::ptr::null_mut(),
             );
         }
@@ -181,7 +181,7 @@ pub fn str_from_db_encoding(s: &CStr) -> &str {
         //TODO redundant check?
         return s.to_str().unwrap();
     }
-    return unsafe { CStr::from_ptr(encoded).to_str().unwrap() };
+    unsafe { CStr::from_ptr(encoded).to_str().unwrap() }
 }
 
 pub(crate) mod serde_reference_adaptor {

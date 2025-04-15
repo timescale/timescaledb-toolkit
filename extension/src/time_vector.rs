@@ -334,10 +334,10 @@ pub fn combine(
     }
 
     let null_val = if flags & FLAG_HAS_NULLS == 0 {
-        std::vec::from_elem(0_u8, (points.len() + 7) / 8)
+        std::vec::from_elem(0_u8, points.len().div_ceil(8))
     } else {
         let mut v = first.null_val.as_slice().to_vec();
-        v.resize((points.len() + 7) / 8, 0);
+        v.resize(points.len().div_ceil(8), 0);
         if second.has_nulls() {
             for i in 0..second.num_points {
                 if second.is_null_val(i as usize) {

@@ -89,7 +89,7 @@ pub fn lttb_final_inner(
                 flags: time_vector::FLAG_IS_SORTED,
                 internal_padding: [0; 3],
                 points: (&*downsampled).into(),
-                null_val: std::vec::from_elem(0_u8, (downsampled.len() + 7) / 8).into()
+                null_val: std::vec::from_elem(0_u8, downsampled.len().div_ceil(8)).into()
             })
             .into()
         })
@@ -213,7 +213,7 @@ pub fn gap_preserving_lttb_final_inner(
                 num_points: downsampled.len() as u32,
                 flags: time_vector::FLAG_IS_SORTED,
                 internal_padding: [0; 3],
-                null_val: std::vec::from_elem(0_u8, (downsampled.len() + 7) / 8).into(),
+                null_val: std::vec::from_elem(0_u8, downsampled.len().div_ceil(8)).into(),
                 points: downsampled.into(),
             })
             .into()
@@ -415,7 +415,7 @@ pub fn lttb_ts(data: Timevector_TSTZ_F64, threshold: usize) -> Timevector_TSTZ_F
     // Always add the last point.
     sampled.push(data.get(data.num_points() - 1).unwrap());
 
-    let nulls_len = (sampled.len() + 7) / 8;
+    let nulls_len = sampled.len().div_ceil(8);
 
     crate::build! {
         Timevector_TSTZ_F64 {

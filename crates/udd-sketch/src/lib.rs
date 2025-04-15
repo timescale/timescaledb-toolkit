@@ -223,39 +223,108 @@ impl SketchHashMap {
         self.map.len()
     }
 
-    // Combine adjacent buckets
-    fn compact(&mut self) {
-        let mut target = self.head;
-        // TODO can we do without this additional map?
-        let old_map = std::mem::take(&mut self.map);
+    /// Combine adjacent buckets using the stack.
+    fn compact_using_stack<const N: usize>(&mut self) {
+        let len = self.map.len();
+        debug_assert!(len <= N);
+        let mut entries = [(SketchHashKey::Invalid, 0); N];
+        let mut drain = self.map.drain();
 
-        self.head = self.head.compact_key();
-
-        while target != SketchHashKey::Invalid {
-            let old_entry = &old_map[&target];
-            let new_key = target.compact_key();
-            // it doesn't matter where buckets are absolutely, their relative
-            // positions will remain unchanged unless two buckets are compacted
-            // together
-            let new_next = if old_entry.next.compact_key() == new_key {
-                // the old `next` bucket is going to be compacted into the same
-                // one as `target`
-                old_map[&old_entry.next].next.compact_key()
+        for e in entries.iter_mut() {
+            if let Some((key, entry)) = drain.next() {
+                *e = (key.compact_key(), entry.count);
             } else {
-                old_entry.next.compact_key()
-            };
-            self.map
-                .entry(new_key)
-                .or_insert(SketchHashEntry {
-                    count: 0,
-                    next: new_next,
-                })
-                .count += old_entry.count;
-            target = old_map[&target].next;
+                break;
+            }
+        }
+        drop(drain);
+
+        self.populate_map_using_iter(&mut entries[0..len])
+    }
+
+    /// This function will populate the backing map using the provided slice.
+    /// It will sort and aggregate, so the caller does not need to take care
+    /// of that.
+    /// However, this should really only be called to populate the empty map.
+    fn populate_map_using_iter(&mut self, entries: &mut [(SketchHashKey, u64)]) {
+        assert!(
+            self.map.is_empty(),
+            "SketchHashMap should be empty when populating using a slice"
+        );
+        if entries.is_empty() {
+            return;
+        }
+
+        // To build up the linked list, we can do so by calling `entry_upsert` for every call
+        // to the `HashMap`. `entry_upsert` however needs to walk the map though to figure
+        // out where to place a key, therefore, we switch to:
+        // - sort
+        // - aggregate
+        // - insert
+        // That's what we do here
+
+        // - sort
+        entries.sort_unstable_by_key(|e| e.0);
+
+        // - aggregate
+        let mut old_index = 0;
+        let mut current = entries[0];
+        for idx in 1..entries.len() {
+            let next = entries[idx];
+            if next.0 == current.0 {
+                current.1 += next.1;
+            } else {
+                entries[old_index] = current;
+                current = next;
+                old_index += 1;
+            }
+        }
+
+        // Final one
+        entries[old_index] = current;
+
+        // We should only return the slice containing the aggregated values
+        let iter = entries.into_iter().take(old_index + 1).peekable();
+
+        let mut iter = iter.peekable();
+        self.head = iter.peek().map(|p| p.0).unwrap_or(Invalid);
+
+        // - insert
+        while let Some((key, count)) = iter.next() {
+            self.map.insert(
+                *key,
+                SketchHashEntry {
+                    count: *count,
+                    next: iter.peek().map(|p| p.0).unwrap_or(Invalid),
+                },
+            );
         }
     }
-}
 
+    #[inline]
+    fn compact(&mut self) {
+        match self.len() {
+            0 => return,
+            // PERCENTILE_AGG_DEFAULT_SIZE defaults to 200, so
+            // this entry covers that case.
+            1..=200 => self.compact_using_stack::<200>(),
+            201..=1000 => self.compact_using_stack::<1000>(),
+            1001..=5000 => self.compact_using_stack::<5000>(),
+            _ => self.compact_using_heap(),
+        }
+    }
+
+    // Combine adjacent buckets
+    fn compact_using_heap(&mut self) {
+        let mut entries = Vec::with_capacity(self.map.len());
+
+        // By draining the `HashMap`, we can reuse the same piece of memory after we're done.
+        // We're only using the `Vec` for a very short-lived period of time.
+        entries.extend(self.map.drain().map(|e| (e.0.compact_key(), e.1.count)));
+
+        self.populate_map_using_iter(&mut entries)
+    }
+}
 #[derive(Clone, Debug, PartialEq)]
 pub struct UDDSketch {
     buckets: SketchHashMap,

@@ -11,6 +11,18 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 #### Bug fixes
 
 #### Other notable changes
+
+#### Shout-outs
+
+**Full Changelog**: [TODO]
+
+## [1.20.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.20.0) (2025-04-16)
+
+#### New experimental features
+
+#### Bug fixes
+
+#### Other notable changes
 - [#847](https://github.com/timescale/timescaledb-toolkit/pull/847): Added `total` accessor for tdigest and uddsketch
 - [#853](https://github.com/timescale/timescaledb-toolkit/pull/853): Performance improvements for `UDDSketch`
 

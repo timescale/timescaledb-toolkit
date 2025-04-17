@@ -123,15 +123,6 @@ EOF
 
         # Debian family
         debian | ubuntu)
-            # TimescaleDB does not have packages for Debian 12
-            if [ $OS_VERSION -ge 12 ]; then
-                export TSDB_PG_VERSIONS="13 14 15 16 17"
-            fi
-            if [ "$OS_VERSION" = "24.04" ]; then
-                export PG_VERSIONS="14 15 16 17"
-                export TSDB_PG_VERSIONS="14 15 16 17"
-            fi
-
             # Image comes in with no package lists so we have to start with this.
             apt-get -qq update
 

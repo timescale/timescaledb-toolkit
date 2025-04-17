@@ -39,7 +39,7 @@ jobs:
       fail-fast: false
       max-parallel: 12
       matrix:
-        pgversion: [14, 15, 16, 17]
+        pgversion: [15, 16, 17]
         container:
         - os: rockylinux
           version: "9"
@@ -68,27 +68,6 @@ jobs:
             skip: true
         - container:
             schedule: false
-        include:
-        # TimescaleDB as of 2.12.0 no longer supports PostgreSQL 12.
-        # To allow us to do run CI against PostgreSQL 12, we therefore explicitly
-        # remove all CI's, except if we are run against the latest supported TimescaleDB
-        # version for PostgreSQL 12, which is 2.11.2
-        - pgversion: 12
-          container:
-            image: debian-11-amd64
-            os: debian
-            version: "11" 
-          tsdb_commit: 2.11.2
-        # TimescaleDB as of 2.16.0 no longer supports PostgreSQL 13.
-        # To allow us to do run CI against PostgreSQL 13, we therefore explicitly
-        # remove all CI's, except if we are run against the latest supported TimescaleDB
-        # version for PostgreSQL 13, which is 2.15.3
-        - pgversion: 13
-          container:
-            image: debian-11-amd64
-            os: debian
-            version: "11" 
-          tsdb_commit: 2.15.3
     env:
       # TODO Why?  Cargo default is to pass `-C incremental` to rustc; why don't we want that?
       #   https://doc.rust-lang.org/rustc/codegen-options/index.html#incremental

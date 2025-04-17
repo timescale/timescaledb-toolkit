@@ -101,7 +101,7 @@ hop on the [Discussions forum](https://github.com/timescale/timescaledb-toolkit/
 
 See above for prerequisites and installation instructions.
 
-You can run tests against a postgres version `pg12`, `pg13`, `pg14`, `pg15`, `pg16` or `pg17` using
+You can run tests against a postgres version `pg15`, `pg16` or `pg17` using
 
 ```
 cargo pgrx test ${postgres_version}

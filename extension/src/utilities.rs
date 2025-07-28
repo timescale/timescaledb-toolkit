@@ -93,7 +93,7 @@ extension_sql!(
 CREATE FUNCTION days_in_month(date timestamptz) RETURNS int
 SET search_path TO pg_catalog,pg_temp
 AS $$
-SELECT CAST(EXTRACT('day' FROM ($1 + interval '1 month' - $1)) as INTEGER)
+SELECT CAST(EXTRACT('day' FROM (date_trunc('month', $1) + interval '1 month' - date_trunc('month', $1))) AS INTEGER)
 $$ LANGUAGE SQL STRICT IMMUTABLE PARALLEL SAFE;
 ",
     name = "days_in_month",
@@ -199,6 +199,20 @@ mod tests {
                 .unwrap()
                 .unwrap();
             assert_eq!(test_val, 29);
+        });
+        Spi::connect(|mut client| {
+            let test_val = client
+                .update(
+                    "SELECT days_in_month('2023-01-31 00:00:00+00'::timestamptz)",
+                    None,
+                    None,
+                )
+                .unwrap()
+                .first()
+                .get_one::<i64>()
+                .unwrap()
+                .unwrap();
+            assert_eq!(test_val, 31);
         });
     }
     #[pg_test]

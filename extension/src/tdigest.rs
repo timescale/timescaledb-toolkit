@@ -184,6 +184,7 @@ impl<'input> TDigest<'input> {
 #[pg_extern(immutable, parallel_safe)]
 fn tdigest_final(state: Internal, fcinfo: pg_sys::FunctionCallInfo) -> Option<TDigest<'static>> {
     unsafe {
+        let mut state = state;
         in_aggregate_context(fcinfo, || {
             let state: &mut tdigest::Builder = match state.get_mut() {
                 None => return None,

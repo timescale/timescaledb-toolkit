@@ -6,10 +6,10 @@ edition = "2021"
 [dependencies]
 bytecount = "0.6.2"
 clap = { version = "3.2.15", features = ["wrap_help"] }
-colored = "2.0.0"
-postgres = "=0.19.7" # pinned because we pin tokio-postgres
-pulldown-cmark = "0.8.0"
+colored = "3.0.0"
+postgres = "0.19.10" # TODO dbeck: pinned because we pin tokio-postgres
+pulldown-cmark = "0.13.0"
 rayon = "1.5"
-tokio-postgres = "=0.7.10" # pinned because 0.7.11 added `SimpleQueryMessage::RowDescription`
+tokio-postgres = "0.7.13" # TODO dbeck: pinned because 0.7.11 added `SimpleQueryMessage::RowDescription`
 uuid = { version = "0.8", features = ["v4"] }
 walkdir = "2"

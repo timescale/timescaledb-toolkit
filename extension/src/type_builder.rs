@@ -131,7 +131,7 @@ macro_rules! pg_type_impl {
             }
 
             #[::pgrx::pgrx_macros::pg_extern(immutable,parallel_safe)]
-            pub fn [<$name:lower _in>](input: Option<&::core::ffi::CStr>) -> Option<$name<'static>> {
+            pub fn [<$name:lower _in>](input: Option<&::core::ffi::CStr>) -> Option<$name<'_>> {
                 input.map_or_else(|| {
                     while let Some(m) = <$name as ::pgrx::inoutfuncs::InOutFuncs>::NULL_ERROR_MESSAGE {
                         ::pgrx::pg_sys::error!("{m}");

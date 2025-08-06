@@ -304,7 +304,7 @@ impl<'a> Serialize for DatumStore<'a> {
         let mut writer = TextSerializableDatumWriter::from_oid(self.type_oid.0);
         let count = self.iter().count();
         let mut seq = serializer.serialize_seq(Some(count + 1))?;
-        seq.serialize_element(&self.type_oid.0.as_u32())?;
+        seq.serialize_element(&self.type_oid.0.to_u32())?;
         for element in self.iter() {
             seq.serialize_element(&writer.make_serializable(element))?;
         }

@@ -188,6 +188,7 @@ impl GaugeSummaryTransState {
 
 #[pg_extern(immutable, parallel_safe, strict, schema = "toolkit_experimental")]
 fn gauge_summary_trans_serialize(state: Internal) -> bytea {
+    let mut state = state;
     let state: &mut GaugeSummaryTransState = unsafe { state.get_mut().unwrap() };
     state.combine_summaries();
     crate::do_serialize!(state)

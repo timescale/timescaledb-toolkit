@@ -51,7 +51,7 @@ impl<'de> Deserialize<'de> for PgProcId {
         // FIXME pgrx wraps all functions in rust wrappers, which makes them
         //       uncallable with DirectFunctionCall(). Is there a way to
         //       export both?
-        extern "C" {
+        extern "C-unwind" {
             #[allow(improper_ctypes)]
             fn regprocedurein(fcinfo: pg_sys::FunctionCallInfo) -> Datum;
         }

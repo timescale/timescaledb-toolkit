@@ -1269,7 +1269,7 @@ pub fn freq_iter<'a>(
     ),
 > {
     unsafe {
-        if ty.oid().as_u32() != agg.type_oid {
+        if ty.oid().to_u32() != agg.type_oid {
             pgrx::error!("mischatched types")
         }
         let counts = agg.counts.slice().iter().zip(agg.overcounts.slice().iter());
@@ -1400,7 +1400,7 @@ pub fn topn(
     ty: Option<AnyElement>,
 ) -> SetOfIterator<AnyElement> {
     // If called with a NULL, assume type matches
-    if ty.is_some() && ty.unwrap().oid().as_u32() != agg.type_oid {
+    if ty.is_some() && ty.unwrap().oid().to_u32() != agg.type_oid {
         pgrx::error!("mischatched types")
     }
 

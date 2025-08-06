@@ -368,7 +368,7 @@ fn parse_timestamptz(val: &str) -> i64 {
     // FIXME pgrx wraps all functions in rust wrappers, which makes them
     //       uncallable with DirectFunctionCall(). Is there a way to
     //       export both?
-    extern "C" {
+    extern "C-unwind" {
         #[allow(improper_ctypes)]
         fn timestamptz_in(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
     }
@@ -390,7 +390,7 @@ fn parse_interval(val: &str) -> *mut pg_sys::Interval {
     // FIXME pgrx wraps all functions in rust wrappers, which makes them
     //       uncallable with DirectFunctionCall(). Is there a way to
     //       export both?
-    extern "C" {
+    extern "C-unwind" {
         #[allow(improper_ctypes)]
         fn interval_in(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
     }

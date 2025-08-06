@@ -228,6 +228,7 @@ impl CounterSummaryTransState {
 
 #[pg_extern(immutable, parallel_safe, strict)]
 pub fn counter_summary_trans_serialize(state: Internal) -> bytea {
+    let mut state = state;
     let state: &mut CounterSummaryTransState = unsafe { state.get_mut().unwrap() };
     state.combine_summaries();
     crate::do_serialize!(state)

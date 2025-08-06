@@ -14,12 +14,15 @@ pub trait FloatLike:
     }
     fn from_u64(n: u64) -> Self;
 }
+
+pub use twofloat::TwoFloat;
+
 impl FloatLike for f64 {
     fn from_u64(n: u64) -> Self {
         n as f64
     }
 }
-impl FloatLike for twofloat::TwoFloat {
+impl FloatLike for self::TwoFloat {
     fn from_u64(n: u64) -> Self {
         (n as f64).into()
     }

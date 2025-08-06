@@ -417,8 +417,12 @@ macro_rules! do_serialize {
             use std::convert::TryInto;
 
             let state = &*$state;
-            let serialized_size = bincode::serialized_size(state)
+
+            // Encode first to get both size and data
+            let serialized_data = bincode::serde::encode_to_vec(state, bincode::config::standard())
                 .unwrap_or_else(|e| pgrx::error!("serialization error {}", e));
+            let serialized_size = serialized_data.len() as u64;
+
             let our_size = serialized_size + 2; // size of serialized data + our version flags
             let allocated_size = our_size + 4; // size of our data + the varlena header
             let allocated_size = allocated_size.try_into()
@@ -443,7 +447,8 @@ macro_rules! do_serialize {
             // serialization version; 1 for bincode is currently the only option
             writer.write_all(&[SerializationType::Default as u8])
                 .unwrap_or_else(|e| pgrx::error!("serialization error {}", e));
-            bincode::serialize_into(&mut writer, state)
+            // Simply copy the pre-encoded data
+            writer.write_all(&serialized_data)
                 .unwrap_or_else(|e| pgrx::error!("serialization error {}", e));
             unsafe {
                 let len = writer.position().try_into().expect("serialized size too large");
@@ -481,7 +486,8 @@ macro_rules! do_deserialize {
                     bytes[1]
                 )
             }
-            bincode::deserialize(&bytes[2..])
+            bincode::serde::decode_from_slice(&bytes[2..], bincode::config::standard())
+                .map(|(result, _)| result)
                 .unwrap_or_else(|e| pgrx::error!("deserialization error {}", e))
         };
         state.into()

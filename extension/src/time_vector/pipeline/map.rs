@@ -188,7 +188,7 @@ pub fn apply_to(
 ) -> Timevector_TSTZ_F64<'_> {
     let mut flinfo: pg_sys::FmgrInfo = unsafe { MaybeUninit::zeroed().assume_init() };
 
-    let fn_addr: unsafe extern "C" fn(*mut pg_sys::FunctionCallInfoBaseData) -> pg_sys::Datum;
+    let fn_addr: unsafe extern "C-unwind" fn(*mut pg_sys::FunctionCallInfoBaseData) -> pg_sys::Datum;
     let mut fc_info = unsafe {
         pg_sys::fmgr_info(func, &mut flinfo);
         fn_addr = flinfo.fn_addr.expect("null function in timevector map");

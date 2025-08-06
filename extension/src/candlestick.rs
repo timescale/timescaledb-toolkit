@@ -332,6 +332,7 @@ pub fn candlestick_combine_inner<'input>(
 
 #[pg_extern(immutable, parallel_safe, strict)]
 pub fn candlestick_serialize(state: Internal) -> bytea {
+    let mut state = state;
     let cs: &mut Candlestick = unsafe { state.get_mut().unwrap() };
     let ser = &**cs;
     crate::do_serialize!(ser)

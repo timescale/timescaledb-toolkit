@@ -88,6 +88,7 @@ use crate::raw::bytea;
 
 #[pg_extern(immutable, parallel_safe, strict)]
 pub fn tdigest_serialize(state: Internal) -> bytea {
+    let mut state = state;
     let state: &mut tdigest::Builder = unsafe { state.get_mut().unwrap() };
     // TODO this macro is really broken
     let hack = state.build();

@@ -67,7 +67,7 @@ pub fn generate_periodic_normal_series(
 
     let mut rng = match rng_seed {
         Some(v) => ChaCha12Rng::seed_from_u64(v as u64),
-        None => ChaCha12Rng::from_entropy(),
+        None => ChaCha12Rng::from_os_rng(),
     };
 
     let distribution = rand_distr::Normal::new(0.0, standard_deviation).unwrap();

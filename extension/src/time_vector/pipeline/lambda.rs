@@ -368,7 +368,7 @@ impl PartialOrd for Value {
         //
         // For now it seems OK to suppress these warnings here and below with
         // #[allow(improper_ctypes)]
-        extern "C" {
+        extern "C-unwind" {
             #[allow(improper_ctypes)]
             fn interval_cmp(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
         }
@@ -400,7 +400,7 @@ impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
         use std::mem::discriminant;
         use Value::*;
-        extern "C" {
+        extern "C-unwind" {
             #[allow(improper_ctypes)]
             fn interval_eq(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
         }

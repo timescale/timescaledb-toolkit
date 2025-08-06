@@ -45,7 +45,7 @@ pub fn ts_interval_sum_to_ms(
     ref_time: &crate::raw::TimestampTz,
     interval: &crate::raw::Interval,
 ) -> i64 {
-    extern "C" {
+    extern "C-unwind" {
         #[allow(improper_ctypes)]
         fn timestamptz_pl_interval(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
     }

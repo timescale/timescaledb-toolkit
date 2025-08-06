@@ -1,8 +1,7 @@
 // 2D stats are based on the Youngs-Cramer implementation in PG here:
 // https://github.com/postgres/postgres/blob/472e518a44eacd9caac7d618f1b6451672ca4481/src/backend/utils/adt/float.c#L3260
-use crate::{m3, m4, FloatLike, StatsError, XYPair, INV_FLOATING_ERROR_THRESHOLD};
+use crate::{m3, m4, FloatLike, TwoFloat, StatsError, XYPair, INV_FLOATING_ERROR_THRESHOLD};
 use serde::{Deserialize, Serialize};
-use twofloat::TwoFloat;
 
 mod stats2d_flat_serialize;
 

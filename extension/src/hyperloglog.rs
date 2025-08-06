@@ -153,6 +153,7 @@ use crate::raw::bytea;
 
 #[pg_extern(immutable, parallel_safe, strict)]
 pub fn hyperloglog_serialize(state: Internal) -> bytea {
+    let mut state = state;
     let state: &mut HyperLogLogTrans = unsafe { state.get_mut().unwrap() };
     state.logger.merge_all();
     crate::do_serialize!(state)

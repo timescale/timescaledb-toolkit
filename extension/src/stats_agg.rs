@@ -1,5 +1,6 @@
 use pgrx::*;
-use twofloat::TwoFloat;
+use stats_agg::FloatLike;
+use stats_agg::TwoFloat;
 
 use crate::{
     accessors::{

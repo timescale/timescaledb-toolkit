@@ -293,15 +293,15 @@ mod tests {
 
     #[pg_test]
     fn test_simple_arith_binops() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -309,7 +309,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {sp}"), None, &[])
                 .unwrap();
 
             // we use a subselect to guarantee order
@@ -322,12 +322,9 @@ mod tests {
 
             let val = client
                 .update(
-                    &format!(
-                        "SELECT (series -> add(1.0))::TEXT FROM ({}) s",
-                        create_series
-                    ),
+                    &format!("SELECT (series -> add(1.0))::TEXT FROM ({create_series}) s"),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -346,12 +343,9 @@ mod tests {
 
             let val = client
                 .update(
-                    &format!(
-                        "SELECT (series -> sub(3.0))::TEXT FROM ({}) s",
-                        create_series
-                    ),
+                    &format!("SELECT (series -> sub(3.0))::TEXT FROM ({create_series}) s"),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -370,12 +364,9 @@ mod tests {
 
             let val = client
                 .update(
-                    &format!(
-                        "SELECT (series -> mul(2.0))::TEXT FROM ({}) s",
-                        create_series
-                    ),
+                    &format!("SELECT (series -> mul(2.0))::TEXT FROM ({create_series}) s"),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -394,12 +385,9 @@ mod tests {
 
             let val = client
                 .update(
-                    &format!(
-                        "SELECT (series -> div(5.0))::TEXT FROM ({}) s",
-                        create_series
-                    ),
+                    &format!("SELECT (series -> div(5.0))::TEXT FROM ({create_series}) s"),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -418,12 +406,9 @@ mod tests {
 
             let val = client
                 .update(
-                    &format!(
-                        "SELECT (series -> mod(5.0))::TEXT FROM ({}) s",
-                        create_series
-                    ),
+                    &format!("SELECT (series -> mod(5.0))::TEXT FROM ({create_series}) s"),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -442,12 +427,9 @@ mod tests {
 
             let val = client
                 .update(
-                    &format!(
-                        "SELECT (series -> power(2.0))::TEXT FROM ({}) s",
-                        create_series
-                    ),
+                    &format!("SELECT (series -> power(2.0))::TEXT FROM ({create_series}) s"),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -466,12 +448,9 @@ mod tests {
 
             let val = client
                 .update(
-                    &format!(
-                        "SELECT (series -> logn(10.0))::TEXT FROM ({}) s",
-                        create_series
-                    ),
+                    &format!("SELECT (series -> logn(10.0))::TEXT FROM ({create_series}) s"),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -492,15 +471,15 @@ mod tests {
 
     #[pg_test]
     fn test_simple_arith_unaryops() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -508,7 +487,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {sp}"), None, &[])
                 .unwrap();
 
             // we use a subselect to guarantee order
@@ -521,9 +500,9 @@ mod tests {
 
             let val = client
                 .update(
-                    &format!("SELECT (series -> abs())::TEXT FROM ({}) s", create_series),
+                    &format!("SELECT (series -> abs())::TEXT FROM ({create_series}) s"),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -558,9 +537,9 @@ mod tests {
 
             let val = client
                 .update(
-                    &format!("SELECT (series -> ceil())::TEXT FROM ({}) s", create_series),
+                    &format!("SELECT (series -> ceil())::TEXT FROM ({create_series}) s"),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -579,12 +558,9 @@ mod tests {
 
             let val = client
                 .update(
-                    &format!(
-                        "SELECT (series -> floor())::TEXT FROM ({}) s",
-                        create_series
-                    ),
+                    &format!("SELECT (series -> floor())::TEXT FROM ({create_series}) s"),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -637,12 +613,9 @@ mod tests {
 
             let val = client
                 .update(
-                    &format!(
-                        "SELECT (series -> round())::TEXT FROM ({}) s",
-                        create_series
-                    ),
+                    &format!("SELECT (series -> round())::TEXT FROM ({create_series}) s"),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -661,9 +634,9 @@ mod tests {
 
             let val = client
                 .update(
-                    &format!("SELECT (series -> sign())::TEXT FROM ({}) s", create_series),
+                    &format!("SELECT (series -> sign())::TEXT FROM ({create_series}) s"),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -698,12 +671,9 @@ mod tests {
 
             let val = client
                 .update(
-                    &format!(
-                        "SELECT (series -> trunc())::TEXT FROM ({}) s",
-                        create_series
-                    ),
+                    &format!("SELECT (series -> trunc())::TEXT FROM ({create_series}) s"),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()

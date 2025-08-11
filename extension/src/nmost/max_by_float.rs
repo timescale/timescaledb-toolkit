@@ -21,7 +21,7 @@ pg_type! {
         data: DatumStore<'input>,
     }
 }
-ron_inout_funcs!(MaxByFloats);
+ron_inout_funcs!(MaxByFloats<'input>);
 
 impl<'input> From<MaxByFloatTransType> for MaxByFloats<'input> {
     fn from(item: MaxByFloatTransType) -> Self {
@@ -140,13 +140,13 @@ mod tests {
 
     #[pg_test]
     fn max_by_float_correctness() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             client
                 .update(
                     "CREATE TABLE data(val DOUBLE PRECISION, category INT)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -157,7 +157,7 @@ mod tests {
                     .update(
                         &format!("INSERT INTO data VALUES ({}.0/128, {})", i, i % 4),
                         None,
-                        None,
+                        &[],
                     )
                     .unwrap();
             }
@@ -167,7 +167,7 @@ mod tests {
                 .update(
                     "SELECT into_values(max_n_by(val, data, 3), NULL::data)::TEXT from data",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             assert_eq!(
@@ -189,7 +189,7 @@ mod tests {
                 client.update(
                     "WITH aggs as (SELECT category, max_n_by(val, data, 5) as agg from data GROUP BY category)
                         SELECT into_values(rollup(agg), NULL::data)::TEXT FROM aggs",
-                        None, None,
+                        None, &[],
                     ).unwrap();
             assert_eq!(
                 result.next().unwrap()[1].value().unwrap(),

@@ -1,5 +1,4 @@
 use pgrx::*;
-use twofloat::TwoFloat;
 
 use crate::{
     accessors::{
@@ -19,7 +18,8 @@ pub use stats_agg::stats1d::StatsSummary1D as InternalStatsSummary1D;
 pub use stats_agg::stats2d::StatsSummary2D as InternalStatsSummary2D;
 use stats_agg::XYPair;
 
-use self::Method::*;
+use crate::stats_agg::Method::*;
+use stats_agg::TwoFloat;
 
 use crate::raw::bytea;
 
@@ -56,7 +56,7 @@ pg_type! {
 ron_inout_funcs!(StatsSummary1D);
 ron_inout_funcs!(StatsSummary2D);
 
-impl<'input> StatsSummary1D<'input> {
+impl StatsSummary1D {
     fn to_internal(&self) -> InternalStatsSummary1D<f64> {
         InternalStatsSummary1D {
             n: self.n,
@@ -77,7 +77,7 @@ impl<'input> StatsSummary1D<'input> {
     }
 }
 
-impl<'input> StatsSummary2D<'input> {
+impl StatsSummary2D {
     fn to_internal(&self) -> InternalStatsSummary2D<f64> {
         InternalStatsSummary2D {
             n: self.n,
@@ -119,7 +119,7 @@ pub fn stats1d_trans_serialize(state: Internal) -> bytea {
 pub fn stats1d_trans_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
     stats1d_trans_deserialize_inner(bytes).internal()
 }
-pub fn stats1d_trans_deserialize_inner(bytes: bytea) -> Inner<StatsSummary1D<'static>> {
+pub fn stats1d_trans_deserialize_inner(bytes: bytea) -> Inner<StatsSummary1D> {
     let de: StatsSummary1D = crate::do_deserialize!(bytes, StatsSummary1DData);
     de.into()
 }
@@ -135,13 +135,13 @@ pub fn stats2d_trans_serialize(state: Internal) -> bytea {
 pub fn stats2d_trans_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
     stats2d_trans_deserialize_inner(bytes).internal()
 }
-pub fn stats2d_trans_deserialize_inner(bytes: bytea) -> Inner<StatsSummary2D<'static>> {
+pub fn stats2d_trans_deserialize_inner(bytes: bytea) -> Inner<StatsSummary2D> {
     let de: StatsSummary2D = crate::do_deserialize!(bytes, StatsSummary2DData);
     de.into()
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn stats1d_trans<'s>(
+pub fn stats1d_trans(
     state: Internal,
     val: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
@@ -149,7 +149,7 @@ pub fn stats1d_trans<'s>(
     stats1d_trans_inner(unsafe { state.to_inner() }, val, fcinfo).internal()
 }
 #[pg_extern(immutable, parallel_safe)]
-pub fn stats1d_tf_trans<'s>(
+pub fn stats1d_tf_trans(
     state: Internal,
     val: Option<f64>,
     fcinfo: pg_sys::FunctionCallInfo,
@@ -428,18 +428,18 @@ pub fn stats2d_tf_inv_trans_inner(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn stats1d_summary_trans<'a>(
+pub fn stats1d_summary_trans(
     state: Internal,
-    value: Option<StatsSummary1D<'a>>,
+    value: Option<StatsSummary1D>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     stats1d_summary_trans_inner(unsafe { state.to_inner() }, value, fcinfo).internal()
 }
-pub fn stats1d_summary_trans_inner<'s>(
-    state: Option<Inner<StatsSummary1D<'s>>>,
-    value: Option<StatsSummary1D<'s>>,
+pub fn stats1d_summary_trans_inner(
+    state: Option<Inner<StatsSummary1D>>,
+    value: Option<StatsSummary1D>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<StatsSummary1D<'s>>> {
+) -> Option<Inner<StatsSummary1D>> {
     unsafe {
         in_aggregate_context(fcinfo, || match (state, value) {
             (state, None) => state,
@@ -456,18 +456,18 @@ pub fn stats1d_summary_trans_inner<'s>(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn stats2d_summary_trans<'a>(
+pub fn stats2d_summary_trans(
     state: Internal,
-    value: Option<StatsSummary2D<'a>>,
+    value: Option<StatsSummary2D>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     stats2d_summary_trans_inner(unsafe { state.to_inner() }, value, fcinfo).internal()
 }
-pub fn stats2d_summary_trans_inner<'s>(
-    state: Option<Inner<StatsSummary2D<'s>>>,
-    value: Option<StatsSummary2D<'s>>,
+pub fn stats2d_summary_trans_inner(
+    state: Option<Inner<StatsSummary2D>>,
+    value: Option<StatsSummary2D>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<StatsSummary2D<'s>>> {
+) -> Option<Inner<StatsSummary2D>> {
     unsafe {
         in_aggregate_context(fcinfo, || match (state, value) {
             (state, None) => state,
@@ -484,18 +484,18 @@ pub fn stats2d_summary_trans_inner<'s>(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn stats1d_summary_inv_trans<'a>(
+pub fn stats1d_summary_inv_trans(
     state: Internal,
-    value: Option<StatsSummary1D<'a>>,
+    value: Option<StatsSummary1D>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     stats1d_summary_inv_trans_inner(unsafe { state.to_inner() }, value, fcinfo).internal()
 }
-pub fn stats1d_summary_inv_trans_inner<'s>(
-    state: Option<Inner<StatsSummary1D<'s>>>,
+pub fn stats1d_summary_inv_trans_inner(
+    state: Option<Inner<StatsSummary1D>>,
     value: Option<StatsSummary1D>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<StatsSummary1D<'s>>> {
+) -> Option<Inner<StatsSummary1D>> {
     unsafe {
         in_aggregate_context(fcinfo, || match (state, &value) {
             (None, _) => panic!("Inverse function should never be called with NULL state"),
@@ -511,18 +511,18 @@ pub fn stats1d_summary_inv_trans_inner<'s>(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn stats2d_summary_inv_trans<'a>(
+pub fn stats2d_summary_inv_trans(
     state: Internal,
-    value: Option<StatsSummary2D<'a>>,
+    value: Option<StatsSummary2D>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     stats2d_summary_inv_trans_inner(unsafe { state.to_inner() }, value, fcinfo).internal()
 }
-pub fn stats2d_summary_inv_trans_inner<'s>(
-    state: Option<Inner<StatsSummary2D<'s>>>,
+pub fn stats2d_summary_inv_trans_inner(
+    state: Option<Inner<StatsSummary2D>>,
     value: Option<StatsSummary2D>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<StatsSummary2D<'s>>> {
+) -> Option<Inner<StatsSummary2D>> {
     unsafe {
         in_aggregate_context(fcinfo, || match (state, &value) {
             (None, _) => panic!("Inverse function should never be called with NULL state"),
@@ -545,11 +545,11 @@ pub fn stats1d_combine(
 ) -> Option<Internal> {
     unsafe { stats1d_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal() }
 }
-pub fn stats1d_combine_inner<'s, 'v>(
-    state1: Option<Inner<StatsSummary1D<'s>>>,
-    state2: Option<Inner<StatsSummary1D<'v>>>,
+pub fn stats1d_combine_inner(
+    state1: Option<Inner<StatsSummary1D>>,
+    state2: Option<Inner<StatsSummary1D>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<StatsSummary1D<'s>>> {
+) -> Option<Inner<StatsSummary1D>> {
     unsafe {
         in_aggregate_context(fcinfo, || match (state1, state2) {
             (None, None) => None,
@@ -579,11 +579,11 @@ pub fn stats2d_combine(
 ) -> Option<Internal> {
     unsafe { stats2d_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal() }
 }
-pub fn stats2d_combine_inner<'s, 'v>(
-    state1: Option<Inner<StatsSummary2D<'s>>>,
-    state2: Option<Inner<StatsSummary2D<'v>>>,
+pub fn stats2d_combine_inner(
+    state1: Option<Inner<StatsSummary2D>>,
+    state2: Option<Inner<StatsSummary2D>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<StatsSummary2D<'s>>> {
+) -> Option<Inner<StatsSummary2D>> {
     unsafe {
         in_aggregate_context(fcinfo, || match (state1, state2) {
             (None, None) => None,
@@ -606,10 +606,7 @@ pub fn stats2d_combine_inner<'s, 'v>(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-fn stats1d_final(
-    state: Internal,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<StatsSummary1D<'static>> {
+fn stats1d_final(state: Internal, fcinfo: pg_sys::FunctionCallInfo) -> Option<StatsSummary1D> {
     unsafe {
         in_aggregate_context(fcinfo, || match state.get() {
             None => None,
@@ -626,7 +623,7 @@ fn stats1d_tf_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
     // return a normal stats summary here
-) -> Option<StatsSummary1D<'static>> {
+) -> Option<StatsSummary1D> {
     unsafe {
         in_aggregate_context(fcinfo, || match state.get() {
             None => None,
@@ -642,10 +639,7 @@ fn stats1d_tf_final(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-fn stats2d_final(
-    state: Internal,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<StatsSummary2D<'static>> {
+fn stats2d_final(state: Internal, fcinfo: pg_sys::FunctionCallInfo) -> Option<StatsSummary2D> {
     unsafe {
         in_aggregate_context(fcinfo, || match state.get() {
             None => None,
@@ -658,10 +652,7 @@ fn stats2d_final(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-fn stats2d_tf_final(
-    state: Internal,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<StatsSummary2D<'static>> {
+fn stats2d_tf_final(state: Internal, fcinfo: pg_sys::FunctionCallInfo) -> Option<StatsSummary2D> {
     unsafe {
         in_aggregate_context(fcinfo, || match state.get() {
             None => None,
@@ -936,45 +927,38 @@ extension_sql!(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats1d_average<'a>(
-    sketch: StatsSummary1D<'a>,
-    _accessor: AccessorAverage<'a>,
-) -> Option<f64> {
+pub fn arrow_stats1d_average(sketch: StatsSummary1D, _accessor: AccessorAverage) -> Option<f64> {
     stats1d_average(sketch)
 }
 
 #[pg_extern(name = "average", strict, immutable, parallel_safe)]
-pub(crate) fn stats1d_average<'a>(summary: StatsSummary1D<'a>) -> Option<f64> {
+pub(crate) fn stats1d_average(summary: StatsSummary1D) -> Option<f64> {
     summary.to_internal().avg()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats1d_sum<'a>(
-    sketch: StatsSummary1D<'a>,
-    _accessor: AccessorSum<'a>,
-) -> Option<f64> {
+pub fn arrow_stats1d_sum(sketch: StatsSummary1D, _accessor: AccessorSum) -> Option<f64> {
     stats1d_sum(sketch)
 }
 
 #[pg_extern(name = "sum", strict, immutable, parallel_safe)]
-pub(crate) fn stats1d_sum<'a>(summary: StatsSummary1D<'a>) -> Option<f64> {
+pub(crate) fn stats1d_sum(summary: StatsSummary1D) -> Option<f64> {
     summary.to_internal().sum()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats1d_stddev<'a>(
-    sketch: Option<StatsSummary1D<'a>>,
-    accessor: AccessorStdDev<'a>,
+pub fn arrow_stats1d_stddev(
+    sketch: Option<StatsSummary1D>,
+    accessor: AccessorStdDev,
 ) -> Option<f64> {
-    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats1d_stddev(sketch, &method)
+    stats1d_stddev(sketch, accessor.method.as_str())
 }
 
 #[pg_extern(name = "stddev", immutable, parallel_safe)]
-fn stats1d_stddev<'a>(
-    summary: Option<StatsSummary1D<'a>>,
+fn stats1d_stddev(
+    summary: Option<StatsSummary1D>,
     method: default!(&str, "'sample'"),
 ) -> Option<f64> {
     match method_kind(method) {
@@ -985,17 +969,16 @@ fn stats1d_stddev<'a>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats1d_variance<'a>(
-    sketch: Option<StatsSummary1D<'a>>,
-    accessor: AccessorVariance<'a>,
+pub fn arrow_stats1d_variance(
+    sketch: Option<StatsSummary1D>,
+    accessor: AccessorVariance,
 ) -> Option<f64> {
-    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats1d_variance(sketch, &method)
+    stats1d_variance(sketch, accessor.method.as_str())
 }
 
 #[pg_extern(name = "variance", immutable, parallel_safe)]
-fn stats1d_variance<'a>(
-    summary: Option<StatsSummary1D<'a>>,
+fn stats1d_variance(
+    summary: Option<StatsSummary1D>,
     method: default!(&str, "'sample'"),
 ) -> Option<f64> {
     match method_kind(method) {
@@ -1006,19 +989,12 @@ fn stats1d_variance<'a>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats1d_skewness<'a>(
-    sketch: StatsSummary1D<'a>,
-    accessor: AccessorSkewness<'a>,
-) -> Option<f64> {
-    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats1d_skewness(sketch, &method)
+pub fn arrow_stats1d_skewness(sketch: StatsSummary1D, accessor: AccessorSkewness) -> Option<f64> {
+    stats1d_skewness(sketch, accessor.method.as_str())
 }
 
 #[pg_extern(name = "skewness", immutable, parallel_safe)]
-fn stats1d_skewness<'a>(
-    summary: StatsSummary1D<'a>,
-    method: default!(&str, "'sample'"),
-) -> Option<f64> {
+fn stats1d_skewness(summary: StatsSummary1D, method: default!(&str, "'sample'")) -> Option<f64> {
     match method_kind(method) {
         Population => summary.to_internal().skewness_pop(),
         Sample => summary.to_internal().skewness_samp(),
@@ -1027,19 +1003,12 @@ fn stats1d_skewness<'a>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats1d_kurtosis<'a>(
-    sketch: StatsSummary1D<'a>,
-    accessor: AccessorKurtosis<'a>,
-) -> Option<f64> {
-    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats1d_kurtosis(sketch, &method)
+pub fn arrow_stats1d_kurtosis(sketch: StatsSummary1D, accessor: AccessorKurtosis) -> Option<f64> {
+    stats1d_kurtosis(sketch, accessor.method.as_str())
 }
 
 #[pg_extern(name = "kurtosis", immutable, parallel_safe)]
-fn stats1d_kurtosis<'a>(
-    summary: StatsSummary1D<'a>,
-    method: default!(&str, "'sample'"),
-) -> Option<f64> {
+fn stats1d_kurtosis(summary: StatsSummary1D, method: default!(&str, "'sample'")) -> Option<f64> {
     match method_kind(method) {
         Population => summary.to_internal().kurtosis_pop(),
         Sample => summary.to_internal().kurtosis_samp(),
@@ -1048,87 +1017,71 @@ fn stats1d_kurtosis<'a>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats1d_num_vals<'a>(
-    sketch: StatsSummary1D<'a>,
-    _accessor: AccessorNumVals<'a>,
-) -> i64 {
+pub fn arrow_stats1d_num_vals(sketch: StatsSummary1D, _accessor: AccessorNumVals) -> i64 {
     stats1d_num_vals(sketch)
 }
 
 #[pg_extern(name = "num_vals", strict, immutable, parallel_safe)]
-fn stats1d_num_vals<'a>(summary: StatsSummary1D<'a>) -> i64 {
+fn stats1d_num_vals(summary: StatsSummary1D) -> i64 {
     summary.to_internal().count()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_average_x<'a>(
-    sketch: StatsSummary2D<'a>,
-    _accessor: AccessorAverageX<'a>,
-) -> Option<f64> {
+pub fn arrow_stats2d_average_x(sketch: StatsSummary2D, _accessor: AccessorAverageX) -> Option<f64> {
     stats2d_average_x(sketch)
 }
 
 #[pg_extern(name = "average_x", strict, immutable, parallel_safe)]
-fn stats2d_average_x<'a>(summary: StatsSummary2D<'a>) -> Option<f64> {
+fn stats2d_average_x(summary: StatsSummary2D) -> Option<f64> {
     Some(summary.to_internal().avg()?.x)
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_average_y<'a>(
-    sketch: StatsSummary2D<'a>,
-    _accessor: AccessorAverageY<'a>,
-) -> Option<f64> {
+pub fn arrow_stats2d_average_y(sketch: StatsSummary2D, _accessor: AccessorAverageY) -> Option<f64> {
     stats2d_average_y(sketch)
 }
 
 #[pg_extern(name = "average_y", strict, immutable, parallel_safe)]
-fn stats2d_average_y<'a>(summary: StatsSummary2D<'a>) -> Option<f64> {
+fn stats2d_average_y(summary: StatsSummary2D) -> Option<f64> {
     Some(summary.to_internal().avg()?.y)
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_sum_x<'a>(
-    sketch: StatsSummary2D<'a>,
-    _accessor: AccessorSumX<'a>,
-) -> Option<f64> {
+pub fn arrow_stats2d_sum_x(sketch: StatsSummary2D, _accessor: AccessorSumX) -> Option<f64> {
     stats2d_sum_x(sketch)
 }
 
 #[pg_extern(name = "sum_x", strict, immutable, parallel_safe)]
-fn stats2d_sum_x<'a>(summary: StatsSummary2D<'a>) -> Option<f64> {
+fn stats2d_sum_x(summary: StatsSummary2D) -> Option<f64> {
     Some(summary.to_internal().sum()?.x)
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_sum_y<'a>(
-    sketch: StatsSummary2D<'a>,
-    _accessor: AccessorSumY<'a>,
-) -> Option<f64> {
+pub fn arrow_stats2d_sum_y(sketch: StatsSummary2D, _accessor: AccessorSumY) -> Option<f64> {
     stats2d_sum_y(sketch)
 }
 
 #[pg_extern(name = "sum_y", strict, immutable, parallel_safe)]
-fn stats2d_sum_y<'a>(summary: StatsSummary2D<'a>) -> Option<f64> {
+fn stats2d_sum_y(summary: StatsSummary2D) -> Option<f64> {
     Some(summary.to_internal().sum()?.y)
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_stdddev_x<'a>(
-    sketch: Option<StatsSummary2D<'a>>,
-    accessor: AccessorStdDevX<'a>,
+pub fn arrow_stats2d_stdddev_x(
+    sketch: Option<StatsSummary2D>,
+    accessor: AccessorStdDevX,
 ) -> Option<f64> {
-    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats2d_stddev_x(sketch, &method)
+    stats2d_stddev_x(sketch, accessor.method.as_str())
 }
 
 #[pg_extern(name = "stddev_x", immutable, parallel_safe)]
-fn stats2d_stddev_x<'a>(
-    summary: Option<StatsSummary2D<'a>>,
+fn stats2d_stddev_x(
+    summary: Option<StatsSummary2D>,
     method: default!(&str, "'sample'"),
 ) -> Option<f64> {
     match method_kind(method) {
@@ -1139,17 +1092,16 @@ fn stats2d_stddev_x<'a>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_stdddev_y<'a>(
-    sketch: Option<StatsSummary2D<'a>>,
-    accessor: AccessorStdDevY<'a>,
+pub fn arrow_stats2d_stdddev_y(
+    sketch: Option<StatsSummary2D>,
+    accessor: AccessorStdDevY,
 ) -> Option<f64> {
-    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats2d_stddev_y(sketch, &method)
+    stats2d_stddev_y(sketch, accessor.method.as_str())
 }
 
 #[pg_extern(name = "stddev_y", immutable, parallel_safe)]
-fn stats2d_stddev_y<'a>(
-    summary: Option<StatsSummary2D<'a>>,
+fn stats2d_stddev_y(
+    summary: Option<StatsSummary2D>,
     method: default!(&str, "'sample'"),
 ) -> Option<f64> {
     match method_kind(method) {
@@ -1160,17 +1112,16 @@ fn stats2d_stddev_y<'a>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_variance_x<'a>(
-    sketch: Option<StatsSummary2D<'a>>,
-    accessor: AccessorVarianceX<'a>,
+pub fn arrow_stats2d_variance_x(
+    sketch: Option<StatsSummary2D>,
+    accessor: AccessorVarianceX,
 ) -> Option<f64> {
-    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats2d_variance_x(sketch, &method)
+    stats2d_variance_x(sketch, accessor.method.as_str())
 }
 
 #[pg_extern(name = "variance_x", immutable, parallel_safe)]
-fn stats2d_variance_x<'a>(
-    summary: Option<StatsSummary2D<'a>>,
+fn stats2d_variance_x(
+    summary: Option<StatsSummary2D>,
     method: default!(&str, "'sample'"),
 ) -> Option<f64> {
     match method_kind(method) {
@@ -1181,17 +1132,16 @@ fn stats2d_variance_x<'a>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_variance_y<'a>(
-    sketch: Option<StatsSummary2D<'a>>,
-    accessor: AccessorVarianceY<'a>,
+pub fn arrow_stats2d_variance_y(
+    sketch: Option<StatsSummary2D>,
+    accessor: AccessorVarianceY,
 ) -> Option<f64> {
-    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats2d_variance_y(sketch, &method)
+    stats2d_variance_y(sketch, accessor.method.as_str())
 }
 
 #[pg_extern(name = "variance_y", immutable, parallel_safe)]
-fn stats2d_variance_y<'a>(
-    summary: Option<StatsSummary2D<'a>>,
+fn stats2d_variance_y(
+    summary: Option<StatsSummary2D>,
     method: default!(&str, "'sample'"),
 ) -> Option<f64> {
     match method_kind(method) {
@@ -1202,19 +1152,15 @@ fn stats2d_variance_y<'a>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_skewness_x<'a>(
-    sketch: StatsSummary2D<'a>,
-    accessor: AccessorSkewnessX<'a>,
+pub fn arrow_stats2d_skewness_x(
+    sketch: StatsSummary2D,
+    accessor: AccessorSkewnessX,
 ) -> Option<f64> {
-    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats2d_skewness_x(sketch, &method)
+    stats2d_skewness_x(sketch, accessor.method.as_str())
 }
 
 #[pg_extern(name = "skewness_x", strict, immutable, parallel_safe)]
-fn stats2d_skewness_x<'a>(
-    summary: StatsSummary2D<'a>,
-    method: default!(&str, "'sample'"),
-) -> Option<f64> {
+fn stats2d_skewness_x(summary: StatsSummary2D, method: default!(&str, "'sample'")) -> Option<f64> {
     match method_kind(method) {
         Population => Some(summary.to_internal().skewness_pop()?.x),
         Sample => Some(summary.to_internal().skewness_samp()?.x),
@@ -1223,19 +1169,15 @@ fn stats2d_skewness_x<'a>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_skewness_y<'a>(
-    sketch: StatsSummary2D<'a>,
-    accessor: AccessorSkewnessY<'a>,
+pub fn arrow_stats2d_skewness_y(
+    sketch: StatsSummary2D,
+    accessor: AccessorSkewnessY,
 ) -> Option<f64> {
-    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats2d_skewness_y(sketch, &method)
+    stats2d_skewness_y(sketch, accessor.method.as_str())
 }
 
 #[pg_extern(name = "skewness_y", strict, immutable, parallel_safe)]
-fn stats2d_skewness_y<'a>(
-    summary: StatsSummary2D<'a>,
-    method: default!(&str, "'sample'"),
-) -> Option<f64> {
+fn stats2d_skewness_y(summary: StatsSummary2D, method: default!(&str, "'sample'")) -> Option<f64> {
     match method_kind(method) {
         Population => Some(summary.to_internal().skewness_pop()?.y),
         Sample => Some(summary.to_internal().skewness_samp()?.y),
@@ -1244,19 +1186,15 @@ fn stats2d_skewness_y<'a>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_kurtosis_x<'a>(
-    sketch: StatsSummary2D<'a>,
-    accessor: AccessorKurtosisX<'a>,
+pub fn arrow_stats2d_kurtosis_x(
+    sketch: StatsSummary2D,
+    accessor: AccessorKurtosisX,
 ) -> Option<f64> {
-    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats2d_kurtosis_x(sketch, &method)
+    stats2d_kurtosis_x(sketch, accessor.method.as_str())
 }
 
 #[pg_extern(name = "kurtosis_x", strict, immutable, parallel_safe)]
-fn stats2d_kurtosis_x<'a>(
-    summary: StatsSummary2D<'a>,
-    method: default!(&str, "'sample'"),
-) -> Option<f64> {
+fn stats2d_kurtosis_x(summary: StatsSummary2D, method: default!(&str, "'sample'")) -> Option<f64> {
     match method_kind(method) {
         Population => Some(summary.to_internal().kurtosis_pop()?.x),
         Sample => Some(summary.to_internal().kurtosis_samp()?.x),
@@ -1265,19 +1203,15 @@ fn stats2d_kurtosis_x<'a>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_kurtosis_y<'a>(
-    sketch: StatsSummary2D<'a>,
-    accessor: AccessorKurtosisY<'a>,
+pub fn arrow_stats2d_kurtosis_y(
+    sketch: StatsSummary2D,
+    accessor: AccessorKurtosisY,
 ) -> Option<f64> {
-    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats2d_kurtosis_y(sketch, &method)
+    stats2d_kurtosis_y(sketch, accessor.method.as_str())
 }
 
 #[pg_extern(name = "kurtosis_y", strict, immutable, parallel_safe)]
-fn stats2d_kurtosis_y<'a>(
-    summary: StatsSummary2D<'a>,
-    method: default!(&str, "'sample'"),
-) -> Option<f64> {
+fn stats2d_kurtosis_y(summary: StatsSummary2D, method: default!(&str, "'sample'")) -> Option<f64> {
     match method_kind(method) {
         Population => Some(summary.to_internal().kurtosis_pop()?.y),
         Sample => Some(summary.to_internal().kurtosis_samp()?.y),
@@ -1286,101 +1220,88 @@ fn stats2d_kurtosis_y<'a>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_num_vals<'a>(
-    sketch: StatsSummary2D<'a>,
-    _accessor: AccessorNumVals<'a>,
-) -> i64 {
+pub fn arrow_stats2d_num_vals(sketch: StatsSummary2D, _accessor: AccessorNumVals) -> i64 {
     stats2d_num_vals(sketch)
 }
 
 #[pg_extern(name = "num_vals", strict, immutable, parallel_safe)]
-fn stats2d_num_vals<'a>(summary: StatsSummary2D<'a>) -> i64 {
+fn stats2d_num_vals(summary: StatsSummary2D) -> i64 {
     summary.to_internal().count()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_slope<'a>(
-    sketch: StatsSummary2D<'a>,
-    _accessor: AccessorSlope<'a>,
-) -> Option<f64> {
+pub fn arrow_stats2d_slope(sketch: StatsSummary2D, _accessor: AccessorSlope) -> Option<f64> {
     stats2d_slope(sketch)
 }
 
 #[pg_extern(name = "slope", strict, immutable, parallel_safe)]
-fn stats2d_slope<'a>(summary: StatsSummary2D<'a>) -> Option<f64> {
+fn stats2d_slope(summary: StatsSummary2D) -> Option<f64> {
     summary.to_internal().slope()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_corr<'a>(
-    sketch: StatsSummary2D<'a>,
-    _accessor: AccessorCorr<'a>,
-) -> Option<f64> {
+pub fn arrow_stats2d_corr(sketch: StatsSummary2D, _accessor: AccessorCorr) -> Option<f64> {
     stats2d_corr(sketch)
 }
 
 #[pg_extern(name = "corr", strict, immutable, parallel_safe)]
-fn stats2d_corr<'a>(summary: StatsSummary2D<'a>) -> Option<f64> {
+fn stats2d_corr(summary: StatsSummary2D) -> Option<f64> {
     summary.to_internal().corr()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_intercept<'a>(
-    sketch: StatsSummary2D<'a>,
-    _accessor: AccessorIntercept<'a>,
+pub fn arrow_stats2d_intercept(
+    sketch: StatsSummary2D,
+    _accessor: AccessorIntercept,
 ) -> Option<f64> {
     stats2d_intercept(sketch)
 }
 
 #[pg_extern(name = "intercept", strict, immutable, parallel_safe)]
-fn stats2d_intercept<'a>(summary: StatsSummary2D<'a>) -> Option<f64> {
+fn stats2d_intercept(summary: StatsSummary2D) -> Option<f64> {
     summary.to_internal().intercept()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_x_intercept<'a>(
-    sketch: StatsSummary2D<'a>,
-    _accessor: AccessorXIntercept<'a>,
+pub fn arrow_stats2d_x_intercept(
+    sketch: StatsSummary2D,
+    _accessor: AccessorXIntercept,
 ) -> Option<f64> {
     stats2d_x_intercept(sketch)
 }
 
 #[pg_extern(name = "x_intercept", strict, immutable, parallel_safe)]
-fn stats2d_x_intercept<'a>(summary: StatsSummary2D<'a>) -> Option<f64> {
+fn stats2d_x_intercept(summary: StatsSummary2D) -> Option<f64> {
     summary.to_internal().x_intercept()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_determination_coeff<'a>(
-    sketch: StatsSummary2D<'a>,
-    _accessor: AccessorDeterminationCoeff<'a>,
+pub fn arrow_stats2d_determination_coeff(
+    sketch: StatsSummary2D,
+    _accessor: AccessorDeterminationCoeff,
 ) -> Option<f64> {
     stats2d_determination_coeff(sketch)
 }
 
 #[pg_extern(name = "determination_coeff", strict, immutable, parallel_safe)]
-fn stats2d_determination_coeff<'a>(summary: StatsSummary2D<'a>) -> Option<f64> {
+fn stats2d_determination_coeff(summary: StatsSummary2D) -> Option<f64> {
     summary.to_internal().determination_coeff()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_stats2d_covar<'a>(
-    sketch: Option<StatsSummary2D<'a>>,
-    accessor: AccessorCovar<'a>,
-) -> Option<f64> {
-    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    stats2d_covar(sketch, &method)
+pub fn arrow_stats2d_covar(sketch: Option<StatsSummary2D>, accessor: AccessorCovar) -> Option<f64> {
+    stats2d_covar(sketch, accessor.method.as_str())
 }
 
 #[pg_extern(name = "covariance", immutable, parallel_safe)]
-fn stats2d_covar<'a>(
-    summary: Option<StatsSummary2D<'a>>,
+fn stats2d_covar(
+    summary: Option<StatsSummary2D>,
     method: default!(&str, "'sample'"),
 ) -> Option<f64> {
     match method_kind(method) {
@@ -1389,10 +1310,22 @@ fn stats2d_covar<'a>(
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(
+    Clone, Copy, Debug, serde::Serialize, serde::Deserialize, flat_serialize_macro::FlatSerializable,
+)]
+#[repr(u8)]
 pub enum Method {
-    Population,
-    Sample,
+    Population = 1,
+    Sample = 2,
+}
+
+impl Method {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Population => "population",
+            Sample => "sample",
+        }
+    }
 }
 
 #[track_caller]
@@ -1424,7 +1357,7 @@ pub fn as_method(method: &str) -> Option<Method> {
 //     macro_rules! select_one {
 //         ($client:expr, $stmt:expr, $type:ty) => {
 //             $client
-//                 .update($stmt, None, None)
+//                 .update($stmt, None, &[])
 //                 .first()
 //                 .get_one::<$type>()
 //                 .unwrap()
@@ -1451,7 +1384,7 @@ pub fn as_method(method: &str) -> Option<Method> {
 
 //     // #[pg_test]
 //     // fn test_combine_aggregate(){
-//     //     Spi::connect(|mut client| {
+//     //     Spi::connect_mut(|client| {
 
 //     //     });
 //     // }
@@ -1475,12 +1408,12 @@ mod tests {
 
     #[pg_test]
     fn test_stats_agg_text_io() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
                 .update(
                     "CREATE TABLE test_table (test_x DOUBLE PRECISION, test_y DOUBLE PRECISION)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -1488,7 +1421,7 @@ mod tests {
                 .update(
                     "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1497,14 +1430,14 @@ mod tests {
             assert!(test.is_none());
 
             client
-                .update("INSERT INTO test_table VALUES (10, 10);", None, None)
+                .update("INSERT INTO test_table VALUES (10, 10);", None, &[])
                 .unwrap();
 
             let test = client
                 .update(
                     "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1517,13 +1450,13 @@ mod tests {
             );
 
             client
-                .update("INSERT INTO test_table VALUES (20, 20);", None, None)
+                .update("INSERT INTO test_table VALUES (20, 20);", None, &[])
                 .unwrap();
             let test = client
                 .update(
                     "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1540,16 +1473,16 @@ mod tests {
                     .update(
                         "SELECT skewness_x(stats_agg(test_y, test_x)) FROM test_table",
                         None,
-                        None
+                        &[]
                     )
                     .unwrap()
                     .first()
                     .get_one::<f64>(),
                 client
                     .update(
-                        &format!("SELECT skewness_x('{}'::StatsSummary2D)", expected),
+                        &format!("SELECT skewness_x('{expected}'::StatsSummary2D)"),
                         None,
-                        None
+                        &[]
                     )
                     .unwrap()
                     .first()
@@ -1560,16 +1493,16 @@ mod tests {
                     .update(
                         "SELECT kurtosis_y(stats_agg(test_y, test_x)) FROM test_table",
                         None,
-                        None
+                        &[]
                     )
                     .unwrap()
                     .first()
                     .get_one::<f64>(),
                 client
                     .update(
-                        &format!("SELECT kurtosis_y('{}'::StatsSummary2D)", expected),
+                        &format!("SELECT kurtosis_y('{expected}'::StatsSummary2D)"),
                         None,
-                        None
+                        &[]
                     )
                     .unwrap()
                     .first()
@@ -1580,16 +1513,16 @@ mod tests {
                     .update(
                         "SELECT covariance(stats_agg(test_y, test_x)) FROM test_table",
                         None,
-                        None
+                        &[]
                     )
                     .unwrap()
                     .first()
                     .get_one::<f64>(),
                 client
                     .update(
-                        &format!("SELECT covariance('{}'::StatsSummary2D)", expected),
+                        &format!("SELECT covariance('{expected}'::StatsSummary2D)"),
                         None,
-                        None
+                        &[]
                     )
                     .unwrap()
                     .first()
@@ -1600,9 +1533,9 @@ mod tests {
             assert_eq!(
                 client
                     .update(
-                        &format!("SELECT '{}'::StatsSummary2D::TEXT", expected),
+                        &format!("SELECT '{expected}'::StatsSummary2D::TEXT"),
                         None,
-                        None
+                        &[]
                     )
                     .unwrap()
                     .first()
@@ -1613,13 +1546,13 @@ mod tests {
             );
 
             client
-                .update("INSERT INTO test_table VALUES ('NaN', 30);", None, None)
+                .update("INSERT INTO test_table VALUES ('NaN', 30);", None, &[])
                 .unwrap();
             let test = client
                 .update(
                     "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1629,13 +1562,13 @@ mod tests {
             assert_eq!(test, "(version:1,n:3,sx:NaN,sx2:NaN,sx3:NaN,sx4:NaN,sy:60,sy2:200,sy3:0,sy4:20000,sxy:NaN)");
 
             client
-                .update("INSERT INTO test_table VALUES (40, 'Inf');", None, None)
+                .update("INSERT INTO test_table VALUES (40, 'Inf');", None, &[])
                 .unwrap();
             let test = client
                 .update(
                     "SELECT stats_agg(test_y, test_x)::TEXT FROM test_table",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1692,14 +1625,14 @@ mod tests {
         x_values: Vec<f64>,
         y_values: Vec<f64>,
         seed: u64,
-        gen: SmallRng,
+        r#gen: SmallRng,
     }
 
     impl TestState {
         pub fn new(runs: usize, values: usize, seed: Option<u64>) -> TestState {
             let seed = match seed {
                 Some(s) => s,
-                None => SmallRng::from_entropy().gen(),
+                None => SmallRng::from_entropy().gen_range(0..u64::MAX),
             };
 
             TestState {
@@ -1709,7 +1642,7 @@ mod tests {
                 x_values: Vec::new(),
                 y_values: Vec::new(),
                 seed,
-                gen: SmallRng::seed_from_u64(seed),
+                r#gen: SmallRng::seed_from_u64(seed),
             }
         }
 
@@ -1720,18 +1653,18 @@ mod tests {
 
             // We'll cluster the exponential components of the random values around a particular value
             let exp_base = self
-                .gen
+                .r#gen
                 .gen_range((f64::MIN_EXP / 10) as f64..(f64::MAX_EXP / 10) as f64);
 
             for _ in 0..self.values {
-                let exp = self.gen.gen_range((exp_base - 2.)..=(exp_base + 2.));
-                let mantissa = self.gen.gen_range((1.)..2.);
-                let sign = [-1., 1.].choose(&mut self.gen).unwrap();
+                let exp = self.r#gen.gen_range((exp_base - 2.)..=(exp_base + 2.));
+                let mantissa = self.r#gen.gen_range((1.)..2.);
+                let sign = [-1., 1.].choose(&mut self.r#gen).unwrap();
                 self.x_values.push(sign * mantissa * exp.exp2());
 
-                let exp = self.gen.gen_range((exp_base - 2.)..=(exp_base + 2.));
-                let mantissa = self.gen.gen_range((1.)..2.);
-                let sign = [-1., 1.].choose(&mut self.gen).unwrap();
+                let exp = self.r#gen.gen_range((exp_base - 2.)..=(exp_base + 2.));
+                let mantissa = self.r#gen.gen_range((1.)..2.);
+                let sign = [-1., 1.].choose(&mut self.r#gen).unwrap();
                 self.y_values.push(sign * mantissa * exp.exp2());
             }
         }
@@ -1757,7 +1690,7 @@ mod tests {
         do_moving_agg: bool,
     ) {
         warning!("pg_cmd={} ; tk_cmd={}", pg_cmd, tk_cmd);
-        let pg_row = client.update(pg_cmd, None, None).unwrap().first();
+        let pg_row = client.update(pg_cmd, None, &[]).unwrap().first();
         let (pg_result, pg_moving_agg_result) = if do_moving_agg {
             pg_row.get_two::<f64, f64>().unwrap()
         } else {
@@ -1766,13 +1699,13 @@ mod tests {
         let pg_result = pg_result.unwrap();
 
         let (tk_result, arrow_result, tk_moving_agg_result) = client
-            .update(tk_cmd, None, None)
+            .update(tk_cmd, None, &[])
             .unwrap()
             .first()
             .get_three::<f64, f64, f64>()
             .unwrap();
         let (tk_result, arrow_result) = (tk_result.unwrap(), arrow_result.unwrap());
-        assert_eq!(tk_result, arrow_result, "Arrow didn't match in {}", tk_cmd);
+        assert_eq!(tk_result, arrow_result, "Arrow didn't match in {tk_cmd}");
 
         let result = if allowed_diff == 0.0 {
             pg_result == tk_result
@@ -1811,15 +1744,15 @@ mod tests {
     }
 
     fn pg1d_aggx(agg: &str) -> String {
-        format!("SELECT {agg}(test_x)::float, (SELECT {agg}(test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3)::float FROM test_table", agg = agg)
+        format!("SELECT {agg}(test_x)::float, (SELECT {agg}(test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3)::float FROM test_table")
     }
 
     fn pg1d_aggy(agg: &str) -> String {
-        format!("SELECT {agg}(test_y), (SELECT {agg}(test_y) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3) FROM test_table", agg = agg)
+        format!("SELECT {agg}(test_y), (SELECT {agg}(test_y) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3) FROM test_table")
     }
 
     fn pg2d_agg(agg: &str) -> String {
-        format!("SELECT {agg}(test_y, test_x)::float, (SELECT {agg}(test_y, test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3)::float FROM test_table", agg = agg)
+        format!("SELECT {agg}(test_y, test_x)::float, (SELECT {agg}(test_y, test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3)::float FROM test_table")
     }
 
     fn tk1d_agg(agg: &str) -> String {
@@ -1828,8 +1761,7 @@ mod tests {
             {agg}(stats_agg(test_x))::float, \
             (stats_agg(test_x)->{agg}())::float, \
             {agg}((SELECT stats_agg(test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3))::float \
-        FROM test_table",
-            agg = agg
+        FROM test_table"
         )
     }
 
@@ -1839,9 +1771,7 @@ mod tests {
             {agg}(stats_agg(test_x), '{arg}'), \
             stats_agg(test_x)->{agg}('{arg}'), \
             {agg}((SELECT stats_agg(test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3), '{arg}') \
-        FROM test_table",
-            agg = agg,
-            arg = arg
+        FROM test_table"
         )
     }
 
@@ -1851,8 +1781,7 @@ mod tests {
             {agg}(stats_agg(test_y, test_x))::float, \
             (stats_agg(test_y, test_x)->{agg}())::float, \
             {agg}((SELECT stats_agg(test_y, test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3))::float \
-        FROM test_table",
-            agg = agg
+        FROM test_table"
         )
     }
 
@@ -1862,27 +1791,25 @@ mod tests {
             {agg}(stats_agg(test_y, test_x), '{arg}'), \
             stats_agg(test_y, test_x)->{agg}('{arg}'), \
             {agg}((SELECT stats_agg(test_y, test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3), '{arg}') \
-        FROM test_table",
-            agg = agg,
-            arg = arg
+        FROM test_table"
         )
     }
 
     fn pg_moment_pop_query(moment: i32, column: &str) -> String {
-        format!("select sum(({} - a.avg)^{}) / count({}) / (stddev_pop({})^{}) from test_table, (select avg({}) from test_table) a", column, moment, column, column, moment, column)
+        format!("select sum(({column} - a.avg)^{moment}) / count({column}) / (stddev_pop({column})^{moment}) from test_table, (select avg({column}) from test_table) a")
     }
 
     fn pg_moment_samp_query(moment: i32, column: &str) -> String {
-        format!("select sum(({} - a.avg)^{}) / (count({}) - 1) / (stddev_samp({})^{}) from test_table, (select avg({}) from test_table) a", column, moment, column, column, moment, column)
+        format!("select sum(({column} - a.avg)^{moment}) / (count({column}) - 1) / (stddev_samp({column})^{moment}) from test_table, (select avg({column}) from test_table) a")
     }
 
     fn test_aggs(state: &mut TestState) {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
                 .update(
                     "CREATE TABLE test_table (test_x DOUBLE PRECISION, test_y DOUBLE PRECISION)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -1904,7 +1831,7 @@ mod tests {
                             .trim_end_matches(',')
                     ),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -1917,7 +1844,7 @@ mod tests {
 
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggx("avg"),
                 &tk1d_agg("average"),
                 NONE,
@@ -1925,7 +1852,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggx("sum"),
                 &tk1d_agg("sum"),
                 NONE,
@@ -1933,7 +1860,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggx("count"),
                 &tk1d_agg("num_vals"),
                 NONE,
@@ -1941,7 +1868,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggx("stddev"),
                 &tk1d_agg("stddev"),
                 EPS2,
@@ -1949,7 +1876,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggx("stddev_pop"),
                 &tk1d_agg_arg("stddev", "population"),
                 EPS2,
@@ -1957,7 +1884,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggx("stddev_samp"),
                 &tk1d_agg_arg("stddev", "sample"),
                 EPS2,
@@ -1965,7 +1892,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggx("variance"),
                 &tk1d_agg("variance"),
                 EPS3,
@@ -1973,7 +1900,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggx("var_pop"),
                 &tk1d_agg_arg("variance", "population"),
                 EPS3,
@@ -1981,7 +1908,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggx("var_samp"),
                 &tk1d_agg_arg("variance", "sample"),
                 EPS3,
@@ -1990,7 +1917,7 @@ mod tests {
 
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg2d_agg("regr_avgx"),
                 &tk2d_agg("average_x"),
                 NONE,
@@ -1998,7 +1925,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg2d_agg("regr_avgy"),
                 &tk2d_agg("average_y"),
                 NONE,
@@ -2006,7 +1933,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggx("sum"),
                 &tk2d_agg("sum_x"),
                 NONE,
@@ -2014,7 +1941,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggy("sum"),
                 &tk2d_agg("sum_y"),
                 NONE,
@@ -2022,7 +1949,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggx("stddev"),
                 &tk2d_agg("stddev_x"),
                 EPS2,
@@ -2030,7 +1957,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggy("stddev"),
                 &tk2d_agg("stddev_y"),
                 EPS2,
@@ -2038,7 +1965,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggx("stddev_pop"),
                 &tk2d_agg_arg("stddev_x", "population"),
                 EPS2,
@@ -2046,7 +1973,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggy("stddev_pop"),
                 &tk2d_agg_arg("stddev_y", "population"),
                 EPS2,
@@ -2054,7 +1981,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggx("stddev_samp"),
                 &tk2d_agg_arg("stddev_x", "sample"),
                 EPS2,
@@ -2062,7 +1989,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggy("stddev_samp"),
                 &tk2d_agg_arg("stddev_y", "sample"),
                 EPS2,
@@ -2070,7 +1997,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggx("variance"),
                 &tk2d_agg("variance_x"),
                 EPS3,
@@ -2078,7 +2005,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggy("variance"),
                 &tk2d_agg("variance_y"),
                 EPS3,
@@ -2086,7 +2013,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggx("var_pop"),
                 &tk2d_agg_arg("variance_x", "population"),
                 EPS3,
@@ -2094,7 +2021,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggy("var_pop"),
                 &tk2d_agg_arg("variance_y", "population"),
                 EPS3,
@@ -2102,7 +2029,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggx("var_samp"),
                 &tk2d_agg_arg("variance_x", "sample"),
                 EPS3,
@@ -2110,7 +2037,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg1d_aggy("var_samp"),
                 &tk2d_agg_arg("variance_y", "sample"),
                 EPS3,
@@ -2118,7 +2045,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg2d_agg("regr_count"),
                 &tk2d_agg("num_vals"),
                 NONE,
@@ -2127,7 +2054,7 @@ mod tests {
 
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg2d_agg("regr_slope"),
                 &tk2d_agg("slope"),
                 EPS1,
@@ -2135,7 +2062,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg2d_agg("corr"),
                 &tk2d_agg("corr"),
                 EPS1,
@@ -2143,7 +2070,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg2d_agg("regr_intercept"),
                 &tk2d_agg("intercept"),
                 EPS1,
@@ -2154,17 +2081,17 @@ mod tests {
             {
                 let query = tk2d_agg("x_intercept");
                 let (result, arrow_result) = client
-                    .update(&query, None, None)
+                    .update(&query, None, &[])
                     .unwrap()
                     .first()
                     .get_two::<f64, f64>()
                     .unwrap();
-                assert_eq!(result, arrow_result, "Arrow didn't match in {}", query);
+                assert_eq!(result, arrow_result, "Arrow didn't match in {query}");
             }
 
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg2d_agg("regr_r2"),
                 &tk2d_agg("determination_coeff"),
                 EPS1,
@@ -2172,7 +2099,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg2d_agg("covar_pop"),
                 &tk2d_agg_arg("covariance", "population"),
                 BILLIONTH,
@@ -2180,7 +2107,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg2d_agg("covar_samp"),
                 &tk2d_agg_arg("covariance", "sample"),
                 BILLIONTH,
@@ -2190,7 +2117,7 @@ mod tests {
             // Skewness and kurtosis don't have aggregate functions in postgres, but we can compute them
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg_moment_pop_query(3, "test_x"),
                 &tk1d_agg_arg("skewness", "population"),
                 BILLIONTH,
@@ -2198,7 +2125,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg_moment_pop_query(3, "test_x"),
                 &tk2d_agg_arg("skewness_x", "population"),
                 BILLIONTH,
@@ -2206,7 +2133,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg_moment_pop_query(3, "test_y"),
                 &tk2d_agg_arg("skewness_y", "population"),
                 BILLIONTH,
@@ -2214,7 +2141,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg_moment_pop_query(4, "test_x"),
                 &tk1d_agg_arg("kurtosis", "population"),
                 BILLIONTH,
@@ -2222,7 +2149,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg_moment_pop_query(4, "test_x"),
                 &tk2d_agg_arg("kurtosis_x", "population"),
                 BILLIONTH,
@@ -2230,7 +2157,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg_moment_pop_query(4, "test_y"),
                 &tk2d_agg_arg("kurtosis_y", "population"),
                 BILLIONTH,
@@ -2239,7 +2166,7 @@ mod tests {
 
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg_moment_samp_query(3, "test_x"),
                 &tk1d_agg_arg("skewness", "sample"),
                 BILLIONTH,
@@ -2247,7 +2174,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg_moment_samp_query(3, "test_x"),
                 &tk2d_agg_arg("skewness_x", "sample"),
                 BILLIONTH,
@@ -2255,7 +2182,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg_moment_samp_query(3, "test_y"),
                 &tk2d_agg_arg("skewness_y", "sample"),
                 BILLIONTH,
@@ -2263,7 +2190,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg_moment_samp_query(4, "test_x"),
                 &tk1d_agg_arg("kurtosis", "sample"),
                 BILLIONTH,
@@ -2271,7 +2198,7 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg_moment_samp_query(4, "test_x"),
                 &tk2d_agg_arg("kurtosis_x", "sample"),
                 BILLIONTH,
@@ -2279,20 +2206,20 @@ mod tests {
             );
             check_agg_equivalence(
                 state,
-                &mut client,
+                client,
                 &pg_moment_samp_query(4, "test_y"),
                 &tk2d_agg_arg("kurtosis_y", "sample"),
                 BILLIONTH,
                 false,
             );
 
-            client.update("DROP TABLE test_table", None, None).unwrap();
+            client.update("DROP TABLE test_table", None, &[]).unwrap();
         });
     }
 
     #[pg_test]
     fn stats_agg_rolling() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
                 .update(
                     "
@@ -2312,13 +2239,13 @@ INSERT INTO prices (
 );
 ",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
             let mut vals = client.update(
                 "SELECT stddev(data.stats_agg) FROM (SELECT stats_agg(price) OVER (ORDER BY ts RANGE '50 minutes' PRECEDING) FROM prices) data",
-                None, None
+                None, &[]
             ).unwrap();
             assert!(vals.next().unwrap()[1]
                 .value::<f64>()
@@ -2330,7 +2257,7 @@ INSERT INTO prices (
 
             let mut vals = client.update(
                 "SELECT slope(data.stats_agg) FROM (SELECT stats_agg((EXTRACT(minutes FROM ts)), price) OVER (ORDER BY ts RANGE '50 minutes' PRECEDING) FROM prices) data;",
-                None, None
+                None, &[]
             ).unwrap();
             assert!(vals.next().unwrap()[1].value::<f64>().unwrap().is_none()); // trendline is zero initially
             assert!(vals.next().unwrap()[1].value::<f64>().unwrap().is_some());

@@ -88,6 +88,7 @@ use crate::raw::bytea;
 
 #[pg_extern(immutable, parallel_safe, strict)]
 pub fn tdigest_serialize(state: Internal) -> bytea {
+    let mut state = state;
     let state: &mut tdigest::Builder = unsafe { state.get_mut().unwrap() };
     // TODO this macro is really broken
     let hack = state.build();
@@ -185,6 +186,7 @@ impl<'input> TDigest<'input> {
 fn tdigest_final(state: Internal, fcinfo: pg_sys::FunctionCallInfo) -> Option<TDigest<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
+            let mut state = state;
             let state: &mut tdigest::Builder = match state.get_mut() {
                 None => return None,
                 Some(state) => state,
@@ -335,7 +337,7 @@ extension_sql!(
 #[opname(->)]
 pub fn arrow_tdigest_approx_percentile<'a>(
     sketch: TDigest<'a>,
-    accessor: AccessorApproxPercentile<'a>,
+    accessor: AccessorApproxPercentile,
 ) -> f64 {
     tdigest_quantile(accessor.percentile, sketch)
 }
@@ -350,7 +352,7 @@ pub fn tdigest_quantile<'a>(quantile: f64, digest: TDigest<'a>) -> f64 {
 #[opname(->)]
 pub fn arrow_tdigest_approx_rank<'a>(
     sketch: TDigest<'a>,
-    accessor: AccessorApproxPercentileRank<'a>,
+    accessor: AccessorApproxPercentileRank,
 ) -> f64 {
     tdigest_quantile_at_value(accessor.value, sketch)
 }
@@ -365,7 +367,7 @@ pub fn tdigest_quantile_at_value<'a>(value: f64, digest: TDigest<'a>) -> f64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_tdigest_num_vals<'a>(sketch: TDigest<'a>, _accessor: AccessorNumVals<'a>) -> f64 {
+pub fn arrow_tdigest_num_vals<'a>(sketch: TDigest<'a>, _accessor: AccessorNumVals) -> f64 {
     tdigest_count(sketch)
 }
 
@@ -377,7 +379,7 @@ pub fn tdigest_count<'a>(digest: TDigest<'a>) -> f64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_tdigest_min<'a>(sketch: TDigest<'a>, _accessor: AccessorMinVal<'a>) -> f64 {
+pub fn arrow_tdigest_min<'a>(sketch: TDigest<'a>, _accessor: AccessorMinVal) -> f64 {
     tdigest_min(sketch)
 }
 
@@ -389,7 +391,7 @@ pub fn tdigest_min<'a>(digest: TDigest<'a>) -> f64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_tdigest_max<'a>(sketch: TDigest<'a>, _accessor: AccessorMaxVal<'a>) -> f64 {
+pub fn arrow_tdigest_max<'a>(sketch: TDigest<'a>, _accessor: AccessorMaxVal) -> f64 {
     tdigest_max(sketch)
 }
 
@@ -401,7 +403,7 @@ pub fn tdigest_max<'a>(digest: TDigest<'a>) -> f64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_tdigest_mean<'a>(sketch: TDigest<'a>, _accessor: AccessorMean<'a>) -> f64 {
+pub fn arrow_tdigest_mean<'a>(sketch: TDigest<'a>, _accessor: AccessorMean) -> f64 {
     tdigest_mean(sketch)
 }
 
@@ -433,10 +435,7 @@ mod tests {
     fn apx_eql(value: f64, expected: f64, error: f64) {
         assert!(
             (value - expected).abs() < error,
-            "Float value {} differs from expected {} by more than {}",
-            value,
-            expected,
-            error
+            "Float value {value} differs from expected {expected} by more than {error}"
         );
     }
 
@@ -447,20 +446,20 @@ mod tests {
 
     #[pg_test]
     fn test_tdigest_aggregate() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
-                .update("CREATE TABLE test (data DOUBLE PRECISION)", None, None)
+                .update("CREATE TABLE test (data DOUBLE PRECISION)", None, &[])
                 .unwrap();
             client
                 .update(
                     "INSERT INTO test SELECT generate_series(0.01, 100, 0.01)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
             let sanity = client
-                .update("SELECT COUNT(*) FROM test", None, None)
+                .update("SELECT COUNT(*) FROM test", None, &[])
                 .unwrap()
                 .first()
                 .get_one::<i64>()
@@ -472,7 +471,7 @@ mod tests {
                     "CREATE VIEW digest AS \
                 SELECT tdigest(100, data) FROM test",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -484,7 +483,7 @@ mod tests {
                     num_vals(tdigest) \
                     FROM digest",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -503,7 +502,7 @@ mod tests {
                     tdigest->num_vals() \
                     FROM digest",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -521,7 +520,7 @@ mod tests {
                     tdigest -> mean()
                     FROM digest",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -539,13 +538,12 @@ mod tests {
                     .update(
                         &format!(
                             "SELECT
-                            approx_percentile({}, tdigest), \
-                            approx_percentile_rank({}, tdigest) \
-                            FROM digest",
-                            quantile, value
+                            approx_percentile({quantile}, tdigest), \
+                            approx_percentile_rank({value}, tdigest) \
+                            FROM digest"
                         ),
                         None,
-                        None,
+                        &[],
                     )
                     .unwrap()
                     .first()
@@ -564,13 +562,12 @@ mod tests {
                     .update(
                         &format!(
                             "SELECT
-                            tdigest->approx_percentile({}), \
-                            tdigest->approx_percentile_rank({}) \
-                            FROM digest",
-                            quantile, value
+                            tdigest->approx_percentile({quantile}), \
+                            tdigest->approx_percentile_rank({value}) \
+                            FROM digest"
                         ),
                         None,
-                        None,
+                        &[],
                     )
                     .unwrap()
                     .first()
@@ -584,7 +581,7 @@ mod tests {
 
     #[pg_test]
     fn test_tdigest_small_count() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let estimate = client
                 .update(
                     "SELECT \
@@ -593,7 +590,7 @@ mod tests {
                         tdigest(100, data)) \
                     FROM generate_series(1, 100) data;",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -619,14 +616,14 @@ mod tests {
 
     #[pg_test]
     fn test_tdigest_io() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let output = client
                 .update(
                     "SELECT \
                 tdigest(100, data)::text \
                 FROM generate_series(1, 100) data;",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -639,9 +636,9 @@ mod tests {
 
             let estimate = client
                 .update(
-                    &format!("SELECT approx_percentile(0.90, '{}'::tdigest)", expected),
+                    &format!("SELECT approx_percentile(0.90, '{expected}'::tdigest)"),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -685,18 +682,18 @@ mod tests {
 
     #[pg_test]
     fn test_tdigest_compound_agg() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
                 .update(
                     "CREATE TABLE new_test (device INTEGER, value DOUBLE PRECISION)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
-            client.update("INSERT INTO new_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None).unwrap();
+            client.update("INSERT INTO new_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, &[]).unwrap();
 
             let sanity = client
-                .update("SELECT COUNT(*) FROM new_test", None, None)
+                .update("SELECT COUNT(*) FROM new_test", None, &[])
                 .unwrap()
                 .first()
                 .get_one::<i64>()
@@ -710,7 +707,7 @@ mod tests {
                 FROM new_test \
                 GROUP BY device",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -720,7 +717,7 @@ mod tests {
                 SELECT tdigest(tdigest) \
                 FROM digests",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -730,7 +727,7 @@ mod tests {
                 SELECT tdigest(20, value) \
                 FROM new_test",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -740,7 +737,7 @@ mod tests {
                     approx_percentile(0.9, tdigest) \
                     FROM base",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -753,7 +750,7 @@ mod tests {
                 approx_percentile(0.9, tdigest) \
                     FROM composite",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()

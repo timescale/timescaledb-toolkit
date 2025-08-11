@@ -64,15 +64,15 @@ mod tests {
 
     #[pg_test]
     fn test_pipeline_filter_lambda() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -80,14 +80,14 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {sp}"), None, &[])
                 .unwrap();
 
             client
                 .update(
                     "CREATE TABLE series(time timestamptz, value double precision)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             client
@@ -100,7 +100,7 @@ mod tests {
                     ('2020-01-02 UTC'::TIMESTAMPTZ, 15.0), \
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30.0)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -108,7 +108,7 @@ mod tests {
                 .update(
                     "SELECT (timevector(time, value))::TEXT FROM series",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -128,7 +128,7 @@ mod tests {
             let val = client.update(
                 "SELECT (timevector(time, value) -> filter($$ $time != '2020-01-05't and ($value = 10 or $value = 20) $$))::TEXT FROM series",
                 None,
-                None
+                &[]
             )
                 .unwrap().first()
                 .get_one::<String>().unwrap();

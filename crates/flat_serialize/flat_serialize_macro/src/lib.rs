@@ -20,7 +20,7 @@ pub fn flat_serialize(input: TokenStream) -> TokenStream {
         FlatSerialize::Enum(input) => flat_serialize_enum(input),
     };
     if cfg!(feature = "print-generated") {
-        println!("{}", expanded);
+        println!("{expanded}");
     }
     expanded.into()
 }
@@ -614,7 +614,7 @@ impl FlatSerializeEnum {
             let variant = &v.body.ident;
 
             let break_label =
-                syn::Lifetime::new(&format!("'tryref_{}", i), proc_macro2::Span::call_site());
+                syn::Lifetime::new(&format!("'tryref_{i}"), proc_macro2::Span::call_site());
 
             let TryRefBody {
                 vars,

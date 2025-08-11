@@ -30,6 +30,9 @@ jobs:
       - name: Run release-build-scripts job
         # Repeating the default here for 'pull_request'.  Keep in sync with above.
         run: |
+          echo "toolkit-commit: ${{ inputs.toolkit-commit || github.event.pull_request.head.sha }}"
+          echo "builder: ${{ inputs.builder-commit || 'main' }}"
+          echo "tag-base: ${{ inputs.tag-base || 'timescaledev/toolkit-builder-test' }}"
           gh workflow run toolkit-image.yml \
                 -R timescale/release-build-scripts \
                 -r ${{ inputs.builder-commit || 'main' }} \

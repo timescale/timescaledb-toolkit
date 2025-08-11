@@ -22,7 +22,7 @@ impl_flat_serializable!(PgProcId);
 
 // FIXME upstream to pgrx
 // TODO use this or regprocedureout()?
-extern "C" {
+unsafe extern "C" {
     pub fn format_procedure_qualified(procedure_oid: pg_sys::Oid) -> *const c_char;
 }
 
@@ -51,7 +51,7 @@ impl<'de> Deserialize<'de> for PgProcId {
         // FIXME pgrx wraps all functions in rust wrappers, which makes them
         //       uncallable with DirectFunctionCall(). Is there a way to
         //       export both?
-        extern "C" {
+        unsafe extern "C-unwind" {
             #[allow(improper_ctypes)]
             fn regprocedurein(fcinfo: pg_sys::FunctionCallInfo) -> Datum;
         }

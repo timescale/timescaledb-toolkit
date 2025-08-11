@@ -146,15 +146,15 @@ mod tests {
 
     #[pg_test]
     fn test_pipeline_fill_to() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -162,14 +162,14 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {sp}"), None, &[])
                 .unwrap();
 
             client
                 .update(
                     "CREATE TABLE series(time timestamptz, value double precision)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             client
@@ -182,14 +182,14 @@ mod tests {
                     ('2020-01-06 UTC'::TIMESTAMPTZ, 30),   \
                     ('2020-01-09 UTC'::TIMESTAMPTZ, 40.0)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
             let val = client.update(
                 "SELECT (timevector(time, value) -> fill_to('24 hours', 'locf'))::TEXT FROM series",
                 None,
-                None
+                &[]
             )
                 .unwrap().first()
                 .get_one::<String>().unwrap();
@@ -211,7 +211,7 @@ mod tests {
             let val = client.update(
                 "SELECT (timevector(time, value) -> fill_to('24 hours', 'linear'))::TEXT FROM series",
                 None,
-                None
+                &[]
             )
                 .unwrap().first()
                 .get_one::<String>().unwrap();
@@ -233,7 +233,7 @@ mod tests {
             let val = client.update(
                 "SELECT (timevector(time, value) -> fill_to('24 hours', 'nearest'))::TEXT FROM series",
                 None,
-                None
+                &[]
             )
                 .unwrap().first()
                 .get_one::<String>().unwrap();
@@ -255,7 +255,7 @@ mod tests {
             let val = client.update(
                 "SELECT (timevector(time, value) -> fill_to('10 hours', 'nearest'))::TEXT FROM series",
                 None,
-                None
+                &[]
             )
                 .unwrap().first()
                 .get_one::<String>().unwrap();

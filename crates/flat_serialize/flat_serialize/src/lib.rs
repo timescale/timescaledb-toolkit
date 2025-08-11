@@ -658,7 +658,7 @@ unsafe fn fill_slice_from_iter<
         filled += 1;
     }
     if filled < count {
-        panic!("Not enough elements. Expected {} found {}", count, filled)
+        panic!("Not enough elements. Expected {count} found {filled}")
     }
     input
 }
@@ -678,7 +678,7 @@ fn len_of_iterable<'i, T: FlatSerializable<'i>, V: ValOrRef<T>, I: Iterator<Item
         }
     }
     if filled < count {
-        panic!("Not enough elements. Expected {} found {}", count, filled)
+        panic!("Not enough elements. Expected {count} found {filled}")
     }
     len
 }

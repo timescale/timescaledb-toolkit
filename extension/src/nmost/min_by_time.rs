@@ -18,7 +18,7 @@ pg_type! {
         data: DatumStore<'input>,
     }
 }
-ron_inout_funcs!(MinByTimes);
+ron_inout_funcs!(MinByTimes<'input>);
 
 impl<'input> From<MinByTimeTransType> for MinByTimes<'input> {
     fn from(item: MinByTimeTransType) -> Self {
@@ -133,13 +133,13 @@ mod tests {
 
     #[pg_test]
     fn min_by_time_correctness() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             client
                 .update(
                     "CREATE TABLE data(val TIMESTAMPTZ, category INT)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -149,7 +149,7 @@ mod tests {
                 client.update(
                     &format!("INSERT INTO data VALUES ('2020-1-1 UTC'::timestamptz + {} * '1d'::interval, {})", i, i % 4),
                     None,
-                    None,
+                    &[]
                 ).unwrap();
             }
 
@@ -158,7 +158,7 @@ mod tests {
                 .update(
                     "SELECT into_values(min_n_by(val, data, 3), NULL::data)::TEXT from data",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             assert_eq!(
@@ -180,7 +180,7 @@ mod tests {
                 client.update(
                     "WITH aggs as (SELECT category, min_n_by(val, data, 5) as agg from data GROUP BY category)
                         SELECT into_values(rollup(agg), NULL::data)::TEXT FROM aggs",
-                        None, None,
+                        None, &[],
                     ).unwrap();
             assert_eq!(
                 result.next().unwrap()[1].value().unwrap(),

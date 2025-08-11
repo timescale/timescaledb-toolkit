@@ -87,13 +87,13 @@ mod tests {
 
     #[pg_test]
     fn test_anything_in_experimental_and_returns_first() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let output = client
                 .update(
                     "SELECT toolkit_experimental.anything(val) \
                 FROM (VALUES ('foo'), ('bar'), ('baz')) as v(val)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -105,8 +105,8 @@ mod tests {
 
     #[pg_test]
     fn test_anything_has_correct_fn_names_and_def() {
-        Spi::connect(|mut client| {
-            let spec = get_aggregate_spec(&mut client, "anything");
+        Spi::connect_mut(|client| {
+            let spec = get_aggregate_spec(client, "anything");
             // output is
             //   fn kind (`a`), volatility, parallel-safety, num args, final fn modify (is this right?)
             //   transition type (`internal`)
@@ -133,8 +133,8 @@ mod tests {
 
     #[pg_test]
     fn test_cagg_anything_has_correct_fn_names_and_def() {
-        Spi::connect(|mut client| {
-            let spec = get_aggregate_spec(&mut client, "cagg_anything");
+        Spi::connect_mut(|client| {
+            let spec = get_aggregate_spec(client, "cagg_anything");
             // output is
             //   fn kind (`a`), volatility, parallel-safety, num args, final fn modify (is this right?)
             //   transition type (`internal`)
@@ -161,8 +161,8 @@ mod tests {
 
     #[pg_test]
     fn test_parallel_anything_has_correct_fn_names_and_def() {
-        Spi::connect(|mut client| {
-            let spec = get_aggregate_spec(&mut client, "parallel_anything");
+        Spi::connect_mut(|client| {
+            let spec = get_aggregate_spec(client, "parallel_anything");
             // output is
             //   fn kind (`a`), volatility, parallel-safety, num args, final fn modify (is this right?)
             //   transition type (`internal`)
@@ -208,12 +208,11 @@ mod tests {
                 aggdeserialfn,
                 aggcombinefn)::TEXT
             FROM pg_proc, pg_aggregate
-            WHERE proname = '{}'
-              AND pg_proc.oid = aggfnoid;"#,
-                    aggregate_name
+            WHERE proname = '{aggregate_name}'
+              AND pg_proc.oid = aggfnoid;"#
                 ),
                 None,
-                None,
+                &[],
             )
             .unwrap()
             .first()

@@ -21,7 +21,7 @@ pub fn aggregate(_attr: TokenStream, item: TokenStream) -> TokenStream {
     let input = parse_macro_input!(item as Aggregate);
     let expanded = expand(input);
     if cfg!(feature = "print-generated") {
-        println!("{}", expanded);
+        println!("{expanded}");
     }
     expanded.into()
 }
@@ -423,29 +423,27 @@ fn expand(agg: Aggregate) -> TokenStream2 {
     ];
 
     let schema_qualifier = match &schema {
-        Some(schema) => format!("{}.", schema),
+        Some(schema) => format!("{schema}."),
         None => String::new(),
     };
-    let mut create = format!("\nCREATE AGGREGATE {}{} (", schema_qualifier, name);
+    let mut create = format!("\nCREATE AGGREGATE {schema_qualifier}{name} (");
     for (i, (name, arg)) in transition_fn.sql_args().enumerate() {
         if i != 0 {
             let _ = write!(&mut create, ", ");
         }
         if let Some(name) = name {
-            let _ = write!(&mut create, "{} ", name);
+            let _ = write!(&mut create, "{name} ");
         }
-        let _ = write!(&mut create, "{}", arg);
+        let _ = write!(&mut create, "{arg}");
     }
+    let transition_fn_ident = transition_fn.outer_ident(&name);
+    let final_fn_ident = final_fn.outer_ident(&name);
     let _ = write!(
         &mut create,
         ") (\n    \
             stype = internal,\n    \
-            sfunc = {}{},\n    \
-            finalfunc = {}{}",
-        schema_qualifier,
-        transition_fn.outer_ident(&name),
-        schema_qualifier,
-        final_fn.outer_ident(&name),
+            sfunc = {schema_qualifier}{transition_fn_ident},\n    \
+            finalfunc = {schema_qualifier}{final_fn_ident}"
     );
 
     let parallel_safe = parallel_safe.map(|p| {
@@ -558,7 +556,7 @@ fn expand(agg: Aggregate) -> TokenStream2 {
 
     let _ = write!(&mut create, "\n);\n");
 
-    let extension_sql_name = format!("{}_extension_sql", name);
+    let extension_sql_name = format!("{name}_extension_sql");
 
     quote! {
         pub mod #name {
@@ -607,7 +605,7 @@ impl AggregateFn {
         } = self;
 
         let schema = schema.as_ref().map(|s| {
-            let s = format!("{}", s);
+            let s = format!("{s}");
             quote!(, schema = #s)
         });
 
@@ -719,7 +717,7 @@ impl AggregateFn {
         } = self;
 
         let schema = schema.as_ref().map(|s| {
-            let s = format!("{}", s);
+            let s = format!("{s}");
             quote!(, schema = #s)
         });
 
@@ -776,7 +774,7 @@ impl AggregateFn {
         } = self;
 
         let schema = schema.as_ref().map(|s| {
-            let s = format!("{}", s);
+            let s = format!("{s}");
             quote!(, schema = #s)
         });
 
@@ -835,7 +833,7 @@ impl AggregateFn {
         } = self;
 
         let schema = schema.as_ref().map(|s| {
-            let s = format!("{}", s);
+            let s = format!("{s}");
             quote!(, schema = #s)
         });
 
@@ -893,7 +891,7 @@ impl AggregateFn {
         } = self;
 
         let schema = schema.as_ref().map(|s| {
-            let s = format!("{}", s);
+            let s = format!("{s}");
             quote!(, schema = #s)
         });
 

@@ -129,7 +129,7 @@ fn tag_version(version: &str) -> String {
         return version.into();
     }
 
-    format!("{}.0", version)
+    format!("{version}.0")
 }
 
 //-----------------------//
@@ -137,7 +137,7 @@ fn tag_version(version: &str) -> String {
 //-----------------------//
 
 fn version_is_installed(pg_config: &str, version: &str) -> xshell::Result<bool> {
-    let binary_name = format!("timescaledb_toolkit-{}.so", version);
+    let binary_name = format!("timescaledb_toolkit-{version}.so");
     let bin_dir = cmd!("{pg_config} --pkglibdir").read()?;
     let installed_files = read_dir(bin_dir)?;
     let installed = installed_files.into_iter().any(|file| {

@@ -17,13 +17,13 @@ type MaxIntTransType = NMostTransState<Reverse<i64>>;
 
 pg_type! {
     #[derive(Debug)]
-    struct MaxInts <'input> {
+    struct MaxInts<'input> {
         capacity : u32,
         elements : u32,
         values : [i64; self.elements],
     }
 }
-ron_inout_funcs!(MaxInts);
+ron_inout_funcs!(MaxInts<'input>);
 
 impl<'input> From<&mut MaxIntTransType> for MaxInts<'input> {
     fn from(item: &mut MaxIntTransType) -> Self {
@@ -118,18 +118,15 @@ pub fn max_n_int_to_values(agg: MaxInts<'static>) -> SetOfIterator<'static, i64>
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_max_int_into_values<'a>(
+pub fn arrow_max_int_into_values(
     agg: MaxInts<'static>,
-    _accessor: AccessorIntoValues<'a>,
-) -> SetOfIterator<'a, i64> {
+    _accessor: AccessorIntoValues,
+) -> SetOfIterator<'static, i64> {
     max_n_int_to_values(agg)
 }
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_max_int_into_array<'a>(
-    agg: MaxInts<'static>,
-    _accessor: AccessorIntoArray<'a>,
-) -> Vec<i64> {
+pub fn arrow_max_int_into_array(agg: MaxInts<'static>, _accessor: AccessorIntoArray) -> Vec<i64> {
     max_n_int_to_array(agg)
 }
 
@@ -189,10 +186,10 @@ mod tests {
 
     #[pg_test]
     fn max_int_correctness() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             client
-                .update("CREATE TABLE data(val INT8, category INT)", None, None)
+                .update("CREATE TABLE data(val INT8, category INT)", None, &[])
                 .unwrap();
 
             for i in 0..100 {
@@ -202,21 +199,21 @@ mod tests {
                     .update(
                         &format!("INSERT INTO data VALUES ({}, {})", i, i % 4),
                         None,
-                        None,
+                        &[],
                     )
                     .unwrap();
             }
 
             // Test into_array
             let result = client
-                .update("SELECT into_array(max_n(val, 5)) from data", None, None)
+                .update("SELECT into_array(max_n(val, 5)) from data", None, &[])
                 .unwrap()
                 .first()
                 .get_one::<Vec<i64>>()
                 .unwrap();
             assert_eq!(result.unwrap(), vec![99, 98, 97, 96, 95]);
             let result = client
-                .update("SELECT max_n(val, 5)->into_array() from data", None, None)
+                .update("SELECT max_n(val, 5)->into_array() from data", None, &[])
                 .unwrap()
                 .first()
                 .get_one::<Vec<i64>>()
@@ -228,7 +225,7 @@ mod tests {
                 .update(
                     "SELECT into_values(max_n(val, 3))::TEXT from data",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("99"));
@@ -239,7 +236,7 @@ mod tests {
                 .update(
                     "SELECT (max_n(val, 3)->into_values())::TEXT from data",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("99"));
@@ -252,7 +249,7 @@ mod tests {
                 client.update(
                     "WITH aggs as (SELECT category, max_n(val, 5) as agg from data GROUP BY category)
                         SELECT into_array(rollup(agg)) FROM aggs",
-                        None, None,
+                        None, &[],
                     ).unwrap().first().get_one::<Vec<i64>>().unwrap();
             assert_eq!(result.unwrap(), vec![99, 98, 97, 96, 95]);
         })

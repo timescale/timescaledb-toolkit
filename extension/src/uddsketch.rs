@@ -570,7 +570,7 @@ extension_sql!(
 #[opname(->)]
 pub fn arrow_uddsketch_approx_percentile<'a>(
     sketch: UddSketch<'a>,
-    accessor: AccessorApproxPercentile<'a>,
+    accessor: AccessorApproxPercentile,
 ) -> f64 {
     uddsketch_approx_percentile(accessor.percentile, sketch)
 }
@@ -591,9 +591,9 @@ pub fn uddsketch_approx_percentile<'a>(percentile: f64, sketch: UddSketch<'a>) -
 #[opname(->)]
 pub fn arrow_uddsketch_approx_percentile_array<'a>(
     sketch: UddSketch<'a>,
-    percentiles: AccessorPercentileArray<'a>,
+    percentiles: AccessorPercentileArray,
 ) -> Vec<f64> {
-    approx_percentile_slice(percentiles.percentile.as_slice(), sketch)
+    approx_percentile_slice(&percentiles.percentile[..percentiles.len as usize], sketch)
 }
 
 // Approximate the value at the given approx_percentile (0.0-1.0) for each entry in an array
@@ -626,7 +626,7 @@ fn approx_percentile_slice<'a, 'b>(
 #[opname(->)]
 pub fn arrow_uddsketch_approx_rank<'a>(
     sketch: UddSketch<'a>,
-    accessor: AccessorApproxPercentileRank<'a>,
+    accessor: AccessorApproxPercentileRank,
 ) -> f64 {
     uddsketch_approx_percentile_rank(accessor.value, sketch)
 }
@@ -644,7 +644,7 @@ pub fn uddsketch_approx_percentile_rank<'a>(value: f64, sketch: UddSketch<'a>) -
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_uddsketch_num_vals<'a>(sketch: UddSketch<'a>, _accessor: AccessorNumVals<'a>) -> f64 {
+pub fn arrow_uddsketch_num_vals<'a>(sketch: UddSketch<'a>, _accessor: AccessorNumVals) -> f64 {
     uddsketch_num_vals(sketch)
 }
 
@@ -656,7 +656,7 @@ pub fn uddsketch_num_vals<'a>(sketch: UddSketch<'a>) -> f64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_uddsketch_mean<'a>(sketch: UddSketch<'a>, _accessor: AccessorMean<'a>) -> f64 {
+pub fn arrow_uddsketch_mean<'a>(sketch: UddSketch<'a>, _accessor: AccessorMean) -> f64 {
     uddsketch_mean(sketch)
 }
 
@@ -679,7 +679,7 @@ pub fn uddsketch_sum(sketch: UddSketch<'_>) -> f64 {
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_uddsketch_error<'a>(sketch: UddSketch<'a>, _accessor: AccessorError<'a>) -> f64 {
+pub fn arrow_uddsketch_error<'a>(sketch: UddSketch<'a>, _accessor: AccessorError) -> f64 {
     uddsketch_error(sketch)
 }
 
@@ -700,10 +700,7 @@ mod tests {
     fn apx_eql(value: f64, expected: f64, error: f64) {
         assert!(
             (value - expected).abs() < error,
-            "Float value {} differs from expected {} by more than {}",
-            value,
-            expected,
-            error
+            "Float value {value} differs from expected {expected} by more than {error}"
         );
     }
 
@@ -714,20 +711,20 @@ mod tests {
 
     #[pg_test]
     fn test_aggregate() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
-                .update("CREATE TABLE test (data DOUBLE PRECISION)", None, None)
+                .update("CREATE TABLE test (data DOUBLE PRECISION)", None, &[])
                 .unwrap();
             client
                 .update(
                     "INSERT INTO test SELECT generate_series(0.01, 100, 0.01)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
             let sanity = client
-                .update("SELECT COUNT(*) FROM test", None, None)
+                .update("SELECT COUNT(*) FROM test", None, &[])
                 .unwrap()
                 .first()
                 .get_one::<i64>()
@@ -740,12 +737,12 @@ mod tests {
                 SELECT uddsketch(100, 0.05, data) \
                 FROM test",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
             let sanity = client
-                .update("SELECT COUNT(*) FROM sketch", None, None)
+                .update("SELECT COUNT(*) FROM sketch", None, &[])
                 .unwrap()
                 .first()
                 .get_one::<i64>()
@@ -759,7 +756,7 @@ mod tests {
                     num_vals(uddsketch) \
                     FROM sketch",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -776,7 +773,7 @@ mod tests {
                     uddsketch -> num_vals() \
                     FROM sketch",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -792,7 +789,7 @@ mod tests {
                     uddsketch -> error() \
                     FROM sketch",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -810,13 +807,12 @@ mod tests {
                     .update(
                         &format!(
                             "SELECT \
-                                approx_percentile({}, uddsketch), \
-                                approx_percentile_rank( {}, uddsketch) \
-                            FROM sketch",
-                            approx_percentile, value
+                                approx_percentile({approx_percentile}, uddsketch), \
+                                approx_percentile_rank({value}, uddsketch) \
+                            FROM sketch"
                         ),
                         None,
-                        None,
+                        &[],
                     )
                     .unwrap()
                     .first()
@@ -835,13 +831,12 @@ mod tests {
                     .update(
                         &format!(
                             "SELECT \
-                                uddsketch->approx_percentile({}), \
-                                uddsketch->approx_percentile_rank({}) \
-                            FROM sketch",
-                            approx_percentile, value
+                                uddsketch->approx_percentile({approx_percentile}), \
+                                uddsketch->approx_percentile_rank({value}) \
+                            FROM sketch"
                         ),
                         None,
-                        None,
+                        &[],
                     )
                     .unwrap()
                     .first()
@@ -855,18 +850,18 @@ mod tests {
 
     #[pg_test]
     fn test_compound_agg() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
                 .update(
                     "CREATE TABLE new_test (device INTEGER, value DOUBLE PRECISION)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
-            client.update("INSERT INTO new_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None).unwrap();
+            client.update("INSERT INTO new_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, &[]).unwrap();
 
             let sanity = client
-                .update("SELECT COUNT(*) FROM new_test", None, None)
+                .update("SELECT COUNT(*) FROM new_test", None, &[])
                 .unwrap()
                 .first()
                 .get_one::<i64>()
@@ -880,7 +875,7 @@ mod tests {
                 FROM new_test \
                 GROUP BY device",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -890,7 +885,7 @@ mod tests {
                 SELECT rollup(uddsketch) as uddsketch \
                 FROM sketches",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -900,7 +895,7 @@ mod tests {
                 SELECT uddsketch(20, 0.01, value) \
                 FROM new_test",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -911,7 +906,7 @@ mod tests {
                     error(uddsketch) \
                     FROM base",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -925,7 +920,7 @@ mod tests {
                     error(uddsketch) \
                     FROM composite",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -940,18 +935,18 @@ mod tests {
 
     #[pg_test]
     fn test_percentile_agg() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
                 .update(
                     "CREATE TABLE pa_test (device INTEGER, value DOUBLE PRECISION)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
-            client.update("INSERT INTO pa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None).unwrap();
+            client.update("INSERT INTO pa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, &[]).unwrap();
 
             let sanity = client
-                .update("SELECT COUNT(*) FROM pa_test", None, None)
+                .update("SELECT COUNT(*) FROM pa_test", None, &[])
                 .unwrap()
                 .first()
                 .get_one::<i64>()
@@ -965,7 +960,7 @@ mod tests {
                 SELECT uddsketch(200, 0.001, value) as approx \
                 FROM pa_test ",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -975,7 +970,7 @@ mod tests {
                 SELECT percentile_agg(value) as approx \
                 FROM pa_test",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -986,7 +981,7 @@ mod tests {
                     error(approx) \
                     FROM uddsketch_test",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1000,7 +995,7 @@ mod tests {
                     error(approx) \
                     FROM percentile_agg",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1014,18 +1009,18 @@ mod tests {
     }
     #[pg_test]
     fn test_approx_percentile_array() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
                 .update(
                     "CREATE TABLE paa_test (device INTEGER, value DOUBLE PRECISION)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
-            client.update("INSERT INTO paa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None).unwrap();
+            client.update("INSERT INTO paa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, &[]).unwrap();
 
             let sanity = client
-                .update("SELECT COUNT(*) FROM paa_test", None, None)
+                .update("SELECT COUNT(*) FROM paa_test", None, &[])
                 .unwrap()
                 .first()
                 .get_one::<i64>()
@@ -1038,7 +1033,7 @@ mod tests {
                 SELECT uddsketch(200, 0.001, value) as approx \
                 FROM paa_test ",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -1048,7 +1043,7 @@ mod tests {
                 SELECT percentile_agg(value) as approx \
                 FROM paa_test",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -1059,7 +1054,7 @@ mod tests {
                     error(approx) \
                     FROM uddsketch_test",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1073,7 +1068,7 @@ mod tests {
                     error(approx) \
                     FROM percentile_agg",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1101,18 +1096,18 @@ mod tests {
 
     #[pg_test]
     fn test_approx_percentile_array_arrow() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
                 .update(
                     "CREATE TABLE paa_test (device INTEGER, value DOUBLE PRECISION)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
-            client.update("INSERT INTO paa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, None).unwrap();
+            client.update("INSERT INTO paa_test SELECT dev, dev - v FROM generate_series(1,10) dev, generate_series(0, 1.0, 0.01) v", None, &[]).unwrap();
 
             let sanity = client
-                .update("SELECT COUNT(*) FROM paa_test", None, None)
+                .update("SELECT COUNT(*) FROM paa_test", None, &[])
                 .unwrap()
                 .first()
                 .get_one::<i64>()
@@ -1125,7 +1120,7 @@ mod tests {
                 SELECT uddsketch(200, 0.001, value) as approx \
                 FROM paa_test ",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -1135,7 +1130,7 @@ mod tests {
                 SELECT percentile_agg(value) as approx \
                 FROM paa_test",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -1146,7 +1141,7 @@ mod tests {
                     error(approx) \
                     FROM uddsketch_test",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1159,7 +1154,7 @@ mod tests {
         	     error(approx) \
                     FROM uddsketch_test",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1188,17 +1183,17 @@ mod tests {
 
     #[pg_test]
     fn uddsketch_io_test() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
-                .update("CREATE TABLE io_test (value DOUBLE PRECISION)", None, None)
+                .update("CREATE TABLE io_test (value DOUBLE PRECISION)", None, &[])
                 .unwrap();
-            client.update("INSERT INTO io_test VALUES (-1000), (-100), (-10), (-1), (-0.1), (-0.01), (-0.001), (0), (0.001), (0.01), (0.1), (1), (10), (100), (1000)", None, None).unwrap();
+            client.update("INSERT INTO io_test VALUES (-1000), (-100), (-10), (-1), (-0.1), (-0.01), (-0.001), (0), (0.001), (0.01), (0.1), (1), (10), (100), (1000)", None, &[]).unwrap();
 
             let sketch = client
                 .update(
                     "SELECT uddsketch(10, 0.01, value)::text FROM io_test",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1232,7 +1227,7 @@ mod tests {
                 .update(
                     "CREATE VIEW sketch AS SELECT uddsketch(10, 0.01, value) FROM io_test",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -1246,18 +1241,18 @@ mod tests {
                 "approx_percentile(0.6,",
                 "approx_percentile(0.8,",
             ] {
-                let sql1 = format!("SELECT {}uddsketch) FROM sketch", cmd);
-                let sql2 = format!("SELECT {}'{}'::uddsketch) FROM sketch", cmd, expected);
+                let sql1 = format!("SELECT {cmd}uddsketch) FROM sketch");
+                let sql2 = format!("SELECT {cmd}'{expected}'::uddsketch) FROM sketch");
 
                 let expected = client
-                    .update(&sql1, None, None)
+                    .update(&sql1, None, &[])
                     .unwrap()
                     .first()
                     .get_one::<f64>()
                     .unwrap()
                     .unwrap();
                 let test = client
-                    .update(&sql2, None, None)
+                    .update(&sql2, None, &[])
                     .unwrap()
                     .first()
                     .get_one::<f64>()
@@ -1300,9 +1295,9 @@ mod tests {
 
     #[pg_test]
     fn test_udd_null_input_yields_null_output() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let output = client
-                .update("SELECT uddsketch(20, 0.01, NULL)::TEXT", None, None)
+                .update("SELECT uddsketch(20, 0.01, NULL)::TEXT", None, &[])
                 .unwrap()
                 .first()
                 .get_one::<String>()

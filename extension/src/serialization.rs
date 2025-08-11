@@ -15,7 +15,7 @@ mod functions;
 mod types;
 
 // basically timestamptz_out
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn _ts_toolkit_encode_timestamptz(
     dt: pg_sys::TimestampTz,
     buf: &mut [c_char; pg_sys::MAXDATELEN as _],
@@ -51,7 +51,7 @@ pub extern "C" fn _ts_toolkit_encode_timestamptz(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 // this is only going to be used to communicate with a rust lib we compile with this one
 #[allow(improper_ctypes_definitions)]
 pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {
@@ -128,17 +128,14 @@ pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {
                 let err = pg_sys::tm2timestamp(tm, fsec, &mut tz, &mut result);
                 if err != 0 {
                     // TODO pgrx error with correct errcode?
-                    panic!("timestamptz \"{}\" out of range", text)
+                    panic!("timestamptz \"{text}\" out of range")
                 }
                 result
             }
             pg_sys::DTK_EPOCH => pg_sys::SetEpochTimestamp(),
             pg_sys::DTK_LATE => pg_sys::TimestampTz::MAX,
             pg_sys::DTK_EARLY => pg_sys::TimestampTz::MIN,
-            _ => panic!(
-                "unexpected result {} when parsing timestamptz \"{}\"",
-                dtype, text
-            ),
+            _ => panic!("unexpected result {dtype} when parsing timestamptz \"{text}\""),
         }
     }
 }

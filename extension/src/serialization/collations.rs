@@ -115,7 +115,7 @@ impl Serialize for PgCollationId {
                 pg_sys::Datum::from(self.0),
             );
             if tuple.is_null() {
-                pgrx::error!("no collation info for oid {}", self.0.as_u32());
+                pgrx::error!("no collation info for oid {}", self.0.to_u32());
             }
 
             let collation_tuple: Form_pg_collation = get_struct(tuple);
@@ -124,7 +124,7 @@ impl Serialize for PgCollationId {
             if namespace.is_null() {
                 pgrx::error!(
                     "invalid schema oid {}",
-                    (*collation_tuple).collnamespace.as_u32()
+                    (*collation_tuple).collnamespace.to_u32()
                 );
             }
 
@@ -198,10 +198,7 @@ impl<'de> Deserialize<'de> for PgCollationId {
 
             let namespace_id = pg_sys::LookupExplicitNamespace(namespace.as_ptr(), true);
             if namespace_id == pg_sys::InvalidOid {
-                return Err(D::Error::custom(format!(
-                    "invalid namespace {:?}",
-                    namespace
-                )));
+                return Err(D::Error::custom(format!("invalid namespace {namespace:?}")));
             }
 
             // COLLNAMEENCNSP is based on a triple `(collname, collencoding, collnamespace)`,
@@ -239,8 +236,7 @@ impl<'de> Deserialize<'de> for PgCollationId {
                     return Ok(PgCollationId(DEFAULT_COLLATION_OID));
                 }
                 return Err(D::Error::custom(format!(
-                    "invalid collation {:?}.{:?}",
-                    namespace, name
+                    "invalid collation {namespace:?}.{name:?}"
                 )));
             }
 

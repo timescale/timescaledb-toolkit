@@ -36,20 +36,20 @@ impl<'s> ConnectionConfig<'s> {
 
         let mut config = String::new();
         if let Some(host) = host {
-            let _ = write!(&mut config, "host={} ", host);
+            let _ = write!(&mut config, "host={host} ");
         }
         if let Some(port) = port {
-            let _ = write!(&mut config, "port={} ", port);
+            let _ = write!(&mut config, "port={port} ");
         }
         let _ = match user {
-            Some(user) => write!(&mut config, "user={} ", user),
+            Some(user) => write!(&mut config, "user={user} "),
             None => write!(&mut config, "user=postgres "),
         };
         if let Some(password) = password {
-            let _ = write!(&mut config, "password={} ", password);
+            let _ = write!(&mut config, "password={password} ");
         }
         if let Some(database) = database {
-            let _ = write!(&mut config, "dbname={} ", database);
+            let _ = write!(&mut config, "dbname={database} ");
         }
         config
     }

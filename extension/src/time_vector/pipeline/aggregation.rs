@@ -37,7 +37,7 @@ pub mod toolkit_experimental {
         }
     }
 
-    ron_inout_funcs!(PipelineThenStatsAgg);
+    ron_inout_funcs!(PipelineThenStatsAgg<'input>);
 
     pg_type! {
         #[derive(Debug)]
@@ -47,7 +47,7 @@ pub mod toolkit_experimental {
         }
     }
 
-    ron_inout_funcs!(PipelineThenSum);
+    ron_inout_funcs!(PipelineThenSum<'input>);
 
     pg_type! {
         #[derive(Debug)]
@@ -57,7 +57,7 @@ pub mod toolkit_experimental {
         }
     }
 
-    ron_inout_funcs!(PipelineThenAverage);
+    ron_inout_funcs!(PipelineThenAverage<'input>);
 
     pg_type! {
         #[derive(Debug)]
@@ -67,7 +67,7 @@ pub mod toolkit_experimental {
         }
     }
 
-    ron_inout_funcs!(PipelineThenNumVals);
+    ron_inout_funcs!(PipelineThenNumVals<'input>);
 
     pg_type! {
         #[derive(Debug)]
@@ -77,7 +77,7 @@ pub mod toolkit_experimental {
         }
     }
 
-    ron_inout_funcs!(PipelineThenCounterAgg);
+    ron_inout_funcs!(PipelineThenCounterAgg<'input>);
 
     pg_type! {
         #[derive(Debug)]
@@ -88,7 +88,7 @@ pub mod toolkit_experimental {
         }
     }
 
-    ron_inout_funcs!(PipelineThenHyperLogLog);
+    ron_inout_funcs!(PipelineThenHyperLogLog<'input>);
 
     pg_type! {
         #[derive(Debug)]
@@ -98,7 +98,7 @@ pub mod toolkit_experimental {
         }
     }
 
-    ron_inout_funcs!(PipelineThenPercentileAgg);
+    ron_inout_funcs!(PipelineThenPercentileAgg<'input>);
 }
 
 #[pg_operator(immutable, parallel_safe)]
@@ -106,7 +106,7 @@ pub mod toolkit_experimental {
 pub fn arrow_run_pipeline_then_stats_agg<'a>(
     mut timevector: Timevector_TSTZ_F64<'a>,
     pipeline: toolkit_experimental::PipelineThenStatsAgg<'a>,
-) -> StatsSummary1D<'static> {
+) -> StatsSummary1D {
     if timevector.has_nulls() {
         panic!("Unable to compute stats aggregate over timevector containing nulls");
     }
@@ -190,8 +190,8 @@ ALTER FUNCTION "arrow_run_pipeline_then_stats_agg" SUPPORT toolkit_experimental.
     schema = "toolkit_experimental"
 )]
 pub fn sum_pipeline_element<'a>(
-    accessor: AccessorSum<'_>,
-) -> toolkit_experimental::PipelineThenSum<'_> {
+    accessor: AccessorSum,
+) -> toolkit_experimental::PipelineThenSum<'static> {
     let _ = accessor;
     build! {
         PipelineThenSum {
@@ -278,8 +278,8 @@ ALTER FUNCTION "arrow_pipeline_then_sum" SUPPORT toolkit_experimental.pipeline_s
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub fn average_pipeline_element(
-    accessor: AccessorAverage<'_>,
-) -> toolkit_experimental::PipelineThenAverage<'_> {
+    accessor: AccessorAverage,
+) -> toolkit_experimental::PipelineThenAverage<'static> {
     let _ = accessor;
     build! {
         PipelineThenAverage {
@@ -375,8 +375,8 @@ ALTER FUNCTION "arrow_pipeline_then_average" SUPPORT toolkit_experimental.pipeli
     schema = "toolkit_experimental"
 )]
 pub fn num_vals_pipeline_element(
-    accessor: AccessorNumVals<'_>,
-) -> toolkit_experimental::PipelineThenNumVals<'_> {
+    accessor: AccessorNumVals,
+) -> toolkit_experimental::PipelineThenNumVals<'static> {
     let _ = accessor;
     build! {
         PipelineThenNumVals {
@@ -463,7 +463,7 @@ ALTER FUNCTION "arrow_pipeline_then_num_vals" SUPPORT toolkit_experimental.pipel
 pub fn arrow_run_pipeline_then_counter_agg<'a>(
     mut timevector: Timevector_TSTZ_F64<'a>,
     pipeline: toolkit_experimental::PipelineThenCounterAgg<'a>,
-) -> Option<CounterSummary<'static>> {
+) -> Option<CounterSummary> {
     timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
     if timevector.num_points() == 0 {
         return None;
@@ -722,15 +722,15 @@ mod tests {
 
     #[pg_test]
     fn test_stats_agg_finalizer() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -738,7 +738,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {sp}"), None, &[])
                 .unwrap();
 
             // we use a subselect to guarantee order
@@ -751,12 +751,9 @@ mod tests {
 
             let val = client
                 .update(
-                    &format!(
-                        "SELECT (series -> stats_agg())::TEXT FROM ({}) s",
-                        create_series
-                    ),
+                    &format!("SELECT (series -> stats_agg())::TEXT FROM ({create_series}) s"),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -771,15 +768,15 @@ mod tests {
 
     #[pg_test]
     fn test_stats_agg_pipeline_folding() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -787,7 +784,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {sp}"), None, &[])
                 .unwrap();
 
             let output = client
@@ -797,7 +794,7 @@ mod tests {
                 -> ceil() -> abs() -> floor() \
                 -> stats_agg() -> average();",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .nth(1)
@@ -821,15 +818,15 @@ mod tests {
 
     #[pg_test]
     fn test_sum_finalizer() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -837,7 +834,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {sp}"), None, &[])
                 .unwrap();
 
             // we use a subselect to guarantee order
@@ -850,9 +847,9 @@ mod tests {
 
             let val = client
                 .update(
-                    &format!("SELECT (series -> sum())::TEXT FROM ({}) s", create_series),
+                    &format!("SELECT (series -> sum())::TEXT FROM ({create_series}) s"),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -864,15 +861,15 @@ mod tests {
 
     #[pg_test]
     fn test_sum_pipeline_folding() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -880,7 +877,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {sp}"), None, &[])
                 .unwrap();
 
             let output = client
@@ -890,7 +887,7 @@ mod tests {
                 -> ceil() -> abs() -> floor() \
                 -> sum();",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .nth(1)
@@ -914,15 +911,15 @@ mod tests {
 
     #[pg_test]
     fn test_average_finalizer() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -930,7 +927,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {sp}"), None, &[])
                 .unwrap();
 
             // we use a subselect to guarantee order
@@ -943,12 +940,9 @@ mod tests {
 
             let val = client
                 .update(
-                    &format!(
-                        "SELECT (series -> average())::TEXT FROM ({}) s",
-                        create_series
-                    ),
+                    &format!("SELECT (series -> average())::TEXT FROM ({create_series}) s"),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -960,15 +954,15 @@ mod tests {
 
     #[pg_test]
     fn test_average_pipeline_folding() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -976,7 +970,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {sp}"), None, &[])
                 .unwrap();
 
             let output = client
@@ -986,7 +980,7 @@ mod tests {
                 -> ceil() -> abs() -> floor() \
                 -> average();",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .nth(1)
@@ -1010,15 +1004,15 @@ mod tests {
 
     #[pg_test]
     fn test_num_vals_finalizer() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1026,7 +1020,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {sp}"), None, &[])
                 .unwrap();
 
             // we use a subselect to guarantee order
@@ -1039,12 +1033,9 @@ mod tests {
 
             let val = client
                 .update(
-                    &format!(
-                        "SELECT (series -> num_vals())::TEXT FROM ({}) s",
-                        create_series
-                    ),
+                    &format!("SELECT (series -> num_vals())::TEXT FROM ({create_series}) s"),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1056,15 +1047,15 @@ mod tests {
 
     #[pg_test]
     fn test_num_vals_pipeline_folding() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1072,7 +1063,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {sp}"), None, &[])
                 .unwrap();
 
             let output = client
@@ -1082,7 +1073,7 @@ mod tests {
                 -> ceil() -> abs() -> floor() \
                 -> num_vals();",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .nth(1)
@@ -1106,15 +1097,15 @@ mod tests {
 
     #[pg_test]
     fn test_counter_agg_finalizer() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1122,7 +1113,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {sp}"), None, &[])
                 .unwrap();
 
             // we use a subselect to guarantee order
@@ -1136,11 +1127,10 @@ mod tests {
             let val = client
                 .update(
                     &format!(
-                        "SELECT (series -> sort() -> counter_agg())::TEXT FROM ({}) s",
-                        create_series
+                        "SELECT (series -> sort() -> counter_agg())::TEXT FROM ({create_series}) s"
                     ),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1149,9 +1139,9 @@ mod tests {
             assert_eq!(val.unwrap(), "(version:1,stats:(n:5,sx:3156624000,sx2:74649600000,sx3:0,sx4:1894671345254400000000,sy:215,sy2:2280,sy3:6720.000000000007,sy4:1788960,sxy:12960000),first:(ts:\"2020-01-01 00:00:00+00\",val:15),second:(ts:\"2020-01-02 00:00:00+00\",val:25),penultimate:(ts:\"2020-01-04 00:00:00+00\",val:10),last:(ts:\"2020-01-05 00:00:00+00\",val:30),reset_sum:45,num_resets:2,num_changes:4,bounds:(is_present:0,has_left:0,has_right:0,padding:(0,0,0,0,0),left:None,right:None))");
 
             let val = client.update(
-                &format!("SELECT series -> sort() -> counter_agg() -> with_bounds('[2020-01-01 UTC, 2020-02-01 UTC)') -> extrapolated_delta('prometheus') FROM ({}) s", create_series),
+                &format!("SELECT series -> sort() -> counter_agg() -> with_bounds('[2020-01-01 UTC, 2020-02-01 UTC)') -> extrapolated_delta('prometheus') FROM ({create_series}) s"),
                 None,
-                None
+                &[]
             )
                 .unwrap().first()
                 .get_one::<f64>().unwrap().unwrap();
@@ -1164,7 +1154,7 @@ mod tests {
                 -> ceil() -> abs() -> floor() \
                 -> counter_agg();",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .nth(1)
@@ -1188,15 +1178,15 @@ mod tests {
 
     #[pg_test]
     fn test_hyperloglog_finalizer() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1204,7 +1194,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {sp}"), None, &[])
                 .unwrap();
 
             // we use a subselect to guarantee order
@@ -1222,12 +1212,9 @@ mod tests {
 
             let val = client
                 .update(
-                    &format!(
-                        "SELECT (series -> hyperloglog(100))::TEXT FROM ({}) s",
-                        create_series
-                    ),
+                    &format!("SELECT (series -> hyperloglog(100))::TEXT FROM ({create_series}) s"),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1238,11 +1225,10 @@ mod tests {
             let val = client
                 .update(
                     &format!(
-                        "SELECT series -> hyperloglog(100) -> distinct_count() FROM ({}) s",
-                        create_series
+                        "SELECT series -> hyperloglog(100) -> distinct_count() FROM ({create_series}) s"
                     ),
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -1258,7 +1244,7 @@ mod tests {
                 -> ceil() -> abs() -> floor() \
                 -> hyperloglog(100);",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .nth(1)
@@ -1282,15 +1268,15 @@ mod tests {
 
     #[pg_test]
     fn test_percentile_agg_finalizer() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1298,7 +1284,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {sp}"), None, &[])
                 .unwrap();
 
             // we use a subselect to guarantee order
@@ -1311,12 +1297,9 @@ mod tests {
 
             let val = client
                 .update(
-                    &format!(
-                        "SELECT (series -> percentile_agg())::TEXT FROM ({}) s",
-                        create_series
-                    ),
+                    &format!("SELECT (series -> percentile_agg())::TEXT FROM ({create_series}) s"),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1345,15 +1328,15 @@ mod tests {
 
     #[pg_test]
     fn test_percentile_agg_pipeline_folding() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1361,7 +1344,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {sp}"), None, &[])
                 .unwrap();
 
             let output = client
@@ -1371,7 +1354,7 @@ mod tests {
                 -> ceil() -> abs() -> floor() \
                 -> percentile_agg();",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .nth(1)

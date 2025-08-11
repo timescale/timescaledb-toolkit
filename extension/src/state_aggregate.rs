@@ -25,7 +25,7 @@ use crate::{
     ron_inout_funcs,
 };
 
-use toolkit_experimental::CompactStateAgg;
+use toolkit_experimental::{CompactStateAgg, CompactStateAggData};
 
 mod accessors;
 use accessors::*;
@@ -100,7 +100,7 @@ impl StateEntry {
         if let Some(val) = Self::try_from_existing_str(states, state) {
             val
         } else {
-            panic!("Tried to get state that doesn't exist: {}", state)
+            panic!("Tried to get state that doesn't exist: {state}")
         }
     }
     fn try_from_existing_str(states: &str, state: &str) -> Option<Self> {
@@ -410,9 +410,8 @@ pub mod toolkit_experimental {
         }
     }
 
-    ron_inout_funcs!(CompactStateAgg);
+    ron_inout_funcs!(CompactStateAgg<'input>);
 }
-use toolkit_experimental::*;
 
 pg_type! {
     #[derive(Debug)]
@@ -433,7 +432,7 @@ impl<'input> StateAgg<'input> {
         Self::new(CompactStateAgg::empty(false, integer_states))
     }
 
-    pub fn as_compact_state_agg(self) -> toolkit_experimental::CompactStateAgg<'input> {
+    pub fn as_compact_state_agg(self) -> toolkit_experimental::CompactStateAgg<'static> {
         unsafe { self.0.compact_state_agg.flatten() }
     }
 
@@ -450,7 +449,7 @@ impl<'input> StateAgg<'input> {
         );
     }
 }
-ron_inout_funcs!(StateAgg);
+ron_inout_funcs!(StateAgg<'input>);
 
 fn state_trans_inner(
     state: Option<CompactStateAggTransState>,
@@ -851,7 +850,7 @@ pub fn duration_in_tl_int<'a>(agg: Option<StateAgg<'a>>, state: i64) -> crate::r
 #[opname(->)]
 pub fn arrow_state_agg_duration_in_string<'a>(
     agg: StateAgg<'a>,
-    accessor: AccessorDurationIn<'a>,
+    accessor: AccessorDurationIn,
 ) -> crate::raw::Interval {
     let state = MaterializedState::String(
         String::from_utf8_lossy(accessor.state_bytes.as_slice()).to_string(),
@@ -862,7 +861,7 @@ pub fn arrow_state_agg_duration_in_string<'a>(
 #[opname(->)]
 pub fn arrow_state_agg_duration_in_int<'a>(
     agg: StateAgg<'a>,
-    accessor: AccessorDurationInInt<'a>,
+    accessor: AccessorDurationInInt,
 ) -> crate::raw::Interval {
     let state = MaterializedState::Integer(accessor.state);
     duration_in_inner(Some(agg.as_compact_state_agg()), state, None)
@@ -924,7 +923,7 @@ fn range_tuple(start: i64, interval: i64) -> (i64, Option<i64>) {
 #[opname(->)]
 pub fn arrow_state_agg_duration_in_range_string<'a>(
     agg: StateAgg<'a>,
-    accessor: AccessorDurationInRange<'a>,
+    accessor: AccessorDurationInRange,
 ) -> crate::raw::Interval {
     let state = MaterializedState::String(
         String::from_utf8_lossy(accessor.state_bytes.as_slice()).to_string(),
@@ -939,7 +938,7 @@ pub fn arrow_state_agg_duration_in_range_string<'a>(
 #[opname(->)]
 pub fn arrow_state_agg_duration_in_range_int<'a>(
     agg: StateAgg<'a>,
-    accessor: AccessorDurationInRangeInt<'a>,
+    accessor: AccessorDurationInRangeInt,
 ) -> crate::raw::Interval {
     let state = MaterializedState::Integer(accessor.state);
     duration_in_inner(
@@ -1075,7 +1074,7 @@ pub fn interpolated_duration_in_tl_int<'a>(
 #[opname(->)]
 pub fn arrow_state_agg_interpolated_duration_in_string<'a>(
     agg: Option<StateAgg<'a>>,
-    accessor: AccessorInterpolatedDurationIn<'a>,
+    accessor: AccessorInterpolatedDurationIn,
 ) -> crate::raw::Interval {
     let state = MaterializedState::String(
         String::from_utf8_lossy(accessor.state_bytes.as_slice()).to_string(),
@@ -1096,7 +1095,7 @@ pub fn arrow_state_agg_interpolated_duration_in_string<'a>(
 #[opname(->)]
 pub fn arrow_state_agg_interpolated_duration_in_int<'a>(
     agg: Option<StateAgg<'a>>,
-    accessor: AccessorInterpolatedDurationInInt<'a>,
+    accessor: AccessorInterpolatedDurationInInt,
 ) -> crate::raw::Interval {
     let state = MaterializedState::Integer(accessor.state);
     interpolated_duration_in_inner(
@@ -1216,7 +1215,7 @@ pub fn into_values_tl_int<'a>(
 #[opname(->)]
 pub fn arrow_state_agg_into_values<'a>(
     agg: StateAgg<'a>,
-    _accessor: AccessorIntoValues<'a>,
+    _accessor: AccessorIntoValues,
 ) -> TableIterator<
     'a,
     (
@@ -1230,7 +1229,7 @@ pub fn arrow_state_agg_into_values<'a>(
 #[opname(->)]
 pub fn arrow_state_agg_into_int_values<'a>(
     agg: StateAgg<'a>,
-    _accessor: AccessorIntoIntValues<'a>,
+    _accessor: AccessorIntoIntValues,
 ) -> TableIterator<
     'a,
     (
@@ -1332,7 +1331,7 @@ pub fn state_int_timeline<'a>(
 #[opname(->)]
 pub fn arrow_state_agg_state_timeline<'a>(
     agg: StateAgg<'a>,
-    _accessor: AccessorStateTimeline<'a>,
+    _accessor: AccessorStateTimeline,
 ) -> TableIterator<
     'a,
     (
@@ -1347,7 +1346,7 @@ pub fn arrow_state_agg_state_timeline<'a>(
 #[opname(->)]
 pub fn arrow_state_agg_state_int_timeline<'a>(
     agg: StateAgg<'a>,
-    _accessor: AccessorStateIntTimeline<'a>,
+    _accessor: AccessorStateIntTimeline,
 ) -> TableIterator<
     'a,
     (
@@ -1459,7 +1458,7 @@ pub fn interpolated_state_int_timeline<'a>(
 #[opname(->)]
 pub fn arrow_state_agg_interpolated_state_timeline<'a>(
     agg: Option<StateAgg<'a>>,
-    accessor: AccessorInterpolatedStateTimeline<'a>,
+    accessor: AccessorInterpolatedStateTimeline,
 ) -> TableIterator<
     'a,
     (
@@ -1483,7 +1482,7 @@ pub fn arrow_state_agg_interpolated_state_timeline<'a>(
 #[opname(->)]
 pub fn arrow_state_agg_interpolated_state_int_timeline<'a>(
     agg: Option<StateAgg<'a>>,
-    accessor: AccessorInterpolatedStateIntTimeline<'a>,
+    accessor: AccessorInterpolatedStateIntTimeline,
 ) -> TableIterator<
     'a,
     (
@@ -1573,7 +1572,7 @@ pub fn state_int_periods<'a>(
 #[opname(->)]
 pub fn arrow_state_agg_state_periods_string<'a>(
     agg: StateAgg<'a>,
-    accessor: AccessorStatePeriods<'a>,
+    accessor: AccessorStatePeriods,
 ) -> TableIterator<
     'a,
     (
@@ -1590,7 +1589,7 @@ pub fn arrow_state_agg_state_periods_string<'a>(
 #[opname(->)]
 pub fn arrow_state_agg_state_periods_int<'a>(
     agg: StateAgg<'a>,
-    accessor: AccessorStatePeriodsInt<'a>,
+    accessor: AccessorStatePeriodsInt,
 ) -> TableIterator<
     'a,
     (
@@ -1682,7 +1681,7 @@ pub fn interpolated_state_periods_int<'a>(
 #[opname(->)]
 pub fn arrow_state_agg_interpolated_state_periods_string<'a>(
     agg: Option<StateAgg<'a>>,
-    accessor: AccessorInterpolatedStatePeriods<'a>,
+    accessor: AccessorInterpolatedStatePeriods,
 ) -> TableIterator<
     'a,
     (
@@ -1709,7 +1708,7 @@ pub fn arrow_state_agg_interpolated_state_periods_string<'a>(
 #[opname(->)]
 pub fn arrow_state_agg_interpolated_state_periods_int<'a>(
     agg: Option<StateAgg<'a>>,
-    accessor: AccessorInterpolatedStatePeriodsInt<'a>,
+    accessor: AccessorInterpolatedStatePeriodsInt,
 ) -> TableIterator<
     'a,
     (
@@ -1765,7 +1764,7 @@ fn state_at_int<'a>(agg: StateAgg<'a>, point: TimestampTz) -> Option<i64> {
 #[opname(->)]
 pub fn arrow_state_agg_state_at_string<'a>(
     agg: StateAgg<'a>,
-    accessor: AccessorStateAt<'a>,
+    accessor: AccessorStateAt,
 ) -> Option<String> {
     state_at_inner(agg, accessor.time).map(MaterializedState::into_string)
 }
@@ -1774,7 +1773,7 @@ pub fn arrow_state_agg_state_at_string<'a>(
 #[opname(->)]
 pub fn arrow_state_agg_state_at_int<'a>(
     agg: StateAgg<'a>,
-    accessor: AccessorStateAtInt<'a>,
+    accessor: AccessorStateAtInt,
 ) -> Option<i64> {
     state_at_inner(agg, accessor.time).map(MaterializedState::into_integer)
 }
@@ -1852,7 +1851,7 @@ mod tests {
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {
             $client
-                .update($stmt, None, None)
+                .update($stmt, None, &[])
                 .unwrap()
                 .first()
                 .get_one::<$type>()
@@ -1864,9 +1863,9 @@ mod tests {
     #[pg_test]
     #[should_panic = "The start and interval parameters cannot be used for duration_in with"]
     fn duration_in_misuse_error() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
-                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, &[])
                 .unwrap();
             assert_eq!(
                 "365 days 00:02:00",
@@ -1881,9 +1880,9 @@ mod tests {
 
     #[pg_test]
     fn one_state_one_change() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
-                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, &[])
                 .unwrap();
             client
                 .update(
@@ -1892,7 +1891,7 @@ mod tests {
                     ('2020-12-31 00:02:00+00', 'end')
                 "#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             assert_eq!(
@@ -1916,9 +1915,9 @@ mod tests {
 
     #[pg_test]
     fn two_states_two_changes() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
-                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, &[])
                 .unwrap();
             client
                 .update(
@@ -1928,7 +1927,7 @@ mod tests {
                     ('2020-12-31 00:02:00+00', 'end')
                 "#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -1953,9 +1952,9 @@ mod tests {
 
     #[pg_test]
     fn two_states_three_changes() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
-                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, &[])
                 .unwrap();
             client
                 .update(
@@ -1966,7 +1965,7 @@ mod tests {
                     ('2020-12-31 00:02:00+00', 'end')
                 "#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -2008,9 +2007,9 @@ mod tests {
 
     #[pg_test]
     fn out_of_order_times() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
-                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, &[])
                 .unwrap();
             client
                 .update(
@@ -2021,7 +2020,7 @@ mod tests {
                     ('2020-12-31 00:02:00+00', 'end')
                 "#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -2048,9 +2047,9 @@ mod tests {
     fn same_state_twice() {
         // TODO Do we care?  Could be that states are recorded not only when they change but
         // also at regular intervals even when they don't?
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
-                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, &[])
                 .unwrap();
             client
                 .update(
@@ -2061,7 +2060,7 @@ mod tests {
                     ('2020-12-31 00:02:00+00', 'end')
                 "#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             assert_eq!(
@@ -2085,9 +2084,9 @@ mod tests {
 
     #[pg_test]
     fn duration_in_two_states_two_changes() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
-                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, &[])
                 .unwrap();
             client
                 .update(
@@ -2097,7 +2096,7 @@ mod tests {
                     ('2020-12-31 00:02:00+00', 'end')
                 "#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             assert_eq!(
@@ -2121,9 +2120,9 @@ mod tests {
 
     #[pg_test]
     fn same_state_twice_last() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
-                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, &[])
                 .unwrap();
             client
                 .update(
@@ -2133,7 +2132,7 @@ mod tests {
                     ('2020-01-01 00:02:00+00', 'two')
                 "#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             assert_eq!(
@@ -2150,9 +2149,9 @@ mod tests {
     #[pg_test]
     fn combine_using_muchos_data() {
         compact_state_agg::counters::reset();
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
-                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, &[])
                 .unwrap();
             client.update(
                 r#"
@@ -2162,7 +2161,7 @@ insert into test select '2020-01-02 UTC'::timestamptz + make_interval(days=>v), 
 insert into test select '2020-01-02 UTC'::timestamptz + make_interval(days=>v), 'four' from generate_series(600001,900000) v;
                 "#,
                 None,
-                None,
+                &[],
             ).unwrap();
             assert_eq!(
                 "2 days",
@@ -2187,9 +2186,9 @@ insert into test select '2020-01-02 UTC'::timestamptz + make_interval(days=>v), 
     #[allow(dead_code)]
     fn combine_using_settings() {
         compact_state_agg::counters::reset();
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
-                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, &[])
                 .unwrap();
             client
                 .update(
@@ -2198,7 +2197,7 @@ insert into test select '2020-01-02 UTC'::timestamptz + make_interval(days=>v), 
                     ('2020-01-03 00:00:00+00', 'two')
                 "#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             assert_eq!(
@@ -2232,9 +2231,9 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
     // the sample query from the ticket
     #[pg_test]
     fn sample_query() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
-                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, &[])
                 .unwrap();
             client
                 .update(
@@ -2243,7 +2242,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                     ('2020-01-01 00:01:00+00', 'ERROR'),
                     ('2020-01-01 00:02:00+00', 'STOPPED')"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             assert_eq!(
@@ -2254,7 +2253,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                                   toolkit_experimental.duration_in(states, 'STOPPED')::TEXT as stopped
                              FROM (SELECT toolkit_experimental.compact_state_agg(ts, state) as states FROM test) as foo"#,
                         None,
-                        None,
+                        &[],
                     )
                     .unwrap().first()
                     .get_three::<&str, &str, &str>().unwrap(),
@@ -2268,7 +2267,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                                   duration_in(states, 'STOPPED')::TEXT as stopped
                              FROM (SELECT state_agg(ts, state) as states FROM test) as foo"#,
                         None,
-                        None,
+                        &[],
                     )
                     .unwrap()
                     .first()
@@ -2281,14 +2280,14 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
 
     #[pg_test]
     fn interpolated_duration() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
                 .update(
                     "SET TIME ZONE 'UTC';
                 CREATE TABLE inttest(time TIMESTAMPTZ, state TEXT, bucket INT);
                 CREATE TABLE inttest2(time TIMESTAMPTZ, state BIGINT, bucket INT);",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             client
@@ -2314,7 +2313,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                 ('2020-1-3 12:00'::timestamptz, 10002, 3), 
                 ('2020-1-3 16:00'::timestamptz, 10003, 3);"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -2333,7 +2332,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                 ) s
                 ORDER BY bucket"#,
                 None,
-                None,
+                &[],
             ).unwrap();
 
             // Day 1, in "three" from "16:00" to end of day
@@ -2367,7 +2366,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                 ) s
                 ORDER BY bucket"#,
                 None,
-                None,
+                &[],
             ).unwrap();
 
             // Day 1, in "three" from "16:00" to end of day
@@ -2401,7 +2400,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                 ) s
                 ORDER BY bucket"#,
                 None,
-                None,
+                &[],
             ).unwrap();
 
             // Day 1, in "three" from "16:00" to end of day
@@ -2435,7 +2434,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                 ) s
                 ORDER BY bucket"#,
                 None,
-                None,
+                &[],
             ).unwrap();
 
             // Day 1, in "three" from "16:00" to end of day
@@ -2461,9 +2460,9 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
         error = "state cannot be both String(\"ERROR\") and String(\"START\") at 631152000000000"
     )]
     fn two_states_at_one_time() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
-                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, None)
+                .update("CREATE TABLE test(ts timestamptz, state TEXT)", None, &[])
                 .unwrap();
             client
                 .update(
@@ -2471,21 +2470,21 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                         ('2020-01-01 00:00:00+00', 'START'),
                         ('2020-01-01 00:00:00+00', 'ERROR')"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             client
                 .update(
                     "SELECT toolkit_experimental.duration_in(toolkit_experimental.compact_state_agg(ts, state), 'one') FROM test",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap();
             client
                 .update(
                     "SELECT duration_in(state_agg(ts, state), 'one') FROM test",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
         })
@@ -2493,12 +2492,12 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
 
     #[pg_test]
     fn interpolate_introduces_state() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
                 .update(
                     "CREATE TABLE states(time TIMESTAMPTZ, state TEXT, bucket INT)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             client
@@ -2511,7 +2510,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                 ('2020-1-3 19:30', 'running', 3),
                 ('2020-1-4 12:00', 'stopping', 4)"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -2530,7 +2529,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                 ) s
                 ORDER BY bucket"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -2566,7 +2565,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                 ) s
                 ORDER BY bucket"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -2601,7 +2600,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                 ) s
                 ORDER BY bucket"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -2626,14 +2625,14 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
 
     #[pg_test]
     fn text_serialization() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
                 .update(
                     "SET TIME ZONE 'UTC';
                     CREATE TABLE states(ts TIMESTAMPTZ, state TEXT);
                     CREATE TABLE states_int(ts TIMESTAMPTZ, state BIGINT);",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             // only a single entry so ordering is consistent between runs
@@ -2644,7 +2643,7 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
                     INSERT INTO states_int VALUES
                         ('2020-1-1 10:00', -67876545);"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 

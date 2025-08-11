@@ -61,7 +61,7 @@ fn main() {
             test.header.bold().dimmed()
         );
         let _ = writeln!(&mut out, "{}", error.annotate_position(&test.text));
-        let _ = writeln!(&mut out, "{}\n", error);
+        let _ = writeln!(&mut out, "{error}\n");
     };
 
     runner::run_tests(connection_config, startup_script, all_tests, on_error);

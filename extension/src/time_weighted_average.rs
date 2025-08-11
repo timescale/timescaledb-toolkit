@@ -38,7 +38,7 @@ pg_type! {
 }
 ron_inout_funcs!(TimeWeightSummary);
 
-impl<'input> TimeWeightSummary<'input> {
+impl TimeWeightSummary {
     fn internal(&self) -> TimeWeightSummaryInternal {
         TimeWeightSummaryInternal {
             method: self.method,
@@ -54,7 +54,7 @@ impl<'input> TimeWeightSummary<'input> {
         interval_len: i64,
         prev: Option<TimeWeightSummary>,
         next: Option<TimeWeightSummary>,
-    ) -> TimeWeightSummary<'static> {
+    ) -> TimeWeightSummary {
         assert!(
             interval_start <= self.first.ts,
             "Interval start ({}) must be at or before first timestamp ({})",
@@ -222,9 +222,9 @@ pub fn time_weight_trans_inner(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn time_weight_summary_trans<'a>(
+pub fn time_weight_summary_trans(
     state: Internal,
-    next: Option<TimeWeightSummary<'a>>,
+    next: Option<TimeWeightSummary>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     time_weight_summary_trans_inner(unsafe { state.to_inner() }, next, fcinfo).internal()
@@ -305,14 +305,14 @@ pub fn time_weight_combine_inner(
 fn time_weight_final(
     state: Internal,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<TimeWeightSummary<'static>> {
+) -> Option<TimeWeightSummary> {
     time_weight_final_inner(unsafe { state.to_inner() }, fcinfo)
 }
 
 fn time_weight_final_inner(
     state: Option<Inner<TimeWeightTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<TimeWeightSummary<'static>> {
+) -> Option<TimeWeightSummary> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let mut state = match state {
@@ -335,57 +335,51 @@ fn time_weight_final_inner(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_time_weight_first_val<'a>(
-    sketch: TimeWeightSummary<'a>,
-    _accessor: AccessorFirstVal<'a>,
-) -> f64 {
+pub fn arrow_time_weight_first_val(sketch: TimeWeightSummary, _accessor: AccessorFirstVal) -> f64 {
     time_weight_first_val(sketch)
 }
 
 #[pg_extern(name = "first_val", strict, immutable, parallel_safe)]
-fn time_weight_first_val<'a>(summary: TimeWeightSummary<'a>) -> f64 {
+fn time_weight_first_val(summary: TimeWeightSummary) -> f64 {
     summary.first.val
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_time_weight_last_val<'a>(
-    sketch: TimeWeightSummary<'a>,
-    _accessor: AccessorLastVal<'a>,
-) -> f64 {
+pub fn arrow_time_weight_last_val(sketch: TimeWeightSummary, _accessor: AccessorLastVal) -> f64 {
     time_weight_last_val(sketch)
 }
 
 #[pg_extern(name = "last_val", strict, immutable, parallel_safe)]
-fn time_weight_last_val<'a>(summary: TimeWeightSummary<'a>) -> f64 {
+fn time_weight_last_val(summary: TimeWeightSummary) -> f64 {
     summary.last.val
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_time_weight_first_time<'a>(
-    sketch: TimeWeightSummary<'a>,
-    _accessor: AccessorFirstTime<'a>,
+pub fn arrow_time_weight_first_time(
+    sketch: TimeWeightSummary,
+    _accessor: AccessorFirstTime,
 ) -> crate::raw::TimestampTz {
     time_weight_first_time(sketch)
 }
 
 #[pg_extern(name = "first_time", strict, immutable, parallel_safe)]
-fn time_weight_first_time<'a>(summary: TimeWeightSummary<'a>) -> crate::raw::TimestampTz {
+fn time_weight_first_time(summary: TimeWeightSummary) -> crate::raw::TimestampTz {
     summary.first.ts.into()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_time_weight_last_time<'a>(
-    sketch: TimeWeightSummary<'a>,
-    _accessor: AccessorLastTime<'a>,
+pub fn arrow_time_weight_last_time(
+    sketch: TimeWeightSummary,
+    _accessor: AccessorLastTime,
 ) -> crate::raw::TimestampTz {
     time_weight_last_time(sketch)
 }
 
 #[pg_extern(name = "last_time", strict, immutable, parallel_safe)]
-fn time_weight_last_time<'a>(summary: TimeWeightSummary<'a>) -> crate::raw::TimestampTz {
+fn time_weight_last_time(summary: TimeWeightSummary) -> crate::raw::TimestampTz {
     summary.last.ts.into()
 }
 
@@ -426,27 +420,27 @@ extension_sql!(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_time_weighted_average_average<'a>(
-    sketch: Option<TimeWeightSummary<'a>>,
-    _accessor: AccessorAverage<'a>,
+pub fn arrow_time_weighted_average_average(
+    sketch: Option<TimeWeightSummary>,
+    _accessor: AccessorAverage,
 ) -> Option<f64> {
     time_weighted_average_average(sketch)
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_time_weighted_average_integral<'a>(
-    tws: Option<TimeWeightSummary<'a>>,
-    accessor: AccessorIntegral<'a>,
+pub fn arrow_time_weighted_average_integral(
+    tws: Option<TimeWeightSummary>,
+    accessor: AccessorIntegral,
 ) -> Option<f64> {
     time_weighted_average_integral(
         tws,
-        String::from_utf8_lossy(accessor.bytes.as_slice()).to_string(),
+        String::from_utf8_lossy(&accessor.bytes[..accessor.len as usize]).to_string(),
     )
 }
 
 #[pg_extern(immutable, parallel_safe, name = "average")]
-pub fn time_weighted_average_average<'a>(tws: Option<TimeWeightSummary<'a>>) -> Option<f64> {
+pub fn time_weighted_average_average(tws: Option<TimeWeightSummary>) -> Option<f64> {
     match tws {
         None => None,
         Some(tws) => match tws.internal().time_weighted_average() {
@@ -464,8 +458,8 @@ pub fn time_weighted_average_average<'a>(tws: Option<TimeWeightSummary<'a>>) -> 
 }
 
 #[pg_extern(immutable, parallel_safe, name = "integral")]
-pub fn time_weighted_average_integral<'a>(
-    tws: Option<TimeWeightSummary<'a>>,
+pub fn time_weighted_average_integral(
+    tws: Option<TimeWeightSummary>,
     unit: default!(String, "'second'"),
 ) -> Option<f64> {
     let unit = match DurationUnit::from_str(&unit) {
@@ -479,13 +473,13 @@ pub fn time_weighted_average_integral<'a>(
     Some(DurationUnit::Microsec.convert_unit(integral_microsecs, unit))
 }
 
-fn interpolate<'a>(
+fn interpolate(
     tws: Option<TimeWeightSummary>,
     start: crate::raw::TimestampTz,
     duration: crate::raw::Interval,
     prev: Option<TimeWeightSummary>,
     next: Option<TimeWeightSummary>,
-) -> Option<TimeWeightSummary<'a>> {
+) -> Option<TimeWeightSummary> {
     match tws {
         None => None,
         Some(tws) => {
@@ -496,12 +490,12 @@ fn interpolate<'a>(
 }
 
 #[pg_extern(immutable, parallel_safe, name = "interpolated_average")]
-pub fn time_weighted_average_interpolated_average<'a>(
-    tws: Option<TimeWeightSummary<'a>>,
+pub fn time_weighted_average_interpolated_average(
+    tws: Option<TimeWeightSummary>,
     start: crate::raw::TimestampTz,
     duration: crate::raw::Interval,
-    prev: default!(Option<TimeWeightSummary<'a>>, "NULL"),
-    next: default!(Option<TimeWeightSummary<'a>>, "NULL"),
+    prev: default!(Option<TimeWeightSummary>, "NULL"),
+    next: default!(Option<TimeWeightSummary>, "NULL"),
 ) -> Option<f64> {
     let target = interpolate(tws, start, duration, prev, next);
     time_weighted_average_average(target)
@@ -509,9 +503,9 @@ pub fn time_weighted_average_interpolated_average<'a>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_time_weighted_average_interpolated_average<'a>(
-    tws: Option<TimeWeightSummary<'a>>,
-    accessor: TimeWeightInterpolatedAverageAccessor<'a>,
+pub fn arrow_time_weighted_average_interpolated_average(
+    tws: Option<TimeWeightSummary>,
+    accessor: TimeWeightInterpolatedAverageAccessor,
 ) -> Option<f64> {
     let prev = if accessor.flags & 1 == 1 {
         Some(accessor.prev.clone().into())
@@ -534,12 +528,12 @@ pub fn arrow_time_weighted_average_interpolated_average<'a>(
 }
 
 #[pg_extern(immutable, parallel_safe, name = "interpolated_integral")]
-pub fn time_weighted_average_interpolated_integral<'a>(
-    tws: Option<TimeWeightSummary<'a>>,
+pub fn time_weighted_average_interpolated_integral(
+    tws: Option<TimeWeightSummary>,
     start: crate::raw::TimestampTz,
     interval: crate::raw::Interval,
-    prev: default!(Option<TimeWeightSummary<'a>>, "NULL"),
-    next: default!(Option<TimeWeightSummary<'a>>, "NULL"),
+    prev: default!(Option<TimeWeightSummary>, "NULL"),
+    next: default!(Option<TimeWeightSummary>, "NULL"),
     unit: default!(String, "'second'"),
 ) -> Option<f64> {
     let target = interpolate(tws, start, interval, prev, next);
@@ -548,9 +542,9 @@ pub fn time_weighted_average_interpolated_integral<'a>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_time_weighted_average_interpolated_integral<'a>(
-    tws: Option<TimeWeightSummary<'a>>,
-    accessor: TimeWeightInterpolatedIntegralAccessor<'a>,
+pub fn arrow_time_weighted_average_interpolated_integral(
+    tws: Option<TimeWeightSummary>,
+    accessor: TimeWeightInterpolatedIntegralAccessor,
 ) -> Option<f64> {
     let prev = if accessor.flags & 1 == 1 {
         Some(accessor.prev.clone().into())
@@ -593,7 +587,7 @@ mod tests {
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {
             $client
-                .update($stmt, None, None)
+                .update($stmt, None, &[])
                 .unwrap()
                 .first()
                 .get_one::<$type>()
@@ -603,14 +597,14 @@ mod tests {
     }
     #[pg_test]
     fn test_time_weight_aggregate() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let stmt =
                 "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION); SET TIME ZONE 'UTC'";
-            client.update(stmt, None, None).unwrap();
+            client.update(stmt, None, &[]).unwrap();
 
             // add a point
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:00:00+00', 10.0)";
-            client.update(stmt, None, None).unwrap();
+            client.update(stmt, None, &[]).unwrap();
 
             let stmt = "SELECT integral(time_weight('Trapezoidal', ts, val), 'hrs') FROM test";
             assert_eq!(select_one!(client, stmt, f64), 0.0);
@@ -619,7 +613,7 @@ mod tests {
 
             // add another point
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:01:00+00', 20.0)";
-            client.update(stmt, None, None).unwrap();
+            client.update(stmt, None, &[]).unwrap();
 
             // test basic with 2 points
             let stmt = "SELECT average(time_weight('Linear', ts, val)) FROM test";
@@ -651,7 +645,7 @@ mod tests {
 
             // more values evenly spaced
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)";
-            client.update(stmt, None, None).unwrap();
+            client.update(stmt, None, &[]).unwrap();
 
             let stmt = "SELECT average(time_weight('Linear', ts, val)) FROM test";
             assert!((select_one!(client, stmt, f64) - 15.0).abs() < f64::EPSILON);
@@ -665,7 +659,7 @@ mod tests {
 
             //non-evenly spaced values
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:08:00+00', 30.0), ('2020-01-01 00:10:00+00', 10.0), ('2020-01-01 00:10:30+00', 20.0), ('2020-01-01 00:20:00+00', 30.0)";
-            client.update(stmt, None, None).unwrap();
+            client.update(stmt, None, &[]).unwrap();
 
             let stmt = "SELECT average(time_weight('Linear', ts, val)) FROM test";
             // expected =(15 +15 +15 +15 + 20*4 + 20*2 +15*.5 + 25*9.5) / 20 = 21.25 just taking the midpoints between each point and multiplying by minutes and dividing by total
@@ -716,18 +710,18 @@ mod tests {
 
     #[pg_test]
     fn test_time_weight_io() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             let stmt = "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)";
-            client.update(stmt, None, None).unwrap();
+            client.update(stmt, None, &[]).unwrap();
 
             let linear_time_weight = "SELECT time_weight('Linear', ts, val)::TEXT FROM test";
             let locf_time_weight = "SELECT time_weight('LOCF', ts, val)::TEXT FROM test";
-            let avg = |text: &str| format!("SELECT average('{}'::TimeWeightSummary)", text);
+            let avg = |text: &str| format!("SELECT average('{text}'::TimeWeightSummary)");
 
             // add a couple points
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:00:00+00', 10.0), ('2020-01-01 00:01:00+00', 20.0)";
-            client.update(stmt, None, None).unwrap();
+            client.update(stmt, None, &[]).unwrap();
 
             // test basic with 2 points
             let expected = "(\
@@ -752,7 +746,7 @@ mod tests {
 
             // more values evenly spaced
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)";
-            client.update(stmt, None, None).unwrap();
+            client.update(stmt, None, &[]).unwrap();
 
             let expected = "(\
                 version:1,\
@@ -775,7 +769,7 @@ mod tests {
 
             //non-evenly spaced values
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:08:00+00', 30.0), ('2020-01-01 00:10:00+00', 10.0), ('2020-01-01 00:10:30+00', 20.0), ('2020-01-01 00:20:00+00', 30.0)";
-            client.update(stmt, None, None).unwrap();
+            client.update(stmt, None, &[]).unwrap();
 
             let expected = "(\
                 version:1,\
@@ -870,11 +864,11 @@ mod tests {
 
     #[pg_test]
     fn test_time_weight_interpolation() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client.update(
                 "CREATE TABLE test(time timestamptz, value double precision, bucket timestamptz)",
                 None,
-                None,
+                &[]
             ).unwrap();
             client
                 .update(
@@ -889,7 +883,7 @@ mod tests {
                 ('2020-1-3 12:00'::timestamptz, 0.0, '2020-1-3'::timestamptz), 
                 ('2020-1-3 16:00'::timestamptz, 35.0, '2020-1-3'::timestamptz)"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -909,7 +903,7 @@ mod tests {
                 ) s
                 ORDER BY bucket"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             // test arrow version
@@ -928,7 +922,7 @@ mod tests {
                 ) s
                 ORDER BY bucket"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             let mut integrals = client
@@ -948,7 +942,7 @@ mod tests {
                 ) s
                 ORDER BY bucket"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             // verify that default value works
@@ -968,7 +962,7 @@ mod tests {
                 ) s
                 ORDER BY bucket"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -1008,7 +1002,7 @@ mod tests {
 
     #[pg_test]
     fn test_locf_interpolation_to_null() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let stmt =
                 "SELECT interpolated_average(time_weight('locf', '2020-01-01 20:00:00+00', 100),
                     '2020-01-01 00:00:00+00', '1d')";

@@ -23,9 +23,7 @@ pub fn get_upgradeable_from(control_file: &str) -> Result<Vec<String>> {
 /// find a `<field name> = '<field value>'` in `file` and extract `<field value>`
 pub fn get_field_val<'a>(file: &'a str, field_name: &str) -> Result<&'a str> {
     file.lines()
-        .filter(|line| {
-            line.starts_with(field_name) || line.starts_with(&format!("# {}", field_name))
-        })
+        .filter(|line| line.starts_with(field_name) || line.starts_with(&format!("# {field_name}")))
         .map(get_quoted_field)
         .next()
         .ok_or(Error::FieldNotFound)

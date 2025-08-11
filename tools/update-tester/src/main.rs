@@ -195,7 +195,7 @@ fn main() {
                     test.header.bold().dimmed()
                 );
                 eprintln!("{}", error.annotate_position(&test.text));
-                eprintln!("{}\n", error);
+                eprintln!("{error}\n");
             };
 
             let res = try_main(
@@ -209,7 +209,7 @@ fn main() {
                 on_error,
             );
             if let Err(err) = res {
-                eprintln!("{}", err);
+                eprintln!("{err}");
                 process::exit(1);
             }
             if num_errors > 0 {
@@ -240,11 +240,11 @@ fn main() {
                     test.header.bold().dimmed()
                 );
                 eprintln!("{}", error.annotate_position(&test.text));
-                eprintln!("{}\n", error);
+                eprintln!("{error}\n");
             };
             let res = try_create_objects(&connection_config, on_error);
             if let Err(err) = res {
-                eprintln!("{}", err);
+                eprintln!("{err}");
                 process::exit(1);
             }
             if num_errors > 0 {
@@ -276,17 +276,17 @@ fn main() {
                     test.header.bold().dimmed()
                 );
                 eprintln!("{}", error.annotate_position(&test.text));
-                eprintln!("{}\n", error);
+                eprintln!("{error}\n");
             };
 
             let root_dir = ".";
             let res = try_validate_objects(&connection_config, root_dir, on_error);
             if let Err(err) = res {
-                eprintln!("{}", err);
+                eprintln!("{err}");
                 process::exit(1);
             }
             if num_errors > 0 {
-                eprintln!("{} {}\n", num_errors, "Tests Failed".bold().red());
+                eprintln!("{num_errors} {}\n", "Tests Failed".bold().red());
                 eprintln!("{}\n", "Validation Failed".bold().red());
                 process::exit(1)
             }
@@ -367,7 +367,7 @@ fn get_version_info(root_dir: &str) -> xshell::Result<(String, Vec<String>)> {
         .to_owned();
 
     let upgradable_from = get_upgradeable_from(&control_contents)
-        .unwrap_or_else(|e| panic!("{} in control file {}", e, control_contents));
+        .unwrap_or_else(|e| panic!("{e} in control file {control_contents}"));
 
     Ok((current_version, upgradable_from))
 }
@@ -378,7 +378,7 @@ fn get_version_info(root_dir: &str) -> xshell::Result<(String, Vec<String>)> {
 
 // run a command, only printing the output on failure
 fn quietly_run(cmd: Cmd) -> xshell::Result<()> {
-    let display = format!("{}", cmd);
+    let display = format!("{cmd}");
     let output = cmd.ignore_status().output()?;
     if !output.status.success() {
         io::stdout()
@@ -388,9 +388,8 @@ fn quietly_run(cmd: Cmd) -> xshell::Result<()> {
             .write_all(&output.stderr)
             .expect("cannot write to stdout");
         panic!(
-            "{} `{}` exited with a non-zero error code {}",
+            "{} `{display}` exited with a non-zero error code {}",
             "ERROR".bold().red(),
-            display,
             output.status
         )
     }

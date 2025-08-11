@@ -54,7 +54,7 @@ pg_type! {
 
 ron_inout_funcs!(CounterSummary);
 
-impl<'input> CounterSummary<'input> {
+impl CounterSummary {
     pub fn to_internal_counter_summary(&self) -> MetricSummary {
         MetricSummary {
             first: self.first,
@@ -92,7 +92,7 @@ impl<'input> CounterSummary<'input> {
         interval_len: i64,
         prev: Option<CounterSummary>,
         next: Option<CounterSummary>,
-    ) -> CounterSummary<'static> {
+    ) -> CounterSummary {
         let prev = if self.first.ts > interval_start {
             prev.map(|summary| {
                 let first = if summary.last.val > self.first.val {
@@ -228,6 +228,7 @@ impl CounterSummaryTransState {
 
 #[pg_extern(immutable, parallel_safe, strict)]
 pub fn counter_summary_trans_serialize(state: Internal) -> bytea {
+    let mut state = state;
     let state: &mut CounterSummaryTransState = unsafe { state.get_mut().unwrap() };
     state.combine_summaries();
     crate::do_serialize!(state)
@@ -295,9 +296,9 @@ pub fn counter_agg_trans_no_bounds(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn counter_agg_summary_trans<'a>(
+pub fn counter_agg_summary_trans(
     state: Internal,
-    value: Option<CounterSummary<'a>>,
+    value: Option<CounterSummary>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     counter_agg_summary_trans_inner(unsafe { state.to_inner() }, value, fcinfo).internal()
@@ -368,16 +369,13 @@ pub fn counter_agg_combine_inner(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-fn counter_agg_final(
-    state: Internal,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<CounterSummary<'static>> {
+fn counter_agg_final(state: Internal, fcinfo: pg_sys::FunctionCallInfo) -> Option<CounterSummary> {
     counter_agg_final_inner(unsafe { state.to_inner() }, fcinfo)
 }
 fn counter_agg_final_inner(
     state: Option<Inner<CounterSummaryTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<CounterSummary<'static>> {
+) -> Option<CounterSummary> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let mut state = match state {
@@ -471,118 +469,103 @@ extension_sql!(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_delta<'a>(
-    sketch: CounterSummary<'a>,
-    _accessor: AccessorDelta<'a>,
-) -> f64 {
+pub fn arrow_counter_agg_delta(sketch: CounterSummary, _accessor: AccessorDelta) -> f64 {
     counter_agg_delta(sketch)
 }
 
 #[pg_extern(name = "delta", strict, immutable, parallel_safe)]
-fn counter_agg_delta<'a>(summary: CounterSummary<'a>) -> f64 {
+fn counter_agg_delta(summary: CounterSummary) -> f64 {
     summary.to_internal_counter_summary().delta()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_rate<'a>(
-    sketch: CounterSummary<'a>,
-    _accessor: AccessorRate<'a>,
-) -> Option<f64> {
+pub fn arrow_counter_agg_rate(sketch: CounterSummary, _accessor: AccessorRate) -> Option<f64> {
     counter_agg_rate(sketch)
 }
 
 #[pg_extern(name = "rate", strict, immutable, parallel_safe)]
-fn counter_agg_rate<'a>(summary: CounterSummary<'a>) -> Option<f64> {
+fn counter_agg_rate(summary: CounterSummary) -> Option<f64> {
     summary.to_internal_counter_summary().rate()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_time_delta<'a>(
-    sketch: CounterSummary<'a>,
-    _accessor: AccessorTimeDelta<'a>,
-) -> f64 {
+pub fn arrow_counter_agg_time_delta(sketch: CounterSummary, _accessor: AccessorTimeDelta) -> f64 {
     counter_agg_time_delta(sketch)
 }
 
 #[pg_extern(name = "time_delta", strict, immutable, parallel_safe)]
-fn counter_agg_time_delta<'a>(summary: CounterSummary<'a>) -> f64 {
+fn counter_agg_time_delta(summary: CounterSummary) -> f64 {
     summary.to_internal_counter_summary().time_delta()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_irate_left<'a>(
-    sketch: CounterSummary<'a>,
-    _accessor: AccessorIrateLeft<'a>,
+pub fn arrow_counter_agg_irate_left(
+    sketch: CounterSummary,
+    _accessor: AccessorIrateLeft,
 ) -> Option<f64> {
     counter_agg_irate_left(sketch)
 }
 
 #[pg_extern(name = "irate_left", strict, immutable, parallel_safe)]
-fn counter_agg_irate_left<'a>(summary: CounterSummary<'a>) -> Option<f64> {
+fn counter_agg_irate_left(summary: CounterSummary) -> Option<f64> {
     summary.to_internal_counter_summary().irate_left()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_irate_right<'a>(
-    sketch: CounterSummary<'a>,
-    _accessor: AccessorIrateRight<'a>,
+pub fn arrow_counter_agg_irate_right(
+    sketch: CounterSummary,
+    _accessor: AccessorIrateRight,
 ) -> Option<f64> {
     counter_agg_irate_right(sketch)
 }
 
 #[pg_extern(name = "irate_right", strict, immutable, parallel_safe)]
-fn counter_agg_irate_right<'a>(summary: CounterSummary<'a>) -> Option<f64> {
+fn counter_agg_irate_right(summary: CounterSummary) -> Option<f64> {
     summary.to_internal_counter_summary().irate_right()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_idelta_left<'a>(
-    sketch: CounterSummary<'a>,
-    _accessor: AccessorIdeltaLeft<'a>,
-) -> f64 {
+pub fn arrow_counter_agg_idelta_left(sketch: CounterSummary, _accessor: AccessorIdeltaLeft) -> f64 {
     counter_agg_idelta_left(sketch)
 }
 
 #[pg_extern(name = "idelta_left", strict, immutable, parallel_safe)]
-fn counter_agg_idelta_left<'a>(summary: CounterSummary<'a>) -> f64 {
+fn counter_agg_idelta_left(summary: CounterSummary) -> f64 {
     summary.to_internal_counter_summary().idelta_left()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_idelta_right<'a>(
-    sketch: CounterSummary<'a>,
-    _accessor: AccessorIdeltaRight<'a>,
+pub fn arrow_counter_agg_idelta_right(
+    sketch: CounterSummary,
+    _accessor: AccessorIdeltaRight,
 ) -> f64 {
     counter_agg_idelta_right(sketch)
 }
 
 #[pg_extern(name = "idelta_right", strict, immutable, parallel_safe)]
-fn counter_agg_idelta_right<'a>(summary: CounterSummary<'a>) -> f64 {
+fn counter_agg_idelta_right(summary: CounterSummary) -> f64 {
     summary.to_internal_counter_summary().idelta_right()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_with_bounds<'a>(
-    sketch: CounterSummary<'a>,
-    accessor: AccessorWithBounds<'a>,
-) -> CounterSummary<'static> {
+pub fn arrow_counter_agg_with_bounds(
+    sketch: CounterSummary,
+    accessor: AccessorWithBounds,
+) -> CounterSummary {
     let mut builder = CounterSummaryBuilder::from(sketch.to_internal_counter_summary());
     builder.set_bounds(accessor.bounds());
     CounterSummary::from_internal_counter_summary(builder.build())
 }
 
 #[pg_extern(name = "with_bounds", strict, immutable, parallel_safe)]
-fn counter_agg_with_bounds<'a>(
-    summary: CounterSummary<'a>,
-    bounds: tstzrange,
-) -> CounterSummary<'static> {
+fn counter_agg_with_bounds(summary: CounterSummary, bounds: tstzrange) -> CounterSummary {
     // TODO dedup with previous by using apply_bounds
     unsafe {
         let ptr = bounds.0.cast_mut_ptr();
@@ -605,16 +588,15 @@ fn counter_agg_with_bounds<'a>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_extrapolated_delta<'a>(
-    sketch: CounterSummary<'a>,
-    accessor: AccessorExtrapolatedDelta<'a>,
+pub fn arrow_counter_agg_extrapolated_delta(
+    sketch: CounterSummary,
+    accessor: AccessorExtrapolatedDelta,
 ) -> Option<f64> {
-    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    counter_agg_extrapolated_delta(sketch, &method)
+    counter_agg_extrapolated_delta(sketch, accessor.method.as_str())
 }
 
 #[pg_extern(name = "extrapolated_delta", strict, immutable, parallel_safe)]
-fn counter_agg_extrapolated_delta<'a>(summary: CounterSummary<'a>, method: &str) -> Option<f64> {
+fn counter_agg_extrapolated_delta(summary: CounterSummary, method: &str) -> Option<f64> {
     match method_kind(method) {
         Prometheus => summary
             .to_internal_counter_summary()
@@ -624,12 +606,12 @@ fn counter_agg_extrapolated_delta<'a>(summary: CounterSummary<'a>, method: &str)
 }
 
 #[pg_extern(name = "interpolated_delta", immutable, parallel_safe)]
-fn counter_agg_interpolated_delta<'a>(
-    summary: CounterSummary<'a>,
+fn counter_agg_interpolated_delta(
+    summary: CounterSummary,
     start: crate::raw::TimestampTz,
     duration: crate::raw::Interval,
-    prev: Option<CounterSummary<'a>>,
-    next: Option<CounterSummary<'a>>,
+    prev: Option<CounterSummary>,
+    next: Option<CounterSummary>,
 ) -> f64 {
     let interval = crate::datum_utils::interval_to_ms(&start, &duration);
     summary
@@ -640,9 +622,9 @@ fn counter_agg_interpolated_delta<'a>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_interpolated_delta<'a>(
-    sketch: CounterSummary<'a>,
-    accessor: CounterInterpolatedDeltaAccessor<'a>,
+pub fn arrow_counter_interpolated_delta(
+    sketch: CounterSummary,
+    accessor: CounterInterpolatedDeltaAccessor,
 ) -> f64 {
     let prev = if accessor.flags & 1 == 1 {
         Some(accessor.prev.clone().into())
@@ -666,16 +648,15 @@ pub fn arrow_counter_interpolated_delta<'a>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_extrapolated_rate<'a>(
-    sketch: CounterSummary<'a>,
-    accessor: AccessorExtrapolatedRate<'a>,
+pub fn arrow_counter_agg_extrapolated_rate(
+    sketch: CounterSummary,
+    accessor: AccessorExtrapolatedRate,
 ) -> Option<f64> {
-    let method = String::from_utf8_lossy(accessor.bytes.as_slice());
-    counter_agg_extrapolated_rate(sketch, &method)
+    counter_agg_extrapolated_rate(sketch, accessor.method.as_str())
 }
 
 #[pg_extern(name = "extrapolated_rate", strict, immutable, parallel_safe)]
-fn counter_agg_extrapolated_rate<'a>(summary: CounterSummary<'a>, method: &str) -> Option<f64> {
+fn counter_agg_extrapolated_rate(summary: CounterSummary, method: &str) -> Option<f64> {
     match method_kind(method) {
         Prometheus => summary
             .to_internal_counter_summary()
@@ -685,12 +666,12 @@ fn counter_agg_extrapolated_rate<'a>(summary: CounterSummary<'a>, method: &str) 
 }
 
 #[pg_extern(name = "interpolated_rate", immutable, parallel_safe)]
-fn counter_agg_interpolated_rate<'a>(
-    summary: CounterSummary<'a>,
+fn counter_agg_interpolated_rate(
+    summary: CounterSummary,
     start: crate::raw::TimestampTz,
     duration: crate::raw::Interval,
-    prev: Option<CounterSummary<'a>>,
-    next: Option<CounterSummary<'a>>,
+    prev: Option<CounterSummary>,
+    next: Option<CounterSummary>,
 ) -> Option<f64> {
     let interval = crate::datum_utils::interval_to_ms(&start, &duration);
     summary
@@ -701,9 +682,9 @@ fn counter_agg_interpolated_rate<'a>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_interpolated_rate<'a>(
-    sketch: CounterSummary<'a>,
-    accessor: CounterInterpolatedRateAccessor<'a>,
+pub fn arrow_counter_interpolated_rate(
+    sketch: CounterSummary,
+    accessor: CounterInterpolatedRateAccessor,
 ) -> Option<f64> {
     let prev = if accessor.flags & 1 == 1 {
         Some(accessor.prev.clone().into())
@@ -727,163 +708,154 @@ pub fn arrow_counter_interpolated_rate<'a>(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_num_elements<'a>(
-    sketch: CounterSummary<'a>,
-    _accessor: AccessorNumElements<'a>,
+pub fn arrow_counter_agg_num_elements(
+    sketch: CounterSummary,
+    _accessor: AccessorNumElements,
 ) -> i64 {
     counter_agg_num_elements(sketch)
 }
 
 #[pg_extern(name = "num_elements", strict, immutable, parallel_safe)]
-fn counter_agg_num_elements<'a>(summary: CounterSummary<'a>) -> i64 {
+fn counter_agg_num_elements(summary: CounterSummary) -> i64 {
     summary.to_internal_counter_summary().stats.n as i64
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_num_changes<'a>(
-    sketch: CounterSummary<'a>,
-    _accessor: AccessorNumChanges<'a>,
-) -> i64 {
+pub fn arrow_counter_agg_num_changes(sketch: CounterSummary, _accessor: AccessorNumChanges) -> i64 {
     counter_agg_num_changes(sketch)
 }
 
 #[pg_extern(name = "num_changes", strict, immutable, parallel_safe)]
-fn counter_agg_num_changes<'a>(summary: CounterSummary<'a>) -> i64 {
+fn counter_agg_num_changes(summary: CounterSummary) -> i64 {
     summary.to_internal_counter_summary().num_changes as i64
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_num_resets<'a>(
-    sketch: CounterSummary<'a>,
-    _accessor: AccessorNumResets<'a>,
-) -> i64 {
+pub fn arrow_counter_agg_num_resets(sketch: CounterSummary, _accessor: AccessorNumResets) -> i64 {
     counter_agg_num_resets(sketch)
 }
 
 #[pg_extern(name = "num_resets", strict, immutable, parallel_safe)]
-fn counter_agg_num_resets<'a>(summary: CounterSummary<'a>) -> i64 {
+fn counter_agg_num_resets(summary: CounterSummary) -> i64 {
     summary.to_internal_counter_summary().num_resets as i64
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_slope<'a>(
-    sketch: CounterSummary<'a>,
-    _accessor: AccessorSlope<'a>,
-) -> Option<f64> {
+pub fn arrow_counter_agg_slope(sketch: CounterSummary, _accessor: AccessorSlope) -> Option<f64> {
     counter_agg_slope(sketch)
 }
 
 #[pg_extern(name = "slope", strict, immutable, parallel_safe)]
-fn counter_agg_slope<'a>(summary: CounterSummary<'a>) -> Option<f64> {
+fn counter_agg_slope(summary: CounterSummary) -> Option<f64> {
     summary.to_internal_counter_summary().stats.slope()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_intercept<'a>(
-    sketch: CounterSummary<'a>,
-    _accessor: AccessorIntercept<'a>,
+pub fn arrow_counter_agg_intercept(
+    sketch: CounterSummary,
+    _accessor: AccessorIntercept,
 ) -> Option<f64> {
     counter_agg_intercept(sketch)
 }
 
 #[pg_extern(name = "intercept", strict, immutable, parallel_safe)]
-fn counter_agg_intercept<'a>(summary: CounterSummary<'a>) -> Option<f64> {
+fn counter_agg_intercept(summary: CounterSummary) -> Option<f64> {
     summary.to_internal_counter_summary().stats.intercept()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_corr<'a>(
-    sketch: CounterSummary<'a>,
-    _accessor: AccessorCorr<'a>,
-) -> Option<f64> {
+pub fn arrow_counter_agg_corr(sketch: CounterSummary, _accessor: AccessorCorr) -> Option<f64> {
     counter_agg_corr(sketch)
 }
 
 #[pg_extern(name = "corr", strict, immutable, parallel_safe)]
-fn counter_agg_corr<'a>(summary: CounterSummary<'a>) -> Option<f64> {
+fn counter_agg_corr(summary: CounterSummary) -> Option<f64> {
     summary.to_internal_counter_summary().stats.corr()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_zero_time<'a>(
-    sketch: CounterSummary<'a>,
-    _accessor: AccessorCounterZeroTime<'a>,
+pub fn arrow_counter_agg_zero_time(
+    sketch: CounterSummary,
+    _accessor: AccessorCounterZeroTime,
 ) -> Option<crate::raw::TimestampTz> {
     counter_agg_counter_zero_time(sketch)
 }
 
 #[pg_extern(name = "counter_zero_time", strict, immutable, parallel_safe)]
-fn counter_agg_counter_zero_time<'a>(
-    summary: CounterSummary<'a>,
-) -> Option<crate::raw::TimestampTz> {
+fn counter_agg_counter_zero_time(summary: CounterSummary) -> Option<crate::raw::TimestampTz> {
     Some(((summary.to_internal_counter_summary().stats.x_intercept()? * 1_000_000.0) as i64).into())
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_first_val<'a>(
-    sketch: CounterSummary<'a>,
-    _accessor: AccessorFirstVal<'a>,
-) -> f64 {
+pub fn arrow_counter_agg_first_val(sketch: CounterSummary, _accessor: AccessorFirstVal) -> f64 {
     counter_agg_first_val(sketch)
 }
 
 #[pg_extern(name = "first_val", strict, immutable, parallel_safe)]
-fn counter_agg_first_val<'a>(summary: CounterSummary<'a>) -> f64 {
+fn counter_agg_first_val(summary: CounterSummary) -> f64 {
     summary.to_internal_counter_summary().first.val
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_last_val<'a>(
-    sketch: CounterSummary<'a>,
-    _accessor: AccessorLastVal<'a>,
-) -> f64 {
+pub fn arrow_counter_agg_last_val(sketch: CounterSummary, _accessor: AccessorLastVal) -> f64 {
     counter_agg_last_val(sketch)
 }
 
 #[pg_extern(name = "last_val", strict, immutable, parallel_safe)]
-fn counter_agg_last_val<'a>(summary: CounterSummary<'a>) -> f64 {
+fn counter_agg_last_val(summary: CounterSummary) -> f64 {
     summary.to_internal_counter_summary().last.val
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_first_time<'a>(
-    sketch: CounterSummary<'a>,
-    _accessor: AccessorFirstTime<'a>,
+pub fn arrow_counter_agg_first_time(
+    sketch: CounterSummary,
+    _accessor: AccessorFirstTime,
 ) -> crate::raw::TimestampTz {
     counter_agg_first_time(sketch)
 }
 
 #[pg_extern(name = "first_time", strict, immutable, parallel_safe)]
-fn counter_agg_first_time<'a>(summary: CounterSummary<'a>) -> crate::raw::TimestampTz {
+fn counter_agg_first_time(summary: CounterSummary) -> crate::raw::TimestampTz {
     summary.to_internal_counter_summary().first.ts.into()
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_counter_agg_last_time<'a>(
-    sketch: CounterSummary<'a>,
-    _accessor: AccessorLastTime<'a>,
+pub fn arrow_counter_agg_last_time(
+    sketch: CounterSummary,
+    _accessor: AccessorLastTime,
 ) -> crate::raw::TimestampTz {
     counter_agg_last_time(sketch)
 }
 
 #[pg_extern(name = "last_time", strict, immutable, parallel_safe)]
-fn counter_agg_last_time<'a>(summary: CounterSummary<'a>) -> crate::raw::TimestampTz {
+fn counter_agg_last_time(summary: CounterSummary) -> crate::raw::TimestampTz {
     summary.to_internal_counter_summary().last.ts.into()
 }
 
-#[derive(Clone, Copy)]
+#[derive(
+    Clone, Copy, Debug, serde::Serialize, serde::Deserialize, flat_serialize_macro::FlatSerializable,
+)]
+#[repr(u8)]
 pub enum Method {
-    Prometheus,
+    Prometheus = 1,
+}
+
+impl Method {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Method::Prometheus => "prometheus",
+        }
+    }
 }
 
 #[track_caller]
@@ -912,7 +884,7 @@ mod tests {
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {
             $client
-                .update($stmt, None, None)
+                .update($stmt, None, &[])
                 .unwrap()
                 .first()
                 .get_one::<$type>()
@@ -924,7 +896,7 @@ mod tests {
     macro_rules! select_and_check_one {
         ($client:expr, $stmt:expr, $type:ty) => {{
             let (a, b) = $client
-                .update($stmt, None, None)
+                .update($stmt, None, &[])
                 .unwrap()
                 .first()
                 .get_two::<$type, $type>()
@@ -954,19 +926,19 @@ mod tests {
 
     #[pg_test]
     fn test_counter_aggregate() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             // set search_path after defining our table so we don't pollute the wrong schema
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             let stmt = "SELECT format('toolkit_experimental, %s',current_setting('search_path'))";
             let search_path = select_one!(client, stmt, String);
             client
                 .update(
-                    &format!("SET LOCAL search_path TO {}", search_path),
+                    &format!("SET LOCAL search_path TO {search_path}"),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
-            make_test_table(&mut client, "test");
+            make_test_table(client, "test");
 
             // NULL bounds are equivalent to none provided
             let stmt = "SELECT counter_agg(ts, val) FROM test";
@@ -1010,7 +982,7 @@ mod tests {
             assert_relative_eq!(select_and_check_one!(client, stmt, f64), 20.0 / 120.0);
 
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:02:00+00', 10.0), ('2020-01-01 00:03:00+00', 20.0), ('2020-01-01 00:04:00+00', 10.0)";
-            client.update(stmt, None, None).unwrap();
+            client.update(stmt, None, &[]).unwrap();
 
             let stmt = "SELECT \
                 slope(counter_agg(ts, val)), \
@@ -1038,7 +1010,7 @@ mod tests {
             assert_eq!(&zp, "2019-12-31 23:59:00+00");
 
             let stmt = "INSERT INTO test VALUES('2020-01-01 00:08:00+00', 30.0), ('2020-01-01 00:10:00+00', 30.0), ('2020-01-01 00:10:30+00', 10.0), ('2020-01-01 00:20:00+00', 40.0)";
-            client.update(stmt, None, None).unwrap();
+            client.update(stmt, None, &[]).unwrap();
 
             let stmt = "SELECT \
                 num_elements(counter_agg(ts, val)), \
@@ -1072,15 +1044,15 @@ mod tests {
 
     #[pg_test]
     fn test_counter_io() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
                 .update(
                     "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
-            client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
+            client.update("SET TIME ZONE 'UTC'", None, &[]).unwrap();
             let stmt = "INSERT INTO test VALUES\
                 ('2020-01-01 00:00:00+00', 10.0),\
                 ('2020-01-01 00:01:00+00', 20.0),\
@@ -1091,7 +1063,7 @@ mod tests {
                 ('2020-01-01 00:06:00+00', 10.0),\
                 ('2020-01-01 00:07:00+00', 30.0),\
                 ('2020-01-01 00:08:00+00', 10.0)";
-            client.update(stmt, None, None).unwrap();
+            client.update(stmt, None, &[]).unwrap();
 
             let expected = "(\
                 version:1,\
@@ -1128,21 +1100,21 @@ mod tests {
             let test = select_one!(client, stmt, String);
             assert_eq!(test, expected);
 
-            let stmt = format!("SELECT '{}'::CounterSummary::TEXT", expected);
+            let stmt = format!("SELECT '{expected}'::CounterSummary::TEXT");
             let round_trip = select_one!(client, &stmt, String);
             assert_eq!(expected, round_trip);
 
             let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
             let delta = select_one!(client, stmt, f64);
             assert!((delta - 100.).abs() < f64::EPSILON);
-            let stmt = format!("SELECT delta('{}')", expected);
+            let stmt = format!("SELECT delta('{expected}')");
             let delta_test = select_one!(client, &stmt, f64);
             assert!((delta - delta_test).abs() < f64::EPSILON);
 
             let stmt = "SELECT num_resets(counter_agg(ts, val)) FROM test";
             let resets = select_one!(client, stmt, i64);
             assert_eq!(resets, 4);
-            let stmt = format!("SELECT num_resets('{}')", expected);
+            let stmt = format!("SELECT num_resets('{expected}')");
             let resets_test = select_one!(client, &stmt, i64);
             assert_eq!(resets, resets_test);
         });
@@ -1221,8 +1193,8 @@ mod tests {
 
     #[pg_test]
     fn delta_after_counter_decrease() {
-        Spi::connect(|mut client| {
-            decrease(&mut client);
+        Spi::connect_mut(|client| {
+            decrease(client);
             let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
             // 10 after 30 means there was a reset so we add 30 + 10 = 40.
             // Delta from 30 to 40 => 10
@@ -1232,8 +1204,8 @@ mod tests {
 
     #[pg_test]
     fn delta_after_counter_increase() {
-        Spi::connect(|mut client| {
-            increase(&mut client);
+        Spi::connect_mut(|client| {
+            increase(client);
             let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
         });
@@ -1241,8 +1213,8 @@ mod tests {
 
     #[pg_test]
     fn delta_after_counter_decrease_then_increase_to_same_value() {
-        Spi::connect(|mut client| {
-            decrease_then_increase_to_same_value(&mut client);
+        Spi::connect_mut(|client| {
+            decrease_then_increase_to_same_value(client);
             let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
             // 10 after 30 means there was a reset so we add 30 + 10 + 30 = 70.
             // Delta from 30 to 70 => 30
@@ -1252,8 +1224,8 @@ mod tests {
 
     #[pg_test]
     fn delta_after_counter_increase_then_decrease_to_same_value() {
-        Spi::connect(|mut client| {
-            increase_then_decrease_to_same_value(&mut client);
+        Spi::connect_mut(|client| {
+            increase_then_decrease_to_same_value(client);
             let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
             // In this case, counter goes 10, 30, 40 (reset + 10).
             // Delta from 10 to 40 => 30
@@ -1263,8 +1235,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_after_counter_decrease() {
-        Spi::connect(|mut client| {
-            decrease(&mut client);
+        Spi::connect_mut(|client| {
+            decrease(client);
             let stmt = "SELECT idelta_left(counter_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
         });
@@ -1272,8 +1244,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_after_counter_increase() {
-        Spi::connect(|mut client| {
-            increase(&mut client);
+        Spi::connect_mut(|client| {
+            increase(client);
             let stmt = "SELECT idelta_left(counter_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
         });
@@ -1281,8 +1253,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_after_counter_increase_then_decrease_to_same_value() {
-        Spi::connect(|mut client| {
-            increase_then_decrease_to_same_value(&mut client);
+        Spi::connect_mut(|client| {
+            increase_then_decrease_to_same_value(client);
             let stmt = "SELECT idelta_left(counter_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
         });
@@ -1290,8 +1262,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_after_counter_decrease_then_increase_to_same_value() {
-        Spi::connect(|mut client| {
-            decrease_then_increase_to_same_value(&mut client);
+        Spi::connect_mut(|client| {
+            decrease_then_increase_to_same_value(client);
 
             let stmt = "SELECT idelta_left(counter_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
@@ -1300,8 +1272,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_after_counter_decrease() {
-        Spi::connect(|mut client| {
-            decrease(&mut client);
+        Spi::connect_mut(|client| {
+            decrease(client);
             let stmt = "SELECT idelta_right(counter_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
         });
@@ -1309,8 +1281,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_after_counter_increase() {
-        Spi::connect(|mut client| {
-            increase(&mut client);
+        Spi::connect_mut(|client| {
+            increase(client);
             let stmt = "SELECT idelta_right(counter_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
         });
@@ -1318,8 +1290,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_after_counter_increase_then_decrease_to_same_value() {
-        Spi::connect(|mut client| {
-            increase_then_decrease_to_same_value(&mut client);
+        Spi::connect_mut(|client| {
+            increase_then_decrease_to_same_value(client);
             let stmt = "SELECT idelta_right(counter_agg(ts, val)) FROM test";
             assert_eq!(10.0, select_one!(client, stmt, f64));
         });
@@ -1327,8 +1299,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_after_counter_decrease_then_increase_to_same_value() {
-        Spi::connect(|mut client| {
-            decrease_then_increase_to_same_value(&mut client);
+        Spi::connect_mut(|client| {
+            decrease_then_increase_to_same_value(client);
             let stmt = "SELECT idelta_right(counter_agg(ts, val)) FROM test";
             assert_eq!(20.0, select_one!(client, stmt, f64));
         });
@@ -1336,11 +1308,11 @@ mod tests {
 
     #[pg_test]
     fn counter_agg_interpolation() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client.update(
                 "CREATE TABLE test(time timestamptz, value double precision, bucket timestamptz)",
                 None,
-                None,
+                &[]
             ).unwrap();
             client
                 .update(
@@ -1355,7 +1327,7 @@ mod tests {
                 ('2020-1-3 12:00'::timestamptz, 0.0, '2020-1-3'::timestamptz), 
                 ('2020-1-3 16:00'::timestamptz, 35.0, '2020-1-3'::timestamptz)"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -1375,7 +1347,7 @@ mod tests {
                 ) s
                 ORDER BY bucket"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -1412,7 +1384,7 @@ mod tests {
                 ) s
                 ORDER BY bucket"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -1449,7 +1421,7 @@ mod tests {
                 ) s
                 ORDER BY bucket"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -1486,7 +1458,7 @@ mod tests {
                 ) s
                 ORDER BY bucket"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -1511,11 +1483,11 @@ mod tests {
 
     #[pg_test]
     fn interpolated_delta_with_aligned_point() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client.update(
                 "CREATE TABLE test(time timestamptz, value double precision, bucket timestamptz)",
                 None,
-                None,
+                &[]
             ).unwrap();
             client
                 .update(
@@ -1527,7 +1499,7 @@ mod tests {
                 ('2020-1-2 12:00'::timestamptz, 50.0, '2020-1-2'::timestamptz),
                 ('2020-1-2 20:00'::timestamptz, 25.0, '2020-1-2'::timestamptz)"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -1547,7 +1519,7 @@ mod tests {
                 ) s
                 ORDER BY bucket"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             // Day 1, start at 10, interpolated end of day is 15 (after reset), reset at 40 and 20
@@ -1566,8 +1538,8 @@ mod tests {
 
     #[pg_test]
     fn irate_left_arrow_match() {
-        Spi::connect(|mut client| {
-            make_test_table(&mut client, "test");
+        Spi::connect_mut(|client| {
+            make_test_table(client, "test");
 
             assert_relative_eq!(
                 select_and_check_one!(
@@ -1585,8 +1557,8 @@ mod tests {
 
     #[pg_test]
     fn irate_right_arrow_match() {
-        Spi::connect(|mut client| {
-            make_test_table(&mut client, "test");
+        Spi::connect_mut(|client| {
+            make_test_table(client, "test");
 
             assert_relative_eq!(
                 select_and_check_one!(
@@ -1604,8 +1576,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_left_arrow_match() {
-        Spi::connect(|mut client| {
-            make_test_table(&mut client, "test");
+        Spi::connect_mut(|client| {
+            make_test_table(client, "test");
 
             assert_relative_eq!(
                 select_and_check_one!(
@@ -1623,8 +1595,8 @@ mod tests {
 
     #[pg_test]
     fn idelta_right_arrow_match() {
-        Spi::connect(|mut client| {
-            make_test_table(&mut client, "test");
+        Spi::connect_mut(|client| {
+            make_test_table(client, "test");
 
             assert_relative_eq!(
                 select_and_check_one!(
@@ -1642,8 +1614,8 @@ mod tests {
 
     #[pg_test]
     fn num_resets_arrow_match() {
-        Spi::connect(|mut client| {
-            make_test_table(&mut client, "test");
+        Spi::connect_mut(|client| {
+            make_test_table(client, "test");
 
             assert_relative_eq!(
                 select_and_check_one!(
@@ -1661,8 +1633,8 @@ mod tests {
 
     #[pg_test]
     fn first_and_last_val() {
-        Spi::connect(|mut client| {
-            make_test_table(&mut client, "test");
+        Spi::connect_mut(|client| {
+            make_test_table(client, "test");
 
             assert_relative_eq!(
                 select_one!(
@@ -1690,8 +1662,8 @@ mod tests {
 
     #[pg_test]
     fn first_and_last_val_arrow_match() {
-        Spi::connect(|mut client| {
-            make_test_table(&mut client, "test");
+        Spi::connect_mut(|client| {
+            make_test_table(client, "test");
 
             assert_relative_eq!(
                 select_and_check_one!(
@@ -1721,9 +1693,9 @@ mod tests {
 
     #[pg_test]
     fn first_and_last_time() {
-        Spi::connect(|mut client| {
-            make_test_table(&mut client, "test");
-            client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            make_test_table(client, "test");
+            client.update("SET TIME ZONE 'UTC'", None, &[]).unwrap();
 
             assert_eq!(
                 select_one!(
@@ -1751,9 +1723,9 @@ mod tests {
 
     #[pg_test]
     fn first_and_last_time_arrow_match() {
-        Spi::connect(|mut client| {
-            make_test_table(&mut client, "test");
-            client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            make_test_table(client, "test");
+            client.update("SET TIME ZONE 'UTC'", None, &[]).unwrap();
 
             assert_eq!(
                 select_and_check_one!(
@@ -1783,7 +1755,7 @@ mod tests {
 
     // #[pg_test]
     // fn test_combine_aggregate(){
-    //     Spi::connect(|mut client| {
+    //     Spi::connect_mut(|client| {
 
     //     });
     // }
@@ -1796,17 +1768,17 @@ pub(crate) mod testing {
             .update(
                 "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
                 None,
-                None,
+                &[],
             )
             .unwrap();
-        client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
+        client.update("SET TIME ZONE 'UTC'", None, &[]).unwrap();
         client
             .update(
                 r#"INSERT INTO test VALUES
                 ('2020-01-01 00:00:00+00', 30.0),
                 ('2020-01-01 00:07:00+00', 10.0)"#,
                 None,
-                None,
+                &[],
             )
             .unwrap();
     }
@@ -1816,17 +1788,17 @@ pub(crate) mod testing {
             .update(
                 "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
                 None,
-                None,
+                &[],
             )
             .unwrap();
-        client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
+        client.update("SET TIME ZONE 'UTC'", None, &[]).unwrap();
         client
             .update(
                 r#"INSERT INTO test VALUES
                 ('2020-01-01 00:00:00+00', 10.0),
                 ('2020-01-01 00:07:00+00', 30.0)"#,
                 None,
-                None,
+                &[],
             )
             .unwrap();
     }
@@ -1836,10 +1808,10 @@ pub(crate) mod testing {
             .update(
                 "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
                 None,
-                None,
+                &[],
             )
             .unwrap();
-        client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
+        client.update("SET TIME ZONE 'UTC'", None, &[]).unwrap();
         client
             .update(
                 r#"INSERT INTO test VALUES
@@ -1847,7 +1819,7 @@ pub(crate) mod testing {
                 ('2020-01-01 00:07:00+00', 10.0),
                 ('2020-01-01 00:08:00+00', 30.0)"#,
                 None,
-                None,
+                &[],
             )
             .unwrap();
     }
@@ -1857,10 +1829,10 @@ pub(crate) mod testing {
             .update(
                 "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
                 None,
-                None,
+                &[],
             )
             .unwrap();
-        client.update("SET TIME ZONE 'UTC'", None, None).unwrap();
+        client.update("SET TIME ZONE 'UTC'", None, &[]).unwrap();
         client
             .update(
                 r#"INSERT INTO test VALUES
@@ -1868,7 +1840,7 @@ pub(crate) mod testing {
                 ('2020-01-01 00:07:00+00', 30.0),
                 ('2020-01-01 00:08:00+00', 10.0)"#,
                 None,
-                None,
+                &[],
             )
             .unwrap();
     }
@@ -1876,18 +1848,15 @@ pub(crate) mod testing {
     pub fn make_test_table(client: &mut pgrx::spi::SpiClient, name: &str) {
         client
             .update(
-                &format!(
-                    "CREATE TABLE {}(ts timestamptz, val DOUBLE PRECISION)",
-                    name
-                ),
+                &format!("CREATE TABLE {name}(ts timestamptz, val DOUBLE PRECISION)"),
                 None,
-                None,
+                &[],
             )
             .unwrap();
         client.update(
-                &format!("INSERT INTO {} VALUES('2020-01-01 00:00:00+00', 10.0), ('2020-01-01 00:01:00+00', 20.0)", name),
+                &format!("INSERT INTO {name} VALUES('2020-01-01 00:00:00+00', 10.0), ('2020-01-01 00:01:00+00', 20.0)"),
                 None,
-                None,
+                &[]
             ).unwrap();
     }
 }

@@ -1,5 +1,3 @@
-use std::convert::TryInto as _;
-
 use pgrx::*;
 
 use counter_agg::range::I64Range;
@@ -14,7 +12,6 @@ macro_rules! accessor {
     ) => {
         ::paste::paste! {
             $crate::pg_type!{
-                // TODO Move into pg_type as we don't care to vary it.
                 #[derive(Debug)]
                 struct [<Accessor $name:camel>] {
                 $($field: $typ,)*
@@ -37,7 +34,7 @@ macro_rules! accessor_fn_impl {
             #[pg_extern(immutable, parallel_safe, name = "" $name "")]
             fn [<accessor_ $name >](
                 $( $field: $typ ),*
-            ) -> [<Accessor $name:camel>]<'static> {
+            ) -> [<Accessor $name:camel>] {
                 $crate::build! {
                     [<Accessor $name:camel>] {
                         $( $field ),*
@@ -121,7 +118,7 @@ pg_type! {
 ron_inout_funcs!(AccessorLiveAt);
 
 #[pg_extern(immutable, parallel_safe, name = "live_at")]
-pub fn accessor_live_at(ts: crate::raw::TimestampTz) -> AccessorLiveAt<'static> {
+pub fn accessor_live_at(ts: crate::raw::TimestampTz) -> AccessorLiveAt {
     unsafe {
         flatten! {
             AccessorLiveAt {
@@ -133,9 +130,8 @@ pub fn accessor_live_at(ts: crate::raw::TimestampTz) -> AccessorLiveAt<'static> 
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorStdDev<'input> {
-        len: u32,
-        bytes: [u8; self.len],
+    struct AccessorStdDev {
+        method: crate::stats_agg::Method,
     }
 }
 
@@ -143,13 +139,12 @@ pg_type! {
 ron_inout_funcs!(AccessorStdDev);
 
 #[pg_extern(immutable, parallel_safe, name = "stddev")]
-pub fn accessor_stddev(method: default!(&str, "'sample'")) -> AccessorStdDev<'static> {
-    let _ = crate::stats_agg::method_kind(method);
+pub fn accessor_stddev(method: default!(&str, "'sample'")) -> AccessorStdDev {
+    let method_enum = crate::stats_agg::method_kind(method);
     unsafe {
         flatten! {
             AccessorStdDev {
-                len: method.len().try_into().unwrap(),
-                bytes: method.as_bytes().into(),
+                method: method_enum,
             }
         }
     }
@@ -157,9 +152,8 @@ pub fn accessor_stddev(method: default!(&str, "'sample'")) -> AccessorStdDev<'st
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorStdDevX<'input> {
-        len: u32,
-        bytes: [u8; self.len],
+    struct AccessorStdDevX {
+        method: crate::stats_agg::Method,
     }
 }
 
@@ -167,13 +161,12 @@ pg_type! {
 ron_inout_funcs!(AccessorStdDevX);
 
 #[pg_extern(immutable, parallel_safe, name = "stddev_x")]
-pub fn accessor_stddev_x(method: default!(&str, "'sample'")) -> AccessorStdDevX<'static> {
-    let _ = crate::stats_agg::method_kind(method);
+pub fn accessor_stddev_x(method: default!(&str, "'sample'")) -> AccessorStdDevX {
+    let method_enum = crate::stats_agg::method_kind(method);
     unsafe {
         flatten! {
             AccessorStdDevX {
-                len: method.len().try_into().unwrap(),
-                bytes: method.as_bytes().into(),
+                method: method_enum,
             }
         }
     }
@@ -181,9 +174,8 @@ pub fn accessor_stddev_x(method: default!(&str, "'sample'")) -> AccessorStdDevX<
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorStdDevY<'input> {
-        len: u32,
-        bytes: [u8; self.len],
+    struct AccessorStdDevY {
+        method: crate::stats_agg::Method,
     }
 }
 
@@ -191,13 +183,12 @@ pg_type! {
 ron_inout_funcs!(AccessorStdDevY);
 
 #[pg_extern(immutable, parallel_safe, name = "stddev_y")]
-pub fn accessor_stddev_y(method: default!(&str, "'sample'")) -> AccessorStdDevY<'static> {
-    let _ = crate::stats_agg::method_kind(method);
+pub fn accessor_stddev_y(method: default!(&str, "'sample'")) -> AccessorStdDevY {
+    let method_enum = crate::stats_agg::method_kind(method);
     unsafe {
         flatten! {
             AccessorStdDevY {
-                len: method.len().try_into().unwrap(),
-                bytes: method.as_bytes().into(),
+                method: method_enum,
             }
         }
     }
@@ -205,9 +196,8 @@ pub fn accessor_stddev_y(method: default!(&str, "'sample'")) -> AccessorStdDevY<
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorVariance<'input> {
-        len: u32,
-        bytes: [u8; self.len],
+    struct AccessorVariance {
+        method: crate::stats_agg::Method,
     }
 }
 
@@ -215,13 +205,12 @@ pg_type! {
 ron_inout_funcs!(AccessorVariance);
 
 #[pg_extern(immutable, parallel_safe, name = "variance")]
-pub fn accessor_variance(method: default!(&str, "'sample'")) -> AccessorVariance<'static> {
-    let _ = crate::stats_agg::method_kind(method);
+pub fn accessor_variance(method: default!(&str, "'sample'")) -> AccessorVariance {
+    let method_enum = crate::stats_agg::method_kind(method);
     unsafe {
         flatten! {
             AccessorVariance {
-                len: method.len().try_into().unwrap(),
-                bytes: method.as_bytes().into(),
+                method: method_enum,
             }
         }
     }
@@ -229,9 +218,8 @@ pub fn accessor_variance(method: default!(&str, "'sample'")) -> AccessorVariance
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorVarianceX<'input> {
-        len: u32,
-        bytes: [u8; self.len],
+    struct AccessorVarianceX {
+        method: crate::stats_agg::Method,
     }
 }
 
@@ -239,13 +227,12 @@ pg_type! {
 ron_inout_funcs!(AccessorVarianceX);
 
 #[pg_extern(immutable, parallel_safe, name = "variance_x")]
-pub fn accessor_variance_x(method: default!(&str, "'sample'")) -> AccessorVarianceX<'static> {
-    let _ = crate::stats_agg::method_kind(method);
+pub fn accessor_variance_x(method: default!(&str, "'sample'")) -> AccessorVarianceX {
+    let method_enum = crate::stats_agg::method_kind(method);
     unsafe {
         flatten! {
             AccessorVarianceX {
-                len: method.len().try_into().unwrap(),
-                bytes: method.as_bytes().into(),
+                method: method_enum,
             }
         }
     }
@@ -253,9 +240,8 @@ pub fn accessor_variance_x(method: default!(&str, "'sample'")) -> AccessorVarian
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorVarianceY<'input> {
-        len: u32,
-        bytes: [u8; self.len],
+    struct AccessorVarianceY {
+        method: crate::stats_agg::Method,
     }
 }
 
@@ -263,13 +249,12 @@ pg_type! {
 ron_inout_funcs!(AccessorVarianceY);
 
 #[pg_extern(immutable, parallel_safe, name = "variance_y")]
-pub fn accessor_variance_y(method: default!(&str, "'sample'")) -> AccessorVarianceY<'static> {
-    let _ = crate::stats_agg::method_kind(method);
+pub fn accessor_variance_y(method: default!(&str, "'sample'")) -> AccessorVarianceY {
+    let method_enum = crate::stats_agg::method_kind(method);
     unsafe {
         flatten! {
             AccessorVarianceY {
-                len: method.len().try_into().unwrap(),
-                bytes: method.as_bytes().into(),
+                method: method_enum,
             }
         }
     }
@@ -277,22 +262,21 @@ pub fn accessor_variance_y(method: default!(&str, "'sample'")) -> AccessorVarian
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorSkewness<'input>  {
-        len: u32,
-        bytes: [u8; self.len],
+    struct AccessorSkewness {
+        method: crate::stats_agg::Method,
     }
 }
 
+//FIXME string IO
 ron_inout_funcs!(AccessorSkewness);
 
 #[pg_extern(immutable, parallel_safe, name = "skewness")]
-pub fn accessor_skewness(method: default!(&str, "'sample'")) -> AccessorSkewness<'static> {
-    let _ = crate::stats_agg::method_kind(method);
+pub fn accessor_skewness(method: default!(&str, "'sample'")) -> AccessorSkewness {
+    let method_enum = crate::stats_agg::method_kind(method);
     unsafe {
         flatten! {
             AccessorSkewness {
-                len: method.len().try_into().unwrap(),
-                bytes: method.as_bytes().into(),
+                method: method_enum,
             }
         }
     }
@@ -300,22 +284,21 @@ pub fn accessor_skewness(method: default!(&str, "'sample'")) -> AccessorSkewness
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorSkewnessX<'input>  {
-        len: u32,
-        bytes: [u8; self.len],
+    struct AccessorSkewnessX {
+        method: crate::stats_agg::Method,
     }
 }
 
+//FIXME string IO
 ron_inout_funcs!(AccessorSkewnessX);
 
 #[pg_extern(immutable, parallel_safe, name = "skewness_x")]
-pub fn accessor_skewness_x(method: default!(&str, "'sample'")) -> AccessorSkewnessX<'static> {
-    let _ = crate::stats_agg::method_kind(method);
+pub fn accessor_skewness_x(method: default!(&str, "'sample'")) -> AccessorSkewnessX {
+    let method_enum = crate::stats_agg::method_kind(method);
     unsafe {
         flatten! {
             AccessorSkewnessX {
-                len: method.len().try_into().unwrap(),
-                bytes: method.as_bytes().into(),
+                method: method_enum,
             }
         }
     }
@@ -323,22 +306,21 @@ pub fn accessor_skewness_x(method: default!(&str, "'sample'")) -> AccessorSkewne
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorSkewnessY<'input>  {
-        len: u32,
-        bytes: [u8; self.len],
+    struct AccessorSkewnessY {
+        method: crate::stats_agg::Method,
     }
 }
 
+//FIXME string IO
 ron_inout_funcs!(AccessorSkewnessY);
 
 #[pg_extern(immutable, parallel_safe, name = "skewness_y")]
-pub fn accessor_skewness_y(method: default!(&str, "'sample'")) -> AccessorSkewnessY<'static> {
-    let _ = crate::stats_agg::method_kind(method);
+pub fn accessor_skewness_y(method: default!(&str, "'sample'")) -> AccessorSkewnessY {
+    let method_enum = crate::stats_agg::method_kind(method);
     unsafe {
         flatten! {
             AccessorSkewnessY {
-                len: method.len().try_into().unwrap(),
-                bytes: method.as_bytes().into(),
+                method: method_enum,
             }
         }
     }
@@ -346,22 +328,21 @@ pub fn accessor_skewness_y(method: default!(&str, "'sample'")) -> AccessorSkewne
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorKurtosis<'input>  {
-        len: u32,
-        bytes: [u8; self.len],
+    struct AccessorKurtosis {
+        method: crate::stats_agg::Method,
     }
 }
 
+//FIXME string IO
 ron_inout_funcs!(AccessorKurtosis);
 
 #[pg_extern(immutable, parallel_safe, name = "kurtosis")]
-pub fn accessor_kurtosis(method: default!(&str, "'sample'")) -> AccessorKurtosis<'static> {
-    let _ = crate::stats_agg::method_kind(method);
+pub fn accessor_kurtosis(method: default!(&str, "'sample'")) -> AccessorKurtosis {
+    let method_enum = crate::stats_agg::method_kind(method);
     unsafe {
         flatten! {
             AccessorKurtosis {
-                len: method.len().try_into().unwrap(),
-                bytes: method.as_bytes().into(),
+                method: method_enum,
             }
         }
     }
@@ -369,22 +350,21 @@ pub fn accessor_kurtosis(method: default!(&str, "'sample'")) -> AccessorKurtosis
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorKurtosisX<'input>  {
-        len: u32,
-        bytes: [u8; self.len],
+    struct AccessorKurtosisX {
+        method: crate::stats_agg::Method,
     }
 }
 
+//FIXME string IO
 ron_inout_funcs!(AccessorKurtosisX);
 
 #[pg_extern(immutable, parallel_safe, name = "kurtosis_x")]
-pub fn accessor_kurtosis_x(method: default!(&str, "'sample'")) -> AccessorKurtosisX<'static> {
-    let _ = crate::stats_agg::method_kind(method);
+pub fn accessor_kurtosis_x(method: default!(&str, "'sample'")) -> AccessorKurtosisX {
+    let method_enum = crate::stats_agg::method_kind(method);
     unsafe {
         flatten! {
             AccessorKurtosisX {
-                len: method.len().try_into().unwrap(),
-                bytes: method.as_bytes().into(),
+                method: method_enum,
             }
         }
     }
@@ -392,22 +372,21 @@ pub fn accessor_kurtosis_x(method: default!(&str, "'sample'")) -> AccessorKurtos
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorKurtosisY<'input>  {
-        len: u32,
-        bytes: [u8; self.len],
+    struct AccessorKurtosisY {
+        method: crate::stats_agg::Method,
     }
 }
 
+//FIXME string IO
 ron_inout_funcs!(AccessorKurtosisY);
 
 #[pg_extern(immutable, parallel_safe, name = "kurtosis_y")]
-pub fn accessor_kurtosis_y(method: default!(&str, "'sample'")) -> AccessorKurtosisY<'static> {
-    let _ = crate::stats_agg::method_kind(method);
+pub fn accessor_kurtosis_y(method: default!(&str, "'sample'")) -> AccessorKurtosisY {
+    let method_enum = crate::stats_agg::method_kind(method);
     unsafe {
         flatten! {
             AccessorKurtosisY {
-                len: method.len().try_into().unwrap(),
-                bytes: method.as_bytes().into(),
+                method: method_enum,
             }
         }
     }
@@ -415,23 +394,21 @@ pub fn accessor_kurtosis_y(method: default!(&str, "'sample'")) -> AccessorKurtos
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorCovar<'input> {
-        len: u32,
-        bytes: [u8; self.len],
+    struct AccessorCovar {
+        method: crate::stats_agg::Method,
     }
 }
 
-// FIXME string IO
+//FIXME string IO
 ron_inout_funcs!(AccessorCovar);
 
 #[pg_extern(immutable, parallel_safe, name = "covariance")]
-pub fn accessor_covar(method: default!(&str, "'sample'")) -> AccessorCovar<'static> {
-    let _ = crate::stats_agg::method_kind(method);
+pub fn accessor_covar(method: default!(&str, "'sample'")) -> AccessorCovar {
+    let method_enum = crate::stats_agg::method_kind(method);
     unsafe {
         flatten! {
             AccessorCovar {
-                len: method.len().try_into().unwrap(),
-                bytes: method.as_bytes().into(),
+                method: method_enum,
             }
         }
     }
@@ -439,9 +416,8 @@ pub fn accessor_covar(method: default!(&str, "'sample'")) -> AccessorCovar<'stat
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorExtrapolatedDelta<'input> {
-        len: u32,
-        bytes: [u8; self.len],
+    struct AccessorExtrapolatedDelta {
+        method: crate::counter_agg::Method,
     }
 }
 
@@ -449,13 +425,12 @@ pg_type! {
 ron_inout_funcs!(AccessorExtrapolatedDelta);
 
 #[pg_extern(immutable, parallel_safe, name = "extrapolated_delta")]
-pub fn accessor_extrapolated_delta(method: &str) -> AccessorExtrapolatedDelta<'static> {
-    let _ = crate::counter_agg::method_kind(method);
+pub fn accessor_extrapolated_delta(method: &str) -> AccessorExtrapolatedDelta {
+    let method_enum = crate::counter_agg::method_kind(method);
     unsafe {
         flatten! {
             AccessorExtrapolatedDelta {
-                len: method.len().try_into().unwrap(),
-                bytes: method.as_bytes().into(),
+                method: method_enum,
             }
         }
     }
@@ -463,9 +438,8 @@ pub fn accessor_extrapolated_delta(method: &str) -> AccessorExtrapolatedDelta<'s
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorExtrapolatedRate<'input> {
-        len: u32,
-        bytes: [u8; self.len],
+    struct AccessorExtrapolatedRate {
+        method: crate::counter_agg::Method,
     }
 }
 
@@ -473,13 +447,12 @@ pg_type! {
 ron_inout_funcs!(AccessorExtrapolatedRate);
 
 #[pg_extern(immutable, parallel_safe, name = "extrapolated_rate")]
-pub fn accessor_extrapolated_rate(method: &str) -> AccessorExtrapolatedRate<'static> {
-    let _ = crate::counter_agg::method_kind(method);
+pub fn accessor_extrapolated_rate(method: &str) -> AccessorExtrapolatedRate {
+    let method_enum = crate::counter_agg::method_kind(method);
     unsafe {
         flatten! {
             AccessorExtrapolatedRate {
-                len: method.len().try_into().unwrap(),
-                bytes: method.as_bytes().into(),
+                method: method_enum,
             }
         }
     }
@@ -499,7 +472,7 @@ pg_type! {
 ron_inout_funcs!(AccessorWithBounds);
 
 #[pg_extern(immutable, parallel_safe, name = "with_bounds")]
-pub fn accessor_with_bounds(bounds: crate::raw::tstzrange) -> AccessorWithBounds<'static> {
+pub fn accessor_with_bounds(bounds: crate::raw::tstzrange) -> AccessorWithBounds {
     let range = unsafe { crate::range::get_range(bounds.0.cast_mut_ptr()) };
     let mut accessor = build! {
         AccessorWithBounds {
@@ -526,7 +499,7 @@ pub fn accessor_with_bounds(bounds: crate::raw::tstzrange) -> AccessorWithBounds
     accessor
 }
 
-impl AccessorWithBounds<'_> {
+impl AccessorWithBounds {
     pub fn bounds(&self) -> Option<I64Range> {
         if self.range_null != 0 {
             return None;
@@ -551,7 +524,7 @@ ron_inout_funcs!(AccessorUnnest);
 // Note that this should be able to replace the timescale_experimental.unnest function
 // and related object in src/timevector/pipeline/expansion.rs
 #[pg_extern(immutable, parallel_safe, name = "unnest")]
-pub fn accessor_unnest() -> AccessorUnnest<'static> {
+pub fn accessor_unnest() -> AccessorUnnest {
     build! {
         AccessorUnnest {
         }
@@ -560,9 +533,9 @@ pub fn accessor_unnest() -> AccessorUnnest<'static> {
 
 pg_type! {
     #[derive(Debug)]
-    struct AccessorIntegral<'input> {
-        len: u32,
-        bytes: [u8; self.len],
+    struct AccessorIntegral {
+        len: u8,
+        bytes: [u8; 16],
     }
 }
 
@@ -570,12 +543,23 @@ pg_type! {
 ron_inout_funcs!(AccessorIntegral);
 
 #[pg_extern(immutable, parallel_safe, name = "integral")]
-pub fn accessor_integral(unit: default!(&str, "'second'")) -> AccessorIntegral<'static> {
+pub fn accessor_integral(unit: default!(&str, "'second'")) -> AccessorIntegral {
+    if unit.len() > 16 {
+        pgrx::error!(
+            "Time unit string too long: {} characters (max 16)",
+            unit.len()
+        );
+    }
+
+    let mut bytes = [0u8; 16];
+    let unit_bytes = unit.as_bytes();
+    bytes[..unit_bytes.len()].copy_from_slice(unit_bytes);
+
     unsafe {
         flatten! {
             AccessorIntegral {
-                len: unit.len().try_into().unwrap(),
-                bytes: unit.as_bytes().into(),
+                len: unit.len() as u8,
+                bytes,
             }
         }
     }
@@ -592,7 +576,7 @@ pg_type! {
 ron_inout_funcs!(AccessorTopNCount);
 
 #[pg_extern(immutable, parallel_safe, name = "topn")]
-pub fn accessor_topn_count(count: i64) -> AccessorTopNCount<'static> {
+pub fn accessor_topn_count(count: i64) -> AccessorTopNCount {
     unsafe {
         flatten! {
             AccessorTopNCount {
@@ -612,7 +596,7 @@ pg_type! {
 ron_inout_funcs!(AccessorMaxFrequencyInt);
 
 #[pg_extern(immutable, parallel_safe, name = "max_frequency")]
-pub fn accessor_max_frequency_int(value: i64) -> AccessorMaxFrequencyInt<'static> {
+pub fn accessor_max_frequency_int(value: i64) -> AccessorMaxFrequencyInt {
     unsafe {
         flatten! {
             AccessorMaxFrequencyInt {
@@ -632,7 +616,7 @@ pg_type! {
 ron_inout_funcs!(AccessorMinFrequencyInt);
 
 #[pg_extern(immutable, parallel_safe, name = "min_frequency")]
-pub fn accessor_min_frequency_int(value: i64) -> AccessorMinFrequencyInt<'static> {
+pub fn accessor_min_frequency_int(value: i64) -> AccessorMinFrequencyInt {
     unsafe {
         flatten! {
             AccessorMinFrequencyInt {
@@ -643,21 +627,31 @@ pub fn accessor_min_frequency_int(value: i64) -> AccessorMinFrequencyInt<'static
 }
 
 pg_type! {
-    struct AccessorPercentileArray<'input> {
+    #[derive(Debug)]
+    struct AccessorPercentileArray {
         len: u64,
-        percentile: [f64; self.len],
+        percentile: [f64; 32],
     }
 }
 
 ron_inout_funcs!(AccessorPercentileArray);
 
 #[pg_extern(immutable, name = "approx_percentiles")]
-pub fn accessor_percentiles(unit: Vec<f64>) -> AccessorPercentileArray<'static> {
+pub fn accessor_percentiles(unit: Vec<f64>) -> AccessorPercentileArray {
+    if unit.len() > 32 {
+        pgrx::error!("Too many percentiles: {} (max 32)", unit.len());
+    }
+
+    let mut percentile = [0.0f64; 32];
+    for (i, &val) in unit.iter().enumerate() {
+        percentile[i] = val;
+    }
+
     unsafe {
         flatten! {
-            AccessorPercentileArray{
-                len: unit.len().try_into().unwrap(),
-                percentile: unit.into(),
+            AccessorPercentileArray {
+                len: unit.len() as u64,
+                percentile,
             }
         }
     }

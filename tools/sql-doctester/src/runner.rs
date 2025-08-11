@@ -187,7 +187,10 @@ fn validate_output(output: Vec<SimpleQueryMessage>, test: &Test) -> Result<(), T
                 rows.push(row);
             }
             CommandComplete(..) => break,
-            _ => unreachable!(),
+            _ => {
+                eprintln!("unhandled message: {:?} for test: {:?}", r, test);
+                unreachable!()
+            },
         }
     }
     let output_error = |header: &str| {

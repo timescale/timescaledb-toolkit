@@ -277,17 +277,17 @@ impl RollupTransState {
 }
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
-pub fn compact_state_agg_rollup_trans<'a>(
+pub fn compact_state_agg_rollup_trans(
     state: Internal,
-    next: Option<CompactStateAgg<'a>>,
+    next: Option<CompactStateAgg>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     compact_state_agg_rollup_trans_inner(unsafe { state.to_inner() }, next, fcinfo).internal()
 }
 
-pub fn compact_state_agg_rollup_trans_inner<'a>(
+pub fn compact_state_agg_rollup_trans_inner(
     state: Option<Inner<RollupTransState>>,
-    next: Option<CompactStateAgg<'a>>,
+    next: Option<CompactStateAgg>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Inner<RollupTransState>> {
     unsafe {
@@ -310,9 +310,9 @@ pub fn compact_state_agg_rollup_trans_inner<'a>(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn state_agg_rollup_trans<'a>(
+pub fn state_agg_rollup_trans(
     state: Internal,
-    next: Option<StateAgg<'a>>,
+    next: Option<StateAgg>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     compact_state_agg_rollup_trans_inner(
@@ -331,10 +331,10 @@ fn compact_state_agg_rollup_final(
     compact_state_agg_rollup_final_inner(unsafe { state.to_inner() }, fcinfo)
 }
 
-fn compact_state_agg_rollup_final_inner<'a>(
+fn compact_state_agg_rollup_final_inner(
     state: Option<Inner<RollupTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<CompactStateAgg<'a>> {
+) -> Option<CompactStateAgg<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let mut state = match state {
@@ -357,10 +357,10 @@ fn state_agg_rollup_final(
     state_agg_rollup_final_inner(unsafe { state.to_inner() }, fcinfo)
 }
 
-fn state_agg_rollup_final_inner<'a>(
+fn state_agg_rollup_final_inner(
     state: Option<Inner<RollupTransState>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<StateAgg<'a>> {
+) -> Option<StateAgg<'static>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let mut state = match state {

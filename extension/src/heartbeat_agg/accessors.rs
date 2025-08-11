@@ -27,7 +27,7 @@ pg_type! {
     }
 }
 
-ron_inout_funcs!(HeartbeatInterpolatedUptimeAccessor);
+ron_inout_funcs!(HeartbeatInterpolatedUptimeAccessor<'input>);
 
 #[pg_extern(immutable, parallel_safe, name = "interpolated_uptime")]
 fn heartbeat_agg_interpolated_uptime_accessor<'a>(
@@ -61,7 +61,7 @@ pg_type! {
     }
 }
 
-ron_inout_funcs!(HeartbeatInterpolatedDowntimeAccessor);
+ron_inout_funcs!(HeartbeatInterpolatedDowntimeAccessor<'input>);
 
 #[pg_extern(immutable, parallel_safe, name = "interpolated_downtime")]
 fn heartbeat_agg_interpolated_downtime_accessor<'a>(
@@ -95,7 +95,7 @@ pg_type! {
     }
 }
 
-ron_inout_funcs!(HeartbeatInterpolateAccessor);
+ron_inout_funcs!(HeartbeatInterpolateAccessor<'input>);
 
 #[pg_extern(immutable, parallel_safe, name = "interpolate")]
 fn heartbeat_agg_interpolate_accessor<'a>(
@@ -138,7 +138,7 @@ ron_inout_funcs!(HeartbeatTrimToAccessor);
 fn heartbeat_agg_trim_to_accessor(
     start: crate::raw::TimestampTz,
     duration: default!(Option<crate::raw::Interval>, "NULL"),
-) -> HeartbeatTrimToAccessor<'static> {
+) -> HeartbeatTrimToAccessor {
     let end = duration
         .map(|intv| crate::datum_utils::ts_interval_sum_to_ms(&start, &intv))
         .unwrap_or(0);

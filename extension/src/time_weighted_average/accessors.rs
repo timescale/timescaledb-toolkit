@@ -23,13 +23,13 @@ pg_type! {
 ron_inout_funcs!(TimeWeightInterpolatedAverageAccessor);
 
 #[pg_extern(immutable, parallel_safe, name = "interpolated_average")]
-fn time_weight_interpolated_average_accessor<'a>(
+fn time_weight_interpolated_average_accessor(
     start: crate::raw::TimestampTz,
     duration: crate::raw::Interval,
-    prev: default!(Option<TimeWeightSummary<'a>>, "NULL"),
-    next: default!(Option<TimeWeightSummary<'a>>, "NULL"),
-) -> TimeWeightInterpolatedAverageAccessor<'static> {
-    fn empty_summary<'b>() -> Option<TimeWeightSummary<'b>> {
+    prev: default!(Option<TimeWeightSummary>, "NULL"),
+    next: default!(Option<TimeWeightSummary>, "NULL"),
+) -> TimeWeightInterpolatedAverageAccessor {
+    fn empty_summary() -> Option<TimeWeightSummary> {
         Some(unsafe {
             flatten!(TimeWeightSummary {
                 first: TSPoint { ts: 0, val: 0.0 },
@@ -72,14 +72,14 @@ pg_type! {
 ron_inout_funcs!(TimeWeightInterpolatedIntegralAccessor);
 
 #[pg_extern(immutable, parallel_safe, name = "interpolated_integral")]
-fn time_weight_interpolated_integral_accessor<'a>(
+fn time_weight_interpolated_integral_accessor(
     start: crate::raw::TimestampTz,
     interval: crate::raw::Interval,
-    prev: default!(Option<TimeWeightSummary<'a>>, "NULL"),
-    next: default!(Option<TimeWeightSummary<'a>>, "NULL"),
+    prev: default!(Option<TimeWeightSummary>, "NULL"),
+    next: default!(Option<TimeWeightSummary>, "NULL"),
     unit: default!(String, "'second'"),
-) -> TimeWeightInterpolatedIntegralAccessor<'static> {
-    fn empty_summary<'b>() -> Option<TimeWeightSummary<'b>> {
+) -> TimeWeightInterpolatedIntegralAccessor {
+    fn empty_summary() -> Option<TimeWeightSummary> {
         Some(unsafe {
             flatten!(TimeWeightSummary {
                 first: TSPoint { ts: 0, val: 0.0 },

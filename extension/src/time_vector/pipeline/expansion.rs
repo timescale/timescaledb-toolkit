@@ -23,7 +23,7 @@ pub mod toolkit_experimental {
         }
     }
 
-    ron_inout_funcs!(PipelineThenUnnest);
+    ron_inout_funcs!(PipelineThenUnnest<'input>);
 
     pg_type! {
         #[derive(Debug)]
@@ -33,7 +33,7 @@ pub mod toolkit_experimental {
         }
     }
 
-    ron_inout_funcs!(PipelineForceMaterialize);
+    ron_inout_funcs!(PipelineForceMaterialize<'input>);
 }
 
 #[pg_extern(
@@ -174,15 +174,15 @@ mod tests {
 
     #[pg_test]
     fn test_unnest_finalizer() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -190,7 +190,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, &[])
                 .unwrap();
 
             // we use a subselect to guarantee order
@@ -209,7 +209,7 @@ mod tests {
                         create_series
                     ),
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -221,15 +221,15 @@ mod tests {
 
     #[pg_test]
     fn test_series_finalizer() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -237,7 +237,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, &[])
                 .unwrap();
 
             // we use a subselect to guarantee order
@@ -255,7 +255,7 @@ mod tests {
                         create_series
                     ),
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -276,15 +276,15 @@ mod tests {
 
     #[pg_test]
     fn test_force_materialize() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -292,7 +292,7 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, &[])
                 .unwrap();
 
             // `-> materialize()` should force materialization, but otherwise the
@@ -305,7 +305,7 @@ mod tests {
                 -> materialize() \
                 -> abs() -> round();",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .nth(1)

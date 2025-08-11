@@ -45,7 +45,10 @@ find_profile() {
 
 [ $# -ge 1 ] || usage
 
+# check versions
+cargo --version
 rustc --version
+rustup --version
 
 while [ $# -gt 0 ]; do
     arg="$1"

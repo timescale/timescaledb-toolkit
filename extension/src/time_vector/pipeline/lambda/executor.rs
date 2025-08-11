@@ -196,7 +196,7 @@ where
         // For now it seems OK to suppress these warnings here with
         // #[allow(improper_ctypes)]
         #[allow(improper_ctypes)]
-        extern "C" {
+        unsafe extern "C-unwind" {
             fn interval_pl(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
             fn interval_mi(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
             fn interval_mul(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;

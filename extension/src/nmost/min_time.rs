@@ -21,7 +21,7 @@ pg_type! {
         values : [pg_sys::TimestampTz; self.elements],
     }
 }
-ron_inout_funcs!(MinTimes);
+ron_inout_funcs!(MinTimes<'input>);
 
 impl<'input> From<&mut MinTimeTransType> for MinTimes<'input> {
     fn from(item: &mut MinTimeTransType) -> Self {
@@ -95,7 +95,8 @@ pub fn min_n_time_deserialize(bytes: bytea, _internal: Internal) -> Option<Inter
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn min_n_time_final(state: Internal) -> MinTimes<'static> {
-    unsafe { &mut *state.to_inner::<MinTimeTransType>().unwrap() }.into()
+    let mut inner = unsafe { state.to_inner::<MinTimeTransType>().unwrap() };
+    unsafe { &mut *inner }.into()
 }
 
 #[pg_extern(name = "into_array", immutable, parallel_safe)]
@@ -121,17 +122,17 @@ pub fn min_n_time_to_values(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_min_time_into_values<'a>(
+pub fn arrow_min_time_into_values(
     agg: MinTimes<'static>,
-    _accessor: AccessorIntoValues<'a>,
-) -> SetOfIterator<'a, crate::raw::TimestampTz> {
+    _accessor: AccessorIntoValues,
+) -> SetOfIterator<'static, crate::raw::TimestampTz> {
     min_n_time_to_values(agg)
 }
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_min_time_into_array<'a>(
+pub fn arrow_min_time_into_array(
     agg: MinTimes<'static>,
-    _accessor: AccessorIntoArray<'a>,
+    _accessor: AccessorIntoArray,
 ) -> Vec<crate::raw::TimestampTz> {
     min_n_time_to_array(agg)
 }
@@ -192,13 +193,13 @@ mod tests {
 
     #[pg_test]
     fn min_time_correctness() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             client
                 .update(
                     "CREATE TABLE data(val TIMESTAMPTZ, category INT)",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap();
 
@@ -208,7 +209,7 @@ mod tests {
                 client.update(
                     &format!("INSERT INTO data VALUES ('2020-1-1 UTC'::timestamptz + {} * '1d'::interval, {})", i, i % 4),
                     None,
-                    None,
+                    &[]
                 ).unwrap();
             }
 
@@ -217,7 +218,7 @@ mod tests {
                 .update(
                     "SELECT into_array(min_n(val, 5))::TEXT from data",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -228,7 +229,7 @@ mod tests {
                 .update(
                     "SELECT (min_n(val, 5)->into_array())::TEXT from data",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -241,7 +242,7 @@ mod tests {
                 .update(
                     "SELECT into_values(min_n(val, 3))::TEXT from data",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap();
             assert_eq!(
@@ -261,7 +262,7 @@ mod tests {
                 .update(
                     "SELECT (min_n(val, 3)->into_values())::TEXT from data",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap();
             assert_eq!(
@@ -283,7 +284,7 @@ mod tests {
                 client.update(
                     "WITH aggs as (SELECT category, min_n(val, 5) as agg from data GROUP BY category)
                         SELECT into_array(rollup(agg))::TEXT FROM aggs",
-                        None, None,
+                        None, &[],
                     ).unwrap().first().get_one::<&str>().unwrap();
             assert_eq!(result.unwrap(), "{\"2020-01-01 00:00:00+00\",\"2020-01-02 00:00:00+00\",\"2020-01-03 00:00:00+00\",\"2020-01-04 00:00:00+00\",\"2020-01-05 00:00:00+00\"}");
         })

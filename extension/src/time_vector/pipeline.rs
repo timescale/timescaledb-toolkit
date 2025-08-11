@@ -107,7 +107,7 @@ pub mod toolkit_experimental {
         }
     }
 
-    ron_inout_funcs!(UnstableTimevectorPipeline);
+    ron_inout_funcs!(UnstableTimevectorPipeline<'input>);
 }
 
 #[pg_operator(immutable, parallel_safe)]
@@ -322,15 +322,15 @@ mod tests {
 
     #[pg_test]
     fn test_pipeline_lttb() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -338,14 +338,14 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, &[])
                 .unwrap();
 
             client
                 .update(
                     "CREATE TABLE lttb_pipe (series timevector_tstz_f64)",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap();
             client.update(
@@ -357,14 +357,14 @@ mod tests {
                     FROM generate_series(1,11,0.1) foo \
                 ) bar",
                 None,
-                None
+                &[]
             ).unwrap();
 
             let val = client
                 .update(
                     "SELECT (series -> lttb(17))::TEXT FROM lttb_pipe",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -397,7 +397,7 @@ mod tests {
                 .update(
                     "SELECT (series -> lttb(8))::TEXT FROM lttb_pipe",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -421,7 +421,7 @@ mod tests {
                 .update(
                     "SELECT (series -> lttb(8) -> lttb(8))::TEXT FROM lttb_pipe",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -445,7 +445,7 @@ mod tests {
                 .update(
                     "SELECT (series -> (lttb(8) -> lttb(8) -> lttb(8)))::TEXT FROM lttb_pipe",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -469,15 +469,15 @@ mod tests {
 
     #[pg_test]
     fn test_pipeline_folding() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -485,13 +485,13 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {}", sp), None, &[])
                 .unwrap();
 
             let output = client.update(
                 "EXPLAIN (verbose) SELECT timevector('2021-01-01'::timestamptz, 0.1) -> round() -> abs() -> round();",
                 None,
-                None
+                &[]
             ).unwrap().nth(1)
                 .unwrap()
                 .get_datum_by_ordinal(1).unwrap()

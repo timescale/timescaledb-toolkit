@@ -23,7 +23,7 @@ pg_type! {
         values : [f64; self.elements],
     }
 }
-ron_inout_funcs!(MinFloats);
+ron_inout_funcs!(MinFloats<'input>);
 
 impl<'input> From<&mut MinFloatTransType> for MinFloats<'input> {
     fn from(item: &mut MinFloatTransType) -> Self {
@@ -108,7 +108,8 @@ pub fn min_n_float_deserialize(bytes: bytea, _internal: Internal) -> Option<Inte
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn min_n_float_final(state: Internal) -> MinFloats<'static> {
-    unsafe { &mut *state.to_inner::<MinFloatTransType>().unwrap() }.into()
+    let mut inner = unsafe { state.to_inner::<MinFloatTransType>().unwrap() };
+    unsafe { &mut *inner }.into()
 }
 
 #[pg_extern(name = "into_array", immutable, parallel_safe)]
@@ -123,17 +124,17 @@ pub fn min_n_float_to_values(agg: MinFloats<'static>) -> SetOfIterator<'static, 
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_min_float_into_values<'a>(
+pub fn arrow_min_float_into_values(
     agg: MinFloats<'static>,
-    _accessor: AccessorIntoValues<'a>,
-) -> SetOfIterator<'a, f64> {
+    _accessor: AccessorIntoValues,
+) -> SetOfIterator<'static, f64> {
     min_n_float_to_values(agg)
 }
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_min_float_into_array<'a>(
+pub fn arrow_min_float_into_array(
     agg: MinFloats<'static>,
-    _accessor: AccessorIntoArray<'a>,
+    _accessor: AccessorIntoArray,
 ) -> Vec<f64> {
     min_n_float_to_array(agg)
 }
@@ -194,13 +195,13 @@ mod tests {
 
     #[pg_test]
     fn min_float_correctness() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             client
                 .update(
                     "CREATE TABLE data(val DOUBLE PRECISION, category INT)",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap();
 
@@ -211,14 +212,14 @@ mod tests {
                     .update(
                         &format!("INSERT INTO data VALUES ({}.0/128, {})", i, i % 4),
                         None,
-                        None,
+                        &[]
                     )
                     .unwrap();
             }
 
             // Test into_array
             let result = client
-                .update("SELECT into_array(min_n(val, 5)) from data", None, None)
+                .update("SELECT into_array(min_n(val, 5)) from data", None, &[])
                 .unwrap()
                 .first()
                 .get_one::<Vec<f64>>()
@@ -228,7 +229,7 @@ mod tests {
                 vec![0. / 128., 1. / 128., 2. / 128., 3. / 128., 4. / 128.]
             );
             let result = client
-                .update("SELECT min_n(val, 5)->into_array() from data", None, None)
+                .update("SELECT min_n(val, 5)->into_array() from data", None, &[])
                 .unwrap()
                 .first()
                 .get_one::<Vec<f64>>()
@@ -243,7 +244,7 @@ mod tests {
                 .update(
                     "SELECT into_values(min_n(val, 3))::TEXT from data",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap();
             assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("0"));
@@ -257,7 +258,7 @@ mod tests {
                 .update(
                     "SELECT (min_n(val, 3)->into_values())::TEXT from data",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap();
             assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("0"));
@@ -273,7 +274,7 @@ mod tests {
                 client.update(
                     "WITH aggs as (SELECT category, min_n(val, 5) as agg from data GROUP BY category)
                         SELECT into_array(rollup(agg)) FROM aggs",
-                        None, None,
+                        None, &[],
                     ).unwrap().first().get_one::<Vec<f64>>();
             assert_eq!(
                 result.unwrap().unwrap(),

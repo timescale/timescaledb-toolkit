@@ -1,6 +1,5 @@
-use crate::{m3, m4, FloatLike, StatsError, INV_FLOATING_ERROR_THRESHOLD};
+use crate::{m3, m4, FloatLike, StatsError, TwoFloat, INV_FLOATING_ERROR_THRESHOLD};
 use serde::{Deserialize, Serialize};
-use twofloat::TwoFloat;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Serialize, Deserialize)]
 #[repr(C)]

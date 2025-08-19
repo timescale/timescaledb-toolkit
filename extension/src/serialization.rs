@@ -15,7 +15,7 @@ mod functions;
 mod types;
 
 // basically timestamptz_out
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn _ts_toolkit_encode_timestamptz(
     dt: pg_sys::TimestampTz,
     buf: &mut [c_char; pg_sys::MAXDATELEN as _],
@@ -51,7 +51,7 @@ pub extern "C" fn _ts_toolkit_encode_timestamptz(
     }
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 // this is only going to be used to communicate with a rust lib we compile with this one
 #[allow(improper_ctypes_definitions)]
 pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {

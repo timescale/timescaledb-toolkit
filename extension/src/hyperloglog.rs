@@ -153,6 +153,7 @@ use crate::raw::bytea;
 
 #[pg_extern(immutable, parallel_safe, strict)]
 pub fn hyperloglog_serialize(state: Internal) -> bytea {
+    let mut state = state;
     let state: &mut HyperLogLogTrans = unsafe { state.get_mut().unwrap() };
     state.logger.merge_all();
     crate::do_serialize!(state)
@@ -202,7 +203,7 @@ flat_serialize_macro::flat_serialize! {
     }
 }
 
-ron_inout_funcs!(HyperLogLog);
+ron_inout_funcs!(HyperLogLog<'input>);
 
 #[pg_extern(immutable, parallel_safe)]
 fn hyperloglog_final(
@@ -341,7 +342,7 @@ extension_sql!(
 #[opname(->)]
 pub fn arrow_hyperloglog_count<'a>(
     sketch: HyperLogLog<'a>,
-    _accessor: AccessorDistinctCount<'a>,
+    _accessor: AccessorDistinctCount,
 ) -> i64 {
     hyperloglog_count(sketch)
 }
@@ -374,7 +375,7 @@ pub fn hyperloglog_count<'a>(hyperloglog: HyperLogLog<'a>) -> i64 {
 #[opname(->)]
 pub fn arrow_hyperloglog_error<'a>(
     sketch: HyperLogLog<'a>,
-    _accessor: AccessorStderror<'a>,
+    _accessor: AccessorStderror,
 ) -> f64 {
     hyperloglog_error(sketch)
 }
@@ -488,14 +489,14 @@ mod tests {
 
     #[pg_test]
     fn test_hll_aggregate() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let text = client
                 .update(
                     "SELECT \
                         hyperloglog(32, v::float)::TEXT \
                         FROM generate_series(1, 100) v",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -525,7 +526,7 @@ mod tests {
                     hyperloglog(32, v::float) -> distinct_count() \
                     FROM generate_series(1, 100) v",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -538,7 +539,7 @@ mod tests {
                 .update(
                     &format!("SELECT distinct_count('{}')", expected),
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -551,14 +552,14 @@ mod tests {
     #[pg_test]
     // Should have same results as test_hll_distinct_aggregate running with the same number of buckets
     fn test_approx_count_distinct_aggregate() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let text = client
                 .update(
                     "SELECT \
                         approx_count_distinct(v::float)::TEXT \
                         FROM generate_series(1, 100) v",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -606,7 +607,7 @@ mod tests {
                     approx_count_distinct(v::float) -> distinct_count() \
                     FROM generate_series(1, 100) v",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -619,7 +620,7 @@ mod tests {
                 .update(
                     &format!("SELECT distinct_count('{}')", expected),
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -711,13 +712,13 @@ mod tests {
 
     #[pg_test]
     fn test_hll_aggregate_int() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let text = client
                 .update(
                     "SELECT hyperloglog(32, v::int)::TEXT
                     FROM generate_series(1, 100) v",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -745,7 +746,7 @@ mod tests {
                     hyperloglog(32, v::int)\
                 ) FROM generate_series(1, 100) v",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -757,7 +758,7 @@ mod tests {
                 .update(
                     &format!("SELECT distinct_count('{}')", expected),
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -769,7 +770,7 @@ mod tests {
 
     #[pg_test]
     fn test_hll_aggregate_text() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             use crate::serialization::PgCollationId;
 
             let text = client
@@ -778,7 +779,7 @@ mod tests {
                         hyperloglog(32, v::text)::TEXT \
                     FROM generate_series(1, 100) v",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -812,7 +813,7 @@ mod tests {
                     hyperloglog(32, v::text)\
                 ) FROM generate_series(1, 100) v",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -824,7 +825,7 @@ mod tests {
                 .update(
                     &format!("SELECT distinct_count('{}')", expected),
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap()
                 .first()
@@ -836,7 +837,7 @@ mod tests {
 
     #[pg_test]
     fn test_hll_union_text() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             {
                 // self-union should be a nop
                 let expected = client
@@ -845,7 +846,7 @@ mod tests {
                                 hyperloglog(32, v::text)::TEXT \
                             FROM generate_series(1, 100) v",
                         None,
-                        None,
+                        &[]
                     )
                     .unwrap()
                     .first()
@@ -864,7 +865,7 @@ mod tests {
                              FROM generate_series(1, 100) v)\
                         ) q",
                         None,
-                        None,
+                        &[],
                     )
                     .unwrap()
                     .first()
@@ -885,7 +886,7 @@ mod tests {
                          FROM generate_series(50, 150) v)\
                     ) q";
                 let count = client
-                    .update(query, None, None)
+                    .update(query, None, &[])
                     .unwrap()
                     .first()
                     .get_one::<i64>()
@@ -898,9 +899,9 @@ mod tests {
 
     #[pg_test]
     fn test_hll_null_input_yields_null_output() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let output = client
-                .update("SELECT hyperloglog(32, null::int)::TEXT", None, None)
+                .update("SELECT hyperloglog(32, null::int)::TEXT", None, &[])
                 .unwrap()
                 .first()
                 .get_one::<String>()
@@ -913,9 +914,9 @@ mod tests {
         error = "Invalid value for size 2. Size must be between 16 and 262144, though less than 1024 not recommended"
     )]
     fn test_hll_error_too_small() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let output = client
-                .update("SELECT hyperloglog(2, 'foo'::text)::TEXT", None, None)
+                .update("SELECT hyperloglog(2, 'foo'::text)::TEXT", None, &[])
                 .unwrap()
                 .first()
                 .get_one::<String>()
@@ -926,9 +927,9 @@ mod tests {
 
     #[pg_test]
     fn test_hll_size_min() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let output = client
-                .update("SELECT hyperloglog(16, 'foo'::text)::TEXT", None, None)
+                .update("SELECT hyperloglog(16, 'foo'::text)::TEXT", None, &[])
                 .unwrap()
                 .first()
                 .get_one::<String>()
@@ -939,9 +940,9 @@ mod tests {
 
     #[pg_test]
     fn test_hll_size_max() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let output = client
-                .update("SELECT hyperloglog(262144, 'foo'::text)::TEXT", None, None)
+                .update("SELECT hyperloglog(262144, 'foo'::text)::TEXT", None, &[])
                 .unwrap()
                 .first()
                 .get_one::<String>()
@@ -952,7 +953,7 @@ mod tests {
 
     #[pg_test]
     fn stderror_arrow_match() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let (count, arrow_count) = client
                 .update(
                     "SELECT \
@@ -962,7 +963,7 @@ mod tests {
                     hyperloglog(32, v::float) -> stderror() \
                     FROM generate_series(1, 100) v",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -977,7 +978,7 @@ mod tests {
     fn bias_correct_values_accurate() {
         const NUM_BIAS_TRIALS: usize = 5;
         const MAX_TRIAL_ERROR: f64 = 0.05;
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             // This should match THRESHOLD_DATA_VEC from b=12-18
             let thresholds = [3100, 6500, 11500, 20000, 50000, 120000, 350000];
             let rand_precision: Uniform<usize> = Uniform::new_inclusive(12, 18);
@@ -994,7 +995,7 @@ mod tests {
                 );
 
                 let estimate = client
-                    .update(&query, None, None)
+                    .update(&query, None, &[])
                     .unwrap()
                     .first()
                     .get_one::<i64>()
@@ -1011,9 +1012,9 @@ mod tests {
         error = "Invalid value for size 262145. Size must be between 16 and 262144, though less than 1024 not recommended"
     )]
     fn test_hll_error_too_large() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let output = client
-                .update("SELECT hyperloglog(262145, 'foo'::text)::TEXT", None, None)
+                .update("SELECT hyperloglog(262145, 'foo'::text)::TEXT", None, &[])
                 .unwrap()
                 .first()
                 .get_one::<String>()
@@ -1024,7 +1025,7 @@ mod tests {
 
     #[pg_test]
     fn test_hll_null_rollup() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let output1 = client
                 .update(
                     "SELECT distinct_count(rollup(logs))
@@ -1034,7 +1035,7 @@ mod tests {
                     (SELECT hyperloglog(16, v::text) FROM generate_series(6, 10) v WHERE v <=5)
                 ) hll;",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1048,7 +1049,7 @@ mod tests {
                     (SELECT hyperloglog(16, v::text) logs FROM generate_series(1, 5) v)
                 ) hll;",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()

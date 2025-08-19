@@ -24,12 +24,13 @@ impl<'de> serde::Deserialize<'de> for CachedDatum<'_> {
     }
 }
 
+// Routes to pg_type_impl! for lifetime types, pg_type_no_lifetime_impl! for non-lifetime types
 #[macro_export]
 macro_rules! pg_type {
-    // base case, all fields are collected into $vals
+    // BASE CASE: Struct WITH lifetimes → route to pg_type_impl!
     (
         $(#[$attrs: meta])*
-        struct $name: ident $(<$inlife: lifetime>)? {
+        struct $name: ident<$($inlife: lifetime),+> {
             $(,)?
         }
 
@@ -38,16 +39,36 @@ macro_rules! pg_type {
         $crate::pg_type_impl!{
             'input
             $(#[$attrs])*
-            struct $name $(<$inlife>)?
+            struct $name<$($inlife),+>
             {
                 $($($vals)*)?
             }
         }
     };
-    // eat a struct field and add it to $vals
+
+    // BASE CASE: Struct WITHOUT lifetimes → route to pg_type_no_lifetime_impl!
     (
         $(#[$attrs: meta])*
-        struct $name: ident $(<$inlife: lifetime>)? {
+        struct $name: ident {
+            $(,)?
+        }
+
+        $(%($($vals:tt)*))?
+    ) => {
+        $crate::pg_type_no_lifetime_impl!{
+            $(#[$attrs])*
+            struct $name
+            {
+                $($($vals)*)?
+            }
+        }
+    };
+
+    // FIELD PROCESSING: Struct WITH lifetimes
+    // Recurses into this very same macro
+    (
+        $(#[$attrs: meta])*
+        struct $name: ident<$($inlife: lifetime),+> {
             $(#[$fattrs: meta])* $field:ident : $typ: tt $(<$life:lifetime>)?,
             $($tail: tt)*
         }
@@ -56,7 +77,7 @@ macro_rules! pg_type {
     ) => {
         $crate::pg_type!{
             $(#[$attrs])*
-            struct $name $(<$inlife>)? {
+            struct $name<$($inlife),+> {
                 $($tail)*
             }
 
@@ -65,40 +86,29 @@ macro_rules! pg_type {
             )
         }
     };
-    // eat an enum field, define the enum, and add the equivalent struct field to $vals
+
+    // FIELD PROCESSING: Struct WITHOUT lifetimes
+    // Recurses into this very same macro
     (
         $(#[$attrs: meta])*
-        struct $name: ident $(<$inlife: lifetime>)? {
-            $(#[$fattrs: meta])* $estructfield: ident : $(#[$enumattrs: meta])* enum $ename:ident $(<$elife: lifetime>)? {
-                $($enum_def:tt)*
-            },
+        struct $name: ident {
+            $(#[$fattrs: meta])* $field:ident : $typ: ty,
             $($tail: tt)*
         }
 
         $(%($($vals:tt)*))?
     ) => {
-        flat_serialize_macro::flat_serialize! {
-            $(#[$attrs])*
-            $(#[$enumattrs])*
-            #[derive(serde::Serialize, serde::Deserialize)]
-            enum $ename $(<$elife>)? {
-                $($enum_def)*
-            }
-        }
         $crate::pg_type!{
             $(#[$attrs])*
-            #[derive(serde::Serialize, serde::Deserialize)]
-            struct $name $(<$inlife>)? {
+            struct $name {
                 $($tail)*
             }
 
             %( $($($vals)*)?
-                $(#[$fattrs])*
-                #[flat_serialize::flatten]
-                $estructfield : $ename $(<$elife>)?,
+                $(#[$fattrs])* $field : $typ ,
             )
         }
-    }
+    };
 }
 
 #[macro_export]
@@ -112,10 +122,99 @@ macro_rules! pg_type_impl {
         }
     ) => {
         ::paste::paste! {
+            // This is where the main difference between the lifetime and no-lifetime versions is
+            // that the generated struct DOES NOT derive form PostgresType. This is because the
+            // lifetime support in the derive macro is fundamentally broken because some generated
+            // functions don't have an input parameter where the lifetime parameter can be bound to.
             $(#[$attrs])*
-            #[derive(pgrx::PostgresType, Clone, serde::Serialize, serde::Deserialize)]
-            #[bikeshed_postgres_type_manually_impl_from_into_datum]
+            #[derive(Clone, serde::Serialize, serde::Deserialize)]
             pub struct $name<$lifetemplate>(pub [<$name Data>] $(<$inlife>)?, $crate::type_builder::CachedDatum<$lifetemplate>);
+
+            // Manual PostgresType implementation - the derive macro can't handle lifetimes in pgrx 0.16.0
+            impl<$lifetemplate> ::pgrx::datum::PostgresType for $name<$lifetemplate> {}
+
+            unsafe impl<$lifetemplate> ::pgrx_sql_entity_graph::metadata::SqlTranslatable for $name<$lifetemplate> {
+                fn argument_sql() -> core::result::Result<::pgrx_sql_entity_graph::metadata::SqlMapping, ::pgrx_sql_entity_graph::metadata::ArgumentError> {
+                    Ok(::pgrx_sql_entity_graph::metadata::SqlMapping::As(String::from(stringify!($name))))
+                }
+
+                fn return_sql() -> core::result::Result<::pgrx_sql_entity_graph::metadata::Returns, ::pgrx_sql_entity_graph::metadata::ReturnsError> {
+                    Ok(::pgrx_sql_entity_graph::metadata::Returns::One(::pgrx_sql_entity_graph::metadata::SqlMapping::As(String::from(stringify!($name)))))
+                }
+            }
+
+            ::paste::paste! {
+                #[unsafe(no_mangle)]
+                #[doc(hidden)]
+                #[allow(nonstandard_style, unknown_lints, clippy::no_mangle_with_rust_abi)]
+                pub extern "Rust" fn [<__pgrx_internals_type_ $name>]() -> ::pgrx_sql_entity_graph::SqlGraphEntity {
+                    extern crate alloc;
+                    use alloc::string::ToString;
+                    use ::pgrx::datum::WithTypeIds;
+
+                    let mut mappings = Default::default();
+                    <$name<'_> as ::pgrx::datum::WithTypeIds>::register_with_refs(
+                        &mut mappings,
+                        stringify!($name).to_string()
+                    );
+                    ::pgrx::datum::WithSizedTypeIds::<$name<'_>>::register_sized_with_refs(
+                        &mut mappings,
+                        stringify!($name).to_string()
+                    );
+                    ::pgrx::datum::WithArrayTypeIds::<$name<'_>>::register_array_with_refs(
+                        &mut mappings,
+                        stringify!($name).to_string()
+                    );
+                    ::pgrx::datum::WithVarlenaTypeIds::<$name<'_>>::register_varlena_with_refs(
+                        &mut mappings,
+                        stringify!($name).to_string()
+                    );
+
+                    let submission = ::pgrx_sql_entity_graph::PostgresTypeEntity {
+                        name: stringify!($name),
+                        file: file!(),
+                        line: line!(),
+                        module_path: module_path!(),
+                        full_path: core::any::type_name::<$name<'_>>(),
+                        mappings: mappings.into_iter().collect(),
+                        in_fn: stringify!([<$name:lower _in>]),
+                        in_fn_module_path: module_path!().to_string(),
+                        out_fn: stringify!([<$name:lower _out>]),
+                        out_fn_module_path: module_path!().to_string(),
+                        receive_fn: None,
+                        receive_fn_module_path: None,
+                        send_fn: None,
+                        send_fn_module_path: None,
+                        to_sql_config: ::pgrx::pgrx_sql_entity_graph::ToSqlConfigEntity {
+                            enabled: true,
+                            callback: None,
+                            content: None,
+                        },
+                        alignment: None,
+                    };
+                    ::pgrx_sql_entity_graph::SqlGraphEntity::Type(submission)
+                }
+            }
+
+            #[doc(hidden)]
+            #[::pgrx::pgrx_macros::pg_extern(immutable, parallel_safe)]
+            pub fn [<$name:lower _in>](input: Option<&::core::ffi::CStr>) -> Option<$name<'static>> {
+                input.map_or_else(|| {
+                    if let Some(m) = <$name<'static> as ::pgrx::inoutfuncs::InOutFuncs>::NULL_ERROR_MESSAGE {
+                        ::pgrx::pg_sys::error!("{m}");
+                    }
+                    None
+                }, |i| Some(<$name<'static> as ::pgrx::inoutfuncs::InOutFuncs>::input(i)))
+            }
+
+            #[doc(hidden)]
+            #[::pgrx::pgrx_macros::pg_extern(immutable, parallel_safe)]
+            pub fn [<$name:lower _out>](input: $name<'static>) -> ::pgrx::ffi::CString {
+                let mut buffer = ::pgrx::stringinfo::StringInfo::new();
+                ::pgrx::inoutfuncs::InOutFuncs::output(&input, &mut buffer);
+                // SAFETY: We just constructed this StringInfo ourselves
+                unsafe { buffer.leak_cstr().to_owned() }
+            }
 
             flat_serialize_macro::flat_serialize! {
                 $(#[$attrs])*
@@ -130,24 +229,6 @@ macro_rules! pg_type_impl {
                 }
             }
 
-            #[::pgrx::pgrx_macros::pg_extern(immutable,parallel_safe)]
-            pub fn [<$name:lower _in>](input: Option<&::core::ffi::CStr>) -> Option<$name<'static>> {
-                input.map_or_else(|| {
-                    while let Some(m) = <$name as ::pgrx::inoutfuncs::InOutFuncs>::NULL_ERROR_MESSAGE {
-                        ::pgrx::pg_sys::error!("{m}");
-                    }
-                    None
-                }, |i| Some(<$name as ::pgrx::inoutfuncs::InOutFuncs>::input(i)))
-            }
-
-            #[::pgrx::pgrx_macros::pg_extern(immutable,parallel_safe)]
-            pub fn [<$name:lower _out>](input: $name) -> ::pgrx::ffi::CString {
-                let mut buffer = ::pgrx::stringinfo::StringInfo::new();
-                ::pgrx::inoutfuncs::InOutFuncs::output(&input, &mut buffer);
-                // SAFETY: We just constructed this StringInfo ourselves
-                unsafe { buffer.leak_cstr().to_owned() }
-            }
-
             impl<'input> $name<'input> {
                 pub fn in_current_context<'foo>(&self) -> $name<'foo> {
                     unsafe { self.0.flatten() }
@@ -158,8 +239,8 @@ macro_rules! pg_type_impl {
                     use $crate::type_builder::CachedDatum::*;
                     match self.1 {
                         None => {
-                            *self = self.0.flatten();
-                            self.cached_datum_or_flatten()
+                            *self = unsafe { self.0.flatten() };
+                            unsafe { self.cached_datum_or_flatten() }
                         },
                         FromInput(bytes) | Flattened(bytes) => pg_sys::Datum::from(bytes.as_ptr()),
                     }
@@ -334,7 +415,237 @@ macro_rules! pg_type_impl {
 }
 
 #[macro_export]
+macro_rules! pg_type_no_lifetime_impl {
+    (
+        $(#[$attrs: meta])*
+        struct $name: ident {
+            $($(#[$fattrs: meta])* $field:ident : $typ: ty),*
+            $(,)?
+        }
+    ) => {
+        ::paste::paste! {
+            $(#[$attrs])*
+            #[derive(pgrx::PostgresType, Clone, serde::Serialize, serde::Deserialize)]
+            #[inoutfuncs]
+            #[bikeshed_postgres_type_manually_impl_from_into_datum]
+            pub struct $name(pub [<$name Data>], $crate::type_builder::CachedDatum<'static>);
+
+            flat_serialize_macro::flat_serialize! {
+                $(#[$attrs])*
+                #[derive(serde::Serialize, serde::Deserialize)]
+                struct [<$name Data>] {
+                    #[serde(skip, default="crate::serialization::serde_reference_adaptor::default_header")]
+                    header: u32,
+                    version: u8,
+                    #[serde(skip, default="crate::serialization::serde_reference_adaptor::default_padding")]
+                    padding: [u8; 3],
+                    $($(#[$fattrs])* $field: $typ),*
+                }
+            }
+
+            impl $name {
+                pub fn in_current_context(&self) -> $name {
+                    unsafe { self.0.flatten() }
+                }
+
+                #[allow(clippy::missing_safety_doc)]
+                pub unsafe fn cached_datum_or_flatten(&mut self) -> pgrx::pg_sys::Datum {
+                    use $crate::type_builder::CachedDatum::*;
+                    match self.1 {
+                        None => {
+                            *self = unsafe { self.0.flatten() };
+                            self.cached_datum_or_flatten()
+                        },
+                        FromInput(bytes) | Flattened(bytes) => pg_sys::Datum::from(bytes.as_ptr()),
+                    }
+                }
+            }
+
+            impl [<$name Data>] {
+                #[allow(clippy::missing_safety_doc)]
+                pub unsafe fn flatten(&self) -> $name {
+                    use flat_serialize::FlatSerializable as _;
+                    use $crate::type_builder::CachedDatum::Flattened;
+                    let bytes: &'static [u8] = self.to_pg_bytes();
+                    let wrapped = [<$name Data>]::try_ref(bytes).unwrap().0;
+                    $name(wrapped, Flattened(bytes))
+                }
+
+                pub fn to_pg_bytes(&self) -> &'static [u8] {
+                    use std::{mem::MaybeUninit, slice};
+                    use flat_serialize::FlatSerializable as _;
+                    unsafe {
+                        let len = self.num_bytes();
+                        // valena types have a maximum size
+                        if len > 0x3FFFFFFF {
+                            pgrx::error!("size {} bytes is to large", len)
+                        }
+                        let memory: *mut MaybeUninit<u8> = pg_sys::palloc0(len).cast();
+                        let slice = slice::from_raw_parts_mut(memory, len);
+                        let rem = self.fill_slice(slice);
+                        debug_assert_eq!(rem.len(), 0);
+
+                        ::pgrx::set_varsize_4b(memory.cast(), len as i32);
+                        slice::from_raw_parts(memory.cast(), len)
+                    }
+                }
+            }
+
+            impl pgrx::FromDatum for $name {
+                unsafe fn from_polymorphic_datum(datum: pgrx::pg_sys::Datum, is_null: bool, _: pg_sys::Oid) -> Option<Self>
+                where
+                    Self: Sized,
+                {
+                    use flat_serialize::FlatSerializable as _;
+                    if is_null {
+                        return None;
+                    }
+
+                    let mut ptr = pg_sys::pg_detoast_datum_packed(datum.cast_mut_ptr());
+                    //TODO is there a better way to do this?
+                    if pgrx::varatt_is_1b(ptr) {
+                        ptr = pg_sys::pg_detoast_datum_copy(ptr);
+                    }
+                    let data_len = pgrx::varsize_any(ptr);
+
+                    let is_aligned = ptr.cast::<$name>().is_aligned();
+                    let bytes = if !is_aligned {
+                        let unaligned_bytes = std::slice::from_raw_parts(ptr as *mut u8, data_len);
+                        let new_bytes = pgrx::pg_sys::palloc0(data_len);
+
+                        debug_assert!(new_bytes.cast::<$name>().is_aligned());
+
+                        let new_slice: &mut [u8] = std::slice::from_raw_parts_mut(new_bytes.cast(), data_len);
+                        new_slice.copy_from_slice(unaligned_bytes);
+                        new_slice
+                    } else {
+                        std::slice::from_raw_parts(ptr as *mut u8, data_len)
+                    };
+                    let (data, _) = match [<$name Data>]::try_ref(bytes) {
+                        Ok(wrapped) => wrapped,
+                        Err(e) => error!(concat!("invalid ", stringify!($name), " {:?}, got len {}"), e, bytes.len()),
+                    };
+
+                    $name(data, $crate::type_builder::CachedDatum::FromInput(bytes)).into()
+                }
+            }
+
+            impl pgrx::IntoDatum for $name {
+                fn into_datum(self) -> Option<pgrx::pg_sys::Datum> {
+                    use $crate::type_builder::CachedDatum::*;
+                    let datum = match self.1 {
+                        Flattened(bytes) => pg_sys::Datum::from(bytes.as_ptr()),
+                        FromInput(..) | None => pg_sys::Datum::from(self.0.to_pg_bytes().as_ptr()),
+                    };
+                    Some(datum)
+                }
+
+                fn type_oid() -> pg_sys::Oid {
+                    rust_regtypein::<Self>()
+                }
+            }
+
+            unsafe impl ::pgrx::callconv::BoxRet for $name {
+                unsafe fn box_into<'fcx>(
+                    self,
+                    fcinfo: &mut ::pgrx::callconv::FcInfo<'fcx>,
+                ) -> ::pgrx::datum::Datum<'fcx> {
+                    match ::pgrx::datum::IntoDatum::into_datum(self) {
+                        None => fcinfo.return_null(),
+                        Some(datum) => unsafe { fcinfo.return_raw_datum(datum) }
+                    }
+                }
+            }
+
+            unsafe impl<'fcx> callconv::ArgAbi<'fcx> for $name
+            where
+                Self: 'fcx,
+            {
+                unsafe fn unbox_arg_unchecked(arg: callconv::Arg<'_, 'fcx>) -> Self {
+                    let index = arg.index();
+                    unsafe { arg.unbox_arg_using_from_datum().unwrap_or_else(|| panic!("argument {index} must not be null")) }
+                }
+
+                unsafe fn unbox_nullable_arg(arg: callconv::Arg<'_, 'fcx>) -> nullable::Nullable<Self> {
+                    unsafe { arg.unbox_arg_using_from_datum().into() }
+                }
+            }
+
+            impl ::std::ops::Deref for $name {
+                type Target=[<$name Data>];
+                fn deref(&self) -> &Self::Target {
+                    &self.0
+                }
+            }
+
+            impl ::std::ops::DerefMut for $name {
+                fn deref_mut(&mut self) -> &mut Self::Target {
+                    self.1 = $crate::type_builder::CachedDatum::None;
+                    &mut self.0
+                }
+            }
+
+            impl From<[<$name Data>]> for $name {
+                fn from(inner: [<$name Data>]) -> Self {
+                    Self(inner, $crate::type_builder::CachedDatum::None)
+                }
+            }
+
+            impl From<[<$name Data>]> for Option<$name> {
+                fn from(inner: [<$name Data>]) -> Self {
+                    Some($name(inner, $crate::type_builder::CachedDatum::None))
+                }
+            }
+        }
+    }
+}
+
+// Routes to ron_inout_funcs_impl! for lifetime types_impl! for non-lifetime types
+#[macro_export]
 macro_rules! ron_inout_funcs {
+    // Pattern 1: Explicit lifetime parameter → route to ron_inout_funcs_impl!
+    ($name:ident<$lifetime:lifetime>) => {
+        $crate::ron_inout_funcs_impl!($name);
+    };
+
+    // Pattern 2: No lifetime parameter → route to ron_inout_funcs_no_lifetime_impl!
+    ($name:ident) => {
+        $crate::ron_inout_funcs_no_lifetime_impl!($name);
+    };
+}
+
+// Implementation macro for types without lifetimes (used internally by unified ron_inout_funcs!)
+#[macro_export]
+macro_rules! ron_inout_funcs_no_lifetime_impl {
+    ($name:ident) => {
+        impl InOutFuncs for $name {
+            fn output(&self, buffer: &mut StringInfo) {
+                use $crate::serialization::{str_to_db_encoding, EncodedStr::*};
+
+                let stringified = ron::to_string(&**self).unwrap();
+                match str_to_db_encoding(&stringified) {
+                    Utf8(s) => buffer.push_str(s),
+                    Other(s) => buffer.push_bytes(s.to_bytes()),
+                }
+            }
+
+            fn input(input: &std::ffi::CStr) -> $name
+            where
+                Self: Sized,
+            {
+                use $crate::serialization::str_from_db_encoding;
+
+                let input = str_from_db_encoding(input);
+                let val = ron::from_str(input).unwrap();
+                unsafe { Self(val, $crate::type_builder::CachedDatum::None).flatten() }
+            }
+        }
+    };
+}
+
+// Implementation macro for lifetime-parameterized types (used internally by unified ron_inout_funcs!)
+#[macro_export]
+macro_rules! ron_inout_funcs_impl {
     ($name:ident) => {
         impl<'input> InOutFuncs for $name<'input> {
             fn output(&self, buffer: &mut StringInfo) {

@@ -35,7 +35,7 @@ impl Serialize for TSPoint {
     {
         if serializer.is_human_readable() {
             // FIXME ugly hack to use postgres functions in an non-postgres library
-            extern "C" {
+            unsafe extern "C" {
                 fn _ts_toolkit_encode_timestamptz(dt: i64, buf: &mut [u8; 128]);
             }
             let mut ts = [0; 128];
@@ -70,7 +70,7 @@ impl<'de> Deserialize<'de> for TSPoint {
         }
 
         // FIXME ugly hack to use postgres functions in an non-postgres library
-        extern "C" {
+        unsafe extern "C" {
             // this is only going to be used to communicate with a rust lib we compile with this one
             #[allow(improper_ctypes)]
             fn _ts_toolkit_decode_timestamptz(text: &str) -> i64;

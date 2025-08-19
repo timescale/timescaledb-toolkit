@@ -13,4 +13,4 @@ stats_agg = {path="../stats-agg"}
 tspoint = {path="../tspoint"}
 
 [dev-dependencies]
-approx = "0.4.0"
+approx = "0.5.1"

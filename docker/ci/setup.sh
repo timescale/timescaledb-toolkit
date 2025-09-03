@@ -165,7 +165,12 @@ EOF
             #   certificate store, which we trust docker to provide a good copy
             #   of.  May as well just put [trusted=yes] into sources.list instead
             #   of bothering with apt-key...
-            curl -Ls https://packagecloud.io/timescale/timescaledb/gpgkey | apt-key add -
+            if [ "${OS_NAME}" = "ubuntu" ]; then
+                curl -Ls https://packagecloud.io/timescale/timescaledb/gpgkey | apt-key add -
+            else
+                curl -Ls https://packagecloud.io/timescale/timescaledb/gpgkey | gpg --dearmor -o /etc/apt/trusted.gpg.d/timescale_timescaledb.gpg
+            fi
+
             mkdir -p /etc/apt/sources.list.d
             cat > /etc/apt/sources.list.d/timescaledb.list <<EOF
 deb https://packagecloud.io/timescale/timescaledb/$OS_NAME/ $OS_CODE_NAME main

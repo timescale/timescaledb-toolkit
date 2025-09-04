@@ -43,7 +43,7 @@ const DEFAULT_ZETA_SKEW: f64 = 1.1;
 
 // probability of the nth element of a zeta distribution
 fn zeta_eq_n(skew: f64, n: u64) -> f64 {
-    1.0 / zeta(skew) * (n as f64).powf(-1. * skew)
+    1.0 / zeta(skew) * (n as f64).powf(-skew)
 }
 // cumulative distribution <= n in a zeta distribution
 fn zeta_le_n(skew: f64, n: u64) -> f64 {
@@ -1398,7 +1398,7 @@ pub fn topn(
     agg: SpaceSavingAggregate<'_>,
     n: i32,
     ty: Option<AnyElement>,
-) -> SetOfIterator<AnyElement> {
+) -> SetOfIterator<'_, AnyElement> {
     // If called with a NULL, assume type matches
     if ty.is_some() && ty.unwrap().oid().as_u32() != agg.type_oid {
         pgrx::error!("mischatched types")
@@ -1433,7 +1433,7 @@ pub fn topn(
 pub fn default_topn(
     agg: SpaceSavingAggregate<'_>,
     ty: Option<AnyElement>,
-) -> SetOfIterator<AnyElement> {
+) -> SetOfIterator<'_, AnyElement> {
     if agg.topn == 0 {
         pgrx::error!("frequency aggregates require a N parameter to topn")
     }
@@ -1442,7 +1442,7 @@ pub fn default_topn(
 }
 
 #[pg_extern(immutable, parallel_safe, name = "topn")]
-pub fn topn_bigint(agg: SpaceSavingBigIntAggregate<'_>, n: i32) -> SetOfIterator<i64> {
+pub fn topn_bigint(agg: SpaceSavingBigIntAggregate<'_>, n: i32) -> SetOfIterator<'_, i64> {
     validate_topn_for_mcv_agg(
         n,
         agg.topn,
@@ -1471,7 +1471,7 @@ pub fn arrow_topn_bigint<'a>(
 }
 
 #[pg_extern(immutable, parallel_safe, name = "topn")]
-pub fn default_topn_bigint(agg: SpaceSavingBigIntAggregate<'_>) -> SetOfIterator<i64> {
+pub fn default_topn_bigint(agg: SpaceSavingBigIntAggregate<'_>) -> SetOfIterator<'_, i64> {
     if agg.topn == 0 {
         pgrx::error!("frequency aggregates require a N parameter to topn")
     }
@@ -1489,7 +1489,7 @@ pub fn arrow_default_topn_bigint<'a>(
 }
 
 #[pg_extern(immutable, parallel_safe, name = "topn")]
-pub fn topn_text(agg: SpaceSavingTextAggregate<'_>, n: i32) -> SetOfIterator<String> {
+pub fn topn_text(agg: SpaceSavingTextAggregate<'_>, n: i32) -> SetOfIterator<'_, String> {
     validate_topn_for_mcv_agg(
         n,
         agg.topn,
@@ -1521,7 +1521,7 @@ pub fn arrow_topn_text<'a>(
 }
 
 #[pg_extern(immutable, parallel_safe, name = "topn")]
-pub fn default_topn_text(agg: SpaceSavingTextAggregate<'_>) -> SetOfIterator<String> {
+pub fn default_topn_text(agg: SpaceSavingTextAggregate<'_>) -> SetOfIterator<'_, String> {
     if agg.topn == 0 {
         pgrx::error!("frequency aggregates require a N parameter to topn")
     }

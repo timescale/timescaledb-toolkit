@@ -148,7 +148,7 @@ pub enum EncodedStr<'s> {
     Other(&'s CStr),
 }
 
-pub fn str_to_db_encoding(s: &str) -> EncodedStr {
+pub fn str_to_db_encoding(s: &str) -> EncodedStr<'_> {
     if unsafe { pg_sys::GetDatabaseEncoding() == pg_sys::pg_enc::PG_UTF8 as i32 } {
         return EncodedStr::Utf8(s);
     }
@@ -161,7 +161,7 @@ pub fn str_to_db_encoding(s: &str) -> EncodedStr {
             pg_sys::pg_enc::PG_UTF8 as _,
         )
     };
-    if encoded as usize == bytes.as_ptr() as usize {
+    if std::ptr::eq(encoded, bytes.as_ptr() as *const i8) {
         return EncodedStr::Utf8(s);
     }
 
@@ -177,7 +177,7 @@ pub fn str_from_db_encoding(s: &CStr) -> &str {
     let str_len = s.to_bytes().len().try_into().unwrap();
     let encoded =
         unsafe { pg_sys::pg_server_to_any(s.as_ptr(), str_len, pg_sys::pg_enc::PG_UTF8 as _) };
-    if encoded as usize == s.as_ptr() as usize {
+    if std::ptr::eq(encoded, s.as_ptr()) {
         //TODO redundant check?
         return s.to_str().unwrap();
     }

@@ -1,3 +1,5 @@
+#![allow(unexpected_cfgs)]
+
 use std::{collections::HashSet, path::Path};
 
 use colored::Colorize;

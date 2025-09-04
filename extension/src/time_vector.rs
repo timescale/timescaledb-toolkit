@@ -36,7 +36,7 @@ pg_type! {
         flags: u8,         // extra information about the stored data
         internal_padding: [u8; 3],  // required to be aligned
         points: [TSPoint; self.num_points],
-        null_val: [u8; (self.num_points + 7)/ 8], // bit vector, must be last element for alignment purposes
+        null_val: [u8; self.num_points.div_ceil(8)], // bit vector, must be last element for alignment purposes
     }
 }
 

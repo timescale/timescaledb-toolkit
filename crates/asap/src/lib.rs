@@ -239,7 +239,7 @@ struct Metrics<'a> {
 }
 
 impl Metrics<'_> {
-    fn new(values: &[f64]) -> Metrics {
+    fn new(values: &[f64]) -> Metrics<'_> {
         Metrics {
             len: values.len() as u32,
             values,

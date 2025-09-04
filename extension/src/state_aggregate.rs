@@ -270,7 +270,7 @@ pub mod toolkit_experimental {
             interval_start: i64,
             interval_len: i64,
             prev: Option<CompactStateAgg>,
-        ) -> CompactStateAgg {
+        ) -> CompactStateAgg<'_> {
             if self.durations.is_empty() {
                 pgrx::error!("unable to interpolate interval on state aggregate with no data");
             }

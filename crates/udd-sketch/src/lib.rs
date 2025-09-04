@@ -144,7 +144,7 @@ impl SketchHashMap {
         self.entry_upsert(key, 1);
     }
 
-    fn iter(&self) -> SketchHashIterator {
+    fn iter(&self) -> SketchHashIterator<'_> {
         SketchHashIterator {
             container: self,
             next_key: self.head,
@@ -402,7 +402,7 @@ impl UDDSketch {
         self.alpha = 2.0 * self.alpha / (1.0 + self.alpha.powi(2)); // See https://arxiv.org/pdf/2004.08604.pdf Equation 4
     }
 
-    pub fn bucket_iter(&self) -> SketchHashIterator {
+    pub fn bucket_iter(&self) -> SketchHashIterator<'_> {
         self.buckets.iter()
     }
 }

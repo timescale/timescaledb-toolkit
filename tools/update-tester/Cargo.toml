@@ -14,7 +14,7 @@ clap = { version = "3.2.15", features = ["wrap_help"] }
 postgres = "0.19.1"
 semver = "1.0.9"
 toml_edit = "0.14.3"
-xshell = "0.1.14"
+xshell = "0.1.17"
 pulldown-cmark = "0.8.0"
 walkdir = "2.3.2"
 bytecount = "0.6.3"

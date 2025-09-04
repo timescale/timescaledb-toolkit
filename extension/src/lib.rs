@@ -1,3 +1,5 @@
+// so we can support upgrading pgrx
+#![allow(unexpected_cfgs)]
 // so we can allow very new Clippy lints
 #![allow(unknown_lints)]
 // flat_serialize! alignment checks hit this for any single byte field (of which all pg_types! have two by default)

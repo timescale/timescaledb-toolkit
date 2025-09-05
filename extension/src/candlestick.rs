@@ -36,7 +36,7 @@ pg_type! {
     }
 }
 
-impl Candlestick<'_> {
+impl Candlestick {
     pub fn new(ts: i64, open: f64, high: f64, low: f64, close: f64, volume: Option<f64>) -> Self {
         let volume = match volume {
             None => VolKind::Missing {},
@@ -191,7 +191,7 @@ pub fn candlestick(
     low: Option<f64>,
     close: Option<f64>,
     volume: Option<f64>,
-) -> Option<Candlestick<'static>> {
+) -> Option<Candlestick> {
     match ts {
         Some(ts) => Some(Candlestick::new(
             ts.into(),
@@ -254,19 +254,19 @@ pub fn tick_data_transition_inner(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn candlestick_rollup_trans<'a>(
+pub fn candlestick_rollup_trans(
     state: Internal,
-    value: Option<Candlestick<'a>>,
+    value: Option<Candlestick>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
     candlestick_rollup_trans_inner(unsafe { state.to_inner() }, value, fcinfo).internal()
 }
 
-pub fn candlestick_rollup_trans_inner<'input>(
-    state: Option<Inner<Candlestick<'input>>>,
-    value: Option<Candlestick<'input>>,
+pub fn candlestick_rollup_trans_inner(
+    state: Option<Inner<Candlestick>>,
+    value: Option<Candlestick>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<Candlestick<'input>>> {
+) -> Option<Inner<Candlestick>> {
     unsafe {
         in_aggregate_context(fcinfo, || match (state, value) {
             (state, None) => state,
@@ -281,17 +281,14 @@ pub fn candlestick_rollup_trans_inner<'input>(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn candlestick_final(
-    state: Internal,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Candlestick<'static>> {
+pub fn candlestick_final(state: Internal, fcinfo: pg_sys::FunctionCallInfo) -> Option<Candlestick> {
     unsafe { candlestick_final_inner(state.to_inner(), fcinfo) }
 }
 
 pub fn candlestick_final_inner(
-    state: Option<Inner<Candlestick<'static>>>,
+    state: Option<Inner<Candlestick>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Candlestick<'static>> {
+) -> Option<Candlestick> {
     unsafe {
         in_aggregate_context(fcinfo, || {
             let state = match state {
@@ -312,11 +309,11 @@ pub fn candlestick_combine(
     unsafe { candlestick_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal() }
 }
 
-pub fn candlestick_combine_inner<'input>(
-    state1: Option<Inner<Candlestick<'input>>>,
-    state2: Option<Inner<Candlestick<'input>>>,
+pub fn candlestick_combine_inner(
+    state1: Option<Inner<Candlestick>>,
+    state2: Option<Inner<Candlestick>>,
     fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<Candlestick<'input>>> {
+) -> Option<Inner<Candlestick>> {
     unsafe {
         in_aggregate_context(fcinfo, || match (state1, state2) {
             (None, None) => None,
@@ -332,6 +329,7 @@ pub fn candlestick_combine_inner<'input>(
 
 #[pg_extern(immutable, parallel_safe, strict)]
 pub fn candlestick_serialize(state: Internal) -> bytea {
+    let mut state = state;
     let cs: &mut Candlestick = unsafe { state.get_mut().unwrap() };
     let ser = &**cs;
     crate::do_serialize!(ser)
@@ -342,7 +340,7 @@ pub fn candlestick_deserialize(bytes: bytea, _internal: Internal) -> Option<Inte
     candlestick_deserialize_inner(bytes).internal()
 }
 
-pub fn candlestick_deserialize_inner(bytes: bytea) -> Inner<Candlestick<'static>> {
+pub fn candlestick_deserialize_inner(bytes: bytea) -> Inner<Candlestick> {
     let de: CandlestickData = crate::do_deserialize!(bytes, CandlestickData);
     let cs: Candlestick = de.into();
     cs.into()
@@ -398,115 +396,106 @@ extension_sql!(
 
 #[pg_extern(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_open(
-    candlestick: Option<Candlestick<'_>>,
-    _accessor: AccessorOpen<'_>,
-) -> Option<f64> {
+pub fn arrow_open(candlestick: Option<Candlestick>, _accessor: AccessorOpen) -> Option<f64> {
     candlestick.map(|cs| cs.open())
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn open(candlestick: Option<Candlestick<'_>>) -> Option<f64> {
+pub fn open(candlestick: Option<Candlestick>) -> Option<f64> {
     candlestick.map(|cs| cs.open())
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_high(
-    candlestick: Option<Candlestick<'_>>,
-    _accessor: AccessorHigh<'_>,
-) -> Option<f64> {
+pub fn arrow_high(candlestick: Option<Candlestick>, _accessor: AccessorHigh) -> Option<f64> {
     candlestick.map(|cs| cs.high())
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn high(candlestick: Option<Candlestick<'_>>) -> Option<f64> {
+pub fn high(candlestick: Option<Candlestick>) -> Option<f64> {
     candlestick.map(|cs| cs.high())
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_low(candlestick: Option<Candlestick<'_>>, _accessor: AccessorLow<'_>) -> Option<f64> {
+pub fn arrow_low(candlestick: Option<Candlestick>, _accessor: AccessorLow) -> Option<f64> {
     candlestick.map(|cs| cs.low())
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn low(candlestick: Option<Candlestick<'_>>) -> Option<f64> {
+pub fn low(candlestick: Option<Candlestick>) -> Option<f64> {
     candlestick.map(|cs| cs.low())
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_close(
-    candlestick: Option<Candlestick<'_>>,
-    _accessor: AccessorClose<'_>,
-) -> Option<f64> {
+pub fn arrow_close(candlestick: Option<Candlestick>, _accessor: AccessorClose) -> Option<f64> {
     candlestick.map(|cs| cs.close())
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn close(candlestick: Option<Candlestick<'_>>) -> Option<f64> {
+pub fn close(candlestick: Option<Candlestick>) -> Option<f64> {
     candlestick.map(|cs| cs.close())
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_open_time(
-    candlestick: Option<Candlestick<'_>>,
-    _accessor: AccessorOpenTime<'_>,
+    candlestick: Option<Candlestick>,
+    _accessor: AccessorOpenTime,
 ) -> Option<crate::raw::TimestampTz> {
     candlestick.map(|cs| cs.open_time().into())
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn open_time(candlestick: Option<Candlestick<'_>>) -> Option<crate::raw::TimestampTz> {
+pub fn open_time(candlestick: Option<Candlestick>) -> Option<crate::raw::TimestampTz> {
     candlestick.map(|cs| cs.open_time().into())
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_high_time(
-    candlestick: Option<Candlestick<'_>>,
-    _accessor: AccessorHighTime<'_>,
+    candlestick: Option<Candlestick>,
+    _accessor: AccessorHighTime,
 ) -> Option<crate::raw::TimestampTz> {
     candlestick.map(|cs| cs.high_time().into())
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn high_time(candlestick: Option<Candlestick<'_>>) -> Option<crate::raw::TimestampTz> {
+pub fn high_time(candlestick: Option<Candlestick>) -> Option<crate::raw::TimestampTz> {
     candlestick.map(|cs| cs.high_time().into())
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_low_time(
-    candlestick: Option<Candlestick<'_>>,
-    _accessor: AccessorLowTime<'_>,
+    candlestick: Option<Candlestick>,
+    _accessor: AccessorLowTime,
 ) -> Option<crate::raw::TimestampTz> {
     candlestick.map(|cs| cs.low_time().into())
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn low_time(candlestick: Option<Candlestick<'_>>) -> Option<crate::raw::TimestampTz> {
+pub fn low_time(candlestick: Option<Candlestick>) -> Option<crate::raw::TimestampTz> {
     candlestick.map(|cs| cs.low_time().into())
 }
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_close_time(
-    candlestick: Option<Candlestick<'_>>,
-    _accessor: AccessorCloseTime<'_>,
+    candlestick: Option<Candlestick>,
+    _accessor: AccessorCloseTime,
 ) -> Option<crate::raw::TimestampTz> {
     candlestick.map(|cs| cs.close_time().into())
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn close_time(candlestick: Option<Candlestick<'_>>) -> Option<crate::raw::TimestampTz> {
+pub fn close_time(candlestick: Option<Candlestick>) -> Option<crate::raw::TimestampTz> {
     candlestick.map(|cs| cs.close_time().into())
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn volume(candlestick: Option<Candlestick<'_>>) -> Option<f64> {
+pub fn volume(candlestick: Option<Candlestick>) -> Option<f64> {
     match candlestick {
         None => None,
         Some(cs) => cs.volume(),
@@ -514,7 +503,7 @@ pub fn volume(candlestick: Option<Candlestick<'_>>) -> Option<f64> {
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn vwap(candlestick: Option<Candlestick<'_>>) -> Option<f64> {
+pub fn vwap(candlestick: Option<Candlestick>) -> Option<f64> {
     match candlestick {
         None => None,
         Some(cs) => cs.vwap(),
@@ -532,7 +521,7 @@ mod tests {
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {
             $client
-                .update($stmt, None, None)
+                .update($stmt, None, &[])
                 .unwrap()
                 .first()
                 .get_one::<$type>()
@@ -542,7 +531,7 @@ mod tests {
     macro_rules! select_two {
         ($client:expr, $stmt:expr, $type1:ty, $type2:ty) => {
             $client
-                .update($stmt, None, None)
+                .update($stmt, None, &[])
                 .unwrap()
                 .first()
                 .get_two::<$type1, $type2>()
@@ -552,8 +541,8 @@ mod tests {
 
     #[pg_test]
     fn candlestick_single_point() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
 
             let stmt = r#"SELECT candlestick(ts, open, high, low, close, volume)::text
                           FROM (
@@ -576,8 +565,8 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_single_point() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
 
             let stmt = r#"SELECT candlestick_agg(ts, price, volume)::text
                           FROM (
@@ -600,8 +589,8 @@ mod tests {
 
     #[pg_test]
     fn candlestick_accessors() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
 
             for ohlc in ["open", "high", "low", "close"] {
                 let stmt = format!(
@@ -655,8 +644,8 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_accessors() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
 
             for ohlc in ["open", "high", "low", "close"] {
                 let stmt = format!(
@@ -693,15 +682,14 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_extreme_values() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
 
             // timestamptz low and high val according to https://www.postgresql.org/docs/14/datatype-datetime.html
             for extreme_time in &["4713-01-01 00:00:00+00 BC", "294276-12-31 23:59:59+00"] {
                 let stmt = format!(
                     r#"SELECT candlestick_agg(ts, price, volume)::text
-                         FROM (VALUES ('{}'::timestamptz, 1.0, 1.0)) AS v(ts, price, volume)"#,
-                    extreme_time
+                         FROM (VALUES ('{extreme_time}'::timestamptz, 1.0, 1.0)) AS v(ts, price, volume)"#
                 );
 
                 let output = select_one!(client, &stmt, &str);
@@ -709,13 +697,12 @@ mod tests {
                 let expected = format!(
                     "(\
                             version:1,\
-                            open:(ts:\"{}\",val:1),\
-                            high:(ts:\"{}\",val:1),\
-                            low:(ts:\"{}\",val:1),\
-                            close:(ts:\"{}\",val:1),\
+                            open:(ts:\"{extreme_time}\",val:1),\
+                            high:(ts:\"{extreme_time}\",val:1),\
+                            low:(ts:\"{extreme_time}\",val:1),\
+                            close:(ts:\"{extreme_time}\",val:1),\
                             volume:Transaction(vol:1,vwap:1)\
-                            )",
-                    extreme_time, extreme_time, extreme_time, extreme_time
+                            )"
                 );
                 assert_eq!(expected, output.unwrap());
             }
@@ -723,8 +710,7 @@ mod tests {
             for extreme_price in &[f64::MAX, f64::MIN] {
                 let stmt = format!(
                     r#"SELECT candlestick_agg(ts, price, volume)::text
-                 FROM (VALUES ('2022-08-01 00:00:00+00'::timestamptz, {}, 1.0)) AS v(ts, price, volume)"#,
-                    extreme_price
+                 FROM (VALUES ('2022-08-01 00:00:00+00'::timestamptz, {extreme_price}, 1.0)) AS v(ts, price, volume)"#
                 );
 
                 let output = select_one!(client, &stmt, &str);
@@ -732,16 +718,12 @@ mod tests {
                 let expected = format!(
                     "(\
                  version:1,\
-                 open:(ts:\"2022-08-01 00:00:00+00\",val:{}),\
-                 high:(ts:\"2022-08-01 00:00:00+00\",val:{}),\
-                 low:(ts:\"2022-08-01 00:00:00+00\",val:{}),\
-                 close:(ts:\"2022-08-01 00:00:00+00\",val:{}),\
+                 open:(ts:\"2022-08-01 00:00:00+00\",val:{extreme_price}),\
+                 high:(ts:\"2022-08-01 00:00:00+00\",val:{extreme_price}),\
+                 low:(ts:\"2022-08-01 00:00:00+00\",val:{extreme_price}),\
+                 close:(ts:\"2022-08-01 00:00:00+00\",val:{extreme_price}),\
                  volume:Transaction(vol:1,vwap:{})\
                  )",
-                    extreme_price,
-                    extreme_price,
-                    extreme_price,
-                    extreme_price,
                     (extreme_price + extreme_price + extreme_price)
                 );
                 assert_eq!(expected, output.unwrap());
@@ -751,7 +733,7 @@ mod tests {
 
     #[pg_test]
     fn candlestick_null_inputs() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             for (t, o, h, l, c, v) in &[
                 ("NULL", "NULL", "NULL", "NULL", "NULL", "NULL"),
                 ("NULL", "1.0", "1.0", "1.0", "1.0", "1.0"),
@@ -769,7 +751,7 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_null_inputs() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             for (ts, price, vol) in &[
                 ("NULL", "NULL", "NULL"),
                 ("NULL", "1.0", "1.0"),
@@ -780,7 +762,7 @@ mod tests {
                 assert_eq!(output, None);
             }
 
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
 
             let expected = "(\
                             version:1,\
@@ -803,8 +785,8 @@ mod tests {
 
     #[pg_test]
     fn candlestick_as_constructor() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
 
             let stmt = r#"SELECT
                               candlestick(ts, open, high, low, close, volume)::text
@@ -813,7 +795,7 @@ mod tests {
                                      ('2022-08-02 00:00:00+00'::timestamptz, 9.0, 12.0, 3.0, 6.0, 1.0)
                           ) AS v(ts, open, high, low, close, volume)"#;
 
-            let mut candlesticks = client.update(stmt, None, None).unwrap();
+            let mut candlesticks = client.update(stmt, None, &[]).unwrap();
 
             let expected = "(\
                             version:1,\
@@ -847,8 +829,8 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_constant() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
 
             let stmt = r#"SELECT
                               date_trunc('day', ts)::text,
@@ -877,8 +859,8 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_strictly_increasing() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
 
             let stmt = r#"SELECT
                               date_trunc('day', ts)::text,
@@ -907,8 +889,8 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_strictly_decreasing() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
 
             let stmt = r#"SELECT
                               date_trunc('day', ts)::text,
@@ -937,8 +919,8 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_oscillating() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
 
             let stmt = r#"SELECT
                               date_trunc('day', ts)::text,
@@ -974,8 +956,8 @@ mod tests {
 
     #[pg_test]
     fn candlestick_rollup() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
 
             let stmt = r#"WITH t AS (
                               SELECT
@@ -1005,8 +987,8 @@ mod tests {
 
     #[pg_test]
     fn candlestick_agg_rollup() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
 
             let stmt = r#"WITH t AS (
                               SELECT

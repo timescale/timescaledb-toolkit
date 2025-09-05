@@ -229,7 +229,7 @@ impl fmt::Display for CountMinSketch {
 
         write!(f, "|      ||")?;
         for b in 0..self.width {
-            write!(f, "    {:>3} |", b)?;
+            write!(f, "    {b:>3} |")?;
         }
         writeln!(f)?;
 
@@ -240,9 +240,9 @@ impl fmt::Display for CountMinSketch {
         writeln!(f)?;
 
         for n in 0..self.depth {
-            write!(f, "|  {:>3} ||", n)?;
+            write!(f, "|  {n:>3} ||")?;
             for x in &self.counters[n] {
-                write!(f, " {:>6} |", x)?;
+                write!(f, " {x:>6} |")?;
             }
             writeln!(f)?;
         }

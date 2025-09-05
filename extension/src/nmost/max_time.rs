@@ -23,7 +23,7 @@ pg_type! {
         values : [pg_sys::TimestampTz; self.elements],
     }
 }
-ron_inout_funcs!(MaxTimes);
+ron_inout_funcs!(MaxTimes<'input>);
 
 impl<'input> From<&mut MaxTimeTransType> for MaxTimes<'input> {
     fn from(item: &mut MaxTimeTransType) -> Self {
@@ -130,17 +130,17 @@ pub fn max_n_time_to_values(
 
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_max_time_into_values<'a>(
+pub fn arrow_max_time_into_values(
     agg: MaxTimes<'static>,
-    _accessor: AccessorIntoValues<'a>,
-) -> SetOfIterator<'a, crate::raw::TimestampTz> {
+    _accessor: AccessorIntoValues,
+) -> SetOfIterator<'static, crate::raw::TimestampTz> {
     max_n_time_to_values(agg)
 }
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
-pub fn arrow_max_time_into_array<'a>(
+pub fn arrow_max_time_into_array(
     agg: MaxTimes<'static>,
-    _accessor: AccessorIntoArray<'a>,
+    _accessor: AccessorIntoArray,
 ) -> Vec<crate::raw::TimestampTz> {
     max_n_time_to_array(agg)
 }
@@ -201,13 +201,13 @@ mod tests {
 
     #[pg_test]
     fn max_time_correctness() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             client
                 .update(
                     "CREATE TABLE data(val TIMESTAMPTZ, category INT)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -217,7 +217,7 @@ mod tests {
                 client.update(
                     &format!("INSERT INTO data VALUES ('2020-1-1 UTC'::timestamptz + {} * '1d'::interval, {})", i, i % 4),
                     None,
-                    None,
+                    &[]
                 ).unwrap();
             }
 
@@ -226,7 +226,7 @@ mod tests {
                 .update(
                     "SELECT into_array(max_n(val, 5))::TEXT from data",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -237,7 +237,7 @@ mod tests {
                 .update(
                     "SELECT (max_n(val, 5)->into_array())::TEXT from data",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -250,7 +250,7 @@ mod tests {
                 .update(
                     "SELECT into_values(max_n(val, 3))::TEXT from data",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             assert_eq!(
@@ -270,7 +270,7 @@ mod tests {
                 .update(
                     "SELECT (max_n(val, 3)->into_values())::TEXT from data",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             assert_eq!(
@@ -292,7 +292,7 @@ mod tests {
                 client.update(
                     "WITH aggs as (SELECT category, max_n(val, 5) as agg from data GROUP BY category)
                         SELECT into_array(rollup(agg))::TEXT FROM aggs",
-                        None, None,
+                        None, &[],
                     ).unwrap().first().get_one::<&str>().unwrap();
             assert_eq!(result.unwrap(), "{\"2020-04-09 00:00:00+00\",\"2020-04-08 00:00:00+00\",\"2020-04-07 00:00:00+00\",\"2020-04-06 00:00:00+00\",\"2020-04-05 00:00:00+00\"}");
         })

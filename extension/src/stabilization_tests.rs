@@ -12,7 +12,7 @@ mod tests {
     // Test that any new features are added to the the experimental schema
     #[pg_test]
     fn test_schema_qualification() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let stable_functions: HashSet<String> = stable_functions();
             let stable_types: HashSet<String> = stable_types();
             let stable_operators: HashSet<String> = stable_operators();
@@ -26,7 +26,7 @@ mod tests {
                     AND deptype = 'e'
                     ORDER BY 1",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .filter_map(|row| {
@@ -146,7 +146,7 @@ mod tests {
                 return;
             }
 
-            panic!("unexpectedly released features: {:#?}", unexpected_features)
+            panic!("unexpectedly released features: {unexpected_features:#?}")
         });
     }
 

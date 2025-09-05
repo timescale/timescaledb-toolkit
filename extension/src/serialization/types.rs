@@ -218,14 +218,14 @@ impl Serialize for PgTypId {
                 pg_sys::Datum::from(self.0),
             );
             if tuple.is_null() {
-                pgrx::error!("no type info for oid {}", self.0.as_u32());
+                pgrx::error!("no type info for oid {}", self.0.to_u32());
             }
 
             let type_tuple: pg_sys::Form_pg_type = get_struct(tuple);
 
             let namespace = pg_sys::get_namespace_name((*type_tuple).typnamespace);
             if namespace.is_null() {
-                pgrx::error!("invalid schema oid {}", (*type_tuple).typnamespace.as_u32());
+                pgrx::error!("invalid schema oid {}", (*type_tuple).typnamespace.to_u32());
             }
 
             let namespace_len = CStr::from_ptr(namespace).to_bytes().len();
@@ -285,10 +285,7 @@ impl<'de> Deserialize<'de> for PgTypId {
 
             let namespace_id = pg_sys::LookupExplicitNamespace(namespace.as_ptr(), true);
             if namespace_id == pg_sys::InvalidOid {
-                return Err(D::Error::custom(format!(
-                    "invalid namespace {:?}",
-                    namespace
-                )));
+                return Err(D::Error::custom(format!("invalid namespace {namespace:?}")));
             }
 
             let type_id = pg_sys::GetSysCacheOid(
@@ -301,8 +298,7 @@ impl<'de> Deserialize<'de> for PgTypId {
             );
             if type_id == pg_sys::InvalidOid {
                 return Err(D::Error::custom(format!(
-                    "invalid type {:?}.{:?}",
-                    namespace, name
+                    "invalid type {namespace:?}.{name:?}"
                 )));
             }
 

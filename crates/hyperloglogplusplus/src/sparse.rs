@@ -33,8 +33,7 @@ impl<'s> Storage<'s> {
         // TODO what is max precision
         assert!(
             (4..=18).contains(&precision),
-            "invalid value for precision: {}; must be within [4, 18]",
-            precision,
+            "invalid value for precision: {precision}; must be within [4, 18]",
         );
         Self {
             to_merge: Default::default(),
@@ -48,8 +47,7 @@ impl<'s> Storage<'s> {
         // TODO what is max precision
         assert!(
             (4..=18).contains(&precision),
-            "invalid value for precision: {}; must be within [4, 18]",
-            precision,
+            "invalid value for precision: {precision}; must be within [4, 18]",
         );
         Self {
             to_merge: Default::default(),

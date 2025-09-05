@@ -18,16 +18,12 @@ pub fn run_update_tests<OnErr: FnMut(Test, TestError)>(
 ) -> Result<(), xshell::Error> {
     for old_toolkit_version in old_toolkit_versions {
         eprintln!(
-            " {} {} -> {}",
-            "Testing".bold().cyan(),
-            old_toolkit_version,
-            current_toolkit_version
+            " {} {old_toolkit_version} -> {current_toolkit_version}",
+            "Testing".bold().cyan()
         );
 
-        let test_db_name = format!(
-            "tsdb_toolkit_test_{}--{}",
-            old_toolkit_version, current_toolkit_version
-        );
+        let test_db_name =
+            format!("tsdb_toolkit_test_{old_toolkit_version}--{current_toolkit_version}");
         let test_config = root_config.with_db(&test_db_name);
         with_temporary_db(&test_db_name, root_config, || {
             let mut test_client = connect_to(&test_config);
@@ -53,10 +49,8 @@ pub fn run_update_tests<OnErr: FnMut(Test, TestError)>(
             }
         });
         eprintln!(
-            "{} {} -> {}",
-            "Finished".bold().green(),
-            old_toolkit_version,
-            current_toolkit_version
+            "{} {old_toolkit_version} -> {current_toolkit_version}",
+            "Finished".bold().green()
         );
     }
     Ok(())
@@ -73,21 +67,21 @@ pub fn create_test_objects_for_package_testing<OnErr: FnMut(Test, TestError)>(
 
     let mut client = connect_to(root_config).0;
 
-    let drop = format!(r#"DROP DATABASE IF EXISTS "{}""#, test_db_name);
+    let drop = format!(r#"DROP DATABASE IF EXISTS "{test_db_name}""#);
     client
         .simple_query(&drop)
-        .unwrap_or_else(|e| panic!("could not drop db {} due to {}", test_db_name, e));
-    let create = format!(r#"create database "{}""#, test_db_name);
+        .unwrap_or_else(|e| panic!("could not drop db {test_db_name} due to {e}"));
+    let create = format!(r#"create database "{test_db_name}""#);
     client
         .simple_query(&create)
-        .unwrap_or_else(|e| panic!("could not create db {} due to {}", test_db_name, e));
+        .unwrap_or_else(|e| panic!("could not create db {test_db_name} due to {e}"));
 
     let mut test_client = connect_to(&test_config);
 
     let create = "CREATE EXTENSION timescaledb_toolkit";
     test_client
         .simple_query(create)
-        .unwrap_or_else(|e| panic!("could not install extension due to {}", e,));
+        .unwrap_or_else(|e| panic!("could not install extension due to {e}",));
 
     let current_toolkit_version = test_client.get_installed_extension_version();
 
@@ -107,9 +101,9 @@ pub fn create_test_objects_for_package_testing<OnErr: FnMut(Test, TestError)>(
 fn connect_to(config: &ConnectionConfig<'_>) -> TestClient {
     let client = Client::connect(&config.config_string(), NoTls).unwrap_or_else(|e| {
         panic!(
-            "could not connect to postgres DB {} due to {}",
-            config.database.unwrap_or(""),
-            e,
+            "could not connect to postgres DB {database} due to {e}",
+            database = config.database.unwrap_or(""),
+            e = e
         )
     });
     TestClient(client)
@@ -143,15 +137,15 @@ pub fn update_to_and_validate_new_toolkit_version<OnErr: FnMut(Test, TestError)>
     test_client
         .0
         .close()
-        .unwrap_or_else(|e| panic!("Could not close connection to postgres DB due to {}", e));
+        .unwrap_or_else(|e| panic!("Could not close connection to postgres DB due to {e}"));
     // if the validation passes, drop the db
     let mut client = connect_to(root_config).0;
     eprintln!("{}", "Dropping database.".bold().green());
 
-    let drop = format!(r#"DROP DATABASE IF EXISTS "{}""#, test_db_name);
+    let drop = format!(r#"DROP DATABASE IF EXISTS "{test_db_name}""#);
     client
         .simple_query(&drop)
-        .unwrap_or_else(|e| panic!("could not drop db {} due to {}", test_db_name, e));
+        .unwrap_or_else(|e| panic!("could not drop db {test_db_name} due to {e}"));
     Ok(())
 }
 
@@ -177,17 +171,17 @@ fn create_db<'a>(
     new_db_name: &'a str,
 ) -> Deferred<(), impl FnMut() + 'a> {
     let mut client = connect_to(root_config).0;
-    let create = format!(r#"CREATE DATABASE "{}""#, new_db_name);
+    let create = format!(r#"CREATE DATABASE "{new_db_name}""#);
     client
         .simple_query(&create)
-        .unwrap_or_else(|e| panic!("could not create db {} due to {}", new_db_name, e));
+        .unwrap_or_else(|e| panic!("could not create db {new_db_name} due to {e}"));
 
     defer(move || {
         let mut client = connect_to(root_config).0;
-        let drop = format!(r#"DROP DATABASE "{}""#, new_db_name);
+        let drop = format!(r#"DROP DATABASE "{new_db_name}""#);
         client
             .simple_query(&drop)
-            .unwrap_or_else(|e| panic!("could not drop db {} due to {}", new_db_name, e));
+            .unwrap_or_else(|e| panic!("could not drop db {new_db_name} due to {e}"));
     })
 }
 
@@ -201,15 +195,10 @@ type QueryValues = Vec<Vec<Option<String>>>;
 
 impl TestClient {
     fn install_toolkit_at_version(&mut self, old_toolkit_version: &str) {
-        let create = format!(
-            r#"CREATE EXTENSION timescaledb_toolkit VERSION "{}""#,
-            old_toolkit_version
-        );
+        let create =
+            format!(r#"CREATE EXTENSION timescaledb_toolkit VERSION "{old_toolkit_version}""#);
         self.simple_query(&create).unwrap_or_else(|e| {
-            panic!(
-                "could not install extension at version {} due to {}",
-                old_toolkit_version, e,
-            )
+            panic!("could not install extension at version {old_toolkit_version} due to {e}",)
         });
     }
 
@@ -252,10 +241,10 @@ impl TestClient {
 
                 let test_db_name = format!("{}_{}", tests.name, current_toolkit_version);
 
-                let drop = format!(r#"DROP DATABASE IF EXISTS "{}""#, test_db_name);
+                let drop = format!(r#"DROP DATABASE IF EXISTS "{test_db_name}""#);
                 db_creation_client
                     .simple_query(&drop)
-                    .unwrap_or_else(|e| panic!("could not drop db {} due to {}", test_db_name, e));
+                    .unwrap_or_else(|e| panic!("could not drop db {test_db_name} due to {e}"));
                 let locale_flags = {
                     match std::process::Command::new("locale").arg("-a").output() {
                         Ok(cmd)
@@ -268,22 +257,19 @@ impl TestClient {
                         _ => "LC_COLLATE 'C' LC_CTYPE 'C'",
                     }
                 };
-                let create = format!(r#"CREATE DATABASE "{}" {}"#, test_db_name, locale_flags,);
+                let create = format!(r#"CREATE DATABASE "{test_db_name}" {locale_flags}"#,);
                 db_creation_client
                     .simple_query(&create)
-                    .unwrap_or_else(|e| {
-                        panic!("could not create db {} due to {}", test_db_name, e)
-                    });
+                    .unwrap_or_else(|e| panic!("could not create db {test_db_name} due to {e}"));
 
                 let test_config = root_config.with_db(&test_db_name);
 
                 let mut test_client = connect_to(&test_config);
                 test_client
                     .simple_query(&format!(
-                        r#"ALTER DATABASE "{}" SET timezone TO 'UTC';"#,
-                        &test_db_name
+                        r#"ALTER DATABASE "{test_db_name}" SET timezone TO 'UTC';"#,
                     ))
-                    .unwrap_or_else(|e| panic!("could not set time zone to UTC due to {}", e));
+                    .unwrap_or_else(|e| panic!("could not set time zone to UTC due to {e}"));
 
                 // install new version and make sure it is correct
                 test_client.install_toolkit_at_version(&current_toolkit_version);
@@ -313,7 +299,7 @@ impl TestClient {
     fn update_to_current_toolkit_version(&mut self) {
         let update = "ALTER EXTENSION timescaledb_toolkit UPDATE";
         self.simple_query(update)
-            .unwrap_or_else(|e| panic!("could not update extension due to {}", e));
+            .unwrap_or_else(|e| panic!("could not update extension due to {e}"));
     }
 
     fn validate_test_objects_from_files(
@@ -385,12 +371,11 @@ impl TestClient {
             "SELECT pg_proc.proname \
             FROM pg_catalog.pg_proc \
             WHERE pg_proc.probin LIKE '$libdir/timescaledb_toolkit%' \
-              AND pg_proc.probin <> '$libdir/timescaledb_toolkit-{}';",
-            current_toolkit_version,
+              AND pg_proc.probin <> '$libdir/timescaledb_toolkit-{current_toolkit_version}';",
         );
         let leaks = self
             .simple_query(&query_get_leaked_objects)
-            .unwrap_or_else(|e| panic!("could query the leaked objects due to {}", e));
+            .unwrap_or_else(|e| panic!("could query the leaked objects due to {e}"));
         let leaks = get_values(leaks);
         // flatten the list of returned objects for better output on errors
         // it shouldn't change the result since each row only has a single
@@ -415,7 +400,7 @@ impl TestClient {
             WHERE extname = 'timescaledb_toolkit'";
         let updated_version = self
             .simple_query(get_extension_version)
-            .unwrap_or_else(|e| panic!("could get updated extension version due to {}", e));
+            .unwrap_or_else(|e| panic!("could get updated extension version due to {e}"));
 
         get_values(updated_version)
             .pop() // should have 1 row
@@ -427,21 +412,21 @@ impl TestClient {
 
     pub(crate) fn validate_stable_objects_exist(&mut self) {
         for function in stabilization::STABLE_FUNCTIONS {
-            let check_existence = format!("SELECT '{}'::regprocedure;", function);
+            let check_existence = format!("SELECT '{function}'::regprocedure;");
             self.simple_query(&check_existence)
-                .unwrap_or_else(|e| panic!("error checking function existence: {}", e));
+                .unwrap_or_else(|e| panic!("error checking function existence: {e}"));
         }
 
         for ty in stabilization::STABLE_TYPES {
-            let check_existence = format!("SELECT '{}'::regtype;", ty);
+            let check_existence = format!("SELECT '{ty}'::regtype;");
             self.simple_query(&check_existence)
-                .unwrap_or_else(|e| panic!("error checking type existence: {}", e));
+                .unwrap_or_else(|e| panic!("error checking type existence: {e}"));
         }
 
         for operator in stabilization::STABLE_OPERATORS() {
-            let check_existence = format!("SELECT '{}'::regoperator;", operator);
+            let check_existence = format!("SELECT '{operator}'::regoperator;");
             self.simple_query(&check_existence)
-                .unwrap_or_else(|e| panic!("error checking operator existence: {}", e));
+                .unwrap_or_else(|e| panic!("error checking operator existence: {e}"));
         }
     }
 }
@@ -649,9 +634,9 @@ impl fmt::Display for TestError {
                     Some(e) => {
                         use postgres::error::ErrorPosition::*;
                         let pos = match e.position() {
-                            Some(Original(pos)) => format!("At character {}", pos),
+                            Some(Original(pos)) => format!("At character {pos}"),
                             Some(Internal { position, query }) => {
-                                format!("In internal query `{}` at {}", query, position)
+                                format!("In internal query `{query}` at {position}")
                             }
                             None => String::new(),
                         };
@@ -664,10 +649,10 @@ impl fmt::Display for TestError {
                             pos,
                         )
                     }
-                    None => write!(f, "{}", error),
+                    None => write!(f, "{error}"),
                 }
             }
-            TestError::OutputError(err) => write!(f, "{} {}", "Error:".bold().red(), err),
+            TestError::OutputError(err) => write!(f, "{} {err}", "Error:".bold().red()),
         }
     }
 }

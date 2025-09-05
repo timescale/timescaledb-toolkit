@@ -29,7 +29,7 @@ macro_rules! path {
 
 fn main() {
     if let Err(err) = try_main() {
-        eprintln!("{}", err);
+        eprintln!("{err}");
         process::exit(1);
     }
 }
@@ -78,17 +78,16 @@ fn get_extension_info_from_pg_config(pg_config: &str) -> xshell::Result<Extensio
 
     let control_contents = fs::read_to_string(&control_file).unwrap_or_else(|e| {
         panic!(
-            "cannot read control file {} due to {}",
-            control_file.to_string_lossy(),
-            e,
+            "cannot read control file {} due to {e}",
+            control_file.to_string_lossy()
         )
     });
 
     let current_version = get_current_version(&control_contents);
-    eprintln!("Generating Version {}", current_version);
+    eprintln!("Generating Version {current_version}");
 
     let upgradeable_from = get_upgradeable_from(&control_contents);
-    eprintln!("Upgradable From {:?}", upgradeable_from);
+    eprintln!("Upgradable From {upgradeable_from:?}");
 
     let extension_info = ExtensionInfo {
         control_file,
@@ -137,17 +136,16 @@ fn get_extension_info_from_dir(root: &str) -> xshell::Result<ExtensionInfo> {
 
     let control_contents = fs::read_to_string(&control_file).unwrap_or_else(|e| {
         panic!(
-            "cannot read control file {} due to {}",
-            control_file.to_string_lossy(),
-            e,
+            "cannot read control file {} due to {e}",
+            control_file.to_string_lossy()
         )
     });
 
     let current_version = get_current_version(&control_contents);
-    eprintln!("Generating Version {}", current_version);
+    eprintln!("Generating Version {current_version}");
 
     let upgradeable_from = get_upgradeable_from(&control_contents);
-    eprintln!("Upgradable From {:?}", upgradeable_from);
+    eprintln!("Upgradable From {upgradeable_from:?}");
 
     let extension_info = ExtensionInfo {
         control_file,
@@ -204,11 +202,11 @@ fn add_version_to_install_script(
     }: &ExtensionInfo,
 ) {
     let install_script =
-        path!(extension_dir / format!("timescaledb_toolkit--{}.sql", current_version));
+        path!(extension_dir / format!("timescaledb_toolkit--{current_version}.sql"));
 
     let versioned_script = install_script.with_extension("sql.tmp");
 
-    let module_path = format!("$libdir/timescaledb_toolkit-{}", current_version);
+    let module_path = format!("$libdir/timescaledb_toolkit-{current_version}");
 
     transform_file_to(&install_script, &versioned_script, |line| {
         assert!(
@@ -285,7 +283,7 @@ fn get_field_val<'a>(contents: &'a str, field: &str) -> &'a str {
         .filter(|line| line.contains(field))
         .map(get_quoted_field)
         .next()
-        .unwrap_or_else(|| panic!("cannot read field `{}` in control file", field))
+        .unwrap_or_else(|| panic!("cannot read field `{field}` in control file"))
 }
 
 // given a `<field name> = '<field value>'` extract `<field value>`
@@ -293,13 +291,13 @@ fn get_quoted_field(line: &str) -> &str {
     let quoted = line
         .split('=')
         .nth(1)
-        .unwrap_or_else(|| panic!("cannot find value in line `{}`", line));
+        .unwrap_or_else(|| panic!("cannot find value in line `{line}`"));
 
     quoted
         .trim_start()
         .split_terminator('\'')
         .find(|s| !s.is_empty())
-        .unwrap_or_else(|| panic!("unquoted value in line `{}`", line))
+        .unwrap_or_else(|| panic!("unquoted value in line `{line}`"))
 }
 
 //
@@ -309,19 +307,14 @@ fn get_quoted_field(line: &str) -> &str {
 fn open_file(path: impl AsRef<Path>) -> BufReader<File> {
     let path = path.as_ref();
     let file = File::open(path)
-        .unwrap_or_else(|e| panic!("cannot open file `{}` due to {}", path.to_string_lossy(), e,));
+        .unwrap_or_else(|e| panic!("cannot open file `{}` due to {e}", path.to_string_lossy()));
     BufReader::new(file)
 }
 
 fn create_file(path: impl AsRef<Path>) -> BufWriter<File> {
     let path = path.as_ref();
-    let file = File::create(path).unwrap_or_else(|e| {
-        panic!(
-            "cannot create file `{}` due to {}",
-            path.to_string_lossy(),
-            e,
-        )
-    });
+    let file = File::create(path)
+        .unwrap_or_else(|e| panic!("cannot create file `{}` due to {e}", path.to_string_lossy()));
     BufWriter::new(file)
 }
 
@@ -330,10 +323,9 @@ fn rename_file(from: impl AsRef<Path>, to: impl AsRef<Path>) {
     let to = to.as_ref();
     fs::rename(from, to).unwrap_or_else(|e| {
         panic!(
-            "cannot rename `{}` to `{}` due to `{}`",
+            "cannot rename `{}` to `{}` due to `{e}`",
             from.to_string_lossy(),
-            to.to_string_lossy(),
-            e,
+            to.to_string_lossy()
         )
     });
 }
@@ -349,16 +341,11 @@ fn transform_file_to(
     let mut from = open_file(from_path);
 
     for line in (&mut from).lines() {
-        let line = line.unwrap_or_else(|e| {
-            panic!("cannot read `{}` due to {}", from_path.to_string_lossy(), e,)
-        });
+        let line = line
+            .unwrap_or_else(|e| panic!("cannot read `{}` due to {e}", from_path.to_string_lossy()));
 
         writeln!(&mut to, "{}", transform(line)).unwrap_or_else(|e| {
-            panic!(
-                "cannot write to `{}` due to {}",
-                to_path.to_string_lossy(),
-                e,
-            )
+            panic!("cannot write to `{}` due to {e}", to_path.to_string_lossy())
         });
     }
 

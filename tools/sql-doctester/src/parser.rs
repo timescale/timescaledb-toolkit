@@ -69,8 +69,7 @@ pub fn extract_tests_from_string(s: &str, file_stem: &str) -> TestFile {
 
                 if let BlockKind::Output = code_block_info.kind {
                     panic!(
-                        "found output with no test test.\n{}:{} {:?}",
-                        file_stem, current_line, heading_stack
+                        "found output with no test test.\n{file_stem}:{current_line} {heading_stack:?}"
                     )
                 }
 
@@ -78,7 +77,7 @@ pub fn extract_tests_from_string(s: &str, file_stem: &str) -> TestFile {
 
                 stateless &= code_block_info.transactional;
                 let mut test = Test {
-                    location: format!("{}:{}", file_stem, current_line),
+                    location: format!("{file_stem}:{current_line}"),
                     header: if heading_stack.is_empty() {
                         "<root>".to_string()
                     } else {
@@ -115,8 +114,7 @@ pub fn extract_tests_from_string(s: &str, file_stem: &str) -> TestFile {
                                         && !code_block_info.precision_limits.is_empty()
                                     {
                                         panic!(
-                                            "cannot have precision limits on both test and output.\n{}:{} {:?}",
-                                            file_stem, current_line, heading_stack
+                                            "cannot have precision limits on both test and output.\n{file_stem}:{current_line} {heading_stack:?}"
                                         )
                                     }
                                     test.precision_limits = code_block_info.precision_limits;
@@ -208,7 +206,7 @@ fn parse_code_block_info(info: &str) -> CodeBlockInfo {
             p if p.starts_with("precision") => {
                 // syntax `precision(col: bytes)`
                 let precision_err =
-                    || -> ! { panic!("invalid syntax for `precision(col: bytes)` found `{}`", p) };
+                    || -> ! { panic!("invalid syntax for `precision(col: bytes)` found `{p}`") };
                 let arg = &p["precision".len()..];
                 if arg.as_bytes().first() != Some(&b'(') || arg.as_bytes().last() != Some(&b')') {
                     precision_err()
@@ -222,7 +220,7 @@ fn parse_code_block_info(info: &str) -> CodeBlockInfo {
                 let length = args[1].trim().parse().unwrap_or_else(|_| precision_err());
                 let old = info.precision_limits.insert(column, length);
                 if old.is_some() {
-                    panic!("duplicate precision for column {}", column)
+                    panic!("duplicate precision for column {column}")
                 }
             }
             _ => {}

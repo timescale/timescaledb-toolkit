@@ -5,6 +5,8 @@
 // https://github.com/postgres/postgres/blob/472e518a44eacd9caac7d618f1b6451672ca4481/src/backend/utils/adt/float.c#L3260
 //
 
+pub use twofloat::TwoFloat;
+
 pub trait FloatLike:
     num_traits::NumOps + num_traits::NumAssignOps + num_traits::Float + From<f64>
 {
@@ -19,7 +21,7 @@ impl FloatLike for f64 {
         n as f64
     }
 }
-impl FloatLike for twofloat::TwoFloat {
+impl FloatLike for TwoFloat {
     fn from_u64(n: u64) -> Self {
         (n as f64).into()
     }

@@ -856,7 +856,7 @@ mod tests {
     #[test]
     fn random_stress() {
         let mut sketch = UDDSketch::new(1000, 0.01);
-        let seed = rand::thread_rng().gen();
+        let seed = rand::thread_rng().gen_range(0..u64::MAX);
         let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
         let mut bounds = Vec::new();
         for _ in 0..100 {

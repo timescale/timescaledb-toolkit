@@ -70,7 +70,7 @@ pub mod toolkit_experimental {
         }
     }
 
-    ron_inout_funcs!(CountMinSketch);
+    ron_inout_funcs!(CountMinSketch<'input>);
 }
 
 use toolkit_experimental::CountMinSketch;
@@ -139,14 +139,14 @@ mod tests {
 
     #[pg_test]
     fn test_countminsketch() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
-                .update("CREATE TABLE test (data TEXT)", None, None)
+                .update("CREATE TABLE test (data TEXT)", None, &[])
                 .unwrap();
-            client.update("INSERT INTO test SELECT generate_series(1, 100)::TEXT UNION ALL SELECT generate_series(1, 50)::TEXT", None, None).unwrap();
+            client.update("INSERT INTO test SELECT generate_series(1, 100)::TEXT UNION ALL SELECT generate_series(1, 50)::TEXT", None, &[]).unwrap();
 
             let sanity = client
-                .update("SELECT COUNT(*) FROM test", None, None)
+                .update("SELECT COUNT(*) FROM test", None, &[])
                 .unwrap()
                 .first()
                 .get_one::<i64>()
@@ -159,12 +159,12 @@ mod tests {
                 SELECT toolkit_experimental.count_min_sketch(data, 0.01, 0.01) \
                 FROM test",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
             let sanity = client
-                .update("SELECT COUNT(*) FROM sketch", None, None)
+                .update("SELECT COUNT(*) FROM sketch", None, &[])
                 .unwrap()
                 .first()
                 .get_one::<i64>()
@@ -179,7 +179,7 @@ mod tests {
                      toolkit_experimental.approx_count('101', count_min_sketch) \
                      FROM sketch",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -203,7 +203,7 @@ mod tests {
 
     #[pg_test]
     fn test_countminsketch_combine() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let combined = client
                 .update(
 		    "SELECT toolkit_experimental.approx_count('1', toolkit_experimental.count_min_sketch(v::text, 0.01, 0.01))
@@ -211,7 +211,7 @@ mod tests {
 		             UNION ALL \
                            SELECT * FROM generate_series(1, 100))  u(v)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap().first()
                 .get_one::<i64>().unwrap();
@@ -231,17 +231,17 @@ mod tests {
 
     #[pg_test]
     fn countminsketch_io_test() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
-                .update("CREATE TABLE io_test (value TEXT)", None, None)
+                .update("CREATE TABLE io_test (value TEXT)", None, &[])
                 .unwrap();
-            client.update("INSERT INTO io_test VALUES ('lorem'), ('ipsum'), ('dolor'), ('sit'), ('amet'), ('consectetur'), ('adipiscing'), ('elit')", None, None).unwrap();
+            client.update("INSERT INTO io_test VALUES ('lorem'), ('ipsum'), ('dolor'), ('sit'), ('amet'), ('consectetur'), ('adipiscing'), ('elit')", None, &[]).unwrap();
 
             let sketch = client
                 .update(
                     "SELECT toolkit_experimental.count_min_sketch(value, 0.5, 0.01)::text FROM io_test",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap().first()
                 .get_one::<String>().unwrap();
@@ -265,12 +265,12 @@ mod tests {
 
     #[pg_test]
     fn test_cms_null_input_yields_null_output() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let output = client
                 .update(
                     "SELECT toolkit_experimental.count_min_sketch(NULL::TEXT, 0.1, 0.1)::TEXT",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -282,12 +282,12 @@ mod tests {
 
     #[pg_test]
     fn test_approx_count_null_input_yields_null_output() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let output = client
                 .update(
                     "SELECT toolkit_experimental.approx_count('1'::text, NULL::toolkit_experimental.countminsketch)",
                     None,
-                    None,
+                    &[]
                 )
                 .unwrap().first()
                 .get_one::<i64>().unwrap();

@@ -67,17 +67,17 @@ pub(crate) fn generate_from_install(
             Some(Create::Type(create)) => script_creator.handle_create_type(create),
             Some(Create::Schema(create)) => {
                 // TODO is there something more principled to do here?
-                writeln!(script_creator.upgrade_file, "CREATE SCHEMA {}", create).unwrap();
+                writeln!(script_creator.upgrade_file, "CREATE SCHEMA {create}").unwrap();
             }
             Some(Create::Operator(create)) => script_creator.handle_create_operator(create),
             Some(Create::Cast(create)) => {
                 // TODO we don't have a stable one of these yet
                 // JOSH - we should probably check if the FUNCTION is experimental also
                 if create.contains("toolkit_experimental.") || create.starts_with("(tests.") {
-                    writeln!(script_creator.upgrade_file, "CREATE CAST {}", create).unwrap();
+                    writeln!(script_creator.upgrade_file, "CREATE CAST {create}").unwrap();
                     continue;
                 }
-                unimplemented!("unprepared for stable CAST: {}", create)
+                unimplemented!("unprepared for stable CAST: {create}")
             }
             None => continue,
         }
@@ -136,10 +136,10 @@ where
                 if create.is_some() {
                     return create;
                 }
-                unreachable!("unexpected CREATE `{}`", trimmed)
+                unreachable!("unexpected CREATE `{trimmed}`")
             }
 
-            writeln!(self.upgrade_file, "{}", line).unwrap();
+            writeln!(self.upgrade_file, "{line}").unwrap();
         }
         return None;
 
@@ -218,12 +218,12 @@ where
         let type_name = extract_name(&create);
 
         if type_name.starts_with("toolkit_experimental") || type_name.starts_with("tests") {
-            writeln!(self.upgrade_file, "CREATE TYPE {}", create).unwrap();
+            writeln!(self.upgrade_file, "CREATE TYPE {create}").unwrap();
             return;
         }
 
         if self.new_stabilizations.new_types.contains(&type_name) {
-            writeln!(self.upgrade_file, "CREATE TYPE {}", create).unwrap();
+            writeln!(self.upgrade_file, "CREATE TYPE {create}").unwrap();
             return;
         }
 
@@ -260,19 +260,15 @@ where
                 Some(value) => value,
             };
             if alter_statement.is_empty() {
-                write!(
-                    &mut alter_statement,
-                    "ALTER TYPE {name} SET (",
-                    name = type_name
-                )
-                .expect("cannot write ALTER");
+                write!(&mut alter_statement, "ALTER TYPE {type_name} SET (")
+                    .expect("cannot write ALTER");
             } else {
                 alter_statement.push_str(", ");
             }
             write!(
                 &mut alter_statement,
-                "{} = {}",
-                ALTERABLE_PROPERTIES[i], value
+                "{} = {value}",
+                ALTERABLE_PROPERTIES[i]
             )
             .expect("cannot write ALTER");
         }
@@ -280,7 +276,7 @@ where
             alter_statement.push_str(");");
         }
 
-        writeln!(self.upgrade_file, "{}", alter_statement).expect("cannot write ALTER TYPE");
+        writeln!(self.upgrade_file, "{alter_statement}").expect("cannot write ALTER TYPE");
     }
 
     fn handle_create_operator(&mut self, create: String) {
@@ -362,7 +358,7 @@ where
             let field = split.next().unwrap().trim();
             let value = split
                 .next()
-                .unwrap_or_else(|| panic!("no value for field {}", field))
+                .unwrap_or_else(|| panic!("no value for field {field}"))
                 .trim();
             assert_eq!(split.next(), None);
 
@@ -374,10 +370,7 @@ where
                 }
             }
             if !found_match && !allow_no_match {
-                panic!(
-                    "{} is not considered an acceptable property for this object",
-                    field
-                )
+                panic!("{field} is not considered an acceptable property for this object")
             }
         }
 
@@ -412,7 +405,7 @@ fn parse_arg_types(stmt: &str) -> Vec<Vec<String>> {
     // with arbitrary interior whitespace and comments into a
     // `Vec<Vec<type segment>>`
     let stmt = stmt.trim_start();
-    assert!(stmt.starts_with('('), "stmt.starts_with('(') {}", stmt);
+    assert!(stmt.starts_with('('), "stmt.starts_with('(') {stmt}");
     let end = stmt.find(')').expect("cannot find ')' for arg list");
     let args = &stmt[1..end];
     let mut types = vec![];
@@ -512,23 +505,23 @@ fn version(s: &str) -> Version {
     let version = Version {
         major: nums
             .next()
-            .unwrap_or_else(|| panic!("no major version in `{}`", s))
+            .unwrap_or_else(|| panic!("no major version in `{s}`"))
             .parse()
-            .unwrap_or_else(|e| panic!("error {} for major version in `{}`", e, s)),
+            .unwrap_or_else(|e| panic!("error {e} for major version in `{s}`")),
         minor: nums
             .next()
-            .unwrap_or_else(|| panic!("no minor version in `{}`", s))
+            .unwrap_or_else(|| panic!("no minor version in `{s}`"))
             .parse()
-            .unwrap_or_else(|e| panic!("error {} for minor version in `{}`", e, s)),
+            .unwrap_or_else(|e| panic!("error {e} for minor version in `{s}`")),
         patch: nums
             .next()
             .unwrap_or("0")
             .trim_end_matches("-dev")
             .parse()
-            .unwrap_or_else(|e| panic!("error {} for major version in `{}`", e, s)),
+            .unwrap_or_else(|e| panic!("error {e} for major version in `{s}`")),
     };
     if nums.next().is_some() {
-        panic!("extra `.`s in `{}`", s)
+        panic!("extra `.`s in `{s}`")
     }
     version
 }

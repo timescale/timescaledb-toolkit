@@ -31,20 +31,20 @@ impl<'s> ConnectionConfig<'s> {
         } = self;
         let mut config = String::new();
         if let Some(host) = host {
-            let _ = write!(&mut config, "host={} ", host);
+            let _ = write!(&mut config, "host={host} ");
         }
         if let Some(port) = port {
-            let _ = write!(&mut config, "port={} ", port);
+            let _ = write!(&mut config, "port={port} ");
         }
         let _ = match user {
-            Some(user) => write!(&mut config, "user={} ", user),
+            Some(user) => write!(&mut config, "user={user} "),
             None => write!(&mut config, "user=postgres "),
         };
         if let Some(password) = password {
-            let _ = write!(&mut config, "password={} ", password);
+            let _ = write!(&mut config, "password={password} ");
         }
         if let Some(database) = database {
-            let _ = write!(&mut config, "dbname={} ", database);
+            let _ = write!(&mut config, "dbname={database} ");
         }
         Cow::Owned(config)
     }
@@ -68,16 +68,16 @@ pub fn run_tests<OnErr: FnMut(Test, TestError)>(
             eprintln!("{} {}", "Finished".bold().green(), finish_name);
             let _ = Client::connect(root_connection_config, NoTls)
                 .and_then(|mut client| {
-                    client.simple_query(&format!(r#"DROP DATABASE IF EXISTS "{}""#, drop_name))
+                    client.simple_query(&format!(r#"DROP DATABASE IF EXISTS "{drop_name}""#))
                 })
-                .map_err(|e| eprintln!("error dropping DB {}", e));
+                .map_err(|e| eprintln!("error dropping DB {e}"));
         });
         {
             eprintln!("{} {}", "Starting".bold().green(), tests_name);
             let mut root_client = Client::connect(root_connection_config, NoTls)
                 .expect("could not connect to postgres");
             root_client
-                .simple_query(&format!(r#"CREATE DATABASE "{}""#, db_name))
+                .simple_query(&format!(r#"CREATE DATABASE "{db_name}""#))
                 .expect("could not create test DB");
         }
         (db_name, deferred)
@@ -179,6 +179,7 @@ fn validate_output(output: Vec<SimpleQueryMessage>, test: &Test) -> Result<(), T
     let mut rows = Vec::with_capacity(test.output.len());
     for r in output {
         match r {
+            RowDescription(_r) => continue,
             Row(r) => {
                 let mut row: Vec<String> = Vec::with_capacity(r.len());
                 for i in 0..r.len() {
@@ -187,7 +188,10 @@ fn validate_output(output: Vec<SimpleQueryMessage>, test: &Test) -> Result<(), T
                 rows.push(row);
             }
             CommandComplete(..) => break,
-            _ => unreachable!(),
+            _ => {
+                eprintln!("unhandled message: {r:?} for test: {test:?}");
+                unreachable!()
+            }
         }
     }
     let output_error = |header: &str| {
@@ -341,9 +345,9 @@ impl fmt::Display for TestError {
                     Some(e) => {
                         use postgres::error::ErrorPosition::*;
                         let pos = match e.position() {
-                            Some(Original(pos)) => format!("At character {}", pos),
+                            Some(Original(pos)) => format!("At character {pos}"),
                             Some(Internal { position, query }) => {
-                                format!("In internal query `{}` at {}", query, position)
+                                format!("In internal query `{query}` at {position}")
                             }
                             None => String::new(),
                         };
@@ -356,10 +360,10 @@ impl fmt::Display for TestError {
                             pos,
                         )
                     }
-                    None => write!(f, "{}", error),
+                    None => write!(f, "{error}"),
                 }
             }
-            TestError::OutputError(err) => write!(f, "{} {}", "Error:".bold().red(), err),
+            TestError::OutputError(err) => write!(f, "{} {err}", "Error:".bold().red()),
         }
     }
 }

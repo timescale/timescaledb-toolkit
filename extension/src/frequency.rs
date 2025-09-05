@@ -483,7 +483,7 @@ impl<'input> From<(&SpaceSavingAggregate<'input>, &pg_sys::FunctionCallInfo)>
     }
 }
 
-ron_inout_funcs!(SpaceSavingAggregate);
+ron_inout_funcs!(SpaceSavingAggregate<'input>);
 
 pg_type! {
     #[derive(Debug)]
@@ -560,7 +560,7 @@ impl<'input>
     }
 }
 
-ron_inout_funcs!(SpaceSavingBigIntAggregate);
+ron_inout_funcs!(SpaceSavingBigIntAggregate<'input>);
 
 pg_type! {
     #[derive(Debug)]
@@ -629,7 +629,7 @@ impl<'input> From<(&SpaceSavingTextAggregate<'input>, &pg_sys::FunctionCallInfo)
     }
 }
 
-ron_inout_funcs!(SpaceSavingTextAggregate);
+ron_inout_funcs!(SpaceSavingTextAggregate<'input>);
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn mcv_agg_trans(
@@ -1269,7 +1269,7 @@ pub fn freq_iter<'a>(
     ),
 > {
     unsafe {
-        if ty.oid().as_u32() != agg.type_oid {
+        if ty.oid().to_u32() != agg.type_oid {
             pgrx::error!("mischatched types")
         }
         let counts = agg.counts.slice().iter().zip(agg.overcounts.slice().iter());
@@ -1313,7 +1313,7 @@ pub fn freq_bigint_iter<'a>(
 #[opname(->)]
 pub fn arrow_freq_bigint_iter<'a>(
     agg: SpaceSavingBigIntAggregate<'a>,
-    _accessor: AccessorIntoValues<'static>,
+    _accessor: AccessorIntoValues,
 ) -> TableIterator<
     'a,
     (
@@ -1352,7 +1352,7 @@ pub fn freq_text_iter<'a>(
 #[opname(->)]
 pub fn arrow_freq_text_iter<'a>(
     agg: SpaceSavingTextAggregate<'a>,
-    _accessor: AccessorIntoValues<'static>,
+    _accessor: AccessorIntoValues,
 ) -> TableIterator<
     'a,
     (
@@ -1400,7 +1400,7 @@ pub fn topn(
     ty: Option<AnyElement>,
 ) -> SetOfIterator<'_, AnyElement> {
     // If called with a NULL, assume type matches
-    if ty.is_some() && ty.unwrap().oid().as_u32() != agg.type_oid {
+    if ty.is_some() && ty.unwrap().oid().to_u32() != agg.type_oid {
         pgrx::error!("mischatched types")
     }
 
@@ -1465,7 +1465,7 @@ pub fn topn_bigint(agg: SpaceSavingBigIntAggregate<'_>, n: i32) -> SetOfIterator
 #[opname(->)]
 pub fn arrow_topn_bigint<'a>(
     agg: SpaceSavingBigIntAggregate<'a>,
-    accessor: AccessorTopNCount<'static>,
+    accessor: AccessorTopNCount,
 ) -> SetOfIterator<'a, i64> {
     topn_bigint(agg, accessor.count as i32)
 }
@@ -1483,7 +1483,7 @@ pub fn default_topn_bigint(agg: SpaceSavingBigIntAggregate<'_>) -> SetOfIterator
 #[opname(->)]
 pub fn arrow_default_topn_bigint<'a>(
     agg: SpaceSavingBigIntAggregate<'a>,
-    _accessor: AccessorTopn<'static>,
+    _accessor: AccessorTopn,
 ) -> SetOfIterator<'a, i64> {
     default_topn_bigint(agg)
 }
@@ -1515,7 +1515,7 @@ pub fn topn_text(agg: SpaceSavingTextAggregate<'_>, n: i32) -> SetOfIterator<'_,
 #[opname(->)]
 pub fn arrow_topn_text<'a>(
     agg: SpaceSavingTextAggregate<'a>,
-    accessor: AccessorTopNCount<'static>,
+    accessor: AccessorTopNCount,
 ) -> SetOfIterator<'a, String> {
     topn_text(agg, accessor.count as i32)
 }
@@ -1533,7 +1533,7 @@ pub fn default_topn_text(agg: SpaceSavingTextAggregate<'_>) -> SetOfIterator<'_,
 #[opname(->)]
 pub fn arrow_default_topn_text<'a>(
     agg: SpaceSavingTextAggregate<'a>,
-    _accessor: AccessorTopn<'static>,
+    _accessor: AccessorTopn,
 ) -> SetOfIterator<'a, String> {
     default_topn_text(agg)
 }
@@ -1578,7 +1578,7 @@ pub fn max_bigint_frequency(agg: SpaceSavingBigIntAggregate<'_>, value: i64) -> 
 #[opname(->)]
 pub fn arrow_max_bigint_frequency<'a>(
     agg: SpaceSavingBigIntAggregate<'a>,
-    accessor: AccessorMaxFrequencyInt<'static>,
+    accessor: AccessorMaxFrequencyInt,
 ) -> f64 {
     max_bigint_frequency(agg, accessor.value)
 }
@@ -1597,7 +1597,7 @@ pub fn min_bigint_frequency(agg: SpaceSavingBigIntAggregate<'_>, value: i64) -> 
 #[opname(->)]
 pub fn arrow_min_bigint_frequency<'a>(
     agg: SpaceSavingBigIntAggregate<'a>,
-    accessor: AccessorMinFrequencyInt<'static>,
+    accessor: AccessorMinFrequencyInt,
 ) -> f64 {
     min_bigint_frequency(agg, accessor.value)
 }
@@ -1698,13 +1698,13 @@ mod tests {
 
     #[pg_test]
     fn test_freq_aggregate() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             // using the search path trick for this test to make it easier to stabilize later on
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1712,29 +1712,29 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {sp}"), None, &[])
                 .unwrap();
 
-            client.update("SET TIMEZONE to UTC", None, None).unwrap();
+            client.update("SET TIMEZONE to UTC", None, &[]).unwrap();
             client
                 .update(
                     "CREATE TABLE test (data INTEGER, time TIMESTAMPTZ)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
             for i in (0..100).rev() {
-                client.update(&format!("INSERT INTO test SELECT i, '2020-1-1'::TIMESTAMPTZ + ('{} days, ' || i::TEXT || ' seconds')::INTERVAL FROM generate_series({}, 99, 1) i", 100 - i, i), None, None).unwrap();
+                client.update(&format!("INSERT INTO test SELECT i, '2020-1-1'::TIMESTAMPTZ + ('{} days, ' || i::TEXT || ' seconds')::INTERVAL FROM generate_series({i}, 99, 1) i", 100 - i), None, &[]).unwrap();
             }
 
-            let test = client.update("SELECT freq_agg(0.015, s.data)::TEXT FROM (SELECT data FROM test ORDER BY time) s", None, None)
+            let test = client.update("SELECT freq_agg(0.015, s.data)::TEXT FROM (SELECT data FROM test ORDER BY time) s", None, &[])
                 .unwrap().first()
                 .get_one::<String>().unwrap().unwrap();
             let expected = "(version:1,num_values:67,topn:0,values_seen:5050,freq_param:0.015,counts:[100,99,98,97,96,95,94,93,92,91,90,89,88,87,86,85,84,83,82,81,80,79,78,77,76,75,74,73,72,71,70,69,68,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67],overcounts:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66],datums:[99,98,97,96,95,94,93,92,91,90,89,88,87,86,85,84,83,82,81,80,79,78,77,76,75,74,73,72,71,70,69,68,67,33,34,35,36,37,38,39,40,41,42,43,44,45,46,47,48,49,50,51,52,53,54,55,56,57,58,59,60,61,62,63,64,65,66])";
             assert_eq!(test, expected);
 
-            let test = client.update("SELECT raw_freq_agg(0.015, s.data)::TEXT FROM (SELECT data FROM test ORDER BY time) s", None, None)
+            let test = client.update("SELECT raw_freq_agg(0.015, s.data)::TEXT FROM (SELECT data FROM test ORDER BY time) s", None, &[])
                 .unwrap().first()
                 .get_one::<String>().unwrap().unwrap();
             let expected = "(version:1,type_oid:23,num_values:67,values_seen:5050,freq_param:0.015,topn:0,counts:[100,99,98,97,96,95,94,93,92,91,90,89,88,87,86,85,84,83,82,81,80,79,78,77,76,75,74,73,72,71,70,69,68,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67,67],overcounts:[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66,66],datums:[23,\"99\",\"98\",\"97\",\"96\",\"95\",\"94\",\"93\",\"92\",\"91\",\"90\",\"89\",\"88\",\"87\",\"86\",\"85\",\"84\",\"83\",\"82\",\"81\",\"80\",\"79\",\"78\",\"77\",\"76\",\"75\",\"74\",\"73\",\"72\",\"71\",\"70\",\"69\",\"68\",\"67\",\"33\",\"34\",\"35\",\"36\",\"37\",\"38\",\"39\",\"40\",\"41\",\"42\",\"43\",\"44\",\"45\",\"46\",\"47\",\"48\",\"49\",\"50\",\"51\",\"52\",\"53\",\"54\",\"55\",\"56\",\"57\",\"58\",\"59\",\"60\",\"61\",\"62\",\"63\",\"64\",\"65\",\"66\"])";
@@ -1744,13 +1744,13 @@ mod tests {
 
     #[pg_test]
     fn test_topn_aggregate() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             // using the search path trick for this test to make it easier to stabilize later on
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -1758,27 +1758,27 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {sp}"), None, &[])
                 .unwrap();
 
-            client.update("SET TIMEZONE to UTC", None, None).unwrap();
+            client.update("SET TIMEZONE to UTC", None, &[]).unwrap();
             client
                 .update(
                     "CREATE TABLE test (data INTEGER, time TIMESTAMPTZ)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
             for i in (0..200).rev() {
-                client.update(&format!("INSERT INTO test SELECT i, '2020-1-1'::TIMESTAMPTZ + ('{} days, ' || i::TEXT || ' seconds')::INTERVAL FROM generate_series({}, 199, 1) i", 200 - i, i), None, None).unwrap();
+                client.update(&format!("INSERT INTO test SELECT i, '2020-1-1'::TIMESTAMPTZ + ('{} days, ' || i::TEXT || ' seconds')::INTERVAL FROM generate_series({i}, 199, 1) i", 200 - i), None, &[]).unwrap();
             }
 
             let test = client
                 .update(
                     "SELECT mcv_agg(10, s.data)::TEXT FROM (SELECT data FROM test ORDER BY time) s",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -2010,7 +2010,7 @@ mod tests {
             .update(
                 "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                 None,
-                None,
+                &[],
             )
             .unwrap()
             .first()
@@ -2018,49 +2018,49 @@ mod tests {
             .unwrap()
             .unwrap();
         client
-            .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+            .update(&format!("SET LOCAL search_path TO {sp}"), None, &[])
             .unwrap();
 
-        client.update("SET TIMEZONE to UTC", None, None).unwrap();
+        client.update("SET TIMEZONE to UTC", None, &[]).unwrap();
         client
             .update(
                 "CREATE TABLE test (data INTEGER, time TIMESTAMPTZ)",
                 None,
-                None,
+                &[],
             )
             .unwrap();
 
         for i in (0..20).rev() {
-            client.update(&format!("INSERT INTO test SELECT i, '2020-1-1'::TIMESTAMPTZ + ('{} days, ' || i::TEXT || ' seconds')::INTERVAL FROM generate_series({}, 19, 1) i", 10 - i, i), None, None).unwrap();
+            client.update(&format!("INSERT INTO test SELECT i, '2020-1-1'::TIMESTAMPTZ + ('{} days, ' || i::TEXT || ' seconds')::INTERVAL FROM generate_series({i}, 19, 1) i", 10 - i), None, &[]).unwrap();
         }
 
         client
             .update(
                 "CREATE TABLE aggs (name TEXT, agg SPACESAVINGBIGINTAGGREGATE)",
                 None,
-                None,
+                &[],
             )
             .unwrap();
-        client.update("INSERT INTO aggs SELECT 'mcv_default', mcv_agg(5, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None).unwrap();
-        client.update("INSERT INTO aggs SELECT 'mcv_1.5', mcv_agg(5, 1.5, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None).unwrap();
-        client.update("INSERT INTO aggs SELECT 'mcv_2', mcv_agg(5, 2, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None).unwrap();
-        client.update("INSERT INTO aggs SELECT 'freq_8', freq_agg(0.08, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None).unwrap();
-        client.update("INSERT INTO aggs SELECT 'freq_5', freq_agg(0.05, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None).unwrap();
-        client.update("INSERT INTO aggs SELECT 'freq_2', freq_agg(0.02, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, None).unwrap();
+        client.update("INSERT INTO aggs SELECT 'mcv_default', mcv_agg(5, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, &[]).unwrap();
+        client.update("INSERT INTO aggs SELECT 'mcv_1.5', mcv_agg(5, 1.5, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, &[]).unwrap();
+        client.update("INSERT INTO aggs SELECT 'mcv_2', mcv_agg(5, 2, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, &[]).unwrap();
+        client.update("INSERT INTO aggs SELECT 'freq_8', freq_agg(0.08, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, &[]).unwrap();
+        client.update("INSERT INTO aggs SELECT 'freq_5', freq_agg(0.05, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, &[]).unwrap();
+        client.update("INSERT INTO aggs SELECT 'freq_2', freq_agg(0.02, s.data) FROM (SELECT data FROM test ORDER BY time) s", None, &[]).unwrap();
     }
 
     // API tests
     #[pg_test]
     fn test_topn() {
-        Spi::connect(|mut client| {
-            setup_with_test_table(&mut client);
+        Spi::connect_mut(|client| {
+            setup_with_test_table(client);
 
             // simple tests
             let rows = client
                 .update(
                     "SELECT topn(agg) FROM aggs WHERE name = 'mcv_default'",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .count();
@@ -2069,7 +2069,7 @@ mod tests {
                 .update(
                     "SELECT agg -> topn() FROM aggs WHERE name = 'mcv_default'",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .count();
@@ -2078,7 +2078,7 @@ mod tests {
                 .update(
                     "SELECT topn(agg, 5) FROM aggs WHERE name = 'freq_5'",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .count();
@@ -2089,7 +2089,7 @@ mod tests {
                 .update(
                     "SELECT topn(agg, 3) FROM aggs WHERE name = 'mcv_default'",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .count();
@@ -2098,7 +2098,7 @@ mod tests {
                 .update(
                     "SELECT agg -> topn(3) FROM aggs WHERE name = 'mcv_default'",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .count();
@@ -2109,7 +2109,7 @@ mod tests {
                 .update(
                     "SELECT topn(agg, 5) FROM aggs WHERE name = 'freq_8'",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .count();
@@ -2121,13 +2121,13 @@ mod tests {
         error = "data is not skewed enough to find top 0 parameters with a skew of 1.5, try reducing the skew factor"
     )]
     fn topn_on_underskewed_mcv_agg() {
-        Spi::connect(|mut client| {
-            setup_with_test_table(&mut client);
+        Spi::connect_mut(|client| {
+            setup_with_test_table(client);
             client
                 .update(
                     "SELECT topn(agg, 0::int) FROM aggs WHERE name = 'mcv_1.5'",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .count();
@@ -2136,13 +2136,13 @@ mod tests {
 
     #[pg_test(error = "requested N (8) exceeds creation parameter of mcv aggregate (5)")]
     fn topn_high_n_on_mcv_agg() {
-        Spi::connect(|mut client| {
-            setup_with_test_table(&mut client);
+        Spi::connect_mut(|client| {
+            setup_with_test_table(client);
             client
                 .update(
                     "SELECT topn(agg, 8) FROM aggs WHERE name = 'mcv_default'",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .count();
@@ -2151,15 +2151,15 @@ mod tests {
 
     #[pg_test(error = "frequency aggregates require a N parameter to topn")]
     fn topn_requires_n_for_freq_agg() {
-        Spi::connect(|mut client| {
-            setup_with_test_table(&mut client);
+        Spi::connect_mut(|client| {
+            setup_with_test_table(client);
             assert_eq!(
                 0,
                 client
                     .update(
                         "SELECT topn(agg) FROM aggs WHERE name = 'freq_2'",
                         None,
-                        None
+                        &[]
                     )
                     .unwrap()
                     .count(),
@@ -2169,14 +2169,14 @@ mod tests {
 
     #[pg_test]
     fn test_into_values() {
-        Spi::connect(|mut client| {
-            setup_with_test_table(&mut client);
+        Spi::connect_mut(|client| {
+            setup_with_test_table(client);
 
             let rows = client
                 .update(
                     "SELECT into_values(agg) FROM aggs WHERE name = 'freq_8'",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .count();
@@ -2185,7 +2185,7 @@ mod tests {
                 .update(
                     "SELECT into_values(agg) FROM aggs WHERE name = 'freq_5'",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .count();
@@ -2194,7 +2194,7 @@ mod tests {
                 .update(
                     "SELECT into_values(agg) FROM aggs WHERE name = 'freq_2'",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .count();
@@ -2204,7 +2204,7 @@ mod tests {
                 .update(
                     "SELECT agg -> into_values() FROM aggs WHERE name = 'freq_8'",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .count();
@@ -2213,7 +2213,7 @@ mod tests {
                 .update(
                     "SELECT agg -> into_values() FROM aggs WHERE name = 'freq_5'",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .count();
@@ -2222,7 +2222,7 @@ mod tests {
                 .update(
                     "SELECT agg -> into_values() FROM aggs WHERE name = 'freq_2'",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .count();
@@ -2232,48 +2232,48 @@ mod tests {
 
     #[pg_test]
     fn test_frequency_getters() {
-        Spi::connect(|mut client| {
-            setup_with_test_table(&mut client);
+        Spi::connect_mut(|client| {
+            setup_with_test_table(client);
 
             // simple tests
-            let (min, max) = client.update("SELECT min_frequency(agg, 3), max_frequency(agg, 3) FROM aggs WHERE name = 'freq_2'", None, None)
+            let (min, max) = client.update("SELECT min_frequency(agg, 3), max_frequency(agg, 3) FROM aggs WHERE name = 'freq_2'", None, &[])
                 .unwrap().first()
                 .get_two::<f64,f64>().unwrap();
             assert_eq!(min.unwrap(), 0.01904761904761905);
             assert_eq!(max.unwrap(), 0.01904761904761905);
 
-            let (min, max) = client.update("SELECT min_frequency(agg, 11), max_frequency(agg, 11) FROM aggs WHERE name = 'mcv_default'", None, None)
+            let (min, max) = client.update("SELECT min_frequency(agg, 11), max_frequency(agg, 11) FROM aggs WHERE name = 'mcv_default'", None, &[])
                 .unwrap().first()
                 .get_two::<f64,f64>().unwrap();
             assert_eq!(min.unwrap(), 0.05714285714285714);
             assert_eq!(max.unwrap(), 0.05714285714285714);
-            let (min, max) = client.update("SELECT agg -> min_frequency(3), agg -> max_frequency(3) FROM aggs WHERE name = 'freq_2'", None, None)
+            let (min, max) = client.update("SELECT agg -> min_frequency(3), agg -> max_frequency(3) FROM aggs WHERE name = 'freq_2'", None, &[])
                 .unwrap().first()
                 .get_two::<f64,f64>().unwrap();
             assert_eq!(min.unwrap(), 0.01904761904761905);
             assert_eq!(max.unwrap(), 0.01904761904761905);
 
-            let (min, max) = client.update("SELECT agg -> min_frequency(11), agg -> max_frequency(11) FROM aggs WHERE name = 'mcv_default'", None, None)
+            let (min, max) = client.update("SELECT agg -> min_frequency(11), agg -> max_frequency(11) FROM aggs WHERE name = 'mcv_default'", None, &[])
                 .unwrap().first()
                 .get_two::<f64,f64>().unwrap();
             assert_eq!(min.unwrap(), 0.05714285714285714);
             assert_eq!(max.unwrap(), 0.05714285714285714);
 
             // missing value
-            let (min, max) = client.update("SELECT min_frequency(agg, 3), max_frequency(agg, 3) FROM aggs WHERE name = 'freq_8'", None, None)
+            let (min, max) = client.update("SELECT min_frequency(agg, 3), max_frequency(agg, 3) FROM aggs WHERE name = 'freq_8'", None, &[])
                 .unwrap().first()
                 .get_two::<f64,f64>().unwrap();
             assert_eq!(min.unwrap(), 0.);
             assert_eq!(max.unwrap(), 0.);
 
-            let (min, max) = client.update("SELECT min_frequency(agg, 20), max_frequency(agg, 20) FROM aggs WHERE name = 'mcv_2'", None, None)
+            let (min, max) = client.update("SELECT min_frequency(agg, 20), max_frequency(agg, 20) FROM aggs WHERE name = 'mcv_2'", None, &[])
                 .unwrap().first()
                 .get_two::<f64,f64>().unwrap();
             assert_eq!(min.unwrap(), 0.);
             assert_eq!(max.unwrap(), 0.);
 
             // noisy value
-            let (min, max) = client.update("SELECT min_frequency(agg, 8), max_frequency(agg, 8) FROM aggs WHERE name = 'mcv_1.5'", None, None)
+            let (min, max) = client.update("SELECT min_frequency(agg, 8), max_frequency(agg, 8) FROM aggs WHERE name = 'mcv_1.5'", None, &[])
                 .unwrap().first()
                 .get_two::<f64,f64>().unwrap();
             assert_eq!(min.unwrap(), 0.004761904761904762);
@@ -2283,11 +2283,11 @@ mod tests {
 
     #[pg_test]
     fn test_rollups() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client.update(
                 "CREATE TABLE test (raw_data DOUBLE PRECISION, int_data INTEGER, text_data TEXT, bucket INTEGER)",
                 None,
-                None,
+                &[]
             ).unwrap();
 
             // Generate an array of 10000 values by taking the probability curve for a
@@ -2309,10 +2309,9 @@ mod tests {
             // Probably not the most efficient way of populating this table...
             for v in vals {
                 let cmd = format!(
-                    "INSERT INTO test SELECT {}, {}::INT, {}::TEXT, FLOOR(RANDOM() * 10)",
-                    v, v, v
+                    "INSERT INTO test SELECT {v}, {v}::INT, {v}::TEXT, FLOOR(RANDOM() * 10)"
                 );
-                client.update(&cmd, None, None).unwrap();
+                client.update(&cmd, None, &[]).unwrap();
             }
 
             // No matter how the values are batched into subaggregates, we should always
@@ -2320,7 +2319,7 @@ mod tests {
             let mut result = client.update(
                 "WITH aggs AS (SELECT bucket, raw_mcv_agg(5, raw_data) as raw_agg FROM test GROUP BY bucket)
                 SELECT topn(rollup(raw_agg), NULL::DOUBLE PRECISION)::TEXT from aggs",
-                None, None
+                None, &[]
             ).unwrap();
             assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("1"));
             assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("2"));
@@ -2332,7 +2331,7 @@ mod tests {
             let mut result = client.update(
                 "WITH aggs AS (SELECT bucket, mcv_agg(5, int_data) as int_agg FROM test GROUP BY bucket)
                 SELECT topn(rollup(int_agg))::TEXT from aggs",
-                None, None
+                None, &[]
             ).unwrap();
             assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("1"));
             assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("2"));
@@ -2344,7 +2343,7 @@ mod tests {
             let mut result = client.update(
                 "WITH aggs AS (SELECT bucket, mcv_agg(5, text_data) as text_agg FROM test GROUP BY bucket)
                 SELECT topn(rollup(text_agg))::TEXT from aggs",
-                None, None
+                None, &[]
             ).unwrap();
             assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("1"));
             assert_eq!(result.next().unwrap()[1].value().unwrap(), Some("2"));

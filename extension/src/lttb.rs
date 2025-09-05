@@ -436,24 +436,24 @@ mod tests {
 
     #[pg_test]
     fn test_lttb_equivalence() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             client
                 .update(
                     "CREATE TABLE test(time TIMESTAMPTZ, value DOUBLE PRECISION);",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             client.update(
                 "INSERT INTO test
                 SELECT time, value
-                FROM toolkit_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, NULL);", None, None).unwrap();
+                FROM toolkit_experimental.generate_periodic_normal_series('2020-01-01 UTC'::timestamptz, NULL);", None, &[]).unwrap();
 
             client
                 .update(
                     "CREATE TABLE results1(time TIMESTAMPTZ, value DOUBLE PRECISION);",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             client
@@ -464,7 +464,7 @@ mod tests {
                     (SELECT lttb(time, value, 100) FROM test)
                 );",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -472,7 +472,7 @@ mod tests {
                 .update(
                     "CREATE TABLE results2(time TIMESTAMPTZ, value DOUBLE PRECISION);",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             client
@@ -485,12 +485,12 @@ mod tests {
                     )
                 );",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
             let delta = client
-                .update("SELECT count(*)  FROM results1 r1 FULL OUTER JOIN results2 r2 ON r1 = r2 WHERE r1 IS NULL OR r2 IS NULL;" , None, None)
+                .update("SELECT count(*)  FROM results1 r1 FULL OUTER JOIN results2 r2 ON r1 = r2 WHERE r1 IS NULL OR r2 IS NULL;" , None, &[])
                 .unwrap().first()
                 .get_one::<i64>().unwrap();
             assert_eq!(delta.unwrap(), 0);
@@ -499,8 +499,8 @@ mod tests {
 
     #[pg_test]
     fn test_lttb_result() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             let mut result = client
                 .update(
                     r#"SELECT unnest(lttb(ts, val, 5))::TEXT
@@ -518,7 +518,7 @@ mod tests {
                     ('2020-1-11'::timestamptz, 14)
                 ) AS v(ts, val)"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -548,8 +548,8 @@ mod tests {
 
     #[pg_test]
     fn test_gp_lttb() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             let mut result = client
                 .update(
                     r#"SELECT unnest(toolkit_experimental.gp_lttb(ts, val, 7))::TEXT
@@ -567,7 +567,7 @@ mod tests {
                     ('2020-3-11'::timestamptz, 14)
                 ) AS v(ts, val)"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -605,8 +605,8 @@ mod tests {
 
     #[pg_test]
     fn test_gp_lttb_with_gap() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             let mut result = client
                 .update(
                     r#"SELECT unnest(toolkit_experimental.gp_lttb(ts, val, '36hr', 5))::TEXT
@@ -622,7 +622,7 @@ mod tests {
                     ('2020-3-11'::timestamptz, 14)
                 ) AS v(ts, val)"#,
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 

@@ -131,12 +131,12 @@ mod tests {
 
     #[pg_test]
     fn test_to_epoch() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let test_val = client
                 .update(
                     "SELECT to_epoch('2021-01-01 00:00:00+03'::timestamptz)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -146,7 +146,7 @@ mod tests {
             assert!((test_val - 1609448400f64).abs() < f64::EPSILON);
 
             let test_val = client
-                .update("SELECT to_epoch('epoch'::timestamptz)", None, None)
+                .update("SELECT to_epoch('epoch'::timestamptz)", None, &[])
                 .unwrap()
                 .first()
                 .get_one::<f64>()
@@ -158,7 +158,7 @@ mod tests {
                 .update(
                     "SELECT to_epoch('epoch'::timestamptz - interval '42 seconds')",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -171,12 +171,12 @@ mod tests {
 
     #[pg_test]
     fn test_days_in_month() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let test_val = client
                 .update(
                     "SELECT days_in_month('2021-01-01 00:00:00+03'::timestamptz)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -186,12 +186,12 @@ mod tests {
             assert_eq!(test_val, 31);
         });
 
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let test_val = client
                 .update(
                     "SELECT days_in_month('2020-02-03 00:00:00+03'::timestamptz)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -200,12 +200,12 @@ mod tests {
                 .unwrap();
             assert_eq!(test_val, 29);
         });
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let test_val = client
                 .update(
                     "SELECT days_in_month('2023-01-31 00:00:00+00'::timestamptz)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -217,12 +217,12 @@ mod tests {
     }
     #[pg_test]
     fn test_monthly_normalize() {
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let test_val = client
                 .update(
                     "SELECT month_normalize(1000,'2021-01-01 00:00:00+03'::timestamptz)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -231,12 +231,12 @@ mod tests {
                 .unwrap();
             assert_eq!(test_val, 981.8548387096774f64);
         });
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let test_val = client
                 .update(
                     "SELECT month_normalize(1000,'2021-01-01 00:00:00+03'::timestamptz,30.5)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -245,12 +245,12 @@ mod tests {
                 .unwrap();
             assert_eq!(test_val, 983.8709677419355f64);
         });
-        Spi::connect(|mut client| {
+        Spi::connect_mut(|client| {
             let test_val = client
                 .update(
                     "SELECT month_normalize(1000,'2021-01-01 00:00:00+03'::timestamptz,30)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()

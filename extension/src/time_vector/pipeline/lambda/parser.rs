@@ -168,7 +168,7 @@ fn parse_primary<'a>(
                 let var_name = var_name_or_expr.as_str();
                 known_vars
                     .entry(var_name)
-                    .and_modify(|_| panic!("duplicate var {}", var_name))
+                    .and_modify(|_| panic!("duplicate var {var_name}"))
                     .or_insert_with(|| (var_value.ty().clone(), var_expressions.len()));
                 var_expressions.push(var_value);
             }
@@ -259,10 +259,9 @@ fn build_binary_op(
             //      actually is, but it seems easier to just revers the value here if
             //      they're in an unexpected order.
             (Double, Interval) => Binary(Mul, right.into(), left.into(), Interval),
-            (l, r) => panic!(
-                "no operator `{:?} * {:?}` only `DOUBLE * DOUBLE` and `INTERVAL * FLOAT`",
-                l, r
-            ),
+            (l, r) => {
+                panic!("no operator `{l:?} * {r:?}` only `DOUBLE * DOUBLE` and `INTERVAL * FLOAT`")
+            }
         },
 
         divide => {
@@ -368,7 +367,7 @@ fn parse_timestamptz(val: &str) -> i64 {
     // FIXME pgrx wraps all functions in rust wrappers, which makes them
     //       uncallable with DirectFunctionCall(). Is there a way to
     //       export both?
-    extern "C" {
+    unsafe extern "C-unwind" {
         #[allow(improper_ctypes)]
         fn timestamptz_in(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
     }
@@ -390,7 +389,7 @@ fn parse_interval(val: &str) -> *mut pg_sys::Interval {
     // FIXME pgrx wraps all functions in rust wrappers, which makes them
     //       uncallable with DirectFunctionCall(). Is there a way to
     //       export both?
-    extern "C" {
+    unsafe extern "C-unwind" {
         #[allow(improper_ctypes)]
         fn interval_in(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;
     }

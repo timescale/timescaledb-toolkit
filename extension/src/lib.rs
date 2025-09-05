@@ -47,6 +47,8 @@ mod pg_any_element;
 mod raw;
 mod stabilization_info;
 mod stabilization_tests;
+
+#[macro_use]
 mod type_builder;
 
 #[cfg(any(test, feature = "pg_test"))]
@@ -57,7 +59,7 @@ use pgrx::*;
 pgrx::pg_module_magic!();
 
 #[pg_guard]
-pub extern "C" fn _PG_init() {
+pub extern "C-unwind" fn _PG_init() {
     // Nothing to do here
 }
 

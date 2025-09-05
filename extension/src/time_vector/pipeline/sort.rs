@@ -65,15 +65,15 @@ mod tests {
 
     #[pg_test]
     fn test_pipeline_sort() {
-        Spi::connect(|mut client| {
-            client.update("SET timezone TO 'UTC'", None, None).unwrap();
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
             // using the search path trick for this test b/c the operator is
             // difficult to spot otherwise.
             let sp = client
                 .update(
                     "SELECT format(' %s, toolkit_experimental',current_setting('search_path'))",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -81,14 +81,14 @@ mod tests {
                 .unwrap()
                 .unwrap();
             client
-                .update(&format!("SET LOCAL search_path TO {}", sp), None, None)
+                .update(&format!("SET LOCAL search_path TO {sp}"), None, &[])
                 .unwrap();
 
             client
                 .update(
                     "CREATE TABLE series(time timestamptz, value double precision)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
             client
@@ -102,7 +102,7 @@ mod tests {
                     ('2020-01-05 UTC'::TIMESTAMPTZ, 30), \
                     ('2020-01-02 12:00:00 UTC'::TIMESTAMPTZ, NULL)",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap();
 
@@ -110,7 +110,7 @@ mod tests {
                 .update(
                     "SELECT (timevector(time, value))::TEXT FROM series",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()
@@ -132,7 +132,7 @@ mod tests {
                 .update(
                     "SELECT (timevector(time, value) -> sort())::TEXT FROM series",
                     None,
-                    None,
+                    &[],
                 )
                 .unwrap()
                 .first()

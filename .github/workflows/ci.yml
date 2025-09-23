@@ -45,26 +45,26 @@ jobs:
           version: "9"
           image: rockylinux-9-x86_64
           schedule: true
-        #- os: debian
-        #  version: "13"
-        #  image: debian-13-arm64
-        #  schedule: true
+        - os: debian
+          version: "13"
+          image: debian-13-arm64
+          schedule: true
         - os: debian
           version: "13"
           image: debian-13-amd64
           schedule: true
-        #- os: debian
-        #  version: "12"
-        #  image: debian-12-arm64
-        #  schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
+        - os: debian
+          version: "12"
+          image: debian-12-arm64
+          schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
         - os: debian
           version: "12"
           image: debian-12-amd64
           schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
-        #- os: debian
-        #  version: "11"
-        #  image: debian-11-amd64
-        #  schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
+        - os: debian
+          version: "11"
+          image: debian-11-amd64
+          schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
         - os: ubuntu
           version: "24.04"
           image: ubuntu-24.04-amd64

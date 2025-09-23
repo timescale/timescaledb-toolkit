@@ -119,7 +119,7 @@ jobs:
     # must be increased to later to ensure compatibility with Cargo lock file version 4
     - name: "Bump rustup default version on debian-10-amd64"
       if: ${{ matrix.container.image == 'debian-10-amd64' }}
-      run:
+      run: |
         rustc --version
         cargo --version
         rustup update stable

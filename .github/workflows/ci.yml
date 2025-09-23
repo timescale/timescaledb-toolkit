@@ -54,7 +54,7 @@ jobs:
         - os: debian
           version: "10"
           image: debian-10-amd64
-          #schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
+          schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
         - os: ubuntu
           version: "24.04"
           image: ubuntu-24.04-amd64

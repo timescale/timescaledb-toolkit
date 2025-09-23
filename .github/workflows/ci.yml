@@ -48,9 +48,17 @@ jobs:
           skip: ${{ inputs.tsdb-commit != '' }}
           schedule: ${{ !(github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') }}
         - os: debian
+          version: "13"
+          image: debian-13-arm64
+          schedule: true
+        - os: debian
+          version: "12"
+          image: debian-12-arm64
+          schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
+        - os: debian
           version: "11"
           image: debian-11-amd64
-          schedule: true
+          schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
         - os: debian
           version: "10"
           image: debian-10-amd64
@@ -128,11 +136,9 @@ jobs:
         rustup update stable
         rustup default stable
 
-        cargo clean
-        #rm Cargo.lock
-        #cargo update
-        #cargo install cargo-pgrx
-        #cargo pgrx --version        
+        cargo update
+        cargo install cargo-pgrx
+        cargo pgrx --version        
 
     - name: Run pgrx tests
       run: |

@@ -97,7 +97,9 @@ jobs:
     # future to make our container image `USER postgres` and further simplify
     # this file and the packaging Actions file, but it's non-trivial.
     - name: chown Repository
-      run: chown -R postgres .
+      run: |
+        chown -R postgres .
+        chown -R postgres /usr/local/cargo
 
     - name: Build and install TimescaleDB
       if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || inputs.tsdb-commit != '' }}
@@ -125,10 +127,12 @@ jobs:
         cargo --version
         rustup update stable
         rustup default stable
-        rm Cargo.lock
-        cargo update
-        cargo install cargo-pgrx
-        cargo pgrx --version
+
+        cargo clean
+        #rm Cargo.lock
+        #cargo update
+        #cargo install cargo-pgrx
+        #cargo pgrx --version        
 
     - name: Run pgrx tests
       run: |

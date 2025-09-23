@@ -45,12 +45,6 @@ jobs:
           version: "9"
           image: rockylinux-9-x86_64
           schedule: true
-        - os: rockylinux
-          version: "8"
-          image: rockylinux-8-x86_64
-          # Building TSDB in CI is only supported on Debian/Ubuntu
-          skip: ${{ inputs.tsdb-commit != '' }}
-          schedule: ${{ !(github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') }}
         - os: debian
           version: "13"
           image: debian-13-arm64
@@ -130,20 +124,6 @@ jobs:
         path: target
         key: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
         restore-keys: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-  
-
-    # Bump rustc version
-    # lock file version `4` was found, but this version of Cargo does not understand this lock file
-    # requires min v1.77
-    - name: Update rustc on rockylinux-8-x86_64
-      if: ${{ matrix.container.image == 'rockylinux-8-x86_64' }}
-      run: |
-        rustc --version
-        cargo --version
-        rustup update stable
-        rustup default stable
-        cargo install cargo-pgrx
-        cargo pgrx --version
-        chown -R postgres /usr/local/cargo
 
     - name: Run pgrx tests
       run: |

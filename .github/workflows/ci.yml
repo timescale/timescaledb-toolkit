@@ -44,6 +44,10 @@ jobs:
         - os: rockylinux
           version: "9"
           image: rockylinux-9-x86_64
+          schedule: true
+        - os: rockylinux
+          version: "8"
+          image: rockylinux-8-x86_64
           # Building TSDB in CI is only supported on Debian/Ubuntu
           skip: ${{ inputs.tsdb-commit != '' }}
           schedule: ${{ !(github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') }}
@@ -52,8 +56,16 @@ jobs:
           image: debian-13-arm64
           schedule: true
         - os: debian
+          version: "13"
+          image: debian-13-amd64
+          schedule: true
+        - os: debian
           version: "12"
           image: debian-12-arm64
+          schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
+        - os: debian
+          version: "12"
+          image: debian-12-amd64
           schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
         - os: debian
           version: "11"
@@ -62,7 +74,7 @@ jobs:
         - os: ubuntu
           version: "24.04"
           image: ubuntu-24.04-amd64
-          schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
+          schedule: true
         - os: ubuntu
           version: "22.04"
           image: ubuntu-22.04-amd64

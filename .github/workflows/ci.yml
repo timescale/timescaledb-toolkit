@@ -134,7 +134,7 @@ jobs:
     # Bump rustc version
     # lock file version `4` was found, but this version of Cargo does not understand this lock file
     # requires min v1.77
-    - name: Cache cargo target dir
+    - name: Update rustc on rockylinux-8-x86_64
       if: ${{ matrix.container.image == 'rockylinux-8-x86_64' }}
       run: |
         rustc --version
@@ -143,10 +143,8 @@ jobs:
         rustup default stable
         cargo install cargo-pgrx
         cargo pgrx --version
+        chown -R postgres /usr/local/cargo
 
-    #
-    #
-    # 
     - name: Run pgrx tests
       run: |
         if [ "${{ matrix.container.version }}" = 7 ]; then

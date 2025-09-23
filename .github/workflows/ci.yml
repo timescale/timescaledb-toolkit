@@ -117,6 +117,7 @@ jobs:
     # > cargo 1.74.0 (ecb9851af 2023-10-18)
     # > rustc 1.74.0 (79e9716c9 2023-11-13)
     # must be increased to later to ensure compatibility with Cargo lock file version 4
+    # force install latest version of pgrx
     - name: "Bump rustup default version on debian-10-amd64"
       if: ${{ matrix.container.image == 'debian-10-amd64' }}
       run: |
@@ -126,6 +127,7 @@ jobs:
         rustup default stable
         rm Cargo.lock
         cargo update
+        cargo install cargo-pgrx
         cargo pgrx --version
 
     - name: Run pgrx tests

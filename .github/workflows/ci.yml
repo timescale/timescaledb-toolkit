@@ -124,6 +124,8 @@ jobs:
         cargo --version
         rustup update stable
         rustup default stable
+        rm Cargo.lock
+        cargo update
 
     - name: Run pgrx tests
       run: |

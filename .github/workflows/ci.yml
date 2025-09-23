@@ -54,7 +54,7 @@ jobs:
         - os: debian
           version: "10"
           image: debian-10-amd64
-          schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
+          #schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
         - os: ubuntu
           version: "24.04"
           image: ubuntu-24.04-amd64
@@ -112,6 +112,18 @@ jobs:
         path: target
         key: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
         restore-keys: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-
+
+    # Default versions on debian-10-amd64
+    # > cargo 1.74.0 (ecb9851af 2023-10-18)
+    # > rustc 1.74.0 (79e9716c9 2023-11-13)
+    # must be increased to later to ensure compatibility with Cargo lock file version 4
+    - name: "Bump rustup default version on debian-10-amd64"
+      if: ${{ matrix.container.image == 'debian-10-amd64' }}
+      run:
+        rustc --version
+        cargo --version
+        rustup update stable
+        rustup default stable
 
     - name: Run pgrx tests
       run: |

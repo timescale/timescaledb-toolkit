@@ -1,0 +1,97 @@
+name: Dependency Updates
+on:
+  schedule:
+    # Run on the 1st of every month at 9:00 AM UTC
+    - cron: '0 9 1 * *'
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  update-dependencies:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        toolchain: stable
+
+    - name: Cache cargo registry and index
+      uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry/index/
+          ~/.cargo/registry/cache/
+          ~/.cargo/git/db/
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+
+    - name: Update dependencies
+      run: |
+        # Update dependencies and capture the output
+        cargo update --verbose > update_output.txt 2>&1 || true
+        
+        # Check if Cargo.lock was modified
+        if git diff --quiet Cargo.lock; then
+          echo "NO_UPDATES=true" >> $GITHUB_ENV
+          echo "No dependency updates available"
+        else
+          echo "NO_UPDATES=false" >> $GITHUB_ENV
+          echo "Dependencies updated, changes detected in Cargo.lock"
+        fi
+
+    - name: Run cargo check
+      if: env.NO_UPDATES == 'false'
+      run: cargo check --all-targets --verbose
+
+    - name: Run tests
+      if: env.NO_UPDATES == 'false'
+      run: cargo test --verbose
+
+    - name: Generate update summary
+      if: env.NO_UPDATES == 'false'
+      run: |
+        echo "## 📦 Monthly Dependency Updates" > pr_body.md
+        echo "" >> pr_body.md
+        echo "This PR contains automated dependency updates for $(date +'%B %Y')." >> pr_body.md
+        echo "" >> pr_body.md
+        echo "### Changes:" >> pr_body.md
+        echo "\`\`\`" >> pr_body.md
+        cat update_output.txt >> pr_body.md
+        echo "\`\`\`" >> pr_body.md
+        echo "" >> pr_body.md
+        echo "### Verification:" >> pr_body.md
+        echo "- ✅ \`cargo check\` passed" >> pr_body.md
+        echo "- ✅ \`cargo test\` passed" >> pr_body.md
+        echo "" >> pr_body.md
+        echo "---" >> pr_body.md
+        echo "*This PR was automatically created by the monthly dependency update workflow.*" >> pr_body.md
+
+    - name: Create Pull Request
+      if: env.NO_UPDATES == 'false'
+      uses: peter-evans/create-pull-request@v6
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: "chore: update dependencies for $(date +'%B %Y')"
+        title: "chore: Monthly dependency updates - $(date +'%B %Y')"
+        body-path: pr_body.md
+        branch: dependency-updates/$(date +'%Y-%m')
+        delete-branch: true
+        labels: |
+          dependencies
+          automated
+        assignees: ${{ github.repository_owner }}
+        draft: false
+
+    - name: Summary
+      run: |
+        if [ "$NO_UPDATES" = "true" ]; then
+          echo "✅ No dependency updates needed - all dependencies are up to date!"
+        else
+          echo "✅ Dependency update PR created successfully!"
+        fi

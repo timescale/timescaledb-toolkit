@@ -95,9 +95,10 @@ jobs:
 
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@v5
+      uses: actions/checkout@v4
       with:
         ref: ${{ github.event.pull_request.head.sha }}
+        token: ${{ secrets.GITHUB_TOKEN }}
 
     # Github Actions provides a bind mounted working directory for us, where
     # the above checkout happens, and where caches are read from and restored

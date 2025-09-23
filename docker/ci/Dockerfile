@@ -15,10 +15,10 @@ ARG OS_VERSION
 ENV HOME /home/postgres
 
 # Docker fails to set LOGNAME :(
-ENV LOGNAME root
-ENV CARGO_HOME /usr/local/cargo
-ENV RUSTUP_HOME /usr/local/rustup
-ENV PATH "${CARGO_HOME}/bin:/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/bin"
+ENV LOGNAME=root
+ENV CARGO_HOME=/usr/local/cargo
+ENV RUSTUP_HOME?/usr/local/rustup
+ENV PATH?"${CARGO_HOME}/bin:/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/bin"
 
 COPY docker/ci/setup.sh /
 COPY tools/dependencies.sh /

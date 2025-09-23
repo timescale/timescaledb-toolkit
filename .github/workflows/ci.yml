@@ -131,6 +131,22 @@ jobs:
         key: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
         restore-keys: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-  
 
+    # Bump rustc version
+    # lock file version `4` was found, but this version of Cargo does not understand this lock file
+    # requires min v1.77
+    - name: Cache cargo target dir
+      if: ${{ matrix.container.image == 'rockylinux-8-x86_64' }}
+      run: |
+        rustc --version
+        cargo --version
+        rustup update stable
+        rustup default stable
+        cargo install cargo-pgrx
+        cargo pgrx --version
+
+    #
+    #
+    # 
     - name: Run pgrx tests
       run: |
         if [ "${{ matrix.container.version }}" = 7 ]; then

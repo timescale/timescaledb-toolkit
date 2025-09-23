@@ -45,10 +45,10 @@ jobs:
           version: "9"
           image: rockylinux-9-x86_64
           schedule: true
-        - os: debian
-          version: "13"
-          image: debian-13-arm64
-          schedule: true
+        #- os: debian
+        #  version: "13"
+        #  image: debian-13-arm64
+        #  schedule: true
         - os: debian
           version: "13"
           image: debian-13-amd64
@@ -95,7 +95,7 @@ jobs:
 
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
       with:
         ref: ${{ github.event.pull_request.head.sha }}
         token: ${{ secrets.GITHUB_TOKEN }}
@@ -110,7 +110,6 @@ jobs:
     - name: chown Repository
       run: |
         chown -R postgres .
-        chown -R postgres /usr/local/cargo
 
     - name: Build and install TimescaleDB
       if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || inputs.tsdb-commit != '' }}
@@ -125,6 +124,9 @@ jobs:
         path: target
         key: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
         restore-keys: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-  
+
+    # Packages not 
+    #
 
     - name: Run pgrx tests
       run: |
@@ -165,7 +167,7 @@ jobs:
 
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v5
       with:
         ref: ${{ github.event.pull_request.head.sha }}
 
@@ -173,7 +175,7 @@ jobs:
       run: chown -R postgres .
 
     - name: Cache cargo target dir
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: target
         key: ${{ runner.os }}-test-crates-target-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}

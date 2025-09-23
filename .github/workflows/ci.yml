@@ -85,7 +85,7 @@ jobs:
 
     steps:
     - name: Checkout Repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v5
       with:
         ref: ${{ github.event.pull_request.head.sha }}
 
@@ -106,7 +106,7 @@ jobs:
     # TODO After the container image contains a primed target dir, is this still worth it?
     #   Only possible advantage is this one is per-pg-version but what's the impact?
     - name: Cache cargo target dir
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       if: ${{ matrix.container.image == 'debian-11-amd64' }}
       with:
         path: target

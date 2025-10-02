@@ -39,7 +39,7 @@ jobs:
       fail-fast: false
       max-parallel: 12
       matrix:
-        pgversion: [15, 16, 17]
+        pgversion: [15, 16, 17, 18]
         container:
         - os: rockylinux
           version: "9"

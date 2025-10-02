@@ -7,7 +7,7 @@
 # All our automation scripts read this, so at least we're not duplicating this
 # information across all those.
 
-PG_VERSIONS='15 16 17'
+PG_VERSIONS='15 16 17 18'
 # TODO: extend this with 18 this once TimescaleDB supports PostgreSQL 18
 TSDB_PG_VERSIONS='15 16 17'
 

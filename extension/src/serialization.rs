@@ -158,7 +158,7 @@ pub fn str_to_db_encoding(s: &str) -> EncodedStr<'_> {
             pg_sys::pg_enc::PG_UTF8 as _,
         )
     };
-    if std::ptr::eq(encoded, bytes.as_ptr() as *const i8) {
+    if std::ptr::eq(encoded, bytes.as_ptr() as *const c_char) {
         return EncodedStr::Utf8(s);
     }
 

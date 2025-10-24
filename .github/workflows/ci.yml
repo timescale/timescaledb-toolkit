@@ -32,14 +32,14 @@ on:
 jobs:
   testpostgres:
     name: Test Postgres
-    runs-on: ubuntu-24.04
+    runs-on: ${{ contains(matrix.container.image, 'arm64') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     container:
       image: ${{ inputs.container-image || 'timescaledev/toolkit-builder-test' }}:${{ matrix.container.image }}
     strategy:
       fail-fast: false
       max-parallel: 12
       matrix:
-        pgversion: [15, 16, 17]
+        pgversion: [15, 16, 17, 18]
         container:
         - os: rockylinux
           version: "9"

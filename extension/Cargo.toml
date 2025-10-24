@@ -11,18 +11,19 @@ path = "./src/bin/pgrx_embed.rs"
 crate-type = ["cdylib", "lib"]
 
 [features]
-default = ["pg17"]
+default = ["pg18"]
 pg15 = ["pgrx/pg15", "pgrx-tests/pg15"]
 pg16 = ["pgrx/pg16", "pgrx-tests/pg16"]
 pg17 = ["pgrx/pg17", "pgrx-tests/pg17"]
+pg18 = ["pgrx/pg18", "pgrx-tests/pg18"]
 pg_test = ["approx"]
 
 [dependencies]
 # Keep synchronized with `cargo install --version N.N.N cargo-pgrx` in Readme.md and docker/ci/Dockerfile
 # Also `pgrx-tests` down below in `dev-dependencies`.
-pgrx = "=0.16.0"
-pgrx-macros = "=0.16.0"
-pgrx-sql-entity-graph = "=0.16.0"
+pgrx = "=0.16.1"
+pgrx-macros = "=0.16.1"
+pgrx-sql-entity-graph = "=0.16.1"
 encodings = {path="../crates/encodings"}
 flat_serialize = {path="../crates/flat_serialize/flat_serialize"}
 flat_serialize_macro = {path="../crates/flat_serialize/flat_serialize_macro"}
@@ -59,5 +60,5 @@ spfunc = "0.1.0"
 statrs = "0.15.0"
 
 [dev-dependencies]
-pgrx-tests = "=0.16.0"
+pgrx-tests = "=0.16.1"
 approx = "0.4.0"

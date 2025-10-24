@@ -395,6 +395,85 @@ pub fn uptime(agg: HeartbeatAgg<'static>) -> Interval {
     agg.sum_live_intervals().into()
 }
 
+#[pg_extern]
+pub fn average_downtime(agg: HeartbeatAgg<'static>) -> f64 {
+    let num_intervals = agg.num_intervals;
+    (agg.end_time - agg.start_time - agg.sum_live_intervals()) as f64 / num_intervals as f64
+}
+
+#[pg_extern]
+pub fn average_uptime(agg: HeartbeatAgg<'static>) -> f64 {
+    let num_intervals = agg.num_intervals;
+    agg.sum_live_intervals() as f64 / num_intervals as f64
+}
+
+fn mean(data: &Vec<i64>) -> Option<f64> {
+    let sum = data.iter().sum::<i64>() as f64;
+    let count = data.len();
+
+    match count {
+        positive if positive > 0 => Some(sum / count as f64),
+        _ => None,
+    }
+}
+
+fn std_deviation(data: &Vec<i64>) -> Option<f64> {
+    match (mean(data), data.len()) {
+        (Some(data_mean), count) if count > 0 => {
+            let variance = data
+                .iter()
+                .map(|value| {
+                    let diff = data_mean - (*value as f64);
+
+                    diff * diff
+                })
+                .sum::<f64>()
+                / count as f64;
+
+            Some(variance.sqrt())
+        }
+        _ => None,
+    }
+}
+
+#[pg_extern]
+pub fn stddev_downtime(agg: HeartbeatAgg<'static>) -> Option<f64> {
+    // Dead ranges are the opposite of the intervals stored in the aggregate
+    let mut starts = agg.interval_ends.clone().into_vec();
+    let mut ends = agg.interval_starts.clone().into_vec();
+
+    // Fix the first point depending on whether the aggregate starts in a live or dead range
+    if ends[0] == agg.start_time {
+        ends.remove(0);
+    } else {
+        starts.insert(0, agg.start_time);
+    }
+
+    // Fix the last point depending on whether the aggregate starts in a live or dead range
+    if *starts.last().unwrap() == agg.end_time {
+        starts.pop();
+    } else {
+        ends.push(agg.end_time);
+    }
+
+    let mut data: Vec<i64> = vec![];
+    for i in 0..agg.num_intervals as usize {
+        data.push(ends[i] - starts[i]);
+    }
+    std_deviation(&data)
+}
+
+#[pg_extern]
+pub fn stddev_uptime(agg: HeartbeatAgg<'static>) -> Option<f64> {
+    let starts = agg.interval_starts.as_slice();
+    let ends = agg.interval_ends.as_slice();
+    let mut data: Vec<i64> = vec![];
+    for i in 0..agg.num_intervals as usize {
+        data.push(ends[i] - starts[i]);
+    }
+    std_deviation(&data)
+}
+
 #[pg_operator(immutable, parallel_safe)]
 #[opname(->)]
 pub fn arrow_heartbeat_agg_uptime(
@@ -1011,7 +1090,7 @@ mod tests {
             let (result1, result2, result3) =
                 client.update(
                     "WITH agg AS (SELECT heartbeat_agg(heartbeat, '01-01-2020 UTC', '2h', '10m') AS agg FROM liveness)
-                    SELECT live_at(agg, '01-01-2020 00:01:00 UTC')::TEXT, 
+                    SELECT live_at(agg, '01-01-2020 00:01:00 UTC')::TEXT,
                     live_at(agg, '01-01-2020 00:05:00 UTC')::TEXT,
                     live_at(agg, '01-01-2020 00:30:00 UTC')::TEXT FROM agg", None, &[])
                 .unwrap().first()
@@ -1032,7 +1111,7 @@ mod tests {
             let (result1, result2, result3) =
                 client.update(
                     "WITH agg AS (SELECT heartbeat_agg(heartbeat, '01-01-2020 UTC', '2h', '10m') AS agg FROM liveness)
-                    SELECT (agg -> live_at('01-01-2020 00:01:00 UTC'))::TEXT, 
+                    SELECT (agg -> live_at('01-01-2020 00:01:00 UTC'))::TEXT,
                     (agg -> live_at('01-01-2020 00:05:00 UTC'))::TEXT,
                     (agg -> live_at('01-01-2020 00:30:00 UTC'))::TEXT FROM agg", None, &[])
                 .unwrap().first()
@@ -1107,7 +1186,7 @@ mod tests {
                 .update(
                     "WITH aggs AS (
                     SELECT heartbeat_agg(time, batch, '1h', '1m')
-                    FROM heartbeats 
+                    FROM heartbeats
                     GROUP BY batch
                 ) SELECT rollup(heartbeat_agg)::TEXT FROM aggs",
                     None,
@@ -1345,12 +1424,12 @@ mod tests {
                 .update(
                     "WITH s AS (
                     SELECT start,
-                        heartbeat_agg(heartbeat, start, '30m', '10m') AS agg 
-                    FROM liveness 
+                        heartbeat_agg(heartbeat, start, '30m', '10m') AS agg
+                    FROM liveness
                     GROUP BY start),
                 t AS (
                     SELECT start,
-                        interpolate(agg, LAG (agg) OVER (ORDER BY start)) AS agg 
+                        interpolate(agg, LAG (agg) OVER (ORDER BY start)) AS agg
                     FROM s)
                 SELECT downtime(agg)::TEXT FROM t;",
                     None,
@@ -1392,12 +1471,12 @@ mod tests {
                 .update(
                     "WITH s AS (
                     SELECT start,
-                        heartbeat_agg(heartbeat, start, '30m', '10m') AS agg 
-                    FROM liveness 
+                        heartbeat_agg(heartbeat, start, '30m', '10m') AS agg
+                    FROM liveness
                     GROUP BY start),
                 t AS (
                     SELECT start,
-                        interpolate(agg, LAG (agg) OVER (ORDER BY start)) AS agg 
+                        interpolate(agg, LAG (agg) OVER (ORDER BY start)) AS agg
                     FROM s)
                 SELECT live_ranges(agg)::TEXT FROM t;",
                     None,
@@ -1452,12 +1531,12 @@ mod tests {
                 .update(
                     "WITH s AS (
                     SELECT start,
-                        heartbeat_agg(heartbeat, start, '30m', '10m') AS agg 
-                    FROM liveness 
+                        heartbeat_agg(heartbeat, start, '30m', '10m') AS agg
+                    FROM liveness
                     GROUP BY start),
                 t AS (
                     SELECT start,
-                        agg -> interpolate(LAG (agg) OVER (ORDER BY start)) AS agg 
+                        agg -> interpolate(LAG (agg) OVER (ORDER BY start)) AS agg
                     FROM s)
                 SELECT live_ranges(agg)::TEXT FROM t;",
                     None,
@@ -1512,8 +1591,8 @@ mod tests {
                 .update(
                     "WITH s AS (
                     SELECT start,
-                        heartbeat_agg(heartbeat, start, '30m', '10m') AS agg 
-                    FROM liveness 
+                        heartbeat_agg(heartbeat, start, '30m', '10m') AS agg
+                    FROM liveness
                     GROUP BY start)
                 SELECT interpolated_uptime(agg, LAG (agg) OVER (ORDER BY start))::TEXT
                 FROM s",
@@ -1556,8 +1635,8 @@ mod tests {
                 .update(
                     "WITH s AS (
                     SELECT start,
-                        heartbeat_agg(heartbeat, start, '30m', '10m') AS agg 
-                    FROM liveness 
+                        heartbeat_agg(heartbeat, start, '30m', '10m') AS agg
+                    FROM liveness
                     GROUP BY start)
                 SELECT (agg -> interpolated_uptime(LAG (agg) OVER (ORDER BY start)))::TEXT
                 FROM s",
@@ -1600,8 +1679,8 @@ mod tests {
                 .update(
                     "WITH s AS (
                     SELECT start,
-                        heartbeat_agg(heartbeat, start, '30m', '10m') AS agg 
-                    FROM liveness 
+                        heartbeat_agg(heartbeat, start, '30m', '10m') AS agg
+                    FROM liveness
                     GROUP BY start)
                 SELECT interpolated_downtime(agg, LAG (agg) OVER (ORDER BY start))::TEXT
                 FROM s",
@@ -1644,8 +1723,8 @@ mod tests {
                 .update(
                     "WITH s AS (
                     SELECT start,
-                        heartbeat_agg(heartbeat, start, '30m', '10m') AS agg 
-                    FROM liveness 
+                        heartbeat_agg(heartbeat, start, '30m', '10m') AS agg
+                    FROM liveness
                     GROUP BY start)
                 SELECT (agg -> interpolated_downtime(LAG (agg) OVER (ORDER BY start)))::TEXT
                 FROM s",
@@ -1833,12 +1912,12 @@ mod tests {
             let output = client
                 .update(
                     "WITH rollups AS (
-                        SELECT heartbeat_agg(ts, batch, '2h', '20m') 
-                        FROM poc 
-                        GROUP BY batch 
+                        SELECT heartbeat_agg(ts, batch, '2h', '20m')
+                        FROM poc
+                        GROUP BY batch
                         ORDER BY batch
                     )
-                    SELECT live_ranges(rollup(heartbeat_agg))::TEXT 
+                    SELECT live_ranges(rollup(heartbeat_agg))::TEXT
                     FROM rollups",
                     None,
                     &[],

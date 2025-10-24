@@ -33,6 +33,10 @@ crate::functions_stabilized_at! {
         num_live_ranges(heartbeatagg),
         trim_to(heartbeatagg,timestamp with time zone,interval),
         trim_to(timestamp with time zone,interval),
+        average_downtime(heartbeatagg),
+        average_uptime(heartbeatagg),
+        stddev_downtime(heartbeatagg),
+        stddev_uptime(heartbeatagg),
         accessorpercentilearray_in(cstring),
         accessorpercentilearray_out(accessorpercentilearray),
         arrow_uddsketch_approx_percentile_array(uddsketch,accessorpercentilearray),
@@ -278,6 +282,7 @@ crate::functions_stabilized_at! {
         live_ranges(heartbeatagg),
         rollup(heartbeatagg),
         uptime(heartbeatagg),
+
         accessordeadranges_in(cstring),
         accessordeadranges_out(accessordeadranges),
         accessordowntime_in(cstring),

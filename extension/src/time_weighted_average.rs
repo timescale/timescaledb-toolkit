@@ -393,7 +393,7 @@ extension_sql!(
         combinefunc = time_weight_combine,\n\
         serialfunc = time_weight_trans_serialize,\n\
         deserialfunc = time_weight_trans_deserialize,\n\
-        parallel = restricted\n\
+        parallel = unsafe\n\
     );\n\
 \n\
     CREATE AGGREGATE rollup(tws TimeWeightSummary)\n\
@@ -404,7 +404,7 @@ extension_sql!(
         combinefunc = time_weight_combine,\n\
         serialfunc = time_weight_trans_serialize,\n\
         deserialfunc = time_weight_trans_deserialize,\n\
-        parallel = restricted\n\
+        parallel = unsafe\n\
     );\n\
 ",
     name = "time_weight_agg",

@@ -9,7 +9,7 @@ on:
 jobs:
   package:
     env:
-      GITHUB_TOKEN: ${{ secrets.API_TOKEN_GITHUB_PACKAGE }}
+      GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
     runs-on: ubuntu-24.04
     steps:
       - name: Set env

@@ -6,8 +6,7 @@ This repository is the home of the TimescaleDB Toolkit team. Our mission is to
 ease all things analytics when using TimescaleDB, with a particular focus on
 developer ergonomics and performance. Our issue tracker contains more
 on [the features we're planning to work on](https://github.com/timescale/timescaledb-toolkit/labels/proposed-feature)
-and [the problems we're trying to solve](https://github.com/timescale/timescaledb-toolkit/labels/feature-request),
-and our [Discussions forum](https://github.com/timescale/timescaledb-toolkit/discussions) contains ongoing conversation.
+and [the problems we're trying to solve](https://github.com/timescale/timescaledb-toolkit/labels/feature-request).
 
 Documentation for this version of the TimescaleDB Toolkit extension can be found
 in this repository at [`docs`](https://github.com/timescale/timescaledb-toolkit/tree/main/docs).
@@ -15,7 +14,7 @@ The release history can be found on this repo's [GitHub releases](https://github
 
 ## 🖥 Try It Out
 
-The extension comes pre-installed on all [Timescale Cloud](https://www.timescale.com/products#timescale-cloud) instances and also on our full-featured [`timescale/timescaledb-ha` docker image](https://hub.docker.com/r/timescale/timescaledb-ha).
+The extension comes pre-installed on all [Tiger Cloud](https://www.tigerdata.com/cloud) instances and also on our full-featured [`timescale/timescaledb-ha` docker image](https://hub.docker.com/r/timescale/timescaledb-ha).
 
 If DEB and RPM packages are a better fit for your situation, refer to the [Install Toolkit on self-hosted TimescaleDB](https://docs.timescale.com/self-hosted/latest/tooling/install-toolkit/#install-toolkit-on-self-hosted-timescaledb) how-to guide for further instructions on installing the extension via your package manager.
 
@@ -90,12 +89,9 @@ CREATE EXTENSION timescaledb_toolkit;
 
 ## ✏️ Get Involved
 
-The TimescaleDB Toolkit project is still in the initial planning stage as we
-decide our priorities and what to implement first. As such, now is a great time
-to help shape the project's direction! Have a look at the
+We appreciate your help in shaping the project's direction! Have a look at the
 [list of features we're thinking of working on](https://github.com/timescale/timescaledb-toolkit/labels/proposed-feature)
-and feel free to comment on the features, expand the list, or
-hop on the [Discussions forum](https://github.com/timescale/timescaledb-toolkit/discussions) for more in-depth discussions.
+and feel free to comment on the features or expand the list.
 
 ### 🔨 Testing
 
@@ -107,20 +103,6 @@ You can run tests against a postgres version `pg15`, `pg16`, `pg17`, or `pg18` u
 cargo pgrx test ${postgres_version}
 ```
 
-## 🐯 About TimescaleDB
+## Learn about Tiger Data
 
-**[TimescaleDB](https://github.com/timescale/timescaledb)** is a
-**distributed time-series database built on PostgreSQL** that scales to
-over 10 million of metrics per second, supports native compression,
-handles high cardinality, and offers native time-series capabilities,
-such as data retention policies, continuous aggregate views,
-downsampling, data gap-filling and interpolation.
-
-TimescaleDB also supports full SQL, a variety of data types (numerics,
-text, arrays, JSON, booleans), and ACID semantics. Operationally mature
-capabilities include high availability, streaming backups, upgrades over
-time, roles and permissions, and security.
-
-TimescaleDB has a **large and active user community** (tens of millions
-of downloads, hundreds of thousands of active deployments, Slack channels
-with thousands of members).
+Tiger Data is the fastest PostgreSQL for transactional, analytical, and agentic workloads. To learn more about the company and its products, visit [tigerdata.com](https://www.tigerdata.com).

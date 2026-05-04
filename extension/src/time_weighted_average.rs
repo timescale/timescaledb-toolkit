@@ -708,6 +708,96 @@ mod tests {
         });
     }
 
+    // Regression for https://github.com/timescale/timescaledb-toolkit/issues/794
+    // (and #878). time_weight()/rollup() were previously labelled
+    // PARALLEL RESTRICTED, which let the planner combine partial summaries
+    // across workers in non-time order; the combine function then errors with
+    // `called Result::unwrap() on an Err value: OrderError`. They must be
+    // PARALLEL UNSAFE so the planner never builds such a plan.
+    #[pg_test]
+    fn test_time_weight_parallel_unsafe() {
+        Spi::connect_mut(|client| {
+            client.update("SET TIME ZONE 'UTC'", None, &[]).unwrap();
+            client
+                .update(
+                    "CREATE TABLE twa_par(ts timestamptz, val double precision)",
+                    None,
+                    &[],
+                )
+                .unwrap();
+            // Enough rows that PG considers a parallel scan once the cost
+            // knobs below allow it.
+            client
+                .update(
+                    "INSERT INTO twa_par
+                     SELECT '2020-01-01 00:00:00+00'::timestamptz + (i * interval '1 second'),
+                            (i % 1000)::double precision
+                     FROM generate_series(1, 50000) AS s(i)",
+                    None,
+                    &[],
+                )
+                .unwrap();
+            client.update("ANALYZE twa_par", None, &[]).unwrap();
+
+            // Force-cheap parallelism. With time_weight labelled
+            // PARALLEL RESTRICTED these knobs reliably produced a
+            // Partial-Aggregate / Gather plan; the combine then errored.
+            client
+                .update(
+                    "SET min_parallel_table_scan_size = 0;
+                     SET parallel_setup_cost = 0;
+                     SET parallel_tuple_cost = 0;
+                     SET max_parallel_workers_per_gather = 4;",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            // Plan must not contain a Gather over the aggregate. If anyone
+            // reverts the parallel_unsafe label, this catches it without
+            // depending on the non-deterministic combine ordering.
+            let plan: String = client
+                .update(
+                    "EXPLAIN (FORMAT TEXT) \
+                     SELECT average(time_weight('Linear', ts, val)) FROM twa_par",
+                    None,
+                    &[],
+                )
+                .unwrap()
+                .filter_map(|row| {
+                    row.get_datum_by_ordinal(1)
+                        .ok()
+                        .and_then(|d| d.value::<String>().ok().flatten())
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            assert!(
+                !plan.contains("Gather"),
+                "time_weight should not be planned in parallel; got plan:\n{plan}"
+            );
+
+            // And the query must run cleanly. Pre-fix this raised:
+            //   ERROR: called `Result::unwrap()` on an `Err` value: OrderError
+            let _ = select_one!(
+                client,
+                "SELECT average(time_weight('Linear', ts, val)) FROM twa_par",
+                f64
+            );
+
+            // rollup() carries the same labelling and the same risk.
+            let _ = select_one!(
+                client,
+                "WITH t AS (
+                   SELECT date_trunc('hour', ts) AS h,
+                          time_weight('Linear', ts, val) AS tws
+                   FROM twa_par GROUP BY 1
+                 )
+                 SELECT average(rollup(tws)) FROM t",
+                f64
+            );
+        });
+    }
+
     #[pg_test]
     fn test_time_weight_io() {
         Spi::connect_mut(|client| {

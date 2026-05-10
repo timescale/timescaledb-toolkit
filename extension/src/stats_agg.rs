@@ -26,6 +26,8 @@ use crate::raw::bytea;
 type StatsSummary1DTF = InternalStatsSummary1D<TwoFloat>;
 type StatsSummary2DTF = InternalStatsSummary2D<TwoFloat>;
 
+const MAX_EXACT_I64_AS_F64: i64 = 1_i64 << 53;
+
 pg_type! {
     #[derive(Debug, PartialEq)]
     struct StatsSummary1D {
@@ -209,6 +211,44 @@ pub fn stats1d_tf_trans_inner(
     }
 }
 
+fn i64_to_exact_f64_or_error(val: i64) -> f64 {
+    if !(-MAX_EXACT_I64_AS_F64..=MAX_EXACT_I64_AS_F64).contains(&val) {
+        pgrx::error!(
+            "stats_agg(bigint) cannot safely represent values outside +/-{}",
+            MAX_EXACT_I64_AS_F64
+        )
+    }
+    val as f64
+}
+
+#[pg_extern(immutable, parallel_safe)]
+pub fn stats1d_i64_trans(
+    state: Internal,
+    val: Option<i64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal> {
+    stats1d_trans_inner(
+        unsafe { state.to_inner() },
+        val.map(i64_to_exact_f64_or_error),
+        fcinfo,
+    )
+    .internal()
+}
+
+#[pg_extern(immutable, parallel_safe)]
+pub fn stats1d_i64_tf_trans(
+    state: Internal,
+    val: Option<i64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal> {
+    stats1d_tf_trans_inner(
+        unsafe { state.to_inner() },
+        val.map(i64_to_exact_f64_or_error),
+        fcinfo,
+    )
+    .internal()
+}
+
 // Note that in general, for all stats2d cases, if either the y or x value is missing, we disregard the entire point as the n is shared between them
 // if the user wants us to treat nulls as a particular value (ie zero), they can use COALESCE to do so
 #[pg_extern(immutable, parallel_safe)]
@@ -352,6 +392,20 @@ pub fn stats1d_tf_inv_trans_inner(
             }
         })
     }
+}
+
+#[pg_extern(immutable)]
+pub fn stats1d_i64_tf_inv_trans(
+    state: Internal,
+    val: Option<i64>,
+    fcinfo: pg_sys::FunctionCallInfo,
+) -> Option<Internal> {
+    stats1d_tf_inv_trans_inner(
+        unsafe { state.to_inner() },
+        val.map(i64_to_exact_f64_or_error),
+        fcinfo,
+    )
+    .internal()
 }
 
 #[pg_extern(immutable)]
@@ -693,6 +747,36 @@ extension_sql!(
         stats1d_trans_deserialize,
         stats1d_tf_trans,
         stats1d_tf_inv_trans,
+        stats1d_tf_final
+    ],
+);
+
+extension_sql!(
+    "\n\
+    CREATE AGGREGATE stats_agg( value BIGINT )\n\
+    (\n\
+        sfunc = stats1d_i64_trans,\n\
+        stype = internal,\n\
+        finalfunc = stats1d_final,\n\
+        combinefunc = stats1d_combine,\n\
+        serialfunc = stats1d_trans_serialize,\n\
+        deserialfunc = stats1d_trans_deserialize,\n\
+        msfunc = stats1d_i64_tf_trans,\n\
+        minvfunc = stats1d_i64_tf_inv_trans,\n\
+        mstype = internal,\n\
+        mfinalfunc = stats1d_tf_final,\n\
+        parallel = safe\n\
+    );\n\
+",
+    name = "stats_agg_1d_bigint",
+    requires = [
+        stats1d_i64_trans,
+        stats1d_final,
+        stats1d_combine,
+        stats1d_trans_serialize,
+        stats1d_trans_deserialize,
+        stats1d_i64_tf_trans,
+        stats1d_i64_tf_inv_trans,
         stats1d_tf_final
     ],
 );
@@ -1612,6 +1696,49 @@ mod tests {
 
             assert_eq!(*new_state, control);
         }
+    }
+
+    #[pg_test]
+    fn test_stats_agg_bigint_average() {
+        Spi::connect_mut(|client| {
+            let average = client
+                .update(
+                    "\
+                    SELECT average(stats_agg(data))
+                    FROM generate_series(1::bigint, 4::bigint) AS series(data)",
+                    None,
+                    &[],
+                )
+                .unwrap()
+                .first()
+                .get_one::<f64>()
+                .unwrap()
+                .unwrap();
+
+            assert_eq!(average, 2.5);
+        });
+    }
+
+    #[pg_test]
+    #[should_panic = "stats_agg(bigint) cannot safely represent values outside +/-9007199254740992"]
+    fn test_stats_agg_large_bigint_average_errors() {
+        Spi::connect_mut(|client| {
+            client
+                .update(
+                    "\
+                    SELECT average(stats_agg(data))
+                    FROM generate_series(
+                        5223372036854775805::bigint,
+                        5223372036854775806::bigint
+                    ) AS series(data)",
+                    None,
+                    &[],
+                )
+                .unwrap()
+                .first()
+                .get_one::<f64>()
+                .unwrap();
+        });
     }
 
     #[pg_test]

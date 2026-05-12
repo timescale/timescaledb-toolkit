@@ -225,7 +225,7 @@ mod tests {
     }
 
     #[pg_test]
-    fn max_n_by_empty_input_returns_null() {
+    fn max_by_float_empty_input_returns_null() {
         Spi::connect_mut(|client| {
             client.update(
                 "CREATE TABLE data(ts TIMESTAMPTZ, value DOUBLE PRECISION);", None, &[],
@@ -240,7 +240,7 @@ mod tests {
     }
 
     #[pg_test]
-    fn max_n_by_into_values_empty_returns_no_rows() {
+    fn max_by_float_into_values_empty_returns_no_rows() {
         Spi::connect_mut(|client| {
             client.update(
                 "CREATE TABLE data(ts TIMESTAMPTZ, value DOUBLE PRECISION);", None, &[],

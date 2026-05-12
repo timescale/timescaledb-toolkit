@@ -86,22 +86,31 @@ pub fn max_n_by_float_rollup_trans(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn max_n_by_float_final(state: Internal) -> MaxByFloats<'static> {
-    unsafe { state.to_inner::<MaxByFloatTransType>().unwrap().clone() }.into()
+pub fn max_n_by_float_final(state: Internal) -> Option<MaxByFloats<'static>> {
+    unsafe {
+        match state.to_inner::<MaxByFloatTransType>() {
+            Some(state) => Some(state.clone().into()),
+            None => None,
+        }
+    }
 }
 
 #[pg_extern(name = "into_values", immutable, parallel_safe)]
 pub fn max_n_by_float_to_values(
-    agg: MaxByFloats<'static>,
+    agg: Option<MaxByFloats<'static>>,
     _dummy: Option<AnyElement>,
 ) -> TableIterator<'static, (name!(value, f64), name!(data, AnyElement))> {
-    TableIterator::new(
-        agg.values
-            .values
-            .clone()
-            .into_iter()
-            .zip(agg.data.clone().into_anyelement_iter()),
-    )
+    match agg {
+        Some(agg) => TableIterator::new(
+            agg.values
+                .values
+                .clone()
+                .into_iter()
+                .zip(agg.data.clone().into_anyelement_iter()),
+        ),
+        None => TableIterator::new(std::iter::empty()),
+    }
+    
 }
 
 extension_sql!(
@@ -211,6 +220,41 @@ mod tests {
                 result.next().unwrap()[1].value().unwrap(),
                 Some("(0.7421875,\"(0.7421875,3)\")")
             );
+            assert!(result.next().is_none());
+        })
+    }
+
+    #[pg_test]
+    fn max_n_by_empty_input_returns_null() {
+        Spi::connect_mut(|client| {
+            client.update(
+                "CREATE TABLE data(ts TIMESTAMPTZ, value DOUBLE PRECISION);", None, &[],
+            ).unwrap();
+
+            let mut result = client.update(
+            "SELECT max_n_by(value, ts, 1)::TEXT FROM data", None, &[],
+                ).unwrap();
+
+            assert!(result.next().unwrap()[1].value::<String>().unwrap().is_none());
+        })
+    }
+
+    #[pg_test]
+    fn max_n_by_into_values_empty_returns_no_rows() {
+        Spi::connect_mut(|client| {
+            client.update(
+                "CREATE TABLE data(ts TIMESTAMPTZ, value DOUBLE PRECISION);", None, &[],
+            ).unwrap();
+
+            let mut result = client.update(
+                "SELECT * FROM into_values((
+                    SELECT max_n_by(value, ts, 1)
+                    FROM data
+                ), NULL::timestamptz)",
+                None,
+                &[],
+            ).unwrap();
+
             assert!(result.next().is_none());
         })
     }

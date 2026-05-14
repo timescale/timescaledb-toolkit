@@ -95,7 +95,8 @@ pub fn min_n_time_deserialize(bytes: bytea, _internal: Internal) -> Option<Inter
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn min_n_time_final(state: Internal) -> MinTimes<'static> {
-    unsafe { &mut *state.to_inner::<MinTimeTransType>().unwrap() }.into()
+    let mut state = unsafe { state.to_inner::<MinTimeTransType>().unwrap() };
+    unsafe { &mut *state }.into()
 }
 
 #[pg_extern(name = "into_array", immutable, parallel_safe)]

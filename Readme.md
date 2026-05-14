@@ -35,7 +35,7 @@ As for other platforms: patches welcome!
 
 ### 🔧 Tools Setup
 
-Building the extension requires valid [rust](https://www.rust-lang.org/) (we build and test on 1.65), [rustfmt](https://github.com/rust-lang/rustfmt), and clang installs, along with the postgres headers for whichever version of postgres you are running, and pgrx.
+Building the extension requires valid [rust](https://www.rust-lang.org/) (we build and test on 1.89.0), [rustfmt](https://github.com/rust-lang/rustfmt), and clang installs, along with the postgres headers for whichever version of postgres you are running, and pgrx.
 We recommend installing rust using the [official instructions](https://www.rust-lang.org/tools/install):
 
 ```bash
@@ -46,13 +46,13 @@ and build tools, the postgres headers, in the preferred manner for your system. 
 For Ubuntu you can follow the [postgres install instructions](https://www.postgresql.org/download/linux/ubuntu/) then run
 
 ```bash
-sudo apt-get install make gcc pkg-config clang postgresql-server-dev-14 libssl-dev
+sudo apt-get install make gcc pkg-config clang postgresql-server-dev-18 libssl-dev
 ```
 
 Next you need [cargo-pgrx](https://github.com/tcdi/pgrx), which can be installed with
 
 ```bash
-cargo install --version '=0.16.1' --force cargo-pgrx
+cargo install cargo-pgrx --version 0.18.0 --locked --force
 ```
 
 You must reinstall cargo-pgrx whenever you update your Rust compiler, since cargo-pgrx needs to be built with the same compiler as Toolkit.
@@ -60,7 +60,7 @@ You must reinstall cargo-pgrx whenever you update your Rust compiler, since carg
 Finally, setup the pgrx development environment with
 
 ```bash
-cargo pgrx init --pg14 pg_config
+cargo pgrx init --pg18 pg_config
 ```
 
 Installing from source is also available on macOS and requires the same set of prerequisites and set up commands listed above.
@@ -79,6 +79,11 @@ Then run
 ```
 cargo pgrx install --release && \
 cargo run --manifest-path ../tools/post-install/Cargo.toml -- pg_config
+```
+
+To install the extension in a postgres version different that the default:
+```shell
+cargo pgrx install --release --no-default-features --features pg17
 ```
 
 To initialize the extension after installation, enter the following into `psql`:

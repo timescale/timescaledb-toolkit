@@ -2,7 +2,7 @@
 
 use pgrx::*;
 use pgrx_sql_entity_graph::metadata::{
-    ArgumentError, Returns, ReturnsError, SqlMapping, SqlTranslatable,
+    ArgumentError, ReturnsError, ReturnsRef, SqlMappingRef, SqlTranslatable, TypeOrigin,
 };
 
 extension_sql!(
@@ -65,12 +65,12 @@ macro_rules! raw_type {
 
         // SAFETY: all calls to raw_type! use type names that are valid SQL
         unsafe impl SqlTranslatable for $name {
-            fn argument_sql() -> Result<SqlMapping, ArgumentError> {
-                Ok(SqlMapping::literal(stringify!($name)))
-            }
-            fn return_sql() -> Result<Returns, ReturnsError> {
-                Ok(Returns::One(SqlMapping::literal(stringify!($name))))
-            }
+            const TYPE_IDENT: &'static str = pgrx::pgrx_resolved_type!($name);
+            const TYPE_ORIGIN: TypeOrigin = TypeOrigin::External;
+            const ARGUMENT_SQL: Result<SqlMappingRef, ArgumentError> =
+                Ok(SqlMappingRef::literal(stringify!($name)));
+            const RETURN_SQL: Result<ReturnsRef, ReturnsError> =
+                Ok(ReturnsRef::One(SqlMappingRef::literal(stringify!($name))));
         }
 
         unsafe impl<'fcx> callconv::ArgAbi<'fcx> for $name {

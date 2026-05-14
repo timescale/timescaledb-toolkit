@@ -134,60 +134,39 @@ macro_rules! pg_type_impl {
             impl<$lifetemplate> ::pgrx::datum::PostgresType for $name<$lifetemplate> {}
 
             unsafe impl<$lifetemplate> ::pgrx_sql_entity_graph::metadata::SqlTranslatable for $name<$lifetemplate> {
-                fn argument_sql() -> core::result::Result<::pgrx_sql_entity_graph::metadata::SqlMapping, ::pgrx_sql_entity_graph::metadata::ArgumentError> {
-                    Ok(::pgrx_sql_entity_graph::metadata::SqlMapping::As(String::from(stringify!($name))))
-                }
-
-                fn return_sql() -> core::result::Result<::pgrx_sql_entity_graph::metadata::Returns, ::pgrx_sql_entity_graph::metadata::ReturnsError> {
-                    Ok(::pgrx_sql_entity_graph::metadata::Returns::One(::pgrx_sql_entity_graph::metadata::SqlMapping::As(String::from(stringify!($name)))))
-                }
+                const TYPE_IDENT: &'static str = ::pgrx::pgrx_resolved_type!($name<'_>);
+                const TYPE_ORIGIN: ::pgrx_sql_entity_graph::metadata::TypeOrigin =
+                    ::pgrx_sql_entity_graph::metadata::TypeOrigin::ThisExtension;
+                const ARGUMENT_SQL: core::result::Result<
+                    ::pgrx_sql_entity_graph::metadata::SqlMappingRef,
+                    ::pgrx_sql_entity_graph::metadata::ArgumentError,
+                > = Ok(::pgrx_sql_entity_graph::metadata::SqlMappingRef::As(stringify!($name)));
+                const RETURN_SQL: core::result::Result<
+                    ::pgrx_sql_entity_graph::metadata::ReturnsRef,
+                    ::pgrx_sql_entity_graph::metadata::ReturnsError,
+                > = Ok(::pgrx_sql_entity_graph::metadata::ReturnsRef::One(
+                    ::pgrx_sql_entity_graph::metadata::SqlMappingRef::As(stringify!($name))
+                ));
             }
 
             ::paste::paste! {
                 #[unsafe(no_mangle)]
                 #[doc(hidden)]
                 #[allow(nonstandard_style, unknown_lints, clippy::no_mangle_with_rust_abi)]
-                pub extern "Rust" fn [<__pgrx_internals_type_ $name>]() -> ::pgrx_sql_entity_graph::SqlGraphEntity {
-                    extern crate alloc;
-                    use alloc::string::ToString;
-                    use ::pgrx::datum::WithTypeIds;
-
-                    let mut mappings = Default::default();
-                    <$name<'_> as ::pgrx::datum::WithTypeIds>::register_with_refs(
-                        &mut mappings,
-                        stringify!($name).to_string()
-                    );
-                    ::pgrx::datum::WithSizedTypeIds::<$name<'_>>::register_sized_with_refs(
-                        &mut mappings,
-                        stringify!($name).to_string()
-                    );
-                    ::pgrx::datum::WithArrayTypeIds::<$name<'_>>::register_array_with_refs(
-                        &mut mappings,
-                        stringify!($name).to_string()
-                    );
-                    ::pgrx::datum::WithVarlenaTypeIds::<$name<'_>>::register_varlena_with_refs(
-                        &mut mappings,
-                        stringify!($name).to_string()
-                    );
-
+                pub extern "Rust" fn [<__pgrx_internals_type_ $name>]() -> ::pgrx_sql_entity_graph::SqlGraphEntity<'static> {
                     let submission = ::pgrx_sql_entity_graph::PostgresTypeEntity {
                         name: stringify!($name),
                         file: file!(),
                         line: line!(),
                         module_path: module_path!(),
                         full_path: core::any::type_name::<$name<'_>>(),
-                        mappings: mappings.into_iter().collect(),
-                        in_fn: stringify!([<$name:lower _in>]),
-                        in_fn_module_path: module_path!().to_string(),
-                        out_fn: stringify!([<$name:lower _out>]),
-                        out_fn_module_path: module_path!().to_string(),
-                        receive_fn: None,
-                        receive_fn_module_path: None,
-                        send_fn: None,
-                        send_fn_module_path: None,
+                        type_ident: <$name<'_> as ::pgrx_sql_entity_graph::metadata::SqlTranslatable>::TYPE_IDENT,
+                        in_fn_path: stringify!([<$name:lower _in>]),
+                        out_fn_path: stringify!([<$name:lower _out>]),
+                        receive_fn_path: None,
+                        send_fn_path: None,
                         to_sql_config: ::pgrx::pgrx_sql_entity_graph::ToSqlConfigEntity {
                             enabled: true,
-                            callback: None,
                             content: None,
                         },
                         alignment: None,

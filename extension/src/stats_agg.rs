@@ -691,9 +691,9 @@ extension_sql!(
         stats1d_combine,
         stats1d_trans_serialize,
         stats1d_trans_deserialize,
-        stats1d_trans,
-        stats1d_inv_trans,
-        stats1d_final
+        stats1d_tf_trans,
+        stats1d_tf_inv_trans,
+        stats1d_tf_final
     ],
 );
 

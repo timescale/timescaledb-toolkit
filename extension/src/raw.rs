@@ -10,22 +10,20 @@ extension_sql!(
         CREATE SCHEMA toolkit_experimental;\n\
     ",
     name = "create_experimental_schema",
-    creates = [
-        Type(bytea),
-        Type(text),
-        Type(TimestampTz),
-        Type(AnyElement),
-        Type(tstzrange),
-        Type(Interval),
-        Type(regproc)
-    ],
     bootstrap,
 );
 
-// TODO temporary holdover types while we migrate from nominal types to actual
+// TODO temporary holdover types while we migrate from nominal types to actual types (due to pg18)
+const SQL_BYTEA: &str = "bytea";
+const SQL_TEXT: &str = "text";
+const SQL_TIMESTAMPTZ: &str = "timestamp with time zone";
+const SQL_ANYELEMENT: &str = "anyelement";
+const SQL_TSTZRANGE: &str = "tstzrange";
+const SQL_INTERVAL: &str = "interval";
+const SQL_REGPROC: &str = "regproc";
 
 macro_rules! raw_type {
-    ($name:ident, $tyid: path, $arrayid: path) => {
+    ($name:ident, $sql:expr, $tyid: path, $arrayid: path) => {
         impl FromDatum for $name {
             unsafe fn from_polymorphic_datum(
                 datum: pg_sys::Datum,
@@ -68,9 +66,9 @@ macro_rules! raw_type {
             const TYPE_IDENT: &'static str = pgrx::pgrx_resolved_type!($name);
             const TYPE_ORIGIN: TypeOrigin = TypeOrigin::External;
             const ARGUMENT_SQL: Result<SqlMappingRef, ArgumentError> =
-                Ok(SqlMappingRef::literal(stringify!($name)));
+                Ok(SqlMappingRef::literal($sql));
             const RETURN_SQL: Result<ReturnsRef, ReturnsError> =
-                Ok(ReturnsRef::One(SqlMappingRef::literal(stringify!($name))));
+                Ok(ReturnsRef::One(SqlMappingRef::literal($sql)));
         }
 
         unsafe impl<'fcx> callconv::ArgAbi<'fcx> for $name {
@@ -92,7 +90,7 @@ macro_rules! raw_type {
 #[derive(Clone, Copy)]
 pub struct bytea(pub pg_sys::Datum);
 
-raw_type!(bytea, pg_sys::BYTEAOID, pg_sys::BYTEAARRAYOID);
+raw_type!(bytea, SQL_BYTEA, pg_sys::BYTEAOID, pg_sys::BYTEAARRAYOID);
 
 unsafe impl pgrx::callconv::BoxRet for bytea {
     unsafe fn box_into<'fcx>(
@@ -106,12 +104,13 @@ unsafe impl pgrx::callconv::BoxRet for bytea {
 #[derive(Clone, Copy)]
 pub struct text(pub pg_sys::Datum);
 
-raw_type!(text, pg_sys::TEXTOID, pg_sys::TEXTARRAYOID);
+raw_type!(text, SQL_TEXT, pg_sys::TEXTOID, pg_sys::TEXTARRAYOID);
 
 pub struct TimestampTz(pub pg_sys::Datum);
 
 raw_type!(
     TimestampTz,
+    SQL_TIMESTAMPTZ,
     pg_sys::TIMESTAMPTZOID,
     pg_sys::TIMESTAMPTZARRAYOID
 );
@@ -139,15 +138,30 @@ impl From<pg_sys::TimestampTz> for TimestampTz {
 
 pub struct AnyElement(pub pg_sys::Datum);
 
-raw_type!(AnyElement, pg_sys::ANYELEMENTOID, pg_sys::ANYARRAYOID);
+raw_type!(
+    AnyElement,
+    SQL_ANYELEMENT,
+    pg_sys::ANYELEMENTOID,
+    pg_sys::ANYARRAYOID
+);
 
 pub struct tstzrange(pub pg_sys::Datum);
 
-raw_type!(tstzrange, pg_sys::TSTZRANGEOID, pg_sys::TSTZRANGEARRAYOID);
+raw_type!(
+    tstzrange,
+    SQL_TSTZRANGE,
+    pg_sys::TSTZRANGEOID,
+    pg_sys::TSTZRANGEARRAYOID
+);
 
 pub struct Interval(pub pg_sys::Datum);
 
-raw_type!(Interval, pg_sys::INTERVALOID, pg_sys::INTERVALARRAYOID);
+raw_type!(
+    Interval,
+    SQL_INTERVAL,
+    pg_sys::INTERVALOID,
+    pg_sys::INTERVALARRAYOID
+);
 
 unsafe impl pgrx::callconv::BoxRet for Interval {
     unsafe fn box_into<'fcx>(
@@ -190,4 +204,4 @@ impl From<i64> for Interval {
 
 pub struct regproc(pub pg_sys::Datum);
 
-raw_type!(regproc, pg_sys::REGPROCOID, pg_sys::REGPROCARRAYOID);
+raw_type!(regproc, SQL_REGPROC, pg_sys::REGPROCOID, pg_sys::REGPROCARRAYOID);

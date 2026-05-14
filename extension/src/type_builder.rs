@@ -149,31 +149,51 @@ macro_rules! pg_type_impl {
                 ));
             }
 
-            ::paste::paste! {
-                #[unsafe(no_mangle)]
-                #[doc(hidden)]
-                #[allow(nonstandard_style, unknown_lints, clippy::no_mangle_with_rust_abi)]
-                pub extern "Rust" fn [<__pgrx_internals_type_ $name>]() -> ::pgrx_sql_entity_graph::SqlGraphEntity<'static> {
-                    let submission = ::pgrx_sql_entity_graph::PostgresTypeEntity {
-                        name: stringify!($name),
-                        file: file!(),
-                        line: line!(),
-                        module_path: module_path!(),
-                        full_path: core::any::type_name::<$name<'_>>(),
-                        type_ident: <$name<'_> as ::pgrx_sql_entity_graph::metadata::SqlTranslatable>::TYPE_IDENT,
-                        in_fn_path: stringify!([<$name:lower _in>]),
-                        out_fn_path: stringify!([<$name:lower _out>]),
-                        receive_fn_path: None,
-                        send_fn_path: None,
-                        to_sql_config: ::pgrx::pgrx_sql_entity_graph::ToSqlConfigEntity {
-                            enabled: true,
-                            content: None,
-                        },
-                        alignment: None,
-                    };
-                    ::pgrx_sql_entity_graph::SqlGraphEntity::Type(submission)
-                }
-            }
+            const _: () = {
+                const TYPE_IDENT: &str = <$name<'_> as ::pgrx_sql_entity_graph::metadata::SqlTranslatable>::TYPE_IDENT;
+                const FULL_PATH: &str = stringify!($name<'_>);
+                const IN_FN: &str = stringify!([<$name:lower _in>]);
+                const OUT_FN: &str = stringify!([<$name:lower _out>]);
+                const PAYLOAD_LEN: usize =
+                    ::pgrx::pgrx_sql_entity_graph::section::u8_len()
+                    + ::pgrx::pgrx_sql_entity_graph::section::str_len(stringify!($name))
+                    + ::pgrx::pgrx_sql_entity_graph::section::str_len(file!())
+                    + ::pgrx::pgrx_sql_entity_graph::section::u32_len()
+                    + ::pgrx::pgrx_sql_entity_graph::section::str_len(module_path!())
+                    + ::pgrx::pgrx_sql_entity_graph::section::str_len(FULL_PATH)
+                    + ::pgrx::pgrx_sql_entity_graph::section::str_len(TYPE_IDENT)
+                    + ::pgrx::pgrx_sql_entity_graph::section::str_len(IN_FN)
+                    + ::pgrx::pgrx_sql_entity_graph::section::str_len(OUT_FN)
+                    + ::pgrx::pgrx_sql_entity_graph::section::bool_len()
+                    + ::pgrx::pgrx_sql_entity_graph::section::bool_len()
+                    + ::pgrx::pgrx_sql_entity_graph::section::bool_len()
+                    + ::pgrx::pgrx_sql_entity_graph::section::bool_len()
+                    + ::pgrx::pgrx_sql_entity_graph::section::bool_len();
+                const TOTAL_LEN: usize =
+                    ::pgrx::pgrx_sql_entity_graph::section::u32_len() + PAYLOAD_LEN;
+
+                ::pgrx::pgrx_sql_entity_graph::__pgrx_schema_entry!(
+                    [<__pgrx_internals_type_ $name>],
+                    TOTAL_LEN,
+                    ::pgrx::pgrx_sql_entity_graph::section::EntryWriter::<{ TOTAL_LEN }>::new()
+                        .u32(PAYLOAD_LEN as u32)
+                        .u8(::pgrx::pgrx_sql_entity_graph::section::ENTITY_TYPE)
+                        .str(stringify!($name))
+                        .str(file!())
+                        .u32(line!())
+                        .str(module_path!())
+                        .str(FULL_PATH)
+                        .str(TYPE_IDENT)
+                        .str(IN_FN)
+                        .str(OUT_FN)
+                        .bool(false)
+                        .bool(false)
+                        .bool(true)
+                        .bool(false)
+                        .bool(false)
+                        .finish()
+                );
+            };
 
             #[doc(hidden)]
             #[::pgrx::pgrx_macros::pg_extern(immutable, parallel_safe)]

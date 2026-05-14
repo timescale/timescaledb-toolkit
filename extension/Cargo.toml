@@ -4,10 +4,6 @@ version = "1.22.0-dev"
 edition = "2024"
 resolver = "3"
 
-[[bin]]
-name = "pgrx_embed_timescaledb_toolkit"
-path = "./src/bin/pgrx_embed.rs"
-
 [lib]
 crate-type = ["cdylib", "lib"]
 

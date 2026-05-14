@@ -24,7 +24,7 @@ on:
 jobs:
   build:
     env:
-      GH_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
+      GITHUB_TOKEN: ${{ secrets.ORG_AUTOMATION_TOKEN }}
     runs-on: ubuntu-24.04
     steps:
       - name: Run release-build-scripts job

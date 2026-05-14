@@ -297,6 +297,8 @@ mod tests {
                 None,
                 &[],
             ).unwrap();
+
+            assert!(result.next().is_none());
         })
     }
 

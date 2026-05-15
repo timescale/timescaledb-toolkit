@@ -13,7 +13,7 @@ pub type tstzrange = *mut pg_sys::varlena;
 // but we modify because we only allow specific types of ranges, namely [) inclusive on left and exclusive on right, as this makes a lot of logic simpler, and allows for a standard way to represent a range.
 #[allow(clippy::missing_safety_doc)]
 pub unsafe fn get_range(range: tstzrange) -> Option<I64Range> {
-    let range_bytes = get_toasted_bytes(&*range);
+    let range_bytes = unsafe { get_toasted_bytes(&*range) };
     let mut range_bytes = &range_bytes[8..]; // don't care about the Header and Oid
     let flags = *range_bytes.last().unwrap();
     let mut range = I64Range {
@@ -44,12 +44,12 @@ pub unsafe fn get_range(range: tstzrange) -> Option<I64Range> {
 }
 
 unsafe fn get_toasted_bytes(ptr: &pg_sys::varlena) -> &[u8] {
-    let mut ptr = pg_sys::pg_detoast_datum_packed(ptr as *const _ as *mut _);
-    if pgrx::varatt_is_1b(ptr) {
-        ptr = pg_sys::pg_detoast_datum_copy(ptr as *const _ as *mut _);
+    let mut ptr = unsafe { pg_sys::pg_detoast_datum_packed(ptr as *const _ as *mut _) };
+    if unsafe { pgrx::varatt_is_1b(ptr) } {
+        ptr = unsafe { pg_sys::pg_detoast_datum_copy(ptr as *const _ as *mut _) };
     }
-    let data_len = pgrx::varsize_any(ptr);
-    slice::from_raw_parts(ptr as *mut u8, data_len)
+    let data_len = unsafe { pgrx::varsize_any(ptr) };
+    unsafe { slice::from_raw_parts(ptr as *mut u8, data_len) }
 }
 
 const RANGE_EMPTY: u8 = 0x01;
@@ -136,12 +136,13 @@ impl I64RangeWrapper {
 }
 
 // this introduces a timescaledb dependency, but only kind of,
-extension_sql!("\n\
+extension_sql!(
+    "\n\
 CREATE FUNCTION toolkit_experimental.time_bucket_range( bucket_width interval, ts timestamptz)\n\
 RETURNS tstzrange as $$\n\
 SELECT tstzrange(time_bucket(bucket_width, ts), time_bucket(bucket_width, ts + bucket_width), '[)');\n\
 $$\n\
 LANGUAGE SQL IMMUTABLE PARALLEL SAFE;\n\
 ",
-name = "time_bucket_range",
+    name = "time_bucket_range",
 );

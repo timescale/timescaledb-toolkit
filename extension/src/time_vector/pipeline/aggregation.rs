@@ -162,14 +162,19 @@ pub fn pipeline_stats_agg() -> toolkit_experimental::PipelineThenStatsAgg<'stati
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_stats_agg_support(input: Internal) -> Internal {
-    pipeline_support_helper(input, |old_pipeline, new_element| {
-        let new_element =
-            PipelineThenStatsAgg::from_polymorphic_datum(new_element, false, pg_sys::Oid::INVALID)
-                .unwrap();
-        finalize_with_stats_agg(old_pipeline, new_element)
-            .into_datum()
-            .unwrap()
-    })
+    unsafe {
+        pipeline_support_helper(input, |old_pipeline, new_element| {
+            let new_element = PipelineThenStatsAgg::from_polymorphic_datum(
+                new_element,
+                false,
+                pg_sys::Oid::INVALID,
+            )
+            .unwrap();
+            finalize_with_stats_agg(old_pipeline, new_element)
+                .into_datum()
+                .unwrap()
+        })
+    }
 }
 
 // using this instead of pg_operator since the latter doesn't support schemas yet
@@ -261,14 +266,16 @@ pub fn finalize_with_sum<'e>(
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_sum_support(input: Internal) -> Internal {
-    pipeline_support_helper(input, |old_pipeline, new_element| {
-        let new_element =
-            PipelineThenSum::from_polymorphic_datum(new_element, false, pg_sys::Oid::INVALID)
-                .unwrap();
-        finalize_with_sum(old_pipeline, new_element)
-            .into_datum()
-            .unwrap()
-    })
+    unsafe {
+        pipeline_support_helper(input, |old_pipeline, new_element| {
+            let new_element =
+                PipelineThenSum::from_polymorphic_datum(new_element, false, pg_sys::Oid::INVALID)
+                    .unwrap();
+            finalize_with_sum(old_pipeline, new_element)
+                .into_datum()
+                .unwrap()
+        })
+    }
 }
 
 extension_sql!(
@@ -276,10 +283,7 @@ extension_sql!(
 ALTER FUNCTION "arrow_pipeline_then_sum" SUPPORT toolkit_experimental.pipeline_sum_support;
 "#,
     name = "arrow_then_sum_support",
-    requires = [
-        arrow_pipeline_then_sum,
-        pipeline_sum_support,
-    ],
+    requires = [arrow_pipeline_then_sum, pipeline_sum_support,],
 );
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
@@ -356,14 +360,19 @@ pub fn finalize_with_average<'e>(
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_average_support(input: Internal) -> Internal {
-    pipeline_support_helper(input, |old_pipeline, new_element| {
-        let new_element =
-            PipelineThenAverage::from_polymorphic_datum(new_element, false, pg_sys::Oid::INVALID)
-                .unwrap();
-        finalize_with_average(old_pipeline, new_element)
-            .into_datum()
-            .unwrap()
-    })
+    unsafe {
+        pipeline_support_helper(input, |old_pipeline, new_element| {
+            let new_element = PipelineThenAverage::from_polymorphic_datum(
+                new_element,
+                false,
+                pg_sys::Oid::INVALID,
+            )
+            .unwrap();
+            finalize_with_average(old_pipeline, new_element)
+                .into_datum()
+                .unwrap()
+        })
+    }
 }
 
 extension_sql!(
@@ -371,10 +380,7 @@ extension_sql!(
 ALTER FUNCTION "arrow_pipeline_then_average" SUPPORT toolkit_experimental.pipeline_average_support;
 "#,
     name = "pipe_avg_support",
-    requires = [
-        arrow_pipeline_then_average,
-        pipeline_average_support,
-    ],
+    requires = [arrow_pipeline_then_average, pipeline_average_support,],
 );
 
 #[pg_extern(
@@ -448,14 +454,19 @@ pub fn finalize_with_num_vals<'e>(
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_num_vals_support(input: Internal) -> Internal {
-    pipeline_support_helper(input, |old_pipeline, new_element| {
-        let new_element =
-            PipelineThenNumVals::from_polymorphic_datum(new_element, false, pg_sys::Oid::INVALID)
-                .unwrap();
-        finalize_with_num_vals(old_pipeline, new_element)
-            .into_datum()
-            .unwrap()
-    })
+    unsafe {
+        pipeline_support_helper(input, |old_pipeline, new_element| {
+            let new_element = PipelineThenNumVals::from_polymorphic_datum(
+                new_element,
+                false,
+                pg_sys::Oid::INVALID,
+            )
+            .unwrap();
+            finalize_with_num_vals(old_pipeline, new_element)
+                .into_datum()
+                .unwrap()
+        })
+    }
 }
 
 extension_sql!(
@@ -463,10 +474,7 @@ extension_sql!(
 ALTER FUNCTION "arrow_pipeline_then_num_vals" SUPPORT toolkit_experimental.pipeline_num_vals_support;
 "#,
     name = "pipe_then_num_vals",
-    requires = [
-        arrow_pipeline_then_num_vals,
-        pipeline_num_vals_support,
-    ],
+    requires = [arrow_pipeline_then_num_vals, pipeline_num_vals_support,],
 );
 
 // TODO support gauge
@@ -536,17 +544,19 @@ pub fn pipeline_counter_agg() -> toolkit_experimental::PipelineThenCounterAgg<'s
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_counter_agg_support(input: Internal) -> Internal {
-    pipeline_support_helper(input, |old_pipeline, new_element| {
-        let new_element = PipelineThenCounterAgg::from_polymorphic_datum(
-            new_element,
-            false,
-            pg_sys::Oid::INVALID,
-        )
-        .unwrap();
-        finalize_with_counter_agg(old_pipeline, new_element)
-            .into_datum()
-            .unwrap()
-    })
+    unsafe {
+        pipeline_support_helper(input, |old_pipeline, new_element| {
+            let new_element = PipelineThenCounterAgg::from_polymorphic_datum(
+                new_element,
+                false,
+                pg_sys::Oid::INVALID,
+            )
+            .unwrap();
+            finalize_with_counter_agg(old_pipeline, new_element)
+                .into_datum()
+                .unwrap()
+        })
+    }
 }
 
 // using this instead of pg_operator since the latter doesn't support schemas yet
@@ -627,17 +637,19 @@ pub fn pipeline_hyperloglog(size: i32) -> toolkit_experimental::PipelineThenHype
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_hyperloglog_support(input: Internal) -> Internal {
-    pipeline_support_helper(input, |old_pipeline, new_element| {
-        let new_element = PipelineThenHyperLogLog::from_polymorphic_datum(
-            new_element,
-            false,
-            pg_sys::Oid::INVALID,
-        )
-        .unwrap();
-        finalize_with_hyperloglog(old_pipeline, new_element)
-            .into_datum()
-            .unwrap()
-    })
+    unsafe {
+        pipeline_support_helper(input, |old_pipeline, new_element| {
+            let new_element = PipelineThenHyperLogLog::from_polymorphic_datum(
+                new_element,
+                false,
+                pg_sys::Oid::INVALID,
+            )
+            .unwrap();
+            finalize_with_hyperloglog(old_pipeline, new_element)
+                .into_datum()
+                .unwrap()
+        })
+    }
 }
 
 // using this instead of pg_operator since the latter doesn't support schemas yet
@@ -708,17 +720,19 @@ pub fn pipeline_percentile_agg() -> toolkit_experimental::PipelineThenPercentile
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_percentile_agg_support(input: Internal) -> Internal {
-    pipeline_support_helper(input, |old_pipeline, new_element| {
-        let new_element = PipelineThenPercentileAgg::from_polymorphic_datum(
-            new_element,
-            false,
-            pg_sys::Oid::INVALID,
-        )
-        .unwrap();
-        finalize_with_percentile_agg(old_pipeline, new_element)
-            .into_datum()
-            .unwrap()
-    })
+    unsafe {
+        pipeline_support_helper(input, |old_pipeline, new_element| {
+            let new_element = PipelineThenPercentileAgg::from_polymorphic_datum(
+                new_element,
+                false,
+                pg_sys::Oid::INVALID,
+            )
+            .unwrap();
+            finalize_with_percentile_agg(old_pipeline, new_element)
+                .into_datum()
+                .unwrap()
+        })
+    }
 }
 
 // using this instead of pg_operator since the latter doesn't support schemas yet
@@ -825,7 +839,9 @@ mod tests {
                 .value::<String>()
                 .unwrap()
                 .unwrap();
-            assert_eq!(output.trim(), "Output: (\
+            assert_eq!(
+                output.trim(),
+                "Output: (\
                 arrow_run_pipeline_then_stats_agg(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,num_elements:3,elements:[\
@@ -833,7 +849,8 @@ mod tests {
                         Arithmetic(function:Abs,rhs:0),\
                         Arithmetic(function:Floor,rhs:0)\
                     ])'::pipelinethenstatsagg\
-                ) -> '(version:1)'::accessoraverage)");
+                ) -> '(version:1)'::accessoraverage)"
+            );
         });
     }
 
@@ -918,7 +935,9 @@ mod tests {
                 .value::<String>()
                 .unwrap()
                 .unwrap();
-            assert_eq!(output.trim(), "Output: \
+            assert_eq!(
+                output.trim(),
+                "Output: \
                 arrow_pipeline_then_sum(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,num_elements:3,elements:[\
@@ -926,7 +945,8 @@ mod tests {
                         Arithmetic(function:Abs,rhs:0),\
                         Arithmetic(function:Floor,rhs:0)\
                     ])'::pipelinethensum\
-                )");
+                )"
+            );
         });
     }
 
@@ -1011,7 +1031,9 @@ mod tests {
                 .value::<String>()
                 .unwrap()
                 .unwrap();
-            assert_eq!(output.trim(), "Output: \
+            assert_eq!(
+                output.trim(),
+                "Output: \
                 arrow_pipeline_then_average(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,num_elements:3,elements:[\
@@ -1019,7 +1041,8 @@ mod tests {
                         Arithmetic(function:Abs,rhs:0),\
                         Arithmetic(function:Floor,rhs:0)\
                     ])'::pipelinethenaverage\
-                )");
+                )"
+            );
         });
     }
 
@@ -1104,7 +1127,9 @@ mod tests {
                 .value::<String>()
                 .unwrap()
                 .unwrap();
-            assert_eq!(output.trim(), "Output: \
+            assert_eq!(
+                output.trim(),
+                "Output: \
                 arrow_pipeline_then_num_vals(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,num_elements:3,elements:[\
@@ -1112,7 +1137,8 @@ mod tests {
                         Arithmetic(function:Abs,rhs:0),\
                         Arithmetic(function:Floor,rhs:0)\
                     ])'::pipelinethennumvals\
-                )");
+                )"
+            );
         });
     }
 
@@ -1157,7 +1183,10 @@ mod tests {
                 .first()
                 .get_one::<String>()
                 .unwrap();
-            assert_eq!(val.unwrap(), "(version:1,stats:(n:5,sx:3156624000,sx2:74649600000,sx3:0,sx4:1894671345254400000000,sy:215,sy2:2280,sy3:6720.000000000007,sy4:1788960,sxy:12960000),first:(ts:\"2020-01-01 00:00:00+00\",val:15),second:(ts:\"2020-01-02 00:00:00+00\",val:25),penultimate:(ts:\"2020-01-04 00:00:00+00\",val:10),last:(ts:\"2020-01-05 00:00:00+00\",val:30),reset_sum:45,num_resets:2,num_changes:4,bounds:(is_present:0,has_left:0,has_right:0,padding:(0,0,0,0,0),left:None,right:None))");
+            assert_eq!(
+                val.unwrap(),
+                "(version:1,stats:(n:5,sx:3156624000,sx2:74649600000,sx3:0,sx4:1894671345254400000000,sy:215,sy2:2280,sy3:6720.000000000007,sy4:1788960,sxy:12960000),first:(ts:\"2020-01-01 00:00:00+00\",val:15),second:(ts:\"2020-01-02 00:00:00+00\",val:25),penultimate:(ts:\"2020-01-04 00:00:00+00\",val:10),last:(ts:\"2020-01-05 00:00:00+00\",val:30),reset_sum:45,num_resets:2,num_changes:4,bounds:(is_present:0,has_left:0,has_right:0,padding:(0,0,0,0,0),left:None,right:None))"
+            );
 
             let val = client.update(
                 &format!("SELECT series -> sort() -> counter_agg() -> with_bounds('[2020-01-01 UTC, 2020-02-01 UTC)') -> extrapolated_delta('prometheus') FROM ({create_series}) s"),
@@ -1185,7 +1214,9 @@ mod tests {
                 .value::<String>()
                 .unwrap()
                 .unwrap();
-            assert_eq!(output.trim(), "Output: \
+            assert_eq!(
+                output.trim(),
+                "Output: \
                 arrow_run_pipeline_then_counter_agg(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,num_elements:3,elements:[\
@@ -1193,7 +1224,8 @@ mod tests {
                         Arithmetic(function:Abs,rhs:0),\
                         Arithmetic(function:Floor,rhs:0)\
                     ])'::pipelinethencounteragg\
-                )");
+                )"
+            );
         })
     }
 
@@ -1241,7 +1273,10 @@ mod tests {
                 .first()
                 .get_one::<String>()
                 .unwrap();
-            assert_eq!(val.unwrap(), "(version:1,log:Sparse(num_compressed:7,element_type:FLOAT8,collation:None,compressed_bytes:28,precision:7,compressed:[136,188,20,7,8,30,244,43,72,69,89,2,72,255,97,27,72,83,248,27,200,110,35,5,8,37,85,12]))");
+            assert_eq!(
+                val.unwrap(),
+                "(version:1,log:Sparse(num_compressed:7,element_type:FLOAT8,collation:None,compressed_bytes:28,precision:7,compressed:[136,188,20,7,8,30,244,43,72,69,89,2,72,255,97,27,72,83,248,27,200,110,35,5,8,37,85,12]))"
+            );
 
             let val = client
                 .update(
@@ -1275,7 +1310,9 @@ mod tests {
                 .value::<String>()
                 .unwrap()
                 .unwrap();
-            assert_eq!(output.trim(), "Output: \
+            assert_eq!(
+                output.trim(),
+                "Output: \
                 arrow_run_pipeline_then_hyperloglog(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,hll_size:100,num_elements:3,elements:[\
@@ -1283,7 +1320,8 @@ mod tests {
                         Arithmetic(function:Abs,rhs:0),\
                         Arithmetic(function:Floor,rhs:0)\
                     ])'::pipelinethenhyperloglog\
-                )");
+                )"
+            );
         })
     }
 
@@ -1385,7 +1423,9 @@ mod tests {
                 .value::<String>()
                 .unwrap()
                 .unwrap();
-            assert_eq!(output.trim(), "Output: \
+            assert_eq!(
+                output.trim(),
+                "Output: \
                 arrow_run_pipeline_then_percentile_agg(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,num_elements:3,elements:[\
@@ -1393,7 +1433,8 @@ mod tests {
                         Arithmetic(function:Abs,rhs:0),\
                         Arithmetic(function:Floor,rhs:0)\
                     ])'::pipelinethenpercentileagg\
-                )");
+                )"
+            );
         });
     }
 }

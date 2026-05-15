@@ -10,9 +10,9 @@ use pgrx::{
 use pg_sys::{Datum, Oid};
 
 use serde::{
+    Deserialize, Serialize,
     de::{SeqAccess, Visitor},
     ser::SerializeSeq,
-    Deserialize, Serialize,
 };
 
 use crate::{
@@ -23,8 +23,8 @@ use crate::{
     aggregate_utils::{get_collation_or_default, in_aggregate_context},
     build,
     datum_utils::{
-        deep_copy_datum, DatumFromSerializedTextReader, DatumHashBuilder, DatumStore,
-        TextSerializableDatumWriter,
+        DatumFromSerializedTextReader, DatumHashBuilder, DatumStore, TextSerializableDatumWriter,
+        deep_copy_datum,
     },
     palloc::{Inner, Internal, InternalAsValue, ToInternal},
     pg_any_element::{PgAnyElement, PgAnyElementHashMap},
@@ -1389,7 +1389,11 @@ fn validate_topn_for_mcv_agg(
     // for our zeta curve.
     let needed_count = (zeta_le_n(skew, n as u64) * total_vals as f64).ceil() as u64;
     if counts.take(n as usize).sum::<u64>() < needed_count {
-        pgrx::error!("data is not skewed enough to find top {} parameters with a skew of {}, try reducing the skew factor", n , skew)
+        pgrx::error!(
+            "data is not skewed enough to find top {} parameters with a skew of {}, try reducing the skew factor",
+            n,
+            skew
+        )
     }
 }
 
@@ -1680,7 +1684,7 @@ impl<Input, InputIterator: std::iter::Iterator<Item = Input>> Iterator
 }
 
 unsafe fn varlena_to_string(vl: *const pg_sys::varlena) -> String {
-    let bytes: &[u8] = varlena_to_byte_slice(vl);
+    let bytes: &[u8] = unsafe { varlena_to_byte_slice(vl) };
     let s = std::str::from_utf8(bytes).expect("Error creating string from text data");
     s.into()
 }
@@ -1690,10 +1694,10 @@ unsafe fn varlena_to_string(vl: *const pg_sys::varlena) -> String {
 mod tests {
     use super::*;
     use pgrx_macros::pg_test;
+    use rand::RngCore;
     use rand::distributions::{Distribution, Uniform};
     use rand::prelude::SliceRandom;
     use rand::thread_rng;
-    use rand::RngCore;
     use rand_distr::Zeta;
 
     #[pg_test]

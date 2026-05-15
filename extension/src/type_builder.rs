@@ -265,7 +265,7 @@ macro_rules! pg_type_impl {
                     //     return self
                     // }
                     let bytes: &'static [u8] = self.to_pg_bytes();
-                    let wrapped = [<$name Data>]::try_ref(bytes).unwrap().0;
+                    let wrapped = unsafe { [<$name Data>]::try_ref(bytes).unwrap().0 };
                     $name(wrapped, Flattened(bytes))
                 }
 
@@ -299,12 +299,12 @@ macro_rules! pg_type_impl {
                         return None;
                     }
 
-                    let mut ptr = pg_sys::pg_detoast_datum_packed(datum.cast_mut_ptr());
+                    let mut ptr = unsafe { pg_sys::pg_detoast_datum_packed(datum.cast_mut_ptr()) };
                     //TODO is there a better way to do this?
-                    if pgrx::varatt_is_1b(ptr) {
-                        ptr = pg_sys::pg_detoast_datum_copy(ptr);
+                    if unsafe { pgrx::varatt_is_1b(ptr) } {
+                        ptr = unsafe { pg_sys::pg_detoast_datum_copy(ptr) };
                     }
-                    let data_len = pgrx::varsize_any(ptr);
+                    let data_len = unsafe { pgrx::varsize_any(ptr) };
 
                     // NOTE: varlena types are aligned according to the `ALIGNMENT` with which they
                     // are configured in CREATE TYPE. We have (historically) not configured the
@@ -322,19 +322,22 @@ macro_rules! pg_type_impl {
                     // long as they're not slices) because it uses `ptr::read_unaligned`.
                     let is_aligned = ptr.cast::<$name>().is_aligned();
                     let bytes = if !is_aligned {
-                        let unaligned_bytes = std::slice::from_raw_parts(ptr as *mut u8, data_len);
-                        let new_bytes = pgrx::pg_sys::palloc0(data_len);
+                        let unaligned_bytes = unsafe { std::slice::from_raw_parts(ptr as *mut u8, data_len) };
+                        let new_bytes = unsafe { pgrx::pg_sys::palloc0(data_len) };
 
                         // Note: we assume that fresh allocations are 8-byte aligned
                         debug_assert!(new_bytes.cast::<$name>().is_aligned());
 
-                        let new_slice: &mut [u8] = std::slice::from_raw_parts_mut(new_bytes.cast(), data_len);
+                        let new_slice: &mut [u8] = unsafe {
+                            std::slice::from_raw_parts_mut(new_bytes.cast(), data_len)
+                        };
+
                         new_slice.copy_from_slice(unaligned_bytes);
                         new_slice
                     } else {
-                        std::slice::from_raw_parts(ptr as *mut u8, data_len)
+                        unsafe { std::slice::from_raw_parts(ptr as *mut u8, data_len) }
                     };
-                    let (data, _) = match [<$name Data>]::try_ref(bytes) {
+                    let (data, _) = match unsafe { [<$name Data>]::try_ref(bytes) } {
                         Ok(wrapped) => wrapped,
                         Err(e) => error!(concat!("invalid ", stringify!($name), " {:?}, got len {}"), e, bytes.len()),
                     };
@@ -450,25 +453,25 @@ macro_rules! pg_type_no_lifetime_impl {
                 #[allow(clippy::missing_safety_doc)]
                 pub unsafe fn cached_datum_or_flatten(&mut self) -> pgrx::pg_sys::Datum {
                     use $crate::type_builder::CachedDatum::*;
-                    match self.1 {
-                        None => {
-                            *self = unsafe { self.0.flatten() };
-                            self.cached_datum_or_flatten()
-                        },
-                        FromInput(bytes) | Flattened(bytes) => pg_sys::Datum::from(bytes.as_ptr()),
-                    }
+	                    match self.1 {
+	                        None => {
+	                            *self = unsafe { self.0.flatten() };
+	                            unsafe { self.cached_datum_or_flatten() }
+	                        },
+	                        FromInput(bytes) | Flattened(bytes) => pg_sys::Datum::from(bytes.as_ptr()),
+	                    }
                 }
             }
 
             impl [<$name Data>] {
                 #[allow(clippy::missing_safety_doc)]
                 pub unsafe fn flatten(&self) -> $name {
-                    use flat_serialize::FlatSerializable as _;
-                    use $crate::type_builder::CachedDatum::Flattened;
-                    let bytes: &'static [u8] = self.to_pg_bytes();
-                    let wrapped = [<$name Data>]::try_ref(bytes).unwrap().0;
-                    $name(wrapped, Flattened(bytes))
-                }
+	                    use flat_serialize::FlatSerializable as _;
+	                    use $crate::type_builder::CachedDatum::Flattened;
+	                    let bytes: &'static [u8] = self.to_pg_bytes();
+	                    let wrapped = unsafe { [<$name Data>]::try_ref(bytes) }.unwrap().0;
+	                    $name(wrapped, Flattened(bytes))
+	                }
 
                 pub fn to_pg_bytes(&self) -> &'static [u8] {
                     use std::{mem::MaybeUninit, slice};
@@ -500,30 +503,32 @@ macro_rules! pg_type_no_lifetime_impl {
                         return None;
                     }
 
-                    let mut ptr = pg_sys::pg_detoast_datum_packed(datum.cast_mut_ptr());
-                    //TODO is there a better way to do this?
-                    if pgrx::varatt_is_1b(ptr) {
-                        ptr = pg_sys::pg_detoast_datum_copy(ptr);
-                    }
-                    let data_len = pgrx::varsize_any(ptr);
+	                    let mut ptr = unsafe { pg_sys::pg_detoast_datum_packed(datum.cast_mut_ptr()) };
+	                    //TODO is there a better way to do this?
+	                    if unsafe { pgrx::varatt_is_1b(ptr) } {
+	                        ptr = unsafe { pg_sys::pg_detoast_datum_copy(ptr) };
+	                    }
+	                    let data_len = unsafe { pgrx::varsize_any(ptr) };
 
-                    let is_aligned = ptr.cast::<$name>().is_aligned();
-                    let bytes = if !is_aligned {
-                        let unaligned_bytes = std::slice::from_raw_parts(ptr as *mut u8, data_len);
-                        let new_bytes = pgrx::pg_sys::palloc0(data_len);
+	                    let is_aligned = ptr.cast::<$name>().is_aligned();
+	                    let bytes = if !is_aligned {
+	                        let unaligned_bytes = unsafe { std::slice::from_raw_parts(ptr as *mut u8, data_len) };
+	                        let new_bytes = unsafe { pgrx::pg_sys::palloc0(data_len) };
 
-                        debug_assert!(new_bytes.cast::<$name>().is_aligned());
+	                        debug_assert!(new_bytes.cast::<$name>().is_aligned());
 
-                        let new_slice: &mut [u8] = std::slice::from_raw_parts_mut(new_bytes.cast(), data_len);
-                        new_slice.copy_from_slice(unaligned_bytes);
-                        new_slice
-                    } else {
-                        std::slice::from_raw_parts(ptr as *mut u8, data_len)
-                    };
-                    let (data, _) = match [<$name Data>]::try_ref(bytes) {
-                        Ok(wrapped) => wrapped,
-                        Err(e) => error!(concat!("invalid ", stringify!($name), " {:?}, got len {}"), e, bytes.len()),
-                    };
+	                        let new_slice: &mut [u8] = unsafe {
+	                            std::slice::from_raw_parts_mut(new_bytes.cast(), data_len)
+	                        };
+	                        new_slice.copy_from_slice(unaligned_bytes);
+	                        new_slice
+	                    } else {
+	                        unsafe { std::slice::from_raw_parts(ptr as *mut u8, data_len) }
+	                    };
+	                    let (data, _) = match unsafe { [<$name Data>]::try_ref(bytes) } {
+	                        Ok(wrapped) => wrapped,
+	                        Err(e) => error!(concat!("invalid ", stringify!($name), " {:?}, got len {}"), e, bytes.len()),
+	                    };
 
                     $name(data, $crate::type_builder::CachedDatum::FromInput(bytes)).into()
                 }
@@ -619,7 +624,7 @@ macro_rules! ron_inout_funcs_no_lifetime_impl {
     ($name:ident) => {
         impl InOutFuncs for $name {
             fn output(&self, buffer: &mut StringInfo) {
-                use $crate::serialization::{str_to_db_encoding, EncodedStr::*};
+                use $crate::serialization::{EncodedStr::*, str_to_db_encoding};
 
                 let stringified = ron::to_string(&**self).unwrap();
                 match str_to_db_encoding(&stringified) {
@@ -648,7 +653,7 @@ macro_rules! ron_inout_funcs_impl {
     ($name:ident) => {
         impl<'input> InOutFuncs for $name<'input> {
             fn output(&self, buffer: &mut StringInfo) {
-                use $crate::serialization::{str_to_db_encoding, EncodedStr::*};
+                use $crate::serialization::{EncodedStr::*, str_to_db_encoding};
 
                 let stringified = ron::to_string(&**self).unwrap();
                 match str_to_db_encoding(&stringified) {

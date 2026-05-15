@@ -109,7 +109,7 @@ pub fn min_n_float_deserialize(bytes: bytea, _internal: Internal) -> Option<Inte
 #[pg_extern(immutable, parallel_safe)]
 pub fn min_n_float_final(state: Internal) -> MinFloats<'static> {
     let mut state = unsafe { state.to_inner::<MinFloatTransType>().unwrap() };
-    unsafe { &mut *state }.into()
+    (&mut *state).into()
 }
 
 #[pg_extern(name = "into_array", immutable, parallel_safe)]

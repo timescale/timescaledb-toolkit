@@ -39,7 +39,10 @@ pub struct HeartbeatTransState {
 
 impl HeartbeatTransState {
     pub fn new(start: i64, end: i64, interval: i64) -> Self {
-        assert!(end - start > interval, "all points passed to heartbeat agg must occur in the 'agg_duration' interval after 'agg_start'");
+        assert!(
+            end - start > interval,
+            "all points passed to heartbeat agg must occur in the 'agg_duration' interval after 'agg_start'"
+        );
         HeartbeatTransState {
             start,
             end,
@@ -51,7 +54,10 @@ impl HeartbeatTransState {
     }
 
     pub fn insert(&mut self, time: i64) {
-        assert!(time >= self.start && time < self.end, "all points passed to heartbeat agg must occur in the 'agg_duration' interval after 'agg_start'");
+        assert!(
+            time >= self.start && time < self.end,
+            "all points passed to heartbeat agg must occur in the 'agg_duration' interval after 'agg_start'"
+        );
         if self.buffer.len() >= BUFFER_SIZE {
             self.process_batch();
         }
@@ -654,10 +660,10 @@ pub fn heartbeat_final_inner(
                     s.liveness.clone().into_iter().unzip();
 
                 // Trim last interval to end of aggregate's range
-                if let Some(last) = ends.last_mut() {
-                    if *last > s.end {
-                        *last = s.end;
-                    }
+                if let Some(last) = ends.last_mut()
+                    && *last > s.end
+                {
+                    *last = s.end;
                 }
 
                 flatten!(HeartbeatAgg {
@@ -710,10 +716,7 @@ extension_sql!(
     );\n\
 ",
     name = "heartbeat_agg",
-    requires = [
-        heartbeat_trans,
-        heartbeat_final,
-    ],
+    requires = [heartbeat_trans, heartbeat_final,],
 );
 
 extension_sql!(
@@ -1118,7 +1121,10 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            assert_eq!("(version:1,start_time:631162800000000,end_time:631238400000000,last_seen:631237140000000,interval_len:60000000,num_intervals:7,interval_starts:[631162940000000,631178360000000,631179560000000,631180760000000,631184350000000,631236860000000,631237040000000],interval_ends:[631163107000000,631178420000000,631179620000000,631180870000000,631184410000000,631236920000000,631237200000000])", result);
+            assert_eq!(
+                "(version:1,start_time:631162800000000,end_time:631238400000000,last_seen:631237140000000,interval_len:60000000,num_intervals:7,interval_starts:[631162940000000,631178360000000,631179560000000,631180760000000,631184350000000,631236860000000,631237040000000],interval_ends:[631163107000000,631178420000000,631179620000000,631180870000000,631184410000000,631236920000000,631237200000000])",
+                result
+            );
         })
     }
 

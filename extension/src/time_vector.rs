@@ -234,10 +234,11 @@ pub fn timevector_trans_inner(
                 }),
                 Some(state) => state,
             };
-            if let Some(last_point) = state.points.as_slice().last() {
-                if state.is_sorted() && last_point.ts > time {
-                    state.flags ^= FLAG_IS_SORTED;
-                }
+            if let Some(last_point) = state.points.as_slice().last()
+                && state.is_sorted()
+                && last_point.ts > time
+            {
+                state.flags ^= FLAG_IS_SORTED;
             }
             if state.num_points % 8 == 0 {
                 state.null_val.as_owned().push(0);
@@ -618,9 +619,10 @@ mod tests {
                 .unwrap()
                 .unwrap();
 
-            assert_eq!(test_plotly_template,
-"{\"times\": [\"2020-01-01 00:00:00+00\",\"2020-01-02 00:00:00+00\",\"2020-01-03 00:00:00+00\",\"2020-01-04 00:00:00+00\",\"2020-01-05 00:00:00+00\"], \"vals\": [\"30\",\"45\",\"null\",\"55.5\",\"10\"]}"
-		     );
+            assert_eq!(
+                test_plotly_template,
+                "{\"times\": [\"2020-01-01 00:00:00+00\",\"2020-01-02 00:00:00+00\",\"2020-01-03 00:00:00+00\",\"2020-01-04 00:00:00+00\",\"2020-01-05 00:00:00+00\"], \"vals\": [\"30\",\"45\",\"null\",\"55.5\",\"10\"]}"
+            );
             let test_paired_timevals_template = client.update(
                 "SELECT toolkit_experimental.to_text(timevector(time, value),'{{TIMEVALS}}') FROM data",
                 None,
@@ -630,7 +632,8 @@ mod tests {
                 .unwrap();
 
             assert_eq!(
-                test_paired_timevals_template,"[{\"time\": \"2020-01-01 00:00:00+00\", \"val\": 30}, {\"time\": \"2020-01-02 00:00:00+00\", \"val\": 45}, {\"time\": \"2020-01-03 00:00:00+00\", \"val\": null}, {\"time\": \"2020-01-04 00:00:00+00\", \"val\": 55.5}, {\"time\": \"2020-01-05 00:00:00+00\", \"val\": 10} ]"
+                test_paired_timevals_template,
+                "[{\"time\": \"2020-01-01 00:00:00+00\", \"val\": 30}, {\"time\": \"2020-01-02 00:00:00+00\", \"val\": 45}, {\"time\": \"2020-01-03 00:00:00+00\", \"val\": null}, {\"time\": \"2020-01-04 00:00:00+00\", \"val\": 55.5}, {\"time\": \"2020-01-05 00:00:00+00\", \"val\": 10} ]"
             );
 
             let test_user_supplied_template = client
@@ -643,7 +646,8 @@ mod tests {
                 .get_one::<String>().unwrap()
                 .unwrap();
             assert_eq!(
-                test_user_supplied_template,"{\"times\": [2020-01-01 00:00:00+00, 2020-01-02 00:00:00+00, 2020-01-03 00:00:00+00, 2020-01-04 00:00:00+00, 2020-01-05 00:00:00+00], \"vals\": [30, 45, null, 55.5, 10]}"
+                test_user_supplied_template,
+                "{\"times\": [2020-01-01 00:00:00+00, 2020-01-02 00:00:00+00, 2020-01-03 00:00:00+00, 2020-01-04 00:00:00+00, 2020-01-05 00:00:00+00], \"vals\": [30, 45, null, 55.5, 10]}"
             );
             let test_user_supplied_json_template = client.update(
                 "SELECT toolkit_experimental.to_text(timevector(time, value),'{\"times\": {{ TIMES | json_encode() | safe  }}, \"vals\": {{ VALUES | json_encode() | safe }}}') FROM data",
@@ -655,7 +659,7 @@ mod tests {
 
             assert_eq!(
                 test_user_supplied_json_template,
-"{\"times\": [\"2020-01-01 00:00:00+00\",\"2020-01-02 00:00:00+00\",\"2020-01-03 00:00:00+00\",\"2020-01-04 00:00:00+00\",\"2020-01-05 00:00:00+00\"], \"vals\": [\"30\",\"45\",\"null\",\"55.5\",\"10\"]}"
+                "{\"times\": [\"2020-01-01 00:00:00+00\",\"2020-01-02 00:00:00+00\",\"2020-01-03 00:00:00+00\",\"2020-01-04 00:00:00+00\",\"2020-01-05 00:00:00+00\"], \"vals\": [\"30\",\"45\",\"null\",\"55.5\",\"10\"]}"
             );
         })
     }
@@ -698,8 +702,10 @@ mod tests {
                 .unwrap()
                 .unwrap();
 
-            assert_eq!(test_plotly_template,"{\"times\": [\n  \"2020-01-01 00:00:00+00\",\n  \"2020-01-02 00:00:00+00\",\n  \"2020-01-03 00:00:00+00\",\n  \"2020-01-04 00:00:00+00\",\n  \"2020-01-05 00:00:00+00\"\n], \"vals\": [\n  \"30\",\n  \"45\",\n  \"null\",\n  \"55.5\",\n  \"10\"\n]}"
-		     );
+            assert_eq!(
+                test_plotly_template,
+                "{\"times\": [\n  \"2020-01-01 00:00:00+00\",\n  \"2020-01-02 00:00:00+00\",\n  \"2020-01-03 00:00:00+00\",\n  \"2020-01-04 00:00:00+00\",\n  \"2020-01-05 00:00:00+00\"\n], \"vals\": [\n  \"30\",\n  \"45\",\n  \"null\",\n  \"55.5\",\n  \"10\"\n]}"
+            );
         })
     }
 
@@ -813,9 +819,10 @@ mod tests {
             while test {
                 match (func.next(), op.next()) {
                     (None, None) => test = false,
-                    (Some(a), Some(b)) =>
-                        assert_eq!(a[1].value::<&str>(), b[1].value::<&str>()),
-                    _ => panic!("Arrow operator didn't contain the same number of elements as nested function"),
+                    (Some(a), Some(b)) => assert_eq!(a[1].value::<&str>(), b[1].value::<&str>()),
+                    _ => panic!(
+                        "Arrow operator didn't contain the same number of elements as nested function"
+                    ),
                 };
             }
         })

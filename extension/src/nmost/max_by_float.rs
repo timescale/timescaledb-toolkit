@@ -88,10 +88,9 @@ pub fn max_n_by_float_rollup_trans(
 #[pg_extern(immutable, parallel_safe)]
 pub fn max_n_by_float_final(state: Internal) -> Option<MaxByFloats<'static>> {
     unsafe {
-        match state.to_inner::<MaxByFloatTransType>() {
-            Some(state) => Some(state.clone().into()),
-            None => None,
-        }
+        state
+            .to_inner::<MaxByFloatTransType>()
+            .map(|state| state.clone().into())
     }
 }
 

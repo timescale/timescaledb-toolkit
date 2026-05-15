@@ -87,10 +87,9 @@ pub fn max_n_by_int_rollup_trans(
 #[pg_extern(immutable, parallel_safe)]
 pub fn max_n_by_int_final(state: Internal) -> Option<MaxByInts<'static>> {
     unsafe {
-        match state.to_inner::<MaxByIntTransType>() {
-            Some(state) => Some(state.clone().into()),
-            None => None,
-        }
+        state
+            .to_inner::<MaxByIntTransType>()
+            .map(|state| state.clone().into())
     }
 }
 

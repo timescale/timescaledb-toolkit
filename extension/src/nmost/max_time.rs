@@ -104,11 +104,8 @@ pub fn max_n_time_deserialize(bytes: bytea, _internal: Internal) -> Option<Inter
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn max_n_time_final(state: Internal) -> Option<MaxTimes<'static>> {
-    let mut state = unsafe { state.to_inner::<MaxTimeTransType>() };
-    match state {
-        Some(mut state) => Some((&mut *state).into()),
-        None => None,
-    }
+    let state = unsafe { state.to_inner::<MaxTimeTransType>() };
+    state.map(|mut state| (&mut *state).into())
 }
 
 #[pg_extern(name = "into_array", immutable, parallel_safe)]

@@ -87,10 +87,9 @@ pub fn max_n_by_time_rollup_trans(
 #[pg_extern(immutable, parallel_safe)]
 pub fn max_n_by_time_final(state: Internal) -> Option<MaxByTimes<'static>> {
     unsafe {
-        match state.to_inner::<MaxByTimeTransType>() {
-            Some(state) => Some(state.clone().into()),
-            None => None,
-        }
+        state
+            .to_inner::<MaxByTimeTransType>()
+            .map(|state| state.clone().into())
     }
 }
 

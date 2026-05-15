@@ -134,67 +134,66 @@ macro_rules! pg_type_impl {
             impl<$lifetemplate> ::pgrx::datum::PostgresType for $name<$lifetemplate> {}
 
             unsafe impl<$lifetemplate> ::pgrx_sql_entity_graph::metadata::SqlTranslatable for $name<$lifetemplate> {
-                fn argument_sql() -> core::result::Result<::pgrx_sql_entity_graph::metadata::SqlMapping, ::pgrx_sql_entity_graph::metadata::ArgumentError> {
-                    Ok(::pgrx_sql_entity_graph::metadata::SqlMapping::As(String::from(stringify!($name))))
-                }
-
-                fn return_sql() -> core::result::Result<::pgrx_sql_entity_graph::metadata::Returns, ::pgrx_sql_entity_graph::metadata::ReturnsError> {
-                    Ok(::pgrx_sql_entity_graph::metadata::Returns::One(::pgrx_sql_entity_graph::metadata::SqlMapping::As(String::from(stringify!($name)))))
-                }
+                const TYPE_IDENT: &'static str = ::pgrx::pgrx_resolved_type!($name<'_>);
+                const TYPE_ORIGIN: ::pgrx_sql_entity_graph::metadata::TypeOrigin =
+                    ::pgrx_sql_entity_graph::metadata::TypeOrigin::ThisExtension;
+                const ARGUMENT_SQL: core::result::Result<
+                    ::pgrx_sql_entity_graph::metadata::SqlMappingRef,
+                    ::pgrx_sql_entity_graph::metadata::ArgumentError,
+                > = Ok(::pgrx_sql_entity_graph::metadata::SqlMappingRef::As(stringify!($name)));
+                const RETURN_SQL: core::result::Result<
+                    ::pgrx_sql_entity_graph::metadata::ReturnsRef,
+                    ::pgrx_sql_entity_graph::metadata::ReturnsError,
+                > = Ok(::pgrx_sql_entity_graph::metadata::ReturnsRef::One(
+                    ::pgrx_sql_entity_graph::metadata::SqlMappingRef::As(stringify!($name))
+                ));
             }
 
-            ::paste::paste! {
-                #[unsafe(no_mangle)]
-                #[doc(hidden)]
-                #[allow(nonstandard_style, unknown_lints, clippy::no_mangle_with_rust_abi)]
-                pub extern "Rust" fn [<__pgrx_internals_type_ $name>]() -> ::pgrx_sql_entity_graph::SqlGraphEntity {
-                    extern crate alloc;
-                    use alloc::string::ToString;
-                    use ::pgrx::datum::WithTypeIds;
+            const _: () = {
+                const TYPE_IDENT: &str = <$name<'_> as ::pgrx_sql_entity_graph::metadata::SqlTranslatable>::TYPE_IDENT;
+                const FULL_PATH: &str = stringify!($name<'_>);
+                const IN_FN: &str = stringify!([<$name:lower _in>]);
+                const OUT_FN: &str = stringify!([<$name:lower _out>]);
+                const PAYLOAD_LEN: usize =
+                    ::pgrx::pgrx_sql_entity_graph::section::u8_len()
+                    + ::pgrx::pgrx_sql_entity_graph::section::str_len(stringify!($name))
+                    + ::pgrx::pgrx_sql_entity_graph::section::str_len(file!())
+                    + ::pgrx::pgrx_sql_entity_graph::section::u32_len()
+                    + ::pgrx::pgrx_sql_entity_graph::section::str_len(module_path!())
+                    + ::pgrx::pgrx_sql_entity_graph::section::str_len(FULL_PATH)
+                    + ::pgrx::pgrx_sql_entity_graph::section::str_len(TYPE_IDENT)
+                    + ::pgrx::pgrx_sql_entity_graph::section::str_len(IN_FN)
+                    + ::pgrx::pgrx_sql_entity_graph::section::str_len(OUT_FN)
+                    + ::pgrx::pgrx_sql_entity_graph::section::bool_len()
+                    + ::pgrx::pgrx_sql_entity_graph::section::bool_len()
+                    + ::pgrx::pgrx_sql_entity_graph::section::bool_len()
+                    + ::pgrx::pgrx_sql_entity_graph::section::bool_len()
+                    + ::pgrx::pgrx_sql_entity_graph::section::bool_len();
+                const TOTAL_LEN: usize =
+                    ::pgrx::pgrx_sql_entity_graph::section::u32_len() + PAYLOAD_LEN;
 
-                    let mut mappings = Default::default();
-                    <$name<'_> as ::pgrx::datum::WithTypeIds>::register_with_refs(
-                        &mut mappings,
-                        stringify!($name).to_string()
-                    );
-                    ::pgrx::datum::WithSizedTypeIds::<$name<'_>>::register_sized_with_refs(
-                        &mut mappings,
-                        stringify!($name).to_string()
-                    );
-                    ::pgrx::datum::WithArrayTypeIds::<$name<'_>>::register_array_with_refs(
-                        &mut mappings,
-                        stringify!($name).to_string()
-                    );
-                    ::pgrx::datum::WithVarlenaTypeIds::<$name<'_>>::register_varlena_with_refs(
-                        &mut mappings,
-                        stringify!($name).to_string()
-                    );
-
-                    let submission = ::pgrx_sql_entity_graph::PostgresTypeEntity {
-                        name: stringify!($name),
-                        file: file!(),
-                        line: line!(),
-                        module_path: module_path!(),
-                        full_path: core::any::type_name::<$name<'_>>(),
-                        mappings: mappings.into_iter().collect(),
-                        in_fn: stringify!([<$name:lower _in>]),
-                        in_fn_module_path: module_path!().to_string(),
-                        out_fn: stringify!([<$name:lower _out>]),
-                        out_fn_module_path: module_path!().to_string(),
-                        receive_fn: None,
-                        receive_fn_module_path: None,
-                        send_fn: None,
-                        send_fn_module_path: None,
-                        to_sql_config: ::pgrx::pgrx_sql_entity_graph::ToSqlConfigEntity {
-                            enabled: true,
-                            callback: None,
-                            content: None,
-                        },
-                        alignment: None,
-                    };
-                    ::pgrx_sql_entity_graph::SqlGraphEntity::Type(submission)
-                }
-            }
+                ::pgrx::pgrx_sql_entity_graph::__pgrx_schema_entry!(
+                    [<__pgrx_internals_type_ $name>],
+                    TOTAL_LEN,
+                    ::pgrx::pgrx_sql_entity_graph::section::EntryWriter::<{ TOTAL_LEN }>::new()
+                        .u32(PAYLOAD_LEN as u32)
+                        .u8(::pgrx::pgrx_sql_entity_graph::section::ENTITY_TYPE)
+                        .str(stringify!($name))
+                        .str(file!())
+                        .u32(line!())
+                        .str(module_path!())
+                        .str(FULL_PATH)
+                        .str(TYPE_IDENT)
+                        .str(IN_FN)
+                        .str(OUT_FN)
+                        .bool(false)
+                        .bool(false)
+                        .bool(true)
+                        .bool(false)
+                        .bool(false)
+                        .finish()
+                );
+            };
 
             #[doc(hidden)]
             #[::pgrx::pgrx_macros::pg_extern(immutable, parallel_safe)]
@@ -266,7 +265,7 @@ macro_rules! pg_type_impl {
                     //     return self
                     // }
                     let bytes: &'static [u8] = self.to_pg_bytes();
-                    let wrapped = [<$name Data>]::try_ref(bytes).unwrap().0;
+                    let wrapped = unsafe { [<$name Data>]::try_ref(bytes).unwrap().0 };
                     $name(wrapped, Flattened(bytes))
                 }
 
@@ -300,12 +299,12 @@ macro_rules! pg_type_impl {
                         return None;
                     }
 
-                    let mut ptr = pg_sys::pg_detoast_datum_packed(datum.cast_mut_ptr());
+                    let mut ptr = unsafe { pg_sys::pg_detoast_datum_packed(datum.cast_mut_ptr()) };
                     //TODO is there a better way to do this?
-                    if pgrx::varatt_is_1b(ptr) {
-                        ptr = pg_sys::pg_detoast_datum_copy(ptr);
+                    if unsafe { pgrx::varatt_is_1b(ptr) } {
+                        ptr = unsafe { pg_sys::pg_detoast_datum_copy(ptr) };
                     }
-                    let data_len = pgrx::varsize_any(ptr);
+                    let data_len = unsafe { pgrx::varsize_any(ptr) };
 
                     // NOTE: varlena types are aligned according to the `ALIGNMENT` with which they
                     // are configured in CREATE TYPE. We have (historically) not configured the
@@ -323,19 +322,22 @@ macro_rules! pg_type_impl {
                     // long as they're not slices) because it uses `ptr::read_unaligned`.
                     let is_aligned = ptr.cast::<$name>().is_aligned();
                     let bytes = if !is_aligned {
-                        let unaligned_bytes = std::slice::from_raw_parts(ptr as *mut u8, data_len);
-                        let new_bytes = pgrx::pg_sys::palloc0(data_len);
+                        let unaligned_bytes = unsafe { std::slice::from_raw_parts(ptr as *mut u8, data_len) };
+                        let new_bytes = unsafe { pgrx::pg_sys::palloc0(data_len) };
 
                         // Note: we assume that fresh allocations are 8-byte aligned
                         debug_assert!(new_bytes.cast::<$name>().is_aligned());
 
-                        let new_slice: &mut [u8] = std::slice::from_raw_parts_mut(new_bytes.cast(), data_len);
+                        let new_slice: &mut [u8] = unsafe {
+                            std::slice::from_raw_parts_mut(new_bytes.cast(), data_len)
+                        };
+
                         new_slice.copy_from_slice(unaligned_bytes);
                         new_slice
                     } else {
-                        std::slice::from_raw_parts(ptr as *mut u8, data_len)
+                        unsafe { std::slice::from_raw_parts(ptr as *mut u8, data_len) }
                     };
-                    let (data, _) = match [<$name Data>]::try_ref(bytes) {
+                    let (data, _) = match unsafe { [<$name Data>]::try_ref(bytes) } {
                         Ok(wrapped) => wrapped,
                         Err(e) => error!(concat!("invalid ", stringify!($name), " {:?}, got len {}"), e, bytes.len()),
                     };
@@ -451,25 +453,25 @@ macro_rules! pg_type_no_lifetime_impl {
                 #[allow(clippy::missing_safety_doc)]
                 pub unsafe fn cached_datum_or_flatten(&mut self) -> pgrx::pg_sys::Datum {
                     use $crate::type_builder::CachedDatum::*;
-                    match self.1 {
-                        None => {
-                            *self = unsafe { self.0.flatten() };
-                            self.cached_datum_or_flatten()
-                        },
-                        FromInput(bytes) | Flattened(bytes) => pg_sys::Datum::from(bytes.as_ptr()),
-                    }
+	                    match self.1 {
+	                        None => {
+	                            *self = unsafe { self.0.flatten() };
+	                            unsafe { self.cached_datum_or_flatten() }
+	                        },
+	                        FromInput(bytes) | Flattened(bytes) => pg_sys::Datum::from(bytes.as_ptr()),
+	                    }
                 }
             }
 
             impl [<$name Data>] {
                 #[allow(clippy::missing_safety_doc)]
                 pub unsafe fn flatten(&self) -> $name {
-                    use flat_serialize::FlatSerializable as _;
-                    use $crate::type_builder::CachedDatum::Flattened;
-                    let bytes: &'static [u8] = self.to_pg_bytes();
-                    let wrapped = [<$name Data>]::try_ref(bytes).unwrap().0;
-                    $name(wrapped, Flattened(bytes))
-                }
+	                    use flat_serialize::FlatSerializable as _;
+	                    use $crate::type_builder::CachedDatum::Flattened;
+	                    let bytes: &'static [u8] = self.to_pg_bytes();
+	                    let wrapped = unsafe { [<$name Data>]::try_ref(bytes) }.unwrap().0;
+	                    $name(wrapped, Flattened(bytes))
+	                }
 
                 pub fn to_pg_bytes(&self) -> &'static [u8] {
                     use std::{mem::MaybeUninit, slice};
@@ -501,30 +503,32 @@ macro_rules! pg_type_no_lifetime_impl {
                         return None;
                     }
 
-                    let mut ptr = pg_sys::pg_detoast_datum_packed(datum.cast_mut_ptr());
-                    //TODO is there a better way to do this?
-                    if pgrx::varatt_is_1b(ptr) {
-                        ptr = pg_sys::pg_detoast_datum_copy(ptr);
-                    }
-                    let data_len = pgrx::varsize_any(ptr);
+	                    let mut ptr = unsafe { pg_sys::pg_detoast_datum_packed(datum.cast_mut_ptr()) };
+	                    //TODO is there a better way to do this?
+	                    if unsafe { pgrx::varatt_is_1b(ptr) } {
+	                        ptr = unsafe { pg_sys::pg_detoast_datum_copy(ptr) };
+	                    }
+	                    let data_len = unsafe { pgrx::varsize_any(ptr) };
 
-                    let is_aligned = ptr.cast::<$name>().is_aligned();
-                    let bytes = if !is_aligned {
-                        let unaligned_bytes = std::slice::from_raw_parts(ptr as *mut u8, data_len);
-                        let new_bytes = pgrx::pg_sys::palloc0(data_len);
+	                    let is_aligned = ptr.cast::<$name>().is_aligned();
+	                    let bytes = if !is_aligned {
+	                        let unaligned_bytes = unsafe { std::slice::from_raw_parts(ptr as *mut u8, data_len) };
+	                        let new_bytes = unsafe { pgrx::pg_sys::palloc0(data_len) };
 
-                        debug_assert!(new_bytes.cast::<$name>().is_aligned());
+	                        debug_assert!(new_bytes.cast::<$name>().is_aligned());
 
-                        let new_slice: &mut [u8] = std::slice::from_raw_parts_mut(new_bytes.cast(), data_len);
-                        new_slice.copy_from_slice(unaligned_bytes);
-                        new_slice
-                    } else {
-                        std::slice::from_raw_parts(ptr as *mut u8, data_len)
-                    };
-                    let (data, _) = match [<$name Data>]::try_ref(bytes) {
-                        Ok(wrapped) => wrapped,
-                        Err(e) => error!(concat!("invalid ", stringify!($name), " {:?}, got len {}"), e, bytes.len()),
-                    };
+	                        let new_slice: &mut [u8] = unsafe {
+	                            std::slice::from_raw_parts_mut(new_bytes.cast(), data_len)
+	                        };
+	                        new_slice.copy_from_slice(unaligned_bytes);
+	                        new_slice
+	                    } else {
+	                        unsafe { std::slice::from_raw_parts(ptr as *mut u8, data_len) }
+	                    };
+	                    let (data, _) = match unsafe { [<$name Data>]::try_ref(bytes) } {
+	                        Ok(wrapped) => wrapped,
+	                        Err(e) => error!(concat!("invalid ", stringify!($name), " {:?}, got len {}"), e, bytes.len()),
+	                    };
 
                     $name(data, $crate::type_builder::CachedDatum::FromInput(bytes)).into()
                 }
@@ -620,7 +624,7 @@ macro_rules! ron_inout_funcs_no_lifetime_impl {
     ($name:ident) => {
         impl InOutFuncs for $name {
             fn output(&self, buffer: &mut StringInfo) {
-                use $crate::serialization::{str_to_db_encoding, EncodedStr::*};
+                use $crate::serialization::{EncodedStr::*, str_to_db_encoding};
 
                 let stringified = ron::to_string(&**self).unwrap();
                 match str_to_db_encoding(&stringified) {
@@ -649,7 +653,7 @@ macro_rules! ron_inout_funcs_impl {
     ($name:ident) => {
         impl<'input> InOutFuncs for $name<'input> {
             fn output(&self, buffer: &mut StringInfo) {
-                use $crate::serialization::{str_to_db_encoding, EncodedStr::*};
+                use $crate::serialization::{EncodedStr::*, str_to_db_encoding};
 
                 let stringified = ron::to_string(&**self).unwrap();
                 match str_to_db_encoding(&stringified) {

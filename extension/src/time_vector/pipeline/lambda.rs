@@ -33,7 +33,7 @@ pub mod toolkit_experimental {
 
 impl<'input> InOutFuncs for Lambda<'input> {
     fn output(&self, buffer: &mut StringInfo) {
-        use crate::serialization::{str_to_db_encoding, EncodedStr::*};
+        use crate::serialization::{EncodedStr::*, str_to_db_encoding};
 
         let stringified = std::str::from_utf8(self.string.as_slice()).unwrap();
         match str_to_db_encoding(stringified) {
@@ -354,8 +354,8 @@ impl Value {
 
 impl PartialOrd for Value {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        use std::mem::discriminant;
         use Value::*;
+        use std::mem::discriminant;
 
         // XXX `NodeTag` somewhere inside `pg_sys::FunctionCallInfo` triggers
         // `improper_ctypes` lint. The `pgrx` author explains the issue in
@@ -395,8 +395,8 @@ impl PartialOrd for Value {
 
 impl PartialEq for Value {
     fn eq(&self, other: &Self) -> bool {
-        use std::mem::discriminant;
         use Value::*;
+        use std::mem::discriminant;
         unsafe extern "C-unwind" {
             #[allow(improper_ctypes)]
             fn interval_eq(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum;

@@ -122,7 +122,7 @@ pg_type! {
 
 impl<'input> InOutFuncs for TDigest<'input> {
     fn output(&self, buffer: &mut StringInfo) {
-        use crate::serialization::{str_to_db_encoding, EncodedStr::*};
+        use crate::serialization::{EncodedStr::*, str_to_db_encoding};
 
         let stringified = ron::to_string(&**self).unwrap();
         match str_to_db_encoding(&stringified) {

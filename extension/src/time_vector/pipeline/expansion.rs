@@ -145,17 +145,19 @@ pub fn arrow_run_pipeline_then_materialize<'a>(
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
 pub unsafe fn pipeline_materialize_support(input: pgrx::Internal) -> pgrx::Internal {
-    pipeline_support_helper(input, |old_pipeline, new_element| {
-        let new_element = PipelineForceMaterialize::from_polymorphic_datum(
-            new_element,
-            false,
-            pg_sys::Oid::INVALID,
-        )
-        .unwrap();
-        arrow_force_materialize(old_pipeline, new_element)
-            .into_datum()
-            .unwrap()
-    })
+    unsafe {
+        pipeline_support_helper(input, |old_pipeline, new_element| {
+            let new_element = PipelineForceMaterialize::from_polymorphic_datum(
+                new_element,
+                false,
+                pg_sys::Oid::INVALID,
+            )
+            .unwrap();
+            arrow_force_materialize(old_pipeline, new_element)
+                .into_datum()
+                .unwrap()
+        })
+    }
 }
 
 extension_sql!(
@@ -163,7 +165,10 @@ extension_sql!(
 ALTER FUNCTION "arrow_run_pipeline_then_materialize" SUPPORT toolkit_experimental.pipeline_materialize_support;
 "#,
     name = "pipe_then_materialize",
-    requires = [pipeline_materialize_support],
+    requires = [
+        arrow_run_pipeline_then_materialize,
+        pipeline_materialize_support,
+    ],
 );
 
 #[cfg(any(test, feature = "pg_test"))]
@@ -214,7 +219,10 @@ mod tests {
                 .first()
                 .get_one::<String>()
                 .unwrap();
-            assert_eq!(val.unwrap(), "{\"(\\\"2020-01-04 00:00:00+00\\\",25)\",\"(\\\"2020-01-01 00:00:00+00\\\",10)\",\"(\\\"2020-01-03 00:00:00+00\\\",20)\",\"(\\\"2020-01-02 00:00:00+00\\\",15)\",\"(\\\"2020-01-05 00:00:00+00\\\",30)\"}");
+            assert_eq!(
+                val.unwrap(),
+                "{\"(\\\"2020-01-04 00:00:00+00\\\",25)\",\"(\\\"2020-01-01 00:00:00+00\\\",10)\",\"(\\\"2020-01-03 00:00:00+00\\\",20)\",\"(\\\"2020-01-02 00:00:00+00\\\",15)\",\"(\\\"2020-01-05 00:00:00+00\\\",30)\"}"
+            );
         });
     }
 
@@ -311,7 +319,9 @@ mod tests {
                 .value::<String>()
                 .unwrap()
                 .unwrap();
-            assert_eq!(output.trim(), "Output: \
+            assert_eq!(
+                output.trim(),
+                "Output: \
                 arrow_run_pipeline(\
                     arrow_run_pipeline_then_materialize(\
                         timevector('2021-01-01 00:00:00+00'::timestamp with time zone, '0.1'::double precision), \
@@ -322,7 +332,8 @@ mod tests {
                     '(version:1,num_elements:2,elements:[\
                         Arithmetic(function:Abs,rhs:0),Arithmetic(function:Round,rhs:0)\
                     ])'::unstabletimevectorpipeline\
-                )");
+                )"
+            );
         });
     }
 }

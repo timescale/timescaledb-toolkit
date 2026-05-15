@@ -16,7 +16,7 @@ use super::*;
 
 use crate::{flatten, pg_type, ron_inout_funcs};
 
-use fill_to::{fill_to, FillToMethod};
+use fill_to::{FillToMethod, fill_to};
 
 use delta::timevector_delta;
 use sort::sort_timevector;
@@ -165,117 +165,121 @@ pub fn arrow_add_unstable_element<'p>(
     name = "toolkit_pipeline_support"
 )]
 pub unsafe fn pipeline_support(input: Internal) -> Internal {
-    pipeline_support_helper(input, |old_pipeline, new_element| {
-        let new_element = UnstableTimevectorPipeline::from_polymorphic_datum(
-            new_element,
-            false,
-            pg_sys::Oid::INVALID,
-        )
-        .unwrap();
-        arrow_add_unstable_element(old_pipeline, new_element)
-            .into_datum()
-            .unwrap()
-    })
+    unsafe {
+        pipeline_support_helper(input, |old_pipeline, new_element| {
+            let new_element = UnstableTimevectorPipeline::from_polymorphic_datum(
+                new_element,
+                false,
+                pg_sys::Oid::INVALID,
+            )
+            .unwrap();
+            arrow_add_unstable_element(old_pipeline, new_element)
+                .into_datum()
+                .unwrap()
+        })
+    }
 }
 
 pub(crate) unsafe fn pipeline_support_helper(
     input: Internal,
     make_new_pipeline: impl FnOnce(UnstableTimevectorPipeline, pg_sys::Datum) -> pg_sys::Datum,
 ) -> Internal {
-    use std::mem::{size_of, MaybeUninit};
+    unsafe {
+        use std::mem::{MaybeUninit, size_of};
 
-    let input = input.unwrap().unwrap();
-    let input: *mut pg_sys::Node = input.cast_mut_ptr();
-    if !pgrx::is_a(input, pg_sys::NodeTag::T_SupportRequestSimplify) {
-        return no_change();
-    }
+        let input = input.unwrap().unwrap();
+        let input: *mut pg_sys::Node = input.cast_mut_ptr();
+        if !pgrx::is_a(input, pg_sys::NodeTag::T_SupportRequestSimplify) {
+            return no_change();
+        }
 
-    let req: *mut pg_sys::SupportRequestSimplify = input.cast();
+        let req: *mut pg_sys::SupportRequestSimplify = input.cast();
 
-    let final_executor = (*req).fcall;
-    let original_args = PgList::from_pg((*final_executor).args);
-    assert_eq!(original_args.len(), 2);
-    let arg1 = original_args.head().unwrap();
-    let arg2 = original_args.tail().unwrap();
+        let final_executor = (*req).fcall;
+        let original_args = PgList::from_pg((*final_executor).args);
+        assert_eq!(original_args.len(), 2);
+        let arg1 = original_args.head().unwrap();
+        let arg2 = original_args.tail().unwrap();
 
-    let (executor_id, lhs_args) = if is_a(arg1, pg_sys::NodeTag::T_OpExpr) {
-        let old_executor: *mut pg_sys::OpExpr = arg1.cast();
-        ((*old_executor).opfuncid, (*old_executor).args)
-    } else if is_a(arg1, pg_sys::NodeTag::T_FuncExpr) {
-        let old_executor: *mut pg_sys::FuncExpr = arg1.cast();
-        ((*old_executor).funcid, (*old_executor).args)
-    } else {
-        return no_change();
-    };
+        let (executor_id, lhs_args) = if is_a(arg1, pg_sys::NodeTag::T_OpExpr) {
+            let old_executor: *mut pg_sys::OpExpr = arg1.cast();
+            ((*old_executor).opfuncid, (*old_executor).args)
+        } else if is_a(arg1, pg_sys::NodeTag::T_FuncExpr) {
+            let old_executor: *mut pg_sys::FuncExpr = arg1.cast();
+            ((*old_executor).funcid, (*old_executor).args)
+        } else {
+            return no_change();
+        };
 
-    // check old_executor operator fn is 'run_pipeline' above
-    static RUN_PIPELINE_OID: once_cell::sync::OnceCell<pg_sys::Oid> =
-        once_cell::sync::OnceCell::new();
-    match RUN_PIPELINE_OID.get() {
-        Some(oid) => {
-            if executor_id != *oid {
-                return no_change();
+        // check old_executor operator fn is 'run_pipeline' above
+        static RUN_PIPELINE_OID: once_cell::sync::OnceCell<pg_sys::Oid> =
+            once_cell::sync::OnceCell::new();
+        match RUN_PIPELINE_OID.get() {
+            Some(oid) => {
+                if executor_id != *oid {
+                    return no_change();
+                }
+            }
+            None => {
+                let executor_fn = {
+                    let mut flinfo: pg_sys::FmgrInfo = MaybeUninit::zeroed().assume_init();
+                    pg_sys::fmgr_info(executor_id, &mut flinfo);
+                    flinfo.fn_addr
+                };
+                // FIXME this cast should not be necessary; pgrx is defining the
+                //       wrapper functions as
+                //       `unsafe fn(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum`
+                //       instead of
+                //       `unsafe extern "C" fn(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum`
+                //       we'll fix this upstream
+                let expected_executor = arrow_run_pipeline_wrapper as usize;
+                match executor_fn {
+                    None => return no_change(),
+                    // FIXME the direct comparison should work
+                    Some(func) if func as usize != expected_executor => return no_change(),
+                    Some(_) => RUN_PIPELINE_OID.get_or_init(|| executor_id),
+                };
             }
         }
-        None => {
-            let executor_fn = {
-                let mut flinfo: pg_sys::FmgrInfo = MaybeUninit::zeroed().assume_init();
-                pg_sys::fmgr_info(executor_id, &mut flinfo);
-                flinfo.fn_addr
-            };
-            // FIXME this cast should not be necessary; pgrx is defining the
-            //       wrapper functions as
-            //       `unsafe fn(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum`
-            //       instead of
-            //       `unsafe extern "C" fn(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum`
-            //       we'll fix this upstream
-            let expected_executor = arrow_run_pipeline_wrapper as usize;
-            match executor_fn {
-                None => return no_change(),
-                // FIXME the direct comparison should work
-                Some(func) if func as usize != expected_executor => return no_change(),
-                Some(_) => RUN_PIPELINE_OID.get_or_init(|| executor_id),
-            };
+
+        let lhs_args = PgList::from_pg(lhs_args);
+        assert_eq!(lhs_args.len(), 2);
+        let old_series = lhs_args.head().unwrap();
+        let old_const = lhs_args.tail().unwrap();
+
+        if !is_a(old_const, pg_sys::NodeTag::T_Const) {
+            return no_change();
         }
+
+        let old_const: *mut pg_sys::Const = old_const.cast();
+
+        if !is_a(arg2, pg_sys::NodeTag::T_Const) {
+            return no_change();
+        }
+
+        let new_element_const: *mut pg_sys::Const = arg2.cast();
+
+        let old_pipeline = UnstableTimevectorPipeline::from_polymorphic_datum(
+            (*old_const).constvalue,
+            false,
+            pg_sys::Oid::INVALID,
+        )
+        .unwrap();
+        let new_pipeline = make_new_pipeline(old_pipeline, (*new_element_const).constvalue);
+
+        let new_const = pg_sys::palloc(size_of::<pg_sys::Const>()).cast();
+        *new_const = *new_element_const;
+        (*new_const).constvalue = new_pipeline;
+
+        let new_executor = pg_sys::palloc(size_of::<pg_sys::FuncExpr>()).cast();
+        *new_executor = *final_executor;
+        let mut new_executor_args = PgList::new();
+        new_executor_args.push(old_series);
+        new_executor_args.push(new_const.cast());
+        (*new_executor).args = new_executor_args.into_pg();
+
+        Internal::from(Some(pg_sys::Datum::from(new_executor)))
     }
-
-    let lhs_args = PgList::from_pg(lhs_args);
-    assert_eq!(lhs_args.len(), 2);
-    let old_series = lhs_args.head().unwrap();
-    let old_const = lhs_args.tail().unwrap();
-
-    if !is_a(old_const, pg_sys::NodeTag::T_Const) {
-        return no_change();
-    }
-
-    let old_const: *mut pg_sys::Const = old_const.cast();
-
-    if !is_a(arg2, pg_sys::NodeTag::T_Const) {
-        return no_change();
-    }
-
-    let new_element_const: *mut pg_sys::Const = arg2.cast();
-
-    let old_pipeline = UnstableTimevectorPipeline::from_polymorphic_datum(
-        (*old_const).constvalue,
-        false,
-        pg_sys::Oid::INVALID,
-    )
-    .unwrap();
-    let new_pipeline = make_new_pipeline(old_pipeline, (*new_element_const).constvalue);
-
-    let new_const = pg_sys::palloc(size_of::<pg_sys::Const>()).cast();
-    *new_const = *new_element_const;
-    (*new_const).constvalue = new_pipeline;
-
-    let new_executor = pg_sys::palloc(size_of::<pg_sys::FuncExpr>()).cast();
-    *new_executor = *final_executor;
-    let mut new_executor_args = PgList::new();
-    new_executor_args.push(old_series);
-    new_executor_args.push(new_const.cast());
-    (*new_executor).args = new_executor_args.into_pg();
-
-    Internal::from(Some(pg_sys::Datum::from(new_executor)))
 }
 
 // support functions are spec'd as returning NULL pointer if no simplification
@@ -295,7 +299,11 @@ ALTER FUNCTION "arrow_run_pipeline" SUPPORT toolkit_experimental.toolkit_pipelin
 ALTER FUNCTION "arrow_add_unstable_element" SUPPORT toolkit_experimental.toolkit_pipeline_support;
 "#,
     name = "pipe_support",
-    requires = [pipeline_support],
+    requires = [
+        arrow_run_pipeline,
+        arrow_add_unstable_element,
+        pipeline_support,
+    ],
 );
 
 // TODO is (immutable, parallel_safe) correct?
@@ -493,7 +501,9 @@ mod tests {
                 .get_datum_by_ordinal(1).unwrap()
                 .value::<String>().unwrap().unwrap();
             // check that it's executing as if we had input `timevector -> (round() -> abs())`
-            assert_eq!(output.trim(), "Output: \
+            assert_eq!(
+                output.trim(),
+                "Output: \
                 arrow_run_pipeline(\
                     timevector('2021-01-01 00:00:00+00'::timestamp with time zone, '0.1'::double precision), \
                    '(version:1,num_elements:3,elements:[\
@@ -501,7 +511,8 @@ mod tests {
                         Arithmetic(function:Abs,rhs:0),\
                         Arithmetic(function:Round,rhs:0)\
                     ])'::unstabletimevectorpipeline\
-                )");
+                )"
+            );
         });
     }
 }

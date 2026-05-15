@@ -1,11 +1,11 @@
 use std::{
     ffi::{CStr, CString},
-    mem::{align_of, size_of, MaybeUninit},
+    mem::{MaybeUninit, align_of, size_of},
     os::raw::c_char,
     slice,
 };
 
-use flat_serialize::{impl_flat_serializable, FlatSerializable, WrapErr};
+use flat_serialize::{FlatSerializable, WrapErr, impl_flat_serializable};
 
 use serde::{Deserialize, Serialize};
 

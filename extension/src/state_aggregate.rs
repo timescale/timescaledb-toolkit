@@ -21,7 +21,7 @@ use crate::{
     flatten,
     palloc::{Inner, Internal},
     pg_type,
-    raw::{bytea, TimestampTz},
+    raw::{TimestampTz, bytea},
     ron_inout_funcs,
 };
 
@@ -345,7 +345,9 @@ pub mod toolkit_experimental {
                             time: interval_start,
                         }
                     } else {
-                        pgrx::error!("unable to interpolate interval on state aggregate where previous agg has no data")
+                        pgrx::error!(
+                            "unable to interpolate interval on state aggregate where previous agg has no data"
+                        )
                     }
                 }
                 _ => Record {
@@ -1112,7 +1114,9 @@ pub fn arrow_state_agg_interpolated_duration_in_int<'a>(
 }
 
 fn duration_in_bad_args_inner() -> ! {
-    panic!("The start and interval parameters cannot be used for duration_in with a compact state aggregate")
+    panic!(
+        "The start and interval parameters cannot be used for duration_in with a compact state aggregate"
+    )
 }
 
 #[allow(unused_variables)] // can't underscore-prefix since argument names are used by pgrx

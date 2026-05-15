@@ -109,7 +109,8 @@ pub fn max_n_float_deserialize(bytes: bytea, _internal: Internal) -> Option<Inte
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn max_n_float_final(state: Internal) -> MaxFloats<'static> {
-    unsafe { &mut *state.to_inner::<MaxFloatTransType>().unwrap() }.into()
+    let mut state = unsafe { state.to_inner::<MaxFloatTransType>().unwrap() };
+    (&mut *state).into()
 }
 
 #[pg_extern(name = "into_array", immutable, parallel_safe)]

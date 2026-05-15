@@ -420,7 +420,7 @@ fn flatten_log(hyperloglog: &mut HLL<HashableDatum, DatumHashBuilder>) -> HyperL
     // we need to flatten the vector to a single buffer that contains
     // both the size, the data, and the varlen header
 
-    let flat = match hyperloglog.to_parts() {
+    match hyperloglog.to_parts() {
         HyperLogLogStorage::Sparse(sparse) => unsafe {
             flatten!(HyperLogLog {
                 log: Storage::Sparse {
@@ -444,8 +444,7 @@ fn flatten_log(hyperloglog: &mut HLL<HashableDatum, DatumHashBuilder>) -> HyperL
                 }
             })
         },
-    };
-    flat
+    }
 }
 
 fn unflatten_log(hyperloglog: HyperLogLog) -> HLL<HashableDatum, DatumHashBuilder> {
@@ -983,7 +982,15 @@ mod tests {
                     .unwrap();
 
                 let error = (estimate as f64 / cardinality as f64).abs() - 1.;
-                assert!(error < MAX_TRIAL_ERROR, "hyperloglog with {} buckets on cardinality {} gave a result of {}.  Resulting error {} exceeds max allowed ({})", 2^precision, cardinality, estimate, error, MAX_TRIAL_ERROR);
+                assert!(
+                    error < MAX_TRIAL_ERROR,
+                    "hyperloglog with {} buckets on cardinality {} gave a result of {}.  Resulting error {} exceeds max allowed ({})",
+                    2 ^ precision,
+                    cardinality,
+                    estimate,
+                    error,
+                    MAX_TRIAL_ERROR
+                );
             }
         });
     }

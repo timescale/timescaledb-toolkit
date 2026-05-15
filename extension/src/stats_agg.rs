@@ -14,9 +14,9 @@ use crate::{
     pg_type, ron_inout_funcs,
 };
 
+use stats_agg::XYPair;
 pub use stats_agg::stats1d::StatsSummary1D as InternalStatsSummary1D;
 pub use stats_agg::stats2d::StatsSummary2D as InternalStatsSummary2D;
-use stats_agg::XYPair;
 
 use crate::stats_agg::Method::*;
 use stats_agg::TwoFloat;
@@ -691,9 +691,9 @@ extension_sql!(
         stats1d_combine,
         stats1d_trans_serialize,
         stats1d_trans_deserialize,
-        stats1d_trans,
-        stats1d_inv_trans,
-        stats1d_final
+        stats1d_tf_trans,
+        stats1d_tf_inv_trans,
+        stats1d_tf_final
     ],
 );
 
@@ -1559,7 +1559,10 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            assert_eq!(test, "(version:1,n:3,sx:NaN,sx2:NaN,sx3:NaN,sx4:NaN,sy:60,sy2:200,sy3:0,sy4:20000,sxy:NaN)");
+            assert_eq!(
+                test,
+                "(version:1,n:3,sx:NaN,sx2:NaN,sx3:NaN,sx4:NaN,sy:60,sy2:200,sy3:0,sy4:20000,sxy:NaN)"
+            );
 
             client
                 .update("INSERT INTO test_table VALUES (40, 'Inf');", None, &[])
@@ -1575,7 +1578,10 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            assert_eq!(test, "(version:1,n:4,sx:NaN,sx2:NaN,sx3:NaN,sx4:NaN,sy:inf,sy2:NaN,sy3:NaN,sy4:NaN,sxy:NaN)");
+            assert_eq!(
+                test,
+                "(version:1,n:4,sx:NaN,sx2:NaN,sx3:NaN,sx4:NaN,sy:inf,sy2:NaN,sy3:NaN,sy4:NaN,sxy:NaN)"
+            );
         });
     }
 
@@ -1670,9 +1676,16 @@ mod tests {
         }
 
         pub fn failed_msg(&self, dump_vals: bool) -> String {
-            format!("Failed after {} successful iterations, run using {} values generated from seed {}{}", self.passed, self.x_values.len(), self.seed,
+            format!(
+                "Failed after {} successful iterations, run using {} values generated from seed {}{}",
+                self.passed,
+                self.x_values.len(),
+                self.seed,
                 if dump_vals {
-                    format!("\nX-values:\n{:?}\n\nY-values:\n{:?}", self.x_values, self.y_values)
+                    format!(
+                        "\nX-values:\n{:?}\n\nY-values:\n{:?}",
+                        self.x_values, self.y_values
+                    )
                 } else {
                     "".to_string()
                 }
@@ -1744,15 +1757,21 @@ mod tests {
     }
 
     fn pg1d_aggx(agg: &str) -> String {
-        format!("SELECT {agg}(test_x)::float, (SELECT {agg}(test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3)::float FROM test_table")
+        format!(
+            "SELECT {agg}(test_x)::float, (SELECT {agg}(test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3)::float FROM test_table"
+        )
     }
 
     fn pg1d_aggy(agg: &str) -> String {
-        format!("SELECT {agg}(test_y), (SELECT {agg}(test_y) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3) FROM test_table")
+        format!(
+            "SELECT {agg}(test_y), (SELECT {agg}(test_y) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3) FROM test_table"
+        )
     }
 
     fn pg2d_agg(agg: &str) -> String {
-        format!("SELECT {agg}(test_y, test_x)::float, (SELECT {agg}(test_y, test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3)::float FROM test_table")
+        format!(
+            "SELECT {agg}(test_y, test_x)::float, (SELECT {agg}(test_y, test_x) OVER (ORDER BY test_x ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING) FROM test_table LIMIT 1 OFFSET 3)::float FROM test_table"
+        )
     }
 
     fn tk1d_agg(agg: &str) -> String {
@@ -1796,11 +1815,15 @@ mod tests {
     }
 
     fn pg_moment_pop_query(moment: i32, column: &str) -> String {
-        format!("select sum(({column} - a.avg)^{moment}) / count({column}) / (stddev_pop({column})^{moment}) from test_table, (select avg({column}) from test_table) a")
+        format!(
+            "select sum(({column} - a.avg)^{moment}) / count({column}) / (stddev_pop({column})^{moment}) from test_table, (select avg({column}) from test_table) a"
+        )
     }
 
     fn pg_moment_samp_query(moment: i32, column: &str) -> String {
-        format!("select sum(({column} - a.avg)^{moment}) / (count({column}) - 1) / (stddev_samp({column})^{moment}) from test_table, (select avg({column}) from test_table) a")
+        format!(
+            "select sum(({column} - a.avg)^{moment}) / (count({column}) - 1) / (stddev_samp({column})^{moment}) from test_table, (select avg({column}) from test_table) a"
+        )
     }
 
     fn test_aggs(state: &mut TestState) {
@@ -2247,11 +2270,13 @@ INSERT INTO prices (
                 "SELECT stddev(data.stats_agg) FROM (SELECT stats_agg(price) OVER (ORDER BY ts RANGE '50 minutes' PRECEDING) FROM prices) data",
                 None, &[]
             ).unwrap();
-            assert!(vals.next().unwrap()[1]
-                .value::<f64>()
-                .unwrap()
-                .unwrap()
-                .is_nan());
+            assert!(
+                vals.next().unwrap()[1]
+                    .value::<f64>()
+                    .unwrap()
+                    .unwrap()
+                    .is_nan()
+            );
             assert!(vals.next().unwrap()[1].value::<f64>().unwrap().is_some());
             assert!(vals.next().unwrap()[1].value::<f64>().unwrap().is_some());
 

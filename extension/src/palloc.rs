@@ -7,10 +7,10 @@ use std::{
 use pgrx::*;
 
 pub unsafe fn in_memory_context<T, F: FnOnce() -> T>(mctx: pg_sys::MemoryContext, f: F) -> T {
-    let prev_ctx = pg_sys::CurrentMemoryContext;
-    pg_sys::CurrentMemoryContext = mctx;
+    let prev_ctx = unsafe { pg_sys::CurrentMemoryContext };
+    unsafe { pg_sys::CurrentMemoryContext = mctx };
     let t = f();
-    pg_sys::CurrentMemoryContext = prev_ctx;
+    unsafe { pg_sys::CurrentMemoryContext = prev_ctx };
     t
 }
 
@@ -131,30 +131,36 @@ static ALLOCATOR: PanickingAllocator = PanickingAllocator;
 
 unsafe impl GlobalAlloc for PanickingAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let p = System.alloc(layout);
-        if p.is_null() {
-            panic!("Out of memory")
+        unsafe {
+            let p = System.alloc(layout);
+            if p.is_null() {
+                panic!("Out of memory")
+            }
+            p
         }
-        p
     }
 
     unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
-        System.dealloc(ptr, layout)
+        unsafe { System.dealloc(ptr, layout) }
     }
 
     unsafe fn alloc_zeroed(&self, layout: Layout) -> *mut u8 {
-        let p = System.alloc_zeroed(layout);
-        if p.is_null() {
-            panic!("Out of memory")
+        unsafe {
+            let p = System.alloc_zeroed(layout);
+            if p.is_null() {
+                panic!("Out of memory")
+            }
+            p
         }
-        p
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        let p = System.realloc(ptr, layout, new_size);
-        if p.is_null() {
-            panic!("Out of memory")
+        unsafe {
+            let p = System.realloc(ptr, layout, new_size);
+            if p.is_null() {
+                panic!("Out of memory")
+            }
+            p
         }
-        p
     }
 }

@@ -20,7 +20,7 @@ use crate::{
 
 use tspoint::TSPoint;
 
-use counter_agg::{range::I64Range, CounterSummaryBuilder, MetricSummary};
+use counter_agg::{CounterSummaryBuilder, MetricSummary, range::I64Range};
 use stats_agg::stats2d::StatsSummary2D;
 
 use self::Method::*;

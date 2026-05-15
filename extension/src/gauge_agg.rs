@@ -2,7 +2,7 @@ use pgrx::*;
 
 use serde::{Deserialize, Serialize};
 
-use counter_agg::{range::I64Range, GaugeSummaryBuilder, MetricSummary};
+use counter_agg::{GaugeSummaryBuilder, MetricSummary, range::I64Range};
 use flat_serialize_macro::FlatSerializable;
 use stats_agg::stats2d::StatsSummary2D;
 use tspoint::TSPoint;
@@ -18,7 +18,7 @@ use crate::{
     flatten,
     palloc::{Inner, Internal, InternalAsValue, ToInternal},
     pg_type,
-    range::{get_range, I64RangeWrapper},
+    range::{I64RangeWrapper, get_range},
     raw::{bytea, tstzrange},
     ron_inout_funcs,
 };
@@ -1118,13 +1118,15 @@ mod tests {
             client.update(stmt, None, &[]).unwrap();
 
             let stmt = "SELECT toolkit_experimental.gauge_agg(ts, val) FROM test";
-            assert!(client
-                .update(stmt, None, &[])
-                .unwrap()
-                .first()
-                .get_one::<GaugeSummary>()
-                .unwrap()
-                .is_none());
+            assert!(
+                client
+                    .update(stmt, None, &[])
+                    .unwrap()
+                    .first()
+                    .get_one::<GaugeSummary>()
+                    .unwrap()
+                    .is_none()
+            );
         });
     }
 }

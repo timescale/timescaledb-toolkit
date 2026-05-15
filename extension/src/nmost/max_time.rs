@@ -104,7 +104,8 @@ pub fn max_n_time_deserialize(bytes: bytea, _internal: Internal) -> Option<Inter
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn max_n_time_final(state: Internal) -> MaxTimes<'static> {
-    unsafe { &mut *state.to_inner::<MaxTimeTransType>().unwrap() }.into()
+    let mut state = unsafe { state.to_inner::<MaxTimeTransType>().unwrap() };
+    (&mut *state).into()
 }
 
 #[pg_extern(name = "into_array", immutable, parallel_safe)]
@@ -232,7 +233,10 @@ mod tests {
                 .first()
                 .get_one::<&str>()
                 .unwrap();
-            assert_eq!(result.unwrap(), "{\"2020-04-09 00:00:00+00\",\"2020-04-08 00:00:00+00\",\"2020-04-07 00:00:00+00\",\"2020-04-06 00:00:00+00\",\"2020-04-05 00:00:00+00\"}");
+            assert_eq!(
+                result.unwrap(),
+                "{\"2020-04-09 00:00:00+00\",\"2020-04-08 00:00:00+00\",\"2020-04-07 00:00:00+00\",\"2020-04-06 00:00:00+00\",\"2020-04-05 00:00:00+00\"}"
+            );
             let result = client
                 .update(
                     "SELECT (max_n(val, 5)->into_array())::TEXT from data",
@@ -243,7 +247,10 @@ mod tests {
                 .first()
                 .get_one::<&str>()
                 .unwrap();
-            assert_eq!(result.unwrap(), "{\"2020-04-09 00:00:00+00\",\"2020-04-08 00:00:00+00\",\"2020-04-07 00:00:00+00\",\"2020-04-06 00:00:00+00\",\"2020-04-05 00:00:00+00\"}");
+            assert_eq!(
+                result.unwrap(),
+                "{\"2020-04-09 00:00:00+00\",\"2020-04-08 00:00:00+00\",\"2020-04-07 00:00:00+00\",\"2020-04-06 00:00:00+00\",\"2020-04-05 00:00:00+00\"}"
+            );
 
             // Test into_values
             let mut result = client
@@ -294,7 +301,10 @@ mod tests {
                         SELECT into_array(rollup(agg))::TEXT FROM aggs",
                         None, &[],
                     ).unwrap().first().get_one::<&str>().unwrap();
-            assert_eq!(result.unwrap(), "{\"2020-04-09 00:00:00+00\",\"2020-04-08 00:00:00+00\",\"2020-04-07 00:00:00+00\",\"2020-04-06 00:00:00+00\",\"2020-04-05 00:00:00+00\"}");
+            assert_eq!(
+                result.unwrap(),
+                "{\"2020-04-09 00:00:00+00\",\"2020-04-08 00:00:00+00\",\"2020-04-07 00:00:00+00\",\"2020-04-06 00:00:00+00\",\"2020-04-05 00:00:00+00\"}"
+            );
         })
     }
 }

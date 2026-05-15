@@ -1,10 +1,10 @@
 use std::{
     ffi::{CStr, CString},
-    mem::{align_of, size_of, MaybeUninit},
+    mem::{MaybeUninit, align_of, size_of},
     slice,
 };
 
-use flat_serialize::{impl_flat_serializable, FlatSerializable, WrapErr};
+use flat_serialize::{FlatSerializable, WrapErr, impl_flat_serializable};
 
 use serde::{Deserialize, Serialize};
 
@@ -309,9 +309,11 @@ impl<'de> Deserialize<'de> for PgTypId {
 
 unsafe fn get_struct<T>(tuple: pg_sys::HeapTuple) -> *mut T {
     //((char *) ((TUP)->t_data) + (TUP)->t_data->t_hoff)
-    let t_data: *mut u8 = (*tuple).t_data.cast();
-    let t_hoff = (*(*tuple).t_data).t_hoff;
-    t_data.add(t_hoff as usize).cast()
+    unsafe {
+        let t_data: *mut u8 = (*tuple).t_data.cast();
+        let t_hoff = (*(*tuple).t_data).t_hoff;
+        t_data.add(t_hoff as usize).cast()
+    }
 }
 
 #[cfg(any(test, feature = "pg_test"))]

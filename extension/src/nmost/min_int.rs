@@ -95,7 +95,8 @@ pub fn min_n_int_deserialize(bytes: bytea, _internal: Internal) -> Option<Intern
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn min_n_int_final(state: Internal) -> MinInts<'static> {
-    unsafe { &mut *state.to_inner::<MinIntTransType>().unwrap() }.into()
+    let mut state = unsafe { state.to_inner::<MinIntTransType>().unwrap() };
+    (&mut *state).into()
 }
 
 #[pg_extern(name = "into_array", immutable, parallel_safe)]

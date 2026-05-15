@@ -13,11 +13,7 @@ fn saturating_add(x: i32, y: i32) -> i32 {
 fn saturating_add_pos(x: i32, y: i32) -> i32 {
     // check to see if abs of y is greater than the abs of x?
     let result = x.saturating_add(y);
-    if result > 0 {
-        result
-    } else {
-        0
-    }
+    if result > 0 { result } else { 0 }
 }
 
 /// Computes x-y, saturating at the numeric bounds instead of overflowing.
@@ -29,11 +25,7 @@ fn saturating_sub(x: i32, y: i32) -> i32 {
 /// Computes x-y, saturating at 0 for the minimum bound instead of i32::MIN
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
 fn saturating_sub_pos(x: i32, y: i32) -> i32 {
-    if y > x {
-        0
-    } else {
-        x.saturating_sub(y)
-    }
+    if y > x { 0 } else { x.saturating_sub(y) }
 }
 
 /// Computes x*y, saturating at the numeric bounds instead of overflowing

@@ -6,9 +6,9 @@ use std::{
 };
 
 use serde::{
+    Deserialize, Serialize,
     de::{SeqAccess, Visitor},
     ser::SerializeSeq,
-    Deserialize, Serialize,
 };
 
 use pg_sys::{Datum, Oid};
@@ -17,25 +17,27 @@ use pgrx::*;
 use crate::serialization::{PgCollationId, ShortTypeId};
 
 pub(crate) unsafe fn deep_copy_datum(datum: Datum, typoid: Oid) -> Datum {
-    let tentry = pg_sys::lookup_type_cache(typoid, 0_i32);
-    if (*tentry).typbyval {
+    let tentry = unsafe { pg_sys::lookup_type_cache(typoid, 0_i32) };
+    if unsafe { (*tentry).typbyval } {
         datum
-    } else if (*tentry).typlen > 0 {
+    } else if unsafe { (*tentry).typlen } > 0 {
         // only varlena's can be toasted, manually copy anything with len >0
-        let size = (*tentry).typlen as usize;
-        let copy = pg_sys::palloc0(size);
-        std::ptr::copy(datum.cast_mut_ptr(), copy as *mut u8, size);
+        let size = unsafe { (*tentry).typlen } as usize;
+        let copy = unsafe { pg_sys::palloc0(size) };
+        unsafe { std::ptr::copy(datum.cast_mut_ptr(), copy as *mut u8, size) };
         pg_sys::Datum::from(copy)
     } else {
-        pg_sys::Datum::from(pg_sys::pg_detoast_datum_copy(datum.cast_mut_ptr()))
+        pg_sys::Datum::from(unsafe { pg_sys::pg_detoast_datum_copy(datum.cast_mut_ptr()) })
     }
 }
 
 // If datum is an alloced type, free the associated memory
 pub(crate) unsafe fn free_datum(datum: Datum, typoid: Oid) {
-    let tentry = pg_sys::lookup_type_cache(typoid, 0_i32);
-    if !(*tentry).typbyval {
-        pg_sys::pfree(datum.cast_mut_ptr())
+    unsafe {
+        let tentry = pg_sys::lookup_type_cache(typoid, 0_i32);
+        if !(*tentry).typbyval {
+            pg_sys::pfree(datum.cast_mut_ptr())
+        }
     }
 }
 
@@ -136,17 +138,18 @@ pub(crate) struct DatumHashBuilder {
 
 impl DatumHashBuilder {
     pub(crate) unsafe fn from_type_id(type_id: pg_sys::Oid, collation: Option<Oid>) -> Self {
-        let entry =
-            pg_sys::lookup_type_cache(type_id, pg_sys::TYPECACHE_HASH_EXTENDED_PROC_FINFO as _);
-        Self::from_type_cache_entry(entry, collation)
+        let entry = unsafe {
+            pg_sys::lookup_type_cache(type_id, pg_sys::TYPECACHE_HASH_EXTENDED_PROC_FINFO as _)
+        };
+        unsafe { Self::from_type_cache_entry(entry, collation) }
     }
 
     pub(crate) unsafe fn from_type_cache_entry(
         tentry: *const pg_sys::TypeCacheEntry,
         collation: Option<Oid>,
     ) -> Self {
-        let flinfo = if (*tentry).hash_extended_proc_finfo.fn_addr.is_some() {
-            &(*tentry).hash_extended_proc_finfo
+        let flinfo = if unsafe { (*tentry).hash_extended_proc_finfo.fn_addr.is_some() } {
+            unsafe { &(*tentry).hash_extended_proc_finfo }
         } else {
             pgrx::error!("no hash function");
         };
@@ -154,23 +157,25 @@ impl DatumHashBuilder {
         // 1 argument for the key, 1 argument for the seed
         let size =
             size_of::<pg_sys::FunctionCallInfoBaseData>() + size_of::<pg_sys::NullableDatum>() * 2;
-        let info = pg_sys::palloc0(size) as pg_sys::FunctionCallInfo;
+        let info = unsafe { pg_sys::palloc0(size) } as pg_sys::FunctionCallInfo;
 
-        (*info).flinfo = flinfo as *const pg_sys::FmgrInfo as *mut pg_sys::FmgrInfo;
-        (*info).context = std::ptr::null_mut();
-        (*info).resultinfo = std::ptr::null_mut();
-        (*info).fncollation = (*tentry).typcollation;
-        (*info).isnull = false;
-        (*info).nargs = 1;
+        unsafe {
+            (*info).flinfo = flinfo as *const pg_sys::FmgrInfo as *mut pg_sys::FmgrInfo;
+            (*info).context = std::ptr::null_mut();
+            (*info).resultinfo = std::ptr::null_mut();
+            (*info).fncollation = (*tentry).typcollation;
+            (*info).isnull = false;
+            (*info).nargs = 1;
+        }
 
         let collation = match collation {
             Some(collation) => collation,
-            None => (*tentry).typcollation,
+            None => unsafe { (*tentry).typcollation },
         };
 
         Self {
             info,
-            type_id: (*tentry).type_id,
+            type_id: unsafe { (*tentry).type_id },
             collation,
         }
     }

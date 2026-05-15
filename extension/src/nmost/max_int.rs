@@ -103,7 +103,8 @@ pub fn max_n_int_deserialize(bytes: bytea, _internal: Internal) -> Option<Intern
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn max_n_int_final(state: Internal) -> MaxInts<'static> {
-    unsafe { &mut *state.to_inner::<MaxIntTransType>().unwrap() }.into()
+    let mut state = unsafe { state.to_inner::<MaxIntTransType>().unwrap() };
+    (&mut *state).into()
 }
 
 #[pg_extern(name = "into_array", immutable, parallel_safe)]

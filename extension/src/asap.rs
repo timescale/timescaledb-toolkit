@@ -65,10 +65,10 @@ pub fn asap_trans_internal(
 impl ASAPTransState {
     fn add_point(&mut self, point: TSPoint) {
         self.ts.push(point);
-        if let Some(window) = self.ts.windows(2).last() {
-            if window[0].ts > window[1].ts {
-                self.sorted = false
-            }
+        if let Some(window) = self.ts.windows(2).last()
+            && window[0].ts > window[1].ts
+        {
+            self.sorted = false
         }
     }
 }

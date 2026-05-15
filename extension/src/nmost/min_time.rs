@@ -95,7 +95,8 @@ pub fn min_n_time_deserialize(bytes: bytea, _internal: Internal) -> Option<Inter
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn min_n_time_final(state: Internal) -> MinTimes<'static> {
-    unsafe { &mut *state.to_inner::<MinTimeTransType>().unwrap() }.into()
+    let mut state = unsafe { state.to_inner::<MinTimeTransType>().unwrap() };
+    (&mut *state).into()
 }
 
 #[pg_extern(name = "into_array", immutable, parallel_safe)]
@@ -223,7 +224,10 @@ mod tests {
                 .first()
                 .get_one::<&str>()
                 .unwrap();
-            assert_eq!(result.unwrap(), "{\"2020-01-01 00:00:00+00\",\"2020-01-02 00:00:00+00\",\"2020-01-03 00:00:00+00\",\"2020-01-04 00:00:00+00\",\"2020-01-05 00:00:00+00\"}");
+            assert_eq!(
+                result.unwrap(),
+                "{\"2020-01-01 00:00:00+00\",\"2020-01-02 00:00:00+00\",\"2020-01-03 00:00:00+00\",\"2020-01-04 00:00:00+00\",\"2020-01-05 00:00:00+00\"}"
+            );
             let result = client
                 .update(
                     "SELECT (min_n(val, 5)->into_array())::TEXT from data",
@@ -234,7 +238,10 @@ mod tests {
                 .first()
                 .get_one::<&str>()
                 .unwrap();
-            assert_eq!(result.unwrap(), "{\"2020-01-01 00:00:00+00\",\"2020-01-02 00:00:00+00\",\"2020-01-03 00:00:00+00\",\"2020-01-04 00:00:00+00\",\"2020-01-05 00:00:00+00\"}");
+            assert_eq!(
+                result.unwrap(),
+                "{\"2020-01-01 00:00:00+00\",\"2020-01-02 00:00:00+00\",\"2020-01-03 00:00:00+00\",\"2020-01-04 00:00:00+00\",\"2020-01-05 00:00:00+00\"}"
+            );
 
             // Test into_values
             let mut result = client
@@ -285,7 +292,10 @@ mod tests {
                         SELECT into_array(rollup(agg))::TEXT FROM aggs",
                         None, &[],
                     ).unwrap().first().get_one::<&str>().unwrap();
-            assert_eq!(result.unwrap(), "{\"2020-01-01 00:00:00+00\",\"2020-01-02 00:00:00+00\",\"2020-01-03 00:00:00+00\",\"2020-01-04 00:00:00+00\",\"2020-01-05 00:00:00+00\"}");
+            assert_eq!(
+                result.unwrap(),
+                "{\"2020-01-01 00:00:00+00\",\"2020-01-02 00:00:00+00\",\"2020-01-03 00:00:00+00\",\"2020-01-04 00:00:00+00\",\"2020-01-05 00:00:00+00\"}"
+            );
         })
     }
 }

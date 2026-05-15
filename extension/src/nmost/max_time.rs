@@ -311,44 +311,45 @@ mod tests {
     #[pg_test]
     fn max_time_final_returns_null_on_empty_input() {
         Spi::connect_mut(|client| {
-            client.update(
-                "CREATE TABLE data(val TIMESTAMPTZ);",
-                None,
-                &[],
-            ).unwrap();
+            client
+                .update("CREATE TABLE data(val TIMESTAMPTZ);", None, &[])
+                .unwrap();
 
-            let mut result = client.update(
-                "SELECT max_n(val, 1) FROM data",
-                None,
-                &[],
-            ).unwrap();
+            let mut result = client
+                .update("SELECT max_n(val, 1) FROM data", None, &[])
+                .unwrap();
 
-            assert!(result.next().unwrap()[1].value::<String>().unwrap().is_none());
+            assert!(result.next().unwrap()[1]
+                .value::<String>()
+                .unwrap()
+                .is_none());
         })
     }
 
     #[pg_test]
     fn max_time_empty_returns_null() {
         Spi::connect_mut(|client| {
-            client.update(
-                "CREATE TABLE data(val TIMESTAMPTZ, category INT);",
-                None,
-                &[],
-            ).unwrap();
+            client
+                .update(
+                    "CREATE TABLE data(val TIMESTAMPTZ, category INT);",
+                    None,
+                    &[],
+                )
+                .unwrap();
 
-            let mut result = client.update(
-                "SELECT max_n(val, 1)->into_array() FROM data",
-                None,
-                &[],
-            ).unwrap();
+            let mut result = client
+                .update("SELECT max_n(val, 1)->into_array() FROM data", None, &[])
+                .unwrap();
 
             assert!(result.next().unwrap()[1].value::<&str>().unwrap().is_none());
 
-            let mut result = client.update(
-                "SELECT (max_n(val, 1)->into_values())::TEXT FROM data",
-                None,
-                &[],
-            ).unwrap();
+            let mut result = client
+                .update(
+                    "SELECT (max_n(val, 1)->into_values())::TEXT FROM data",
+                    None,
+                    &[],
+                )
+                .unwrap();
 
             assert!(result.next().is_none());
         })
@@ -357,17 +358,21 @@ mod tests {
     #[pg_test]
     fn max_time_into_values_empty_returns_no_rows() {
         Spi::connect_mut(|client| {
-            client.update(
-                "CREATE TABLE data(val TIMESTAMPTZ, category INT);",
-                None,
-                &[],
-            ).unwrap();
+            client
+                .update(
+                    "CREATE TABLE data(val TIMESTAMPTZ, category INT);",
+                    None,
+                    &[],
+                )
+                .unwrap();
 
-            let mut result = client.update(
-                "SELECT into_values(max_n(val, 1))::TEXT FROM data",
-                None,
-                &[],
-            ).unwrap();
+            let mut result = client
+                .update(
+                    "SELECT into_values(max_n(val, 1))::TEXT FROM data",
+                    None,
+                    &[],
+                )
+                .unwrap();
 
             assert!(result.next().is_none());
         })
@@ -376,19 +381,22 @@ mod tests {
     #[pg_test]
     fn max_time_into_array_empty_returns_no_rows() {
         Spi::connect_mut(|client| {
-            client.update(
-                "CREATE TABLE data(val TIMESTAMPTZ, category INT);",
-                None,
-                &[],
-            ).unwrap();
+            client
+                .update(
+                    "CREATE TABLE data(val TIMESTAMPTZ, category INT);",
+                    None,
+                    &[],
+                )
+                .unwrap();
 
-            let mut result = client.update(
-                "SELECT into_array(max_n(val, 1)) FROM data",
-                None,
-                &[],
-            ).unwrap();
+            let mut result = client
+                .update("SELECT into_array(max_n(val, 1)) FROM data", None, &[])
+                .unwrap();
 
-            assert!(result.next().unwrap()[1].value::<Vec<f64>>().unwrap().is_none());
+            assert!(result.next().unwrap()[1]
+                .value::<Vec<f64>>()
+                .unwrap()
+                .is_none());
         })
     }
 }

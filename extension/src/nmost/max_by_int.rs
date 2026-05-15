@@ -86,11 +86,11 @@ pub fn max_n_by_int_rollup_trans(
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn max_n_by_int_final(state: Internal) -> Option<MaxByInts<'static>> {
-    unsafe { 
+    unsafe {
         match state.to_inner::<MaxByIntTransType>() {
             Some(state) => Some(state.clone().into()),
             None => None,
-        } 
+        }
     }
 }
 
@@ -109,7 +109,6 @@ pub fn max_n_by_int_to_values(
         ),
         None => TableIterator::new(std::iter::empty()),
     }
-    
 }
 
 extension_sql!(
@@ -222,32 +221,37 @@ mod tests {
     #[pg_test]
     fn max_by_int_empty_input_returns_null() {
         Spi::connect_mut(|client| {
-            client.update(
-                "CREATE TABLE data(val INT8, category INT)", None, &[],
-            ).unwrap();
+            client
+                .update("CREATE TABLE data(val INT8, category INT)", None, &[])
+                .unwrap();
 
-            let mut result = client.update(
-                "SELECT max_n_by(val, data, 1)::TEXT FROM data", None, &[],
-            ).unwrap();
+            let mut result = client
+                .update("SELECT max_n_by(val, data, 1)::TEXT FROM data", None, &[])
+                .unwrap();
 
-            assert!(result.next().unwrap()[1].value::<String>().unwrap().is_none());
+            assert!(result.next().unwrap()[1]
+                .value::<String>()
+                .unwrap()
+                .is_none());
         })
     }
 
     #[pg_test]
     fn max_by_int_into_values_empty_returns_no_rows() {
         Spi::connect_mut(|client| {
-            client.update(
-                "CREATE TABLE data(val INT8, category INT)", None, &[],
-            ).unwrap();
+            client
+                .update("CREATE TABLE data(val INT8, category INT)", None, &[])
+                .unwrap();
 
-            let mut result = client.update(
-                "SELECT into_values(
+            let mut result = client
+                .update(
+                    "SELECT into_values(
                     max_n_by(val, data, 1),
                     NULL::DATA)::TEXT FROM data",
-                None,
-                &[],
-            ).unwrap();
+                    None,
+                    &[],
+                )
+                .unwrap();
 
             assert!(result.next().is_none());
         })

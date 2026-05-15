@@ -110,7 +110,6 @@ pub fn max_n_by_float_to_values(
         ),
         None => TableIterator::new(std::iter::empty()),
     }
-    
 }
 
 extension_sql!(
@@ -227,33 +226,46 @@ mod tests {
     #[pg_test]
     fn max_by_float_empty_input_returns_null() {
         Spi::connect_mut(|client| {
-            client.update(
-                "CREATE TABLE data(ts TIMESTAMPTZ, value DOUBLE PRECISION);", None, &[],
-            ).unwrap();
+            client
+                .update(
+                    "CREATE TABLE data(ts TIMESTAMPTZ, value DOUBLE PRECISION);",
+                    None,
+                    &[],
+                )
+                .unwrap();
 
-            let mut result = client.update(
-            "SELECT max_n_by(value, ts, 1)::TEXT FROM data", None, &[],
-                ).unwrap();
+            let mut result = client
+                .update("SELECT max_n_by(value, ts, 1)::TEXT FROM data", None, &[])
+                .unwrap();
 
-            assert!(result.next().unwrap()[1].value::<String>().unwrap().is_none());
+            assert!(result.next().unwrap()[1]
+                .value::<String>()
+                .unwrap()
+                .is_none());
         })
     }
 
     #[pg_test]
     fn max_by_float_into_values_empty_returns_no_rows() {
         Spi::connect_mut(|client| {
-            client.update(
-                "CREATE TABLE data(ts TIMESTAMPTZ, value DOUBLE PRECISION);", None, &[],
-            ).unwrap();
+            client
+                .update(
+                    "CREATE TABLE data(ts TIMESTAMPTZ, value DOUBLE PRECISION);",
+                    None,
+                    &[],
+                )
+                .unwrap();
 
-            let mut result = client.update(
-                "SELECT * FROM into_values((
+            let mut result = client
+                .update(
+                    "SELECT * FROM into_values((
                     SELECT max_n_by(value, ts, 1)
                     FROM data
                 ), NULL::timestamptz)",
-                None,
-                &[],
-            ).unwrap();
+                    None,
+                    &[],
+                )
+                .unwrap();
 
             assert!(result.next().is_none());
         })

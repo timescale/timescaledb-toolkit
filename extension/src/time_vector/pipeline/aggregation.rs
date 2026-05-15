@@ -180,7 +180,10 @@ extension_sql!(
 ALTER FUNCTION "arrow_run_pipeline_then_stats_agg" SUPPORT toolkit_experimental.pipeline_stats_agg_support;
 "#,
     name = "pipeline_stats_agg_support",
-    requires = [pipeline_stats_agg_support],
+    requires = [
+        arrow_run_pipeline_then_stats_agg,
+        pipeline_stats_agg_support,
+    ],
 );
 
 #[pg_extern(
@@ -273,7 +276,10 @@ extension_sql!(
 ALTER FUNCTION "arrow_pipeline_then_sum" SUPPORT toolkit_experimental.pipeline_sum_support;
 "#,
     name = "arrow_then_sum_support",
-    requires = [pipeline_sum_support],
+    requires = [
+        arrow_pipeline_then_sum,
+        pipeline_sum_support,
+    ],
 );
 
 #[pg_extern(immutable, parallel_safe, schema = "toolkit_experimental")]
@@ -365,7 +371,10 @@ extension_sql!(
 ALTER FUNCTION "arrow_pipeline_then_average" SUPPORT toolkit_experimental.pipeline_average_support;
 "#,
     name = "pipe_avg_support",
-    requires = [pipeline_average_support],
+    requires = [
+        arrow_pipeline_then_average,
+        pipeline_average_support,
+    ],
 );
 
 #[pg_extern(
@@ -454,7 +463,10 @@ extension_sql!(
 ALTER FUNCTION "arrow_pipeline_then_num_vals" SUPPORT toolkit_experimental.pipeline_num_vals_support;
 "#,
     name = "pipe_then_num_vals",
-    requires = [pipeline_num_vals_support],
+    requires = [
+        arrow_pipeline_then_num_vals,
+        pipeline_num_vals_support,
+    ],
 );
 
 // TODO support gauge
@@ -545,7 +557,10 @@ extension_sql!(
 ALTER FUNCTION "arrow_run_pipeline_then_counter_agg" SUPPORT toolkit_experimental.pipeline_counter_agg_support;
 "#,
     name = "pipe_then_counter_agg",
-    requires = [pipeline_counter_agg_support],
+    requires = [
+        arrow_run_pipeline_then_counter_agg,
+        pipeline_counter_agg_support,
+    ],
 );
 
 #[pg_operator(immutable, parallel_safe)]
@@ -633,7 +648,10 @@ extension_sql!(
 ALTER FUNCTION "arrow_run_pipeline_then_hyperloglog" SUPPORT toolkit_experimental.pipeline_hyperloglog_support;
 "#,
     name = "pipe_then_hll",
-    requires = [pipeline_hyperloglog_support],
+    requires = [
+        arrow_run_pipeline_then_hyperloglog,
+        pipeline_hyperloglog_support,
+    ],
 );
 
 #[pg_operator(immutable, parallel_safe)]
@@ -711,7 +729,10 @@ extension_sql!(
 ALTER FUNCTION "arrow_run_pipeline_then_percentile_agg" SUPPORT toolkit_experimental.pipeline_percentile_agg_support;
 "#,
     name = "pipe_then_percentile",
-    requires = [pipeline_percentile_agg_support],
+    requires = [
+        arrow_run_pipeline_then_percentile_agg,
+        pipeline_percentile_agg_support,
+    ],
 );
 
 #[cfg(any(test, feature = "pg_test"))]

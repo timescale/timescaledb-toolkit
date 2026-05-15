@@ -470,10 +470,10 @@ pub fn live_at(agg: HeartbeatAgg<'static>, test: TimestampTz) -> bool {
             // Only possible if test shows up before first interval
             return false;
         }
-        if let Some((_, next_val)) = start_iter.peek() {
-            if test < *next_val {
-                return test < agg.interval_ends.as_slice()[idx];
-            }
+        if let Some((_, next_val)) = start_iter.peek()
+            && test < *next_val
+        {
+            return test < agg.interval_ends.as_slice()[idx];
         }
     }
     // Fall out the loop if test > start of last interval

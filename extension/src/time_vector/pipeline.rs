@@ -295,7 +295,11 @@ ALTER FUNCTION "arrow_run_pipeline" SUPPORT toolkit_experimental.toolkit_pipelin
 ALTER FUNCTION "arrow_add_unstable_element" SUPPORT toolkit_experimental.toolkit_pipeline_support;
 "#,
     name = "pipe_support",
-    requires = [pipeline_support],
+    requires = [
+        arrow_run_pipeline,
+        arrow_add_unstable_element,
+        pipeline_support,
+    ],
 );
 
 // TODO is (immutable, parallel_safe) correct?

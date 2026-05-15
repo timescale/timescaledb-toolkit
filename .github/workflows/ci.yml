@@ -137,7 +137,13 @@ jobs:
           set -e
         fi
 
-        su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-extension 2>&1'
+        cat > /tmp/keep-pgrxsc.ld <<'EOF'
+        SECTIONS {
+          .pgrxsc : { KEEP(*(.pgrxsc)) }
+        } INSERT AFTER .rodata;
+        EOF
+
+        su postgres -c 'RUSTFLAGS="-Awarnings -C link-arg=-Wl,-T,/tmp/keep-pgrxsc.ld" sh tools/build -pg${{ matrix.pgversion }} test-extension 2>&1'
 
     - name: Run doc tests
       # depends on TSDB, which requires PG >=13

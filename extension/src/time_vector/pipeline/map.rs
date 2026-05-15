@@ -21,7 +21,9 @@ pub fn map_lambda_pipeline_element<'l>(
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
     let expression = lambda.parse();
     if expression.ty() != &lambda::Type::Double && !expression.ty_is_ts_point() {
-        panic!("invalid lambda type: the lambda must return a DOUBLE PRECISION or (TimestampTZ, DOUBLE PRECISION)")
+        panic!(
+            "invalid lambda type: the lambda must return a DOUBLE PRECISION or (TimestampTZ, DOUBLE PRECISION)"
+        )
     }
 
     Element::MapLambda {
@@ -37,7 +39,9 @@ pub fn apply_lambda_to<'a>(
     let expression = lambda.parse();
     let only_val = expression.ty() == &lambda::Type::Double;
     if !only_val && !expression.ty_is_ts_point() {
-        panic!("invalid lambda type: the lambda must return a DOUBLE PRECISION or (TimestampTZ, DOUBLE PRECISION)")
+        panic!(
+            "invalid lambda type: the lambda must return a DOUBLE PRECISION or (TimestampTZ, DOUBLE PRECISION)"
+        )
     }
 
     let mut executor = lambda::ExpressionExecutor::new(&expression);
@@ -108,7 +112,9 @@ pub fn check_user_function_type(function: pg_sys::regproc) {
     let rettype = unsafe { pg_sys::get_func_signature(function, &mut argtypes, &mut nargs) };
 
     if nargs != 1 {
-        error!("invalid number of mapping function arguments, expected fn(timevector) RETURNS timevector")
+        error!(
+            "invalid number of mapping function arguments, expected fn(timevector) RETURNS timevector"
+        )
     }
 
     assert!(!argtypes.is_null());
@@ -165,7 +171,9 @@ pub fn map_data_pipeline_element(
     };
 
     if nargs != 1 {
-        error!("invalid number of mapping function arguments, expected fn(double precision) RETURNS double precision")
+        error!(
+            "invalid number of mapping function arguments, expected fn(double precision) RETURNS double precision"
+        )
     }
 
     if unsafe { *argtypes } != pgrx::PgBuiltInOids::FLOAT8OID.value() {

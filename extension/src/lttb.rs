@@ -233,26 +233,28 @@ CREATE AGGREGATE lttb(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution integer
     requires = [lttb_trans, lttb_final],
 );
 
-extension_sql!("\n\
+extension_sql!(
+    "\n\
 CREATE AGGREGATE toolkit_experimental.gp_lttb(ts TIMESTAMPTZ, value DOUBLE PRECISION, resolution integer) (\n\
     sfunc = lttb_trans,\n\
     stype = internal,\n\
     finalfunc = toolkit_experimental.gp_lttb_final\n\
 );\n\
 ",
-name = "gp_lttb_agg",
-requires = [lttb_trans, gp_lttb_final],
+    name = "gp_lttb_agg",
+    requires = [lttb_trans, gp_lttb_final],
 );
 
-extension_sql!("\n\
+extension_sql!(
+    "\n\
 CREATE AGGREGATE toolkit_experimental.gp_lttb(ts TIMESTAMPTZ, value DOUBLE PRECISION, gapsize INTERVAL, resolution integer) (\n\
     sfunc = toolkit_experimental.gp_lttb_trans,\n\
     stype = internal,\n\
     finalfunc = toolkit_experimental.gp_lttb_final\n\
 );\n\
 ",
-name = "gp_lttb_agg_with_size",
-requires = [gp_lttb_trans, gp_lttb_final],
+    name = "gp_lttb_agg_with_size",
+    requires = [gp_lttb_trans, gp_lttb_final],
 );
 
 // based on https://github.com/jeromefroe/lttb-rs version 0.2.0

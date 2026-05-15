@@ -269,7 +269,7 @@ impl<'a, 'b> From<&'a ReadableUddSketch> for UddSketch<'b> {
 
 impl<'input> InOutFuncs for UddSketch<'input> {
     fn output(&self, buffer: &mut StringInfo) {
-        use crate::serialization::{str_to_db_encoding, EncodedStr::*};
+        use crate::serialization::{EncodedStr::*, str_to_db_encoding};
 
         let stringified = ron::to_string(&ReadableUddSketch::from(self)).unwrap();
         match str_to_db_encoding(&stringified) {
@@ -1086,11 +1086,13 @@ mod tests {
             );
 
             apx_eql(test_error.unwrap(), error.unwrap(), 0.000001);
-            assert!(test_value
-                .unwrap()
-                .iter()
-                .zip(vec![9.0, 5.0, 2.0])
-                .all(|(a, b)| { matches!(pct_eql(*a, b, test_error.unwrap()), ()) }));
+            assert!(
+                test_value
+                    .unwrap()
+                    .iter()
+                    .zip(vec![9.0, 5.0, 2.0])
+                    .all(|(a, b)| { matches!(pct_eql(*a, b, test_error.unwrap()), ()) })
+            );
         });
     }
 
@@ -1173,11 +1175,13 @@ mod tests {
             );
 
             apx_eql(test_error_arrow.unwrap(), error.unwrap(), 0.000001);
-            assert!(test_value_arrow
-                .unwrap()
-                .iter()
-                .zip(vec![9.0, 5.0, 2.0])
-                .all(|(a, b)| { matches!(pct_eql(*a, b, test_error_arrow.unwrap()), ()) }));
+            assert!(
+                test_value_arrow
+                    .unwrap()
+                    .iter()
+                    .zip(vec![9.0, 5.0, 2.0])
+                    .all(|(a, b)| { matches!(pct_eql(*a, b, test_error_arrow.unwrap()), ()) })
+            );
         });
     }
 

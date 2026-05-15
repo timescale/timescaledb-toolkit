@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     aggregate_utils::in_aggregate_context,
-    datum_utils::{deep_copy_datum, free_datum, DatumStore},
+    datum_utils::{DatumStore, deep_copy_datum, free_datum},
     palloc::{Inner, Internal, InternalAsValue},
 };
 

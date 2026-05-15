@@ -204,4 +204,9 @@ impl From<i64> for Interval {
 
 pub struct regproc(pub pg_sys::Datum);
 
-raw_type!(regproc, SQL_REGPROC, pg_sys::REGPROCOID, pg_sys::REGPROCARRAYOID);
+raw_type!(
+    regproc,
+    SQL_REGPROC,
+    pg_sys::REGPROCOID,
+    pg_sys::REGPROCARRAYOID
+);

@@ -8,7 +8,7 @@ use pgrx::*;
 
 use pg_sys::{Datum, Oid};
 
-use crate::datum_utils::{deep_copy_datum, DatumHashBuilder};
+use crate::datum_utils::{DatumHashBuilder, deep_copy_datum};
 
 // Unable to implement PartialEq for AnyElement, so creating a local copy
 pub struct PgAnyElement {

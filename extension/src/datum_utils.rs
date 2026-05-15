@@ -41,7 +41,6 @@ pub(crate) unsafe fn free_datum(datum: Datum, typoid: Oid) {
     }
 }
 
-
 // TODO: is there a better place for this?
 // Note that this requires an reference time to deal with variable length intervals (days or months)
 pub fn ts_interval_sum_to_ms(

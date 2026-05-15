@@ -5,9 +5,9 @@ use pgrx::*;
 use super::*;
 
 use pest::{
+    Parser,
     iterators::{Pair, Pairs},
     prec_climber::{Assoc, Operator, PrecClimber},
-    Parser,
 };
 
 use ExpressionSegment::*;

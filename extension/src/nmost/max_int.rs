@@ -270,10 +270,12 @@ mod tests {
                 .update("SELECT max_n(val, 1) FROM data", None, &[])
                 .unwrap();
 
-            assert!(result.next().unwrap()[1]
-                .value::<String>()
-                .unwrap()
-                .is_none());
+            assert!(
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .is_none()
+            );
         })
     }
 
@@ -288,10 +290,12 @@ mod tests {
                 .update("SELECT max_n(val, 1)->into_array() FROM data", None, &[])
                 .unwrap();
 
-            assert!(result.next().unwrap()[1]
-                .value::<Vec<i64>>()
-                .unwrap()
-                .is_none());
+            assert!(
+                result.next().unwrap()[1]
+                    .value::<Vec<i64>>()
+                    .unwrap()
+                    .is_none()
+            );
 
             let mut result = client
                 .update(
@@ -335,10 +339,12 @@ mod tests {
                 .update("SELECT into_array(max_n(val, 1)) FROM data", None, &[])
                 .unwrap();
 
-            assert!(result.next().unwrap()[1]
-                .value::<Vec<f64>>()
-                .unwrap()
-                .is_none());
+            assert!(
+                result.next().unwrap()[1]
+                    .value::<Vec<f64>>()
+                    .unwrap()
+                    .is_none()
+            );
         })
     }
 }

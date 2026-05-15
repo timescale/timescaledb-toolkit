@@ -242,10 +242,12 @@ mod tests {
                 .update("SELECT max_n_by(val, data, 1)::TEXT FROM data", None, &[])
                 .unwrap();
 
-            assert!(result.next().unwrap()[1]
-                .value::<String>()
-                .unwrap()
-                .is_none());
+            assert!(
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .is_none()
+            );
         })
     }
 

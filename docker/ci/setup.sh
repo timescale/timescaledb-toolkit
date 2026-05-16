@@ -22,7 +22,7 @@ if [ $# -ne 6 ]; then
 fi
 
 ARCH=$1
-OS_NAME=$2
+OS_NAME=${2##*/}
 OS_VERSION=$3
 OS_CODE_NAME=$4
 BUILDER_USERNAME=$5

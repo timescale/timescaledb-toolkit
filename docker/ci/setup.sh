@@ -70,6 +70,11 @@ should_skip_timescaledb_version() {
         return 0
     fi
 
+    if [ "$OS_NAME" = rockylinux ] && [ "$OS_VERSION" = 10 ] && [ "$pg" = 15 ]; then
+        echo "Skipping TimescaleDB for PostgreSQL $pg on EL $OS_VERSION; no package is available"
+        return 0
+    fi
+
     if [ "$OS_NAME" = ubuntu ] && [ "$OS_VERSION" = 26.04 ] && [ "$pg" = 15 ]; then
         echo "Skipping TimescaleDB for PostgreSQL $pg on $OS_NAME $OS_VERSION; no package is available"
         return 0
@@ -103,8 +108,14 @@ if $privileged; then
                     dnf -qy install ruby-devel rubygems
                     ;;
 
+                10)
+                    yum -qy install dnf-plugins-core
+                    dnf config-manager --enable crb
+                    dnf -qy install ruby-devel rubygems
+                    ;;
+
                 *)
-                    echo >&2 'only 7 - 9 supported'
+                    echo >&2 'only 8 - 10 supported'
                     exit 5
                     ;;
             esac

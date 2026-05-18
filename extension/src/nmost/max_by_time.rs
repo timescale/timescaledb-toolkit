@@ -113,7 +113,7 @@ pub fn max_n_by_time_to_values(
                 .map(crate::raw::TimestampTz::from)
                 .zip(agg.data.clone().into_anyelement_iter()),
         ),
-        None => TableIterator::new(std::iter::empty()),
+        None => TableIterator::empty(),
     }
 }
 

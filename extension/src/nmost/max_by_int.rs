@@ -106,7 +106,7 @@ pub fn max_n_by_int_to_values(
                 .into_iter()
                 .zip(agg.data.clone().into_anyelement_iter()),
         ),
-        None => TableIterator::new(std::iter::empty()),
+        None => TableIterator::empty(),
     }
 }
 

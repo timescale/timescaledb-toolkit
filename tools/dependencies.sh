@@ -8,8 +8,8 @@
 # information across all those.
 
 PG_VERSIONS='15 16 17 18'
-# TODO: extend this with 18 this once TimescaleDB supports PostgreSQL 18
-TSDB_PG_VERSIONS='15 16 17'
+
+TSDB_PG_VERSIONS='15 16 17 18'
 
 CARGO_EDIT=0.11.2
 

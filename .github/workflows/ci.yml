@@ -86,6 +86,10 @@ jobs:
           container:
             os: ubuntu
             version: "26.04"
+        - pgversion: 15
+          container:
+            os: rockylinux
+            version: "10"
     env:
       # TODO Why?  Cargo default is to pass `-C incremental` to rustc; why don't we want that?
       #   https://doc.rust-lang.org/rustc/codegen-options/index.html#incremental

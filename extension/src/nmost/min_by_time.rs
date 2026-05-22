@@ -72,13 +72,17 @@ pub fn min_n_by_time_rollup_trans(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn min_n_by_time_final(state: Internal) -> MinByTimes<'static> {
-    unsafe { state.to_inner::<MinByTimeTransType>().unwrap().clone() }.into()
+pub fn min_n_by_time_final(state: Internal) -> Option<MinByTimes<'static>> {
+    unsafe {
+        state
+            .to_inner::<MinByTimeTransType>()
+            .map(|state| state.clone().into())
+    }
 }
 
 #[pg_extern(name = "into_values", immutable, parallel_safe)]
 pub fn min_n_by_time_to_values(
-    agg: MinByTimes<'static>,
+    agg: Option<MinByTimes<'static>>,
     _dummy: Option<AnyElement>,
 ) -> TableIterator<
     'static,
@@ -87,14 +91,17 @@ pub fn min_n_by_time_to_values(
         name!(data, AnyElement),
     ),
 > {
-    TableIterator::new(
-        agg.values
-            .values
-            .clone()
-            .into_iter()
-            .map(crate::raw::TimestampTz::from)
-            .zip(agg.data.clone().into_anyelement_iter()),
-    )
+    match agg {
+        Some(agg) => TableIterator::new(
+            agg.values
+                .values
+                .clone()
+                .into_iter()
+                .map(crate::raw::TimestampTz::from)
+                .zip(agg.data.clone().into_anyelement_iter()),
+        ),
+        None => TableIterator::empty(),
+    }
 }
 
 extension_sql!(
@@ -202,6 +209,54 @@ mod tests {
                 result.next().unwrap()[1].value().unwrap(),
                 Some("(\"2020-01-05 00:00:00+00\",\"(\"\"2020-01-05 00:00:00+00\"\",0)\")")
             );
+            assert!(result.next().is_none());
+        })
+    }
+
+    #[pg_test]
+    fn min_by_time_empty_input_return_null() {
+        Spi::connect_mut(|client| {
+            client
+                .update(
+                    "CREATE TABLE data(val TIMESTAMPTZ, category INT);",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            let mut result = client
+                .update("SELECT min_n_by(val, data, 1)::TEXT FROM data", None, &[])
+                .unwrap();
+
+            assert!(
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .is_none()
+            );
+        })
+    }
+
+    #[pg_test]
+    fn min_by_time_into_values_empty_returns_no_rows() {
+        Spi::connect_mut(|client| {
+            client
+                .update(
+                    "CREATE TABLE data(val TIMESTAMPTZ, category INT);",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            let mut result = client
+                .update(
+                    "SELECT into_values(min_n_by(val, data, 1),
+                NULL::data)::TEXT FROM data",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
             assert!(result.next().is_none());
         })
     }

@@ -21,7 +21,7 @@ pub fn sort_timevector(mut series: Timevector_TSTZ_F64<'_>) -> Timevector_TSTZ_F
     let (points, null_val) = if !series.has_nulls() {
         // easy case
         let mut points = std::mem::take(series.points.as_owned());
-        points.sort_by(|a, b| a.ts.cmp(&b.ts));
+        points.sort_by_key(|a| a.ts);
         let nulls_len = points.len().div_ceil(8);
         (points, std::vec::from_elem(0_u8, nulls_len))
     } else {
@@ -29,7 +29,7 @@ pub fn sort_timevector(mut series: Timevector_TSTZ_F64<'_>) -> Timevector_TSTZ_F
             .into_iter()
             .enumerate()
             .collect();
-        points.sort_by(|(_, a), (_, b)| a.ts.cmp(&b.ts));
+        points.sort_by_key(|(_, a)| a.ts);
         let mut null_val = std::vec::from_elem(0_u8, points.len().div_ceil(8));
         let points = points
             .into_iter()

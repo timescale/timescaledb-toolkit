@@ -91,7 +91,7 @@ pub mod zigzag {
 
     #[inline(always)]
     pub fn decode(n: u64) -> i64 {
-        if n % 2 == 0 {
+        if n.is_multiple_of(2) {
             // positive number
             (n / 2) as i64
         } else {

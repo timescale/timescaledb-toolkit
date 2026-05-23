@@ -232,7 +232,7 @@ pub(crate) unsafe fn pipeline_support_helper(
                 //       instead of
                 //       `unsafe extern "C" fn(fcinfo: pg_sys::FunctionCallInfo) -> pg_sys::Datum`
                 //       we'll fix this upstream
-                let expected_executor = arrow_run_pipeline_wrapper as usize;
+                let expected_executor = arrow_run_pipeline_wrapper as *const () as usize;
                 match executor_fn {
                     None => return no_change(),
                     // FIXME the direct comparison should work

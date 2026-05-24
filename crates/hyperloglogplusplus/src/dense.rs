@@ -62,7 +62,7 @@ impl<'s> Storage<'s> {
     fn idx_count_from_hash(&self, hash: u64) -> (usize, u8) {
         let idx = hash.extract(63, self.precision);
         // w in the paper
-        let hash_bits = hash.extract_bits(63 - self.precision, 0);
+        let hash_bits = Extractable::extract_bits(&hash, 63 - self.precision, 0);
         let count = hash_bits.q() - self.precision;
         (idx as usize, count)
     }

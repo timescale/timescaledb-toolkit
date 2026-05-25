@@ -20,6 +20,14 @@ ENV CARGO_HOME=/usr/local/cargo
 ENV RUSTUP_HOME=/usr/local/rustup
 ENV PATH="${CARGO_HOME}/bin:/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/bin"
 
+# TODO: Remove once pgrx v1.18.1 is released.
+RUN printf '%s\n' \
+        'SECTIONS {' \
+        '  .pgrxsc : { KEEP(*(.pgrxsc)) }' \
+        '} INSERT AFTER .rodata;' \
+        > /usr/local/share/keep-pgrxsc.ld
+ENV RUSTFLAGS="-C link-arg=-Wl,-T,/usr/local/share/keep-pgrxsc.ld"
+
 COPY docker/ci/setup.sh /
 COPY tools/dependencies.sh /
 # TODO simple option processing a la build and testbin would make this less error-prone

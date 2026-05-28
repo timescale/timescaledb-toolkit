@@ -42,6 +42,10 @@ jobs:
         pgversion: [15, 16, 17, 18]
         container:
         - os: rockylinux
+          version: "10"
+          image: rockylinux-10-x86_64
+          schedule: true
+        - os: rockylinux
           version: "9"
           image: rockylinux-9-x86_64
           schedule: true
@@ -66,18 +70,26 @@ jobs:
           image: debian-11-amd64
           schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
         - os: ubuntu
-          version: "24.04"
-          image: ubuntu-24.04-amd64
+          version: "26.04"
+          image: ubuntu-26.04-amd64
           schedule: true
         - os: ubuntu
-          version: "22.04"
-          image: ubuntu-22.04-amd64
+          version: "24.04"
+          image: ubuntu-24.04-amd64
           schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
         exclude:
         - container:
             skip: true
         - container:
             schedule: false
+        - pgversion: 15
+          container:
+            os: ubuntu
+            version: "26.04"
+        - pgversion: 15
+          container:
+            os: rockylinux
+            version: "10"
     env:
       # TODO Why?  Cargo default is to pass `-C incremental` to rustc; why don't we want that?
       #   https://doc.rust-lang.org/rustc/codegen-options/index.html#incremental

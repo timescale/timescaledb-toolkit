@@ -16,6 +16,20 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 **Full Changelog**: [TODO]
 
+## [1.22.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.21.0) (2025-10-24)
+
+#### Bug fixes
+* Fix days_in_month behaviour when supplied date is not start of month by @svenklemm in https://github.com/timescale/timescaledb-toolkit/pull/880
+
+#### Other notable changes
+* Update rust version to 1.89 by @dbeck in https://github.com/timescale/timescaledb-toolkit/pull/884
+* Update pgrx version to 0.16.0 by @dbeck in https://github.com/timescale/timescaledb-toolkit/pull/881
+* Change to ruby 3.1 by @svenklemm in https://github.com/timescale/timescaledb-toolkit/pull/886
+* PG18 support by @syvb in https://github.com/timescale/timescaledb-toolkit/pull/891
+
+#### Shout-outs
+@svyb 
+
 ## [1.21.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.21.0) (2025-04-17)
 
 #### New experimental features

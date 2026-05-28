@@ -28,7 +28,7 @@
 
 # git commit records these on commits (yes, all three).
 # TODO What should we use?  I pulled this from the deb package metadata
-EMAIL=hello@timescale.com
+EMAIL=hello@tigerdata.com
 GIT_AUTHOR_NAME=tools/release
 GIT_COMMITTER_NAME=$GIT_AUTHOR_NAME
 export EMAIL GIT_AUTHOR_NAME GIT_COMMITTER_NAME

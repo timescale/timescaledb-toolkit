@@ -103,9 +103,9 @@ pub fn max_n_time_deserialize(bytes: bytea, _internal: Internal) -> Option<Inter
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn max_n_time_final(state: Internal) -> MaxTimes<'static> {
-    let mut state = unsafe { state.to_inner::<MaxTimeTransType>().unwrap() };
-    (&mut *state).into()
+pub fn max_n_time_final(state: Internal) -> Option<MaxTimes<'static>> {
+    let state = unsafe { state.to_inner::<MaxTimeTransType>() };
+    state.map(|mut state| (&mut *state).into())
 }
 
 #[pg_extern(name = "into_array", immutable, parallel_safe)]
@@ -304,6 +304,102 @@ mod tests {
             assert_eq!(
                 result.unwrap(),
                 "{\"2020-04-09 00:00:00+00\",\"2020-04-08 00:00:00+00\",\"2020-04-07 00:00:00+00\",\"2020-04-06 00:00:00+00\",\"2020-04-05 00:00:00+00\"}"
+            );
+        })
+    }
+
+    #[pg_test]
+    fn max_time_final_returns_null_on_empty_input() {
+        Spi::connect_mut(|client| {
+            client
+                .update("CREATE TABLE data(val TIMESTAMPTZ);", None, &[])
+                .unwrap();
+
+            let mut result = client
+                .update("SELECT max_n(val, 1) FROM data", None, &[])
+                .unwrap();
+
+            assert!(
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .is_none()
+            );
+        })
+    }
+
+    #[pg_test]
+    fn max_time_empty_returns_null() {
+        Spi::connect_mut(|client| {
+            client
+                .update(
+                    "CREATE TABLE data(val TIMESTAMPTZ, category INT);",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            let mut result = client
+                .update("SELECT max_n(val, 1)->into_array() FROM data", None, &[])
+                .unwrap();
+
+            assert!(result.next().unwrap()[1].value::<&str>().unwrap().is_none());
+
+            let mut result = client
+                .update(
+                    "SELECT (max_n(val, 1)->into_values())::TEXT FROM data",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            assert!(result.next().is_none());
+        })
+    }
+
+    #[pg_test]
+    fn max_time_into_values_empty_returns_no_rows() {
+        Spi::connect_mut(|client| {
+            client
+                .update(
+                    "CREATE TABLE data(val TIMESTAMPTZ, category INT);",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            let mut result = client
+                .update(
+                    "SELECT into_values(max_n(val, 1))::TEXT FROM data",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            assert!(result.next().is_none());
+        })
+    }
+
+    #[pg_test]
+    fn max_time_into_array_empty_returns_no_rows() {
+        Spi::connect_mut(|client| {
+            client
+                .update(
+                    "CREATE TABLE data(val TIMESTAMPTZ, category INT);",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            let mut result = client
+                .update("SELECT into_array(max_n(val, 1)) FROM data", None, &[])
+                .unwrap();
+
+            assert!(
+                result.next().unwrap()[1]
+                    .value::<Vec<f64>>()
+                    .unwrap()
+                    .is_none()
             );
         })
     }

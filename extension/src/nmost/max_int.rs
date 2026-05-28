@@ -102,9 +102,9 @@ pub fn max_n_int_deserialize(bytes: bytea, _internal: Internal) -> Option<Intern
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn max_n_int_final(state: Internal) -> MaxInts<'static> {
-    let mut state = unsafe { state.to_inner::<MaxIntTransType>().unwrap() };
-    (&mut *state).into()
+pub fn max_n_int_final(state: Internal) -> Option<MaxInts<'static>> {
+    let state = unsafe { state.to_inner::<MaxIntTransType>() };
+    state.map(|mut state| (&mut *state).into())
 }
 
 #[pg_extern(name = "into_array", immutable, parallel_safe)]
@@ -253,6 +253,95 @@ mod tests {
                         None, &[],
                     ).unwrap().first().get_one::<Vec<i64>>().unwrap();
             assert_eq!(result.unwrap(), vec![99, 98, 97, 96, 95]);
+        })
+    }
+
+    #[pg_test]
+    fn max_int_final_returns_null_on_empty_input() {
+        Spi::connect_mut(|client| {
+            client
+                .update("CREATE TABLE data(val INT8);", None, &[])
+                .unwrap();
+
+            let mut result = client
+                .update("SELECT max_n(val, 1) FROM data", None, &[])
+                .unwrap();
+
+            assert!(
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .is_none()
+            );
+        })
+    }
+
+    #[pg_test]
+    fn max_int_empty_returns_null() {
+        Spi::connect_mut(|client| {
+            client
+                .update("CREATE TABLE data(val INT8, category INT);", None, &[])
+                .unwrap();
+
+            let mut result = client
+                .update("SELECT max_n(val, 1)->into_array() FROM data", None, &[])
+                .unwrap();
+
+            assert!(
+                result.next().unwrap()[1]
+                    .value::<Vec<i64>>()
+                    .unwrap()
+                    .is_none()
+            );
+
+            let mut result = client
+                .update(
+                    "SELECT (max_n(val, 1)->into_values())::TEXT FROM data",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            assert!(result.next().is_none());
+        })
+    }
+
+    #[pg_test]
+    fn max_int_into_values_empty_returns_no_rows() {
+        Spi::connect_mut(|client| {
+            client
+                .update("CREATE TABLE data(val INT8, category INT);", None, &[])
+                .unwrap();
+
+            let mut result = client
+                .update(
+                    "SELECT into_values(max_n(val, 1))::TEXT FROM data",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            assert!(result.next().is_none());
+        })
+    }
+
+    #[pg_test]
+    fn max_int_into_array_empty_returns_no_rows() {
+        Spi::connect_mut(|client| {
+            client
+                .update("CREATE TABLE data(val INT8, category INT);", None, &[])
+                .unwrap();
+
+            let mut result = client
+                .update("SELECT into_array(max_n(val, 1)) FROM data", None, &[])
+                .unwrap();
+
+            assert!(
+                result.next().unwrap()[1]
+                    .value::<Vec<f64>>()
+                    .unwrap()
+                    .is_none()
+            );
         })
     }
 }

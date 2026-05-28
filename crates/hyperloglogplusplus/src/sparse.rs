@@ -201,7 +201,8 @@ impl Encoded {
         let diff = Extractable::extract_bits(&hash, 63 - precision, 64 - NUM_HIGH_BITS);
         if diff == 0 {
             // TODO is this right?
-            let count = Extractable::extract_bits(&hash, 63 - NUM_HIGH_BITS, 0).q() as u32 - NUM_HIGH_BITS as u32;
+            let count = Extractable::extract_bits(&hash, 63 - NUM_HIGH_BITS, 0).q() as u32
+                - NUM_HIGH_BITS as u32;
             Encoded((idx << 7) | (count << 1) | 1)
         } else {
             Encoded(idx << 1)

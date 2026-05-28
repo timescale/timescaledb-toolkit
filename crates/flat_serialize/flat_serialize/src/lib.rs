@@ -686,7 +686,7 @@ fn len_of_iterable<'i, T: FlatSerializable<'i>, V: ValOrRef<T>, I: Iterator<Item
 #[inline(always)]
 fn aligning_len(ptr: *const MaybeUninit<u8>, align: usize) -> usize {
     let current_ptr = ptr as usize;
-    if current_ptr % align == 0 {
+    if current_ptr.is_multiple_of(align) {
         return 0;
     }
     align - (current_ptr % align)

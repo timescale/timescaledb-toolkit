@@ -198,10 +198,11 @@ impl Encoded {
         //
         // *`count` is only present when `tag` is `1`
         let idx = hash.extract(63, NUM_HIGH_BITS) as u32;
-        let diff = hash.extract_bits(63 - precision, 64 - NUM_HIGH_BITS);
+        let diff = Extractable::extract_bits(&hash, 63 - precision, 64 - NUM_HIGH_BITS);
         if diff == 0 {
             // TODO is this right?
-            let count = hash.extract_bits(63 - NUM_HIGH_BITS, 0).q() as u32 - NUM_HIGH_BITS as u32;
+            let count = Extractable::extract_bits(&hash, 63 - NUM_HIGH_BITS, 0).q() as u32
+                - NUM_HIGH_BITS as u32;
             Encoded((idx << 7) | (count << 1) | 1)
         } else {
             Encoded(idx << 1)
@@ -222,7 +223,7 @@ impl Encoded {
             self.extract_count() + extra_bits
         } else {
             let new_hash = (self.idx() as u64) << (64 - NUM_HIGH_BITS);
-            let hash_bits = new_hash.extract_bits(63 - p, 0);
+            let hash_bits = Extractable::extract_bits(&new_hash, 63 - p, 0);
             hash_bits.q() - p
         }
     }
@@ -234,7 +235,7 @@ impl Encoded {
 
     #[inline]
     fn extract_count(&self) -> u8 {
-        self.0.extract_bits(6, 1) as u8
+        Extractable::extract_bits(&self.0, 6, 1) as u8
     }
 }
 

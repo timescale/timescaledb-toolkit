@@ -107,9 +107,9 @@ pub fn min_n_float_deserialize(bytes: bytea, _internal: Internal) -> Option<Inte
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn min_n_float_final(state: Internal) -> MinFloats<'static> {
-    let mut state = unsafe { state.to_inner::<MinFloatTransType>().unwrap() };
-    (&mut *state).into()
+pub fn min_n_float_final(state: Internal) -> Option<MinFloats<'static>> {
+    let state = unsafe { state.to_inner::<MinFloatTransType>() };
+    state.map(|mut state| (&mut *state).into())
 }
 
 #[pg_extern(name = "into_array", immutable, parallel_safe)]
@@ -279,6 +279,107 @@ mod tests {
             assert_eq!(
                 result.unwrap().unwrap(),
                 vec![0. / 128., 1. / 128., 2. / 128., 3. / 128., 4. / 128.]
+            );
+        })
+    }
+
+    #[pg_test]
+    fn min_float_final_returns_null_on_empty_input() {
+        Spi::connect_mut(|client| {
+            client
+                .update("CREATE TABLE data(val DOUBLE PRECISION);", None, &[])
+                .unwrap();
+
+            let mut result = client
+                .update("SELECT min_n(val, 1) FROM data", None, &[])
+                .unwrap();
+
+            assert!(
+                result.next().unwrap()[1]
+                    .value::<String>()
+                    .unwrap()
+                    .is_none()
+            );
+        })
+    }
+
+    #[pg_test]
+    fn min_float_empty_input_returns_null() {
+        Spi::connect_mut(|client| {
+            client
+                .update(
+                    "CREATE TABLE data(val DOUBLE PRECISION, category INT);",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            let mut result = client
+                .update("SELECT min_n(val, 1)->into_array() FROM data", None, &[])
+                .unwrap();
+
+            assert!(
+                result.next().unwrap()[1]
+                    .value::<Vec<f64>>()
+                    .unwrap()
+                    .is_none()
+            );
+
+            let mut result = client
+                .update(
+                    "SELECT (min_n(val, 1)->into_values())::TEXT FROM data",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            assert!(result.next().is_none());
+        })
+    }
+
+    #[pg_test]
+    fn min_float_into_values_empty_returns_no_rows() {
+        Spi::connect_mut(|client| {
+            client
+                .update(
+                    "CREATE TABLE data(val DOUBLE PRECISION, category INT);",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            let mut result = client
+                .update(
+                    "SELECT into_values(min_n(val, 1))::TEXT FROM data",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            assert!(result.next().is_none());
+        })
+    }
+
+    #[pg_test]
+    fn min_float_into_array_empty_returns_no_rows() {
+        Spi::connect_mut(|client| {
+            client
+                .update(
+                    "CREATE TABLE data(val DOUBLE PRECISION, category INT);",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            let mut result = client
+                .update("SELECT into_array(min_n(val, 1)) FROM data", None, &[])
+                .unwrap();
+
+            assert!(
+                result.next().unwrap()[1]
+                    .value::<Vec<f64>>()
+                    .unwrap()
+                    .is_none()
             );
         })
     }

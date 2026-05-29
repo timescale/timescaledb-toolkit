@@ -1,0 +1,2 @@
+cargo +1.89.0 test --profile dev --features "pg17 pg_test" --no-default-features
+

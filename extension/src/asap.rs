@@ -138,9 +138,7 @@ pub fn asap_on_timevector(
     resolution: i32,
 ) -> Option<Timevector_TSTZ_F64<'static>> {
     // TODO: implement this using zero copy (requires sort, find_downsample_interval, and downsample_and_gapfill on Timevector)
-    let needs_sort = series.is_sorted();
-
-    if needs_sort {
+    if !series.is_sorted() {
         series.points.as_owned().sort_by_key(|p| p.ts);
     }
     let start_ts = series.points.as_slice().first().unwrap().ts;

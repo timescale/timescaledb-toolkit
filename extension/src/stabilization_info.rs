@@ -11,6 +11,12 @@
 
 crate::functions_stabilized_at! {
     STABLE_FUNCTIONS
+    "1.23.0" => {
+        stats_agg(bigint),
+        stats1d_i64_tf_inv_trans(internal,bigint),
+        stats1d_i64_tf_trans(internal,bigint),
+        stats1d_i64_trans(internal,bigint),
+    }
     "1.20.0" => {
         total(tdigest),
         total(uddsketch),

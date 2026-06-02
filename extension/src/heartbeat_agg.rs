@@ -327,6 +327,20 @@ impl HeartbeatAgg<'_> {
     }
 }
 
+impl PartialEq for HeartbeatAgg<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.start_time == other.start_time
+            && self.end_time == other.end_time
+            && self.last_seen == other.last_seen
+            && self.interval_len == other.interval_len
+            && self.num_intervals == other.num_intervals
+            && self.interval_starts.as_slice() == other.interval_starts.as_slice()
+            && self.interval_ends.as_slice() == other.interval_ends.as_slice()
+    }
+}
+
+impl Eq for HeartbeatAgg<'_> {}
+
 #[pg_extern]
 pub fn live_ranges(
     agg: HeartbeatAgg<'static>,
@@ -581,6 +595,11 @@ pub fn arrow_heartbeat_agg_trim_to(
         Some(accessor.end)
     };
     agg.trim_to(Some(accessor.start), end)
+}
+
+#[pg_extern]
+pub fn equal(left: HeartbeatAgg<'static>, right: HeartbeatAgg<'static>) -> bool {
+    left == right
 }
 
 #[pg_operator(immutable, parallel_safe)]

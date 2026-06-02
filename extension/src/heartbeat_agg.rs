@@ -583,6 +583,12 @@ pub fn arrow_heartbeat_agg_trim_to(
     agg.trim_to(Some(accessor.start), end)
 }
 
+#[pg_operator(immutable, parallel_safe)]
+#[opname(=)]
+pub fn eq_op_hearbeat_agg(left: HeartbeatAgg<'static>, right: HeartbeatAgg<'static>) -> bool {
+    left == right
+}
+
 impl From<HeartbeatAgg<'static>> for HeartbeatTransState {
     fn from(agg: HeartbeatAgg<'static>) -> Self {
         HeartbeatTransState {

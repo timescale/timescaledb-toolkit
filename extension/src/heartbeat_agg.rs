@@ -597,15 +597,20 @@ pub fn arrow_heartbeat_agg_trim_to(
     agg.trim_to(Some(accessor.start), end)
 }
 
-#[pg_extern]
-pub fn equal(left: HeartbeatAgg<'static>, right: HeartbeatAgg<'static>) -> bool {
+#[pg_operator(immutable, parallel_safe)]
+#[opname(=)]
+#[negator(<>)]
+#[commutator(=)]
+pub fn eq_op_heartbeat_agg(left: HeartbeatAgg<'static>, right: HeartbeatAgg<'static>) -> bool {
     left == right
 }
 
 #[pg_operator(immutable, parallel_safe)]
-#[opname(=)]
-pub fn eq_op_hearbeat_agg(left: HeartbeatAgg<'static>, right: HeartbeatAgg<'static>) -> bool {
-    left == right
+#[opname(<>)]
+#[negator(=)]
+#[commutator(<>)]
+pub fn neq_op_heartbeat_agg(left: HeartbeatAgg<'static>, right: HeartbeatAgg<'static>) -> bool {
+    left != right
 }
 
 impl From<HeartbeatAgg<'static>> for HeartbeatTransState {
@@ -1882,6 +1887,57 @@ mod tests {
             let expected = "(\"2020-01-01 00:50:00+00\",\"2020-01-01 01:30:00+00\")";
 
             assert_eq!(output, Some(expected.into()));
+        });
+    }
+
+    #[pg_test]
+    fn test_eq_operator() {
+        Spi::connect_mut(|client| {
+            client.update("SET TIMEZONE to UTC", None, &[]).unwrap();
+
+            client
+                .update(
+                    "CREATE TABLE poc(ts TIMESTAMPTZ, batch TIMESTAMPTZ)",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            client
+                .update(
+                    "INSERT INTO poc VALUES
+                    ('1-1-2020 0:50 UTC', '1-1-2020 0:00 UTC'),
+                    ('1-1-2020 1:00 UTC', '1-1-2020 0:00 UTC'),
+                    ('1-1-2020 1:00 UTC', '1-1-2020 0:00 UTC')",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            let output = client
+                .select(
+                    "WITH aggs AS (
+                        SELECT
+                            heartbeat_agg(ts, batch, '2h', '20m') AS all_agg,
+                            heartbeat_agg(ts, batch, '2h', '20m')
+                                FILTER (WHERE ts < '1-1-2020 1:00 UTC') AS subset_agg
+                        FROM poc
+                    )
+                    SELECT
+                        all_agg = all_agg
+                        AND NOT all_agg <> all_agg
+                        AND NOT all_agg = subset_agg
+                        AND all_agg <> subset_agg
+                    FROM aggs",
+                    None,
+                    &[],
+                )
+                .unwrap()
+                .first()
+                .get_one::<bool>()
+                .unwrap();
+
+            assert_eq!(output, Some(true));
         });
     }
 }

@@ -11,6 +11,10 @@
 
 crate::functions_stabilized_at! {
     STABLE_FUNCTIONS
+    "1.24.0" => {
+        eq_op_heartbeat_agg(heartbeatagg, heartbeatagg),
+        neq_op_heartbeat_agg(heartbeatagg, heartbeatagg),
+    }
     "1.23.0" => {
         stats_agg(bigint),
         stats1d_i64_tf_inv_trans(internal,bigint),
@@ -1054,6 +1058,10 @@ crate::types_stabilized_at! {
 
 crate::operators_stabilized_at! {
     STABLE_OPERATORS
+    "1.24.0" => {
+        "="(heartbeatagg, heartbeatagg),
+        "<>"(heartbeatagg, heartbeatagg),
+    }
     "1.16.0" => {
         "->"(heartbeatagg,accessornumgaps),
         "->"(heartbeatagg,accessornumliveranges),

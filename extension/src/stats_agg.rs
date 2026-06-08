@@ -2416,4 +2416,21 @@ INSERT INTO prices (
             assert!(vals.next().unwrap()[1].value::<f64>().unwrap().is_some());
         });
     }
+
+    #[pg_test]
+    fn stats_agg_large_values_no_panic() {
+        Spi::connect(|client| {
+            let result = client
+                .select(
+                    "SELECT stats_agg(n) FROM (VALUES (1e308), (1e308), (1e308)) as t(n);",
+                    None,
+                    &[],
+                )
+                .unwrap()
+                .first()
+                .get_one::<i64>();
+
+            assert_eq!(result.unwrap(), Some(3));
+        })
+    }
 }

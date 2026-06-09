@@ -14,9 +14,9 @@ use crate::{
     pg_type, ron_inout_funcs,
 };
 
-use stats_agg::XYPair;
 pub use stats_agg::stats1d::StatsSummary1D as InternalStatsSummary1D;
 pub use stats_agg::stats2d::StatsSummary2D as InternalStatsSummary2D;
+use stats_agg::{StatsError, XYPair};
 
 use crate::stats_agg::Method::*;
 use stats_agg::TwoFloat;
@@ -110,6 +110,16 @@ impl StatsSummary2D {
     }
 }
 
+fn unwrap_stats_result<T>(result: Result<T, StatsError>) -> T {
+    result.unwrap_or_else(|StatsError::DoubleOverflow| {
+        pgrx::ereport!(
+            ERROR,
+            PgSqlErrorCode::ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE,
+            "SQLSTATE [22003] stats_agg overflowed" 
+        );
+    })
+}
+
 #[pg_extern(immutable, parallel_safe, strict)]
 pub fn stats1d_trans_serialize(state: Internal) -> bytea {
     let ser: &StatsSummary1D = unsafe { state.get().unwrap() };
@@ -172,12 +182,12 @@ pub fn stats1d_trans_inner(
                 (Some(state), None) => Some(state),
                 (None, Some(val)) => {
                     let mut s = InternalStatsSummary1D::new();
-                    s.accum(val).unwrap();
+                    unwrap_stats_result(s.accum(val));
                     Some(StatsSummary1D::from_internal(s).into())
                 }
                 (Some(mut state), Some(val)) => {
                     let mut s: InternalStatsSummary1D<f64> = state.to_internal();
-                    s.accum(val).unwrap();
+                    unwrap_stats_result(s.accum(val));
                     *state = StatsSummary1D::from_internal(s);
                     Some(state)
                 }
@@ -198,12 +208,12 @@ pub fn stats1d_tf_trans_inner(
                 (None, Some(val)) => {
                     let val = TwoFloat::from(val);
                     let mut s = InternalStatsSummary1D::new();
-                    s.accum(val).unwrap();
+                    unwrap_stats_result(s.accum(val));
                     Some(s.into())
                 }
                 (Some(mut state), Some(val)) => {
                     let val = TwoFloat::from(val);
-                    state.accum(val).unwrap();
+                    unwrap_stats_result(state.accum(val));
                     Some(state)
                 }
             }
@@ -281,12 +291,12 @@ pub fn stats2d_trans_inner(
                 (Some(state), None) => Some(state),
                 (None, Some(val)) => {
                     let mut s = InternalStatsSummary2D::new();
-                    s.accum(val).unwrap();
+                    unwrap_stats_result(s.accum(val));
                     Some(StatsSummary2D::from_internal(s).into())
                 }
                 (Some(mut state), Some(val)) => {
                     let mut s: InternalStatsSummary2D<f64> = state.to_internal();
-                    s.accum(val).unwrap();
+                    unwrap_stats_result(s.accum(val));
                     *state = StatsSummary2D::from_internal(s);
                     Some(state)
                 }
@@ -328,12 +338,12 @@ pub fn stats2d_tf_trans_inner(
                 (Some(state), None) => Some(state),
                 (None, Some(val)) => {
                     let mut s = InternalStatsSummary2D::new();
-                    s.accum(val).unwrap();
+                    unwrap_stats_result(s.accum(val));
                     Some(s.into())
                 }
                 (Some(mut state), Some(val)) => {
                     let mut s: StatsSummary2DTF = *state;
-                    s.accum(val).unwrap();
+                    unwrap_stats_result(s.accum(val));
                     *state = s;
                     Some(state)
                 }
@@ -501,7 +511,7 @@ pub fn stats1d_summary_trans_inner(
             (Some(state), Some(value)) => {
                 let s = state.to_internal();
                 let v = value.to_internal();
-                let s = s.combine(v).unwrap();
+                let s = unwrap_stats_result(s.combine(v));
                 let s = StatsSummary1D::from_internal(s);
                 Some(s.into())
             }
@@ -529,7 +539,7 @@ pub fn stats2d_summary_trans_inner(
             (Some(state), Some(value)) => {
                 let s = state.to_internal();
                 let v = value.to_internal();
-                let s = s.combine(v).unwrap();
+                let s = unwrap_stats_result(s.combine(v));
                 let s = StatsSummary2D::from_internal(s);
                 Some(s.into())
             }
@@ -618,7 +628,7 @@ pub fn stats1d_combine_inner(
             (Some(state1), Some(state2)) => {
                 let s1 = state1.to_internal();
                 let s2 = state2.to_internal();
-                let s1 = s1.combine(s2).unwrap();
+                let s1 = unwrap_stats_result(s1.combine(s2));
                 Some(StatsSummary1D::from_internal(s1).into())
             }
         })
@@ -652,7 +662,7 @@ pub fn stats2d_combine_inner(
             (Some(state1), Some(state2)) => {
                 let s1 = state1.to_internal();
                 let s2 = state2.to_internal();
-                let s1 = s1.combine(s2).unwrap();
+                let s1 = unwrap_stats_result(s1.combine(s2));
                 Some(StatsSummary2D::from_internal(s1).into())
             }
         })
@@ -2430,19 +2440,23 @@ INSERT INTO prices (
     }
 
     #[pg_test]
-    fn stats_agg_large_values_no_panic() {
-        Spi::connect(|client| {
-            let result = client
-                .select(
-                    "SELECT stats_agg(n) FROM (VALUES (1e308), (1e308), (1e308)) as t(n);",
-                    None,
-                    &[],
-                )
-                .unwrap()
-                .first()
-                .get_one::<i64>();
-
-            assert_eq!(result.unwrap(), Some(3));
+    fn stats_agg_overflow_uses_numeric_out_of_range_sqlstate() {
+        let result = pg_sys::PgTryBuilder::new(|| {
+            Spi::connect(|client| {
+                client
+                    .select(
+                        "SELECT stats_agg(n)
+                        FROM (VALUES (1e308::float8), (1e308::float8)) AS t(n);",
+                        None,
+                        &[],
+                    )
+                    .unwrap();
+            });
+            false
         })
+        .catch_when(PgSqlErrorCode::ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE, |_| true)
+        .execute();
+
+        assert!(result);
     }
 }

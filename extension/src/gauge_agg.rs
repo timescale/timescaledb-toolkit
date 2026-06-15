@@ -46,17 +46,17 @@ pg_type! {
     }
 }
 
-    impl GaugeSummary {
-        pub(super) fn interpolate(
-            &self,
-            interval_start: i64,
-            interval_len: i64,
-            prev: Option<GaugeSummary>,
-            next: Option<GaugeSummary>,
-        ) -> GaugeSummary {
-            let this = MetricSummary::from(self.clone());
-            let prev = prev.map(MetricSummary::from);
-            let next = next.map(MetricSummary::from);
+impl GaugeSummary {
+    pub(super) fn interpolate(
+        &self,
+        interval_start: i64,
+        interval_len: i64,
+        prev: Option<GaugeSummary>,
+        next: Option<GaugeSummary>,
+    ) -> GaugeSummary {
+        let this = MetricSummary::from(self.clone());
+        let prev = prev.map(MetricSummary::from);
+        let next = next.map(MetricSummary::from);
 
         let prev = if this.first.ts > interval_start {
             prev.map(|summary| {
@@ -750,11 +750,7 @@ mod tests {
 
             assert_eq!(
                 expected,
-                select_one!(
-                    client,
-                    "SELECT gauge_agg(ts, val)::TEXT FROM test",
-                    String
-                )
+                select_one!(client, "SELECT gauge_agg(ts, val)::TEXT FROM test", String)
             );
 
             assert_eq!(

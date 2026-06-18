@@ -956,7 +956,7 @@ fn space_saving_text_final(
     state.map(SpaceSavingTextAggregate::from)
 }
 
-#[pg_extern(immutable, parallel_safe)]
+#[pg_extern(immutable, parallel_safe, strict)]
 fn space_saving_serialize(state: Internal) -> bytea {
     let state: Inner<SpaceSavingTransState> = unsafe { state.to_inner().unwrap() };
     crate::do_serialize!(state)

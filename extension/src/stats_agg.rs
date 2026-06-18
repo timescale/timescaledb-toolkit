@@ -115,7 +115,7 @@ fn unwrap_stats_result<T>(result: Result<T, StatsError>) -> T {
         pgrx::ereport!(
             ERROR,
             PgSqlErrorCode::ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE,
-            "SQLSTATE [22003] stats_agg overflowed" 
+            "SQLSTATE [22003] stats_agg overflowed"
         );
     })
 }

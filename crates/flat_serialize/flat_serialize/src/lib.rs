@@ -710,6 +710,7 @@ impl<T: ?Sized> ValOrRef<T> for &T {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::bool_assert_comparison)]
     use crate as flat_serialize;
 
     use flat_serialize_macro::{flat_serialize, FlatSerializable};

@@ -481,7 +481,7 @@ mod tests {
     use super::*;
 
     use pgrx_macros::pg_test;
-    use rand::distributions::{Distribution, Uniform};
+    use rand::distr::{Distribution, Uniform};
 
     #[pg_test]
     fn test_hll_aggregate() {
@@ -960,12 +960,13 @@ mod tests {
         Spi::connect_mut(|client| {
             // This should match THRESHOLD_DATA_VEC from b=12-18
             let thresholds = [3100, 6500, 11500, 20000, 50000, 120000, 350000];
-            let rand_precision: Uniform<usize> = Uniform::new_inclusive(12, 18);
-            let mut rng = rand::thread_rng();
+            let rand_precision: Uniform<usize> = Uniform::new_inclusive(12, 18).unwrap();
+            let mut rng = rand::rng();
             for _ in 0..NUM_BIAS_TRIALS {
                 let precision = rand_precision.sample(&mut rng);
                 let rand_cardinality: Uniform<usize> =
-                    Uniform::new_inclusive(thresholds[precision - 12], 5 * (1 << precision));
+                    Uniform::new_inclusive(thresholds[precision - 12], 5 * (1 << precision))
+                        .unwrap();
                 let cardinality = rand_cardinality.sample(&mut rng);
                 let query = format!(
                     "SELECT hyperloglog({}, v) -> distinct_count() FROM generate_series(1, {}) v",

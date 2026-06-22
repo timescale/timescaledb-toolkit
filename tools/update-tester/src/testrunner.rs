@@ -29,7 +29,7 @@ pub fn run_update_tests<OnErr: FnMut(Test, TestError)>(
             let mut test_client = connect_to(&test_config);
 
             let errors = test_client
-                .create_test_objects_from_files(test_config, old_toolkit_version.clone());
+                .create_test_objects_from_files(test_config.clone(), old_toolkit_version.clone());
 
             for (test, error) in errors {
                 match error {
@@ -98,11 +98,11 @@ pub fn create_test_objects_for_package_testing<OnErr: FnMut(Test, TestError)>(
     Ok(())
 }
 
-fn connect_to(config: &ConnectionConfig<'_>) -> TestClient {
+fn connect_to(config: &ConnectionConfig) -> TestClient {
     let client = Client::connect(&config.config_string(), NoTls).unwrap_or_else(|e| {
         panic!(
             "could not connect to postgres DB {database} due to {e}",
-            database = config.database.unwrap_or(""),
+            database = config.database.as_ref().unwrap_or(&String::new()),
             e = e
         )
     });
@@ -155,7 +155,7 @@ pub fn update_to_and_validate_new_toolkit_version<OnErr: FnMut(Test, TestError)>
 
 fn with_temporary_db<T>(
     db_name: impl AsRef<str>,
-    root_config: &ConnectionConfig<'_>,
+    root_config: &ConnectionConfig,
     f: impl FnOnce() -> T,
 ) -> T {
     let _db_dropper = create_db(root_config, db_name.as_ref());
@@ -167,7 +167,7 @@ fn with_temporary_db<T>(
 // create a database returning an guard that will DROP the db on `drop()`
 #[must_use]
 fn create_db<'a>(
-    root_config: &'a ConnectionConfig<'_>,
+    root_config: &'a ConnectionConfig,
     new_db_name: &'a str,
 ) -> Deferred<(), impl FnMut() + 'a> {
     let mut client = connect_to(root_config).0;
@@ -204,7 +204,7 @@ impl TestClient {
 
     fn create_test_objects_from_files(
         &mut self,
-        root_config: ConnectionConfig<'_>,
+        root_config: ConnectionConfig,
         current_toolkit_version: String,
     ) -> Vec<(Test, Result<(), TestError>)> {
         let all_tests = parser::extract_tests("tests/update");
@@ -304,7 +304,7 @@ impl TestClient {
 
     fn validate_test_objects_from_files(
         &mut self,
-        root_config: ConnectionConfig<'_>,
+        root_config: ConnectionConfig,
         old_toolkit_version: String,
     ) -> Vec<(Test, Result<(), TestError>)> {
         let all_tests = parser::extract_tests("tests/update");

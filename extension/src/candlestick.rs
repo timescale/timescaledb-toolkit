@@ -553,11 +553,11 @@ mod tests {
 
             let expected = "(\
                             version:1,\
-                            open:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            high:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            close:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            volume:Transaction(vol:1,vwap:0)\
+                            open:(ts:\"2022-08-01 00:00:00+00\",val:0.0),\
+                            high:(ts:\"2022-08-01 00:00:00+00\",val:0.0),\
+                            low:(ts:\"2022-08-01 00:00:00+00\",val:0.0),\
+                            close:(ts:\"2022-08-01 00:00:00+00\",val:0.0),\
+                            volume:Transaction(vol:1.0,vwap:0.0)\
                             )";
             assert_eq!(expected, output.unwrap());
         });
@@ -577,11 +577,11 @@ mod tests {
 
             let expected = "(\
                             version:1,\
-                            open:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            high:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            close:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            volume:Transaction(vol:1,vwap:0)\
+                            open:(ts:\"2022-08-01 00:00:00+00\",val:0.0),\
+                            high:(ts:\"2022-08-01 00:00:00+00\",val:0.0),\
+                            low:(ts:\"2022-08-01 00:00:00+00\",val:0.0),\
+                            close:(ts:\"2022-08-01 00:00:00+00\",val:0.0),\
+                            volume:Transaction(vol:1.0,vwap:0.0)\
                             )";
             assert_eq!(expected, output.unwrap());
         });
@@ -697,11 +697,11 @@ mod tests {
                 let expected = format!(
                     "(\
                             version:1,\
-                            open:(ts:\"{extreme_time}\",val:1),\
-                            high:(ts:\"{extreme_time}\",val:1),\
-                            low:(ts:\"{extreme_time}\",val:1),\
-                            close:(ts:\"{extreme_time}\",val:1),\
-                            volume:Transaction(vol:1,vwap:1)\
+                            open:(ts:\"{extreme_time}\",val:1.0),\
+                            high:(ts:\"{extreme_time}\",val:1.0),\
+                            low:(ts:\"{extreme_time}\",val:1.0),\
+                            close:(ts:\"{extreme_time}\",val:1.0),\
+                            volume:Transaction(vol:1.0,vwap:1.0)\
                             )"
                 );
                 assert_eq!(expected, output.unwrap());
@@ -718,11 +718,11 @@ mod tests {
                 let expected = format!(
                     "(\
                  version:1,\
-                 open:(ts:\"2022-08-01 00:00:00+00\",val:{extreme_price}),\
-                 high:(ts:\"2022-08-01 00:00:00+00\",val:{extreme_price}),\
-                 low:(ts:\"2022-08-01 00:00:00+00\",val:{extreme_price}),\
-                 close:(ts:\"2022-08-01 00:00:00+00\",val:{extreme_price}),\
-                 volume:Transaction(vol:1,vwap:{})\
+                 open:(ts:\"2022-08-01 00:00:00+00\",val:{extreme_price}.0),\
+                 high:(ts:\"2022-08-01 00:00:00+00\",val:{extreme_price}.0),\
+                 low:(ts:\"2022-08-01 00:00:00+00\",val:{extreme_price}.0),\
+                 close:(ts:\"2022-08-01 00:00:00+00\",val:{extreme_price}.0),\
+                 volume:Transaction(vol:1.0,vwap:{:.1})\
                  )",
                     (extreme_price + extreme_price + extreme_price)
                 );
@@ -766,10 +766,10 @@ mod tests {
 
             let expected = "(\
                             version:1,\
-                            open:(ts:\"2022-08-01 00:00:00+00\",val:1),\
-                            high:(ts:\"2022-08-01 00:00:00+00\",val:1),\
-                            low:(ts:\"2022-08-01 00:00:00+00\",val:1),\
-                            close:(ts:\"2022-08-01 00:00:00+00\",val:1),\
+                            open:(ts:\"2022-08-01 00:00:00+00\",val:1.0),\
+                            high:(ts:\"2022-08-01 00:00:00+00\",val:1.0),\
+                            low:(ts:\"2022-08-01 00:00:00+00\",val:1.0),\
+                            close:(ts:\"2022-08-01 00:00:00+00\",val:1.0),\
                             volume:Missing()\
                             )";
 
@@ -799,11 +799,11 @@ mod tests {
 
             let expected = "(\
                             version:1,\
-                            open:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            high:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            close:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            volume:Transaction(vol:1,vwap:0)\
+                            open:(ts:\"2022-08-01 00:00:00+00\",val:0.0),\
+                            high:(ts:\"2022-08-01 00:00:00+00\",val:0.0),\
+                            low:(ts:\"2022-08-01 00:00:00+00\",val:0.0),\
+                            close:(ts:\"2022-08-01 00:00:00+00\",val:0.0),\
+                            volume:Transaction(vol:1.0,vwap:0.0)\
                             )";
 
             assert_eq!(
@@ -813,11 +813,11 @@ mod tests {
 
             let expected = "(\
                             version:1,\
-                            open:(ts:\"2022-08-02 00:00:00+00\",val:9),\
-                            high:(ts:\"2022-08-02 00:00:00+00\",val:12),\
-                            low:(ts:\"2022-08-02 00:00:00+00\",val:3),\
-                            close:(ts:\"2022-08-02 00:00:00+00\",val:6),\
-                            volume:Transaction(vol:1,vwap:7)\
+                            open:(ts:\"2022-08-02 00:00:00+00\",val:9.0),\
+                            high:(ts:\"2022-08-02 00:00:00+00\",val:12.0),\
+                            low:(ts:\"2022-08-02 00:00:00+00\",val:3.0),\
+                            close:(ts:\"2022-08-02 00:00:00+00\",val:6.0),\
+                            volume:Transaction(vol:1.0,vwap:7.0)\
                             )";
 
             assert_eq!(
@@ -846,11 +846,11 @@ mod tests {
 
             let expected = "(\
                             version:1,\
-                            open:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            high:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            close:(ts:\"2022-08-01 23:59:59+00\",val:0),\
-                            volume:Transaction(vol:5,vwap:0)\
+                            open:(ts:\"2022-08-01 00:00:00+00\",val:0.0),\
+                            high:(ts:\"2022-08-01 00:00:00+00\",val:0.0),\
+                            low:(ts:\"2022-08-01 00:00:00+00\",val:0.0),\
+                            close:(ts:\"2022-08-01 23:59:59+00\",val:0.0),\
+                            volume:Transaction(vol:5.0,vwap:0.0)\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -876,11 +876,11 @@ mod tests {
 
             let expected = "(\
                             version:1,\
-                            open:(ts:\"2022-08-01 00:00:00+00\",val:1),\
-                            high:(ts:\"2022-08-01 23:59:59+00\",val:5),\
-                            low:(ts:\"2022-08-01 00:00:00+00\",val:1),\
-                            close:(ts:\"2022-08-01 23:59:59+00\",val:5),\
-                            volume:Transaction(vol:5,vwap:15)\
+                            open:(ts:\"2022-08-01 00:00:00+00\",val:1.0),\
+                            high:(ts:\"2022-08-01 23:59:59+00\",val:5.0),\
+                            low:(ts:\"2022-08-01 00:00:00+00\",val:1.0),\
+                            close:(ts:\"2022-08-01 23:59:59+00\",val:5.0),\
+                            volume:Transaction(vol:5.0,vwap:15.0)\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -906,11 +906,11 @@ mod tests {
 
             let expected = "(\
                             version:1,\
-                            open:(ts:\"2022-08-01 00:00:00+00\",val:5),\
-                            high:(ts:\"2022-08-01 00:00:00+00\",val:5),\
-                            low:(ts:\"2022-08-01 23:59:59+00\",val:1),\
-                            close:(ts:\"2022-08-01 23:59:59+00\",val:1),\
-                            volume:Transaction(vol:5,vwap:15)\
+                            open:(ts:\"2022-08-01 00:00:00+00\",val:5.0),\
+                            high:(ts:\"2022-08-01 00:00:00+00\",val:5.0),\
+                            low:(ts:\"2022-08-01 23:59:59+00\",val:1.0),\
+                            close:(ts:\"2022-08-01 23:59:59+00\",val:1.0),\
+                            volume:Transaction(vol:5.0,vwap:15.0)\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -943,11 +943,11 @@ mod tests {
 
             let expected = "(\
                             version:1,\
-                            open:(ts:\"2022-08-01 00:00:00+00\",val:3),\
-                            high:(ts:\"2022-08-01 12:00:00+00\",val:12),\
-                            low:(ts:\"2022-08-01 10:00:00+00\",val:1),\
-                            close:(ts:\"2022-08-01 22:00:00+00\",val:8),\
-                            volume:Transaction(vol:12,vwap:78)\
+                            open:(ts:\"2022-08-01 00:00:00+00\",val:3.0),\
+                            high:(ts:\"2022-08-01 12:00:00+00\",val:12.0),\
+                            low:(ts:\"2022-08-01 10:00:00+00\",val:1.0),\
+                            close:(ts:\"2022-08-01 22:00:00+00\",val:8.0),\
+                            volume:Transaction(vol:12.0,vwap:78.0)\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());
@@ -973,11 +973,11 @@ mod tests {
 
             let expected = "(\
                             version:1,\
-                            open:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            high:(ts:\"2022-08-02 00:00:00+00\",val:8),\
-                            low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            close:(ts:\"2022-08-02 00:00:00+00\",val:8),\
-                            volume:Transaction(vol:9,vwap:41.33333333333333)\
+                            open:(ts:\"2022-08-01 00:00:00+00\",val:0.0),\
+                            high:(ts:\"2022-08-02 00:00:00+00\",val:8.0),\
+                            low:(ts:\"2022-08-01 00:00:00+00\",val:0.0),\
+                            close:(ts:\"2022-08-02 00:00:00+00\",val:8.0),\
+                            volume:Transaction(vol:9.0,vwap:41.33333333333333)\
                             )";
 
             let output = select_one!(client, stmt, &str);
@@ -1015,11 +1015,11 @@ mod tests {
 
             let expected = "(\
                             version:1,\
-                            open:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            high:(ts:\"2022-08-02 23:59:59+00\",val:8),\
-                            low:(ts:\"2022-08-01 00:00:00+00\",val:0),\
-                            close:(ts:\"2022-08-02 23:59:59+00\",val:8),\
-                            volume:Transaction(vol:9,vwap:36)\
+                            open:(ts:\"2022-08-01 00:00:00+00\",val:0.0),\
+                            high:(ts:\"2022-08-02 23:59:59+00\",val:8.0),\
+                            low:(ts:\"2022-08-01 00:00:00+00\",val:0.0),\
+                            close:(ts:\"2022-08-02 23:59:59+00\",val:8.0),\
+                            volume:Transaction(vol:9.0,vwap:36.0)\
                             )";
             let (_, output) = select_two!(client, stmt, &str, &str);
             assert_eq!(expected, output.unwrap());

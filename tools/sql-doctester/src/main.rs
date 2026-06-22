@@ -14,36 +14,31 @@ mod parser;
 mod runner;
 
 fn main() {
-    let matches = Command::new("sql-doctester")
+    let mut matches = Command::new("sql-doctester")
         .about("Runs sql commands from docs/ dir to test out toolkit")
         .arg_required_else_help(true)
-        .arg(Arg::new("HOST").short('h').long("host").takes_value(true))
-        .arg(Arg::new("PORT").short('p').long("port").takes_value(true))
-        .arg(Arg::new("USER").short('u').long("user").takes_value(true))
-        .arg(
-            Arg::new("PASSWORD")
-                .short('a')
-                .long("password")
-                .takes_value(true),
-        )
-        .arg(Arg::new("DB").short('d').long("database").takes_value(true))
-        .arg(Arg::new("INPUT").takes_value(true))
+        .arg(Arg::new("HOST").short('h').long("host").num_args(1))
+        .arg(Arg::new("PORT").short('p').long("port").num_args(1))
+        .arg(Arg::new("USER").short('u').long("user").num_args(1))
+        .arg(Arg::new("PASSWORD").short('a').long("password").num_args(1))
+        .arg(Arg::new("DB").short('d').long("database").num_args(1))
+        .arg(Arg::new("INPUT").num_args(1))
         .mut_arg("help", |_h| Arg::new("help").long("help"))
         .get_matches();
 
-    let dirname = matches.value_of("INPUT").expect("need input");
+    let dirname = matches.remove_one::<String>("INPUT").expect("need input");
 
     let connection_config = ConnectionConfig {
-        host: matches.value_of("HOST"),
-        port: matches.value_of("PORT"),
-        user: matches.value_of("USER"),
-        password: matches.value_of("PASSWORD"),
-        database: matches.value_of("DB"),
+        host: matches.remove_one::<String>("HOST"),
+        port: matches.remove_one::<String>("PORT"),
+        user: matches.remove_one::<String>("USER"),
+        password: matches.remove_one::<String>("PASSWORD"),
+        database: matches.remove_one::<String>("DB"),
     };
 
     let startup_script = include_str!("startup.sql");
 
-    let all_tests = extract_tests(dirname);
+    let all_tests = extract_tests(&dirname);
 
     let mut num_errors = 0;
     let stdout = io::stdout();

@@ -1211,7 +1211,7 @@ mod tests {
                 num_buckets:9,\
                 compactions:8,\
                 count:15,\
-                sum:0,\
+                sum:0.0,\
                 buckets:[\
                     (Negative(2),1),\
                     (Negative(1),2),\

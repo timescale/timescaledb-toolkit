@@ -1481,9 +1481,7 @@ mod tests {
     use approx::relative_eq;
 
     use pgrx_macros::pg_test;
-    use rand::rngs::SmallRng;
-    use rand::seq::SliceRandom;
-    use rand::{self, Rng, SeedableRng};
+    use rand::prelude::*;
 
     const RUNS: usize = 10; // Number of runs to generate
     const VALS: usize = 10000; // Number of values to use for each run
@@ -1530,7 +1528,7 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 test,
-                "(version:1,n:1,sx:10,sx2:0,sx3:0,sx4:0,sy:10,sy2:0,sy3:0,sy4:0,sxy:0)"
+                "(version:1,n:1,sx:10.0,sx2:0.0,sx3:0.0,sx4:0.0,sy:10.0,sy2:0.0,sy3:0.0,sy4:0.0,sxy:0.0)"
             );
 
             client
@@ -1547,8 +1545,7 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            let expected =
-                "(version:1,n:2,sx:30,sx2:50,sx3:0,sx4:1250,sy:30,sy2:50,sy3:0,sy4:1250,sxy:50)";
+            let expected = "(version:1,n:2,sx:30.0,sx2:50.0,sx3:0.0,sx4:1250.0,sy:30.0,sy2:50.0,sy3:0.0,sy4:1250.0,sxy:50.0)";
             assert_eq!(test, expected);
 
             // Test a few functions to see that the text serialized object behave the same as the constructed one
@@ -1645,7 +1642,7 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 test,
-                "(version:1,n:3,sx:NaN,sx2:NaN,sx3:NaN,sx4:NaN,sy:60,sy2:200,sy3:0,sy4:20000,sxy:NaN)"
+                "(version:1,n:3,sx:NaN,sx2:NaN,sx3:NaN,sx4:NaN,sy:60.0,sy2:200.0,sy3:0.0,sy4:20000.0,sxy:NaN)"
             );
 
             client
@@ -1664,7 +1661,7 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 test,
-                "(version:1,n:4,sx:NaN,sx2:NaN,sx3:NaN,sx4:NaN,sy:inf,sy2:NaN,sy3:NaN,sy4:NaN,sxy:NaN)"
+                "(version:1,n:4,sx:NaN,sx2:NaN,sx3:NaN,sx4:NaN,sy:inf,sy2:-NaN,sy3:-NaN,sy4:-NaN,sxy:NaN)"
             );
         });
     }
@@ -1765,7 +1762,7 @@ mod tests {
         pub fn new(runs: usize, values: usize, seed: Option<u64>) -> TestState {
             let seed = match seed {
                 Some(s) => s,
-                None => SmallRng::from_entropy().gen_range(0..u64::MAX),
+                None => SmallRng::from_rng(&mut rand::rng()).random_range(0..u64::MAX),
             };
 
             TestState {
@@ -1787,18 +1784,18 @@ mod tests {
             // We'll cluster the exponential components of the random values around a particular value
             let exp_base = self
                 .r#gen
-                .gen_range((f64::MIN_EXP / 10) as f64..(f64::MAX_EXP / 10) as f64);
+                .random_range((f64::MIN_EXP / 10) as f64..(f64::MAX_EXP / 10) as f64);
 
             for _ in 0..self.values {
-                let exp = self.r#gen.gen_range((exp_base - 2.)..=(exp_base + 2.));
-                let mantissa = self.r#gen.gen_range((1.)..2.);
+                let exp = self.r#gen.random_range((exp_base - 2.)..=(exp_base + 2.));
+                let mantissa = self.r#gen.random_range((1.)..2.);
                 let sign = [-1., 1.].choose(&mut self.r#gen).unwrap();
                 self.x_values.push(sign * mantissa * exp.exp2());
 
-                let exp = self.r#gen.gen_range((exp_base - 2.)..=(exp_base + 2.));
-                let mantissa = self.r#gen.gen_range((1.)..2.);
+                let exp = self.r#gen.random_range((exp_base - 2.)..=(exp_base + 2.));
+                let mantissa = self.r#gen.random_range((1.)..2.);
                 let sign = [-1., 1.].choose(&mut self.r#gen).unwrap();
-                self.y_values.push(sign * mantissa * exp.exp2());
+                self.y_values.push(*sign * mantissa * exp.exp2());
             }
         }
 

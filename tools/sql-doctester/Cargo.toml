@@ -5,11 +5,11 @@ edition = "2021"
 
 [dependencies]
 bytecount = "0.6.2"
-clap = { version = "3.2.15", features = ["wrap_help"] }
-colored = "2.0.0"
-postgres = "=0.19.10" # pinned because we pin tokio-postgres
-pulldown-cmark = "0.8.0"
+clap = { version = "4.6.1", features = ["wrap_help"] }
+colored = "3.1.1"
+postgres = "=0.19.14" # pinned because we pin tokio-postgres
+pulldown-cmark = "0.13.4"
 rayon = "1.5"
-tokio-postgres = "=0.7.13" # pinned because 0.7.11 added `SimpleQueryMessage::RowDescription`
-uuid = { version = "0.8", features = ["v4"] }
+tokio-postgres = "=0.7.18" # pinned because 0.7.11 added `SimpleQueryMessage::RowDescription`
+uuid = { version = "1.23.3", features = ["v4"] }
 walkdir = "2"

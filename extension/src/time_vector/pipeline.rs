@@ -507,9 +507,9 @@ mod tests {
                 arrow_run_pipeline(\
                     timevector('2021-01-01 00:00:00+00'::timestamp with time zone, '0.1'::double precision), \
                    '(version:1,num_elements:3,elements:[\
-                        Arithmetic(function:Round,rhs:0),\
-                        Arithmetic(function:Abs,rhs:0),\
-                        Arithmetic(function:Round,rhs:0)\
+                        Arithmetic(function:Round,rhs:0.0),\
+                        Arithmetic(function:Abs,rhs:0.0),\
+                        Arithmetic(function:Round,rhs:0.0)\
                     ])'::unstabletimevectorpipeline\
                 )"
             );

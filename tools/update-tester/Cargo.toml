@@ -9,12 +9,12 @@ edition = "2021"
 control_file_reader = {path = "../../crates/scripting-utilities/control_file_reader"}
 postgres_connection_configuration = {path = "../../crates/scripting-utilities/postgres_connection_configuration"}
 
-colored = "2.0.0"
-clap = { version = "3.2.15", features = ["wrap_help"] }
-postgres = "0.19.1"
-semver = "1.0.9"
-toml_edit = "0.14.3"
-xshell = "0.1.17"
-pulldown-cmark = "0.8.0"
+colored = "3.1.1"
+clap = { version = "4.6.1", features = ["wrap_help"] }
+postgres = "0.19.14"
+semver = "1.0.28"
+toml_edit = "0.25"
+xshell = "0.2.7"
+pulldown-cmark = "0.13.4"
 walkdir = "2.3.2"
 bytecount = "0.6.3"

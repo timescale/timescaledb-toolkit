@@ -10,7 +10,7 @@ use clap::Command;
 
 use colored::Colorize;
 
-use xshell::{read_file, Cmd};
+use xshell::{Cmd, Shell};
 
 use control_file_reader::get_upgradeable_from;
 use postgres_connection_configuration::ConnectionConfig;
@@ -48,37 +48,37 @@ fn main() {
                 Arg::new("HOST")
                     .short('h')
                     .long("host")
-                    .takes_value(true)
+                    .num_args(1)
             )
             .arg(
                 Arg::new("PORT")
                     .short('p')
                     .long("port")
-                    .takes_value(true)
+                    .num_args(1)
             )
             .arg(
                 Arg::new("USER")
                     .short('u')
                     .long("user")
-                    .takes_value(true)
+                    .num_args(1)
             )
             .arg(
                 Arg::new("PASSWORD")
                     .short('a')
                     .long("password")
-                    .takes_value(true)
+                    .num_args(1)
             )
             .arg(
                 Arg::new("DB")
                     .short('d')
                     .long("database")
-                    .takes_value(true)
+                    .num_args(1)
             )
-            .arg(Arg::new("CACHE").short('c').long("cache").takes_value(true))
-            .arg(Arg::new("REINSTALL").long("reinstall").takes_value(true))
-            .arg(Arg::new("PG_CONFIG").takes_value(true))
-            .arg(Arg::new("CARGO_PGRX").takes_value(true))
-            .arg(Arg::new("CARGO_PGRX_OLD").takes_value(true)),
+            .arg(Arg::new("CACHE").short('c').long("cache").num_args(1))
+            .arg(Arg::new("REINSTALL").long("reinstall").num_args(1))
+            .arg(Arg::new("PG_CONFIG").num_args(1))
+            .arg(Arg::new("CARGO_PGRX").num_args(1))
+            .arg(Arg::new("CARGO_PGRX_OLD").num_args(1)),
     )
 	.subcommand(
 	    Command::new("create-test-objects")
@@ -88,31 +88,31 @@ fn main() {
                 Arg::new("HOST")
                     .short('h')
                     .long("host")
-                    .takes_value(true)
+                    .num_args(1)
             )
             .arg(
                 Arg::new("PORT")
                     .short('p')
                     .long("port")
-                    .takes_value(true)
+                    .num_args(1)
             )
             .arg(
                 Arg::new("USER")
                     .short('u')
                     .long("user")
-                    .takes_value(true)
+                    .num_args(1)
             )
             .arg(
                 Arg::new("PASSWORD")
                     .short('a')
                     .long("password")
-                    .takes_value(true)
+                    .num_args(1)
             )
             .arg(
                 Arg::new("DB")
                     .short('d')
                     .long("database")
-                    .takes_value(true)
+                    .num_args(1)
             )
 	)
 	.subcommand(
@@ -123,31 +123,31 @@ fn main() {
                 Arg::new("HOST")
                     .short('h')
                     .long("host")
-                    .takes_value(true)
+                    .num_args(1)
             )
             .arg(
                 Arg::new("PORT")
                     .short('p')
                     .long("port")
-                    .takes_value(true)
+                    .num_args(1)
             )
             .arg(
                 Arg::new("USER")
                     .short('u')
                     .long("user")
-                    .takes_value(true)
+                    .num_args(1)
             )
             .arg(
                 Arg::new("PASSWORD")
                     .short('a')
                     .long("password")
-                    .takes_value(true)
+                    .num_args(1)
             )
             .arg(
                 Arg::new("DB")
                     .short('d')
                     .long("database")
-                    .takes_value(true)
+                    .num_args(1)
             )
 	)
 // Mutates help, removing the short flag (-h) so that it can be used by HOST
@@ -160,30 +160,30 @@ fn main() {
     match matches.subcommand() {
         Some(("full-update-test-source", full_update_matches)) => {
             let connection_config = ConnectionConfig {
-                host: full_update_matches.value_of("HOST"),
-                port: full_update_matches.value_of("PORT"),
-                user: full_update_matches.value_of("USER"),
-                password: full_update_matches.value_of("PASSWORD"),
-                database: full_update_matches.value_of("DB"),
+                host: full_update_matches.get_one::<String>("HOST").cloned(),
+                port: full_update_matches.get_one::<String>("PORT").cloned(),
+                user: full_update_matches.get_one::<String>("USER").cloned(),
+                password: full_update_matches.get_one::<String>("PASSWORD").cloned(),
+                database: full_update_matches.get_one::<String>("DB").cloned(),
             };
 
-            let cache_dir = full_update_matches.value_of("CACHE");
+            let cache_dir = full_update_matches.get_one::<String>("CACHE");
 
             let root_dir = ".";
 
             let reinstall = full_update_matches
-                .value_of("REINSTALL")
+                .get_one::<String>("REINSTALL")
                 .map(|r| r.split_terminator(',').collect())
                 .unwrap_or_else(HashSet::new);
 
             let pg_config = full_update_matches
-                .value_of("PG_CONFIG")
+                .get_one::<String>("PG_CONFIG")
                 .expect("missing pg_config");
             let cargo_pgrx = full_update_matches
-                .value_of("CARGO_PGRX")
+                .get_one::<String>("CARGO_PGRX")
                 .expect("missing cargo_pgrx");
             let cargo_pgrx_old = full_update_matches
-                .value_of("CARGO_PGRX_OLD")
+                .get_one::<String>("CARGO_PGRX_OLD")
                 .expect("missing cargo_pgrx_old");
 
             let mut num_errors = 0;
@@ -200,7 +200,7 @@ fn main() {
 
             let res = try_main(
                 root_dir,
-                cache_dir,
+                cache_dir.map(|s| s.as_str()),
                 &connection_config,
                 pg_config,
                 cargo_pgrx,
@@ -224,11 +224,19 @@ fn main() {
         }
         Some(("create-test-objects", create_test_object_matches)) => {
             let connection_config = ConnectionConfig {
-                host: create_test_object_matches.value_of("HOST"),
-                port: create_test_object_matches.value_of("PORT"),
-                user: create_test_object_matches.value_of("USER"),
-                password: create_test_object_matches.value_of("PASSWORD"),
-                database: create_test_object_matches.value_of("DB"),
+                host: create_test_object_matches
+                    .get_one::<String>("HOST")
+                    .cloned(),
+                port: create_test_object_matches
+                    .get_one::<String>("PORT")
+                    .cloned(),
+                user: create_test_object_matches
+                    .get_one::<String>("USER")
+                    .cloned(),
+                password: create_test_object_matches
+                    .get_one::<String>("PASSWORD")
+                    .cloned(),
+                database: create_test_object_matches.get_one::<String>("DB").cloned(),
             };
 
             let mut num_errors = 0;
@@ -260,11 +268,21 @@ fn main() {
         }
         Some(("validate-test-objects", validate_test_object_matches)) => {
             let connection_config = ConnectionConfig {
-                host: validate_test_object_matches.value_of("HOST"),
-                port: validate_test_object_matches.value_of("PORT"),
-                user: validate_test_object_matches.value_of("USER"),
-                password: validate_test_object_matches.value_of("PASSWORD"),
-                database: validate_test_object_matches.value_of("DB"),
+                host: validate_test_object_matches
+                    .get_one::<String>("HOST")
+                    .cloned(),
+                port: validate_test_object_matches
+                    .get_one::<String>("PORT")
+                    .cloned(),
+                user: validate_test_object_matches
+                    .get_one::<String>("USER")
+                    .cloned(),
+                password: validate_test_object_matches
+                    .get_one::<String>("PASSWORD")
+                    .cloned(),
+                database: validate_test_object_matches
+                    .get_one::<String>("DB")
+                    .cloned(),
             };
 
             let mut num_errors = 0;
@@ -280,7 +298,8 @@ fn main() {
             };
 
             let root_dir = ".";
-            let res = try_validate_objects(&connection_config, root_dir, on_error);
+            let res = Shell::new()
+                .and_then(|sh| try_validate_objects(&sh, &connection_config, root_dir, on_error));
             if let Err(err) = res {
                 eprintln!("{err}");
                 process::exit(1);
@@ -301,14 +320,15 @@ fn main() {
 fn try_main<OnErr: FnMut(parser::Test, testrunner::TestError)>(
     root_dir: &str,
     cache_dir: Option<&str>,
-    db_conn: &ConnectionConfig<'_>,
+    db_conn: &ConnectionConfig,
     pg_config: &str,
     cargo_pgrx: &str,
     cargo_pgrx_old: &str,
     reinstall: HashSet<&str>,
     on_error: OnErr,
 ) -> xshell::Result<()> {
-    let (current_version, old_versions) = get_version_info(root_dir)?;
+    let sh = Shell::new()?;
+    let (current_version, old_versions) = get_version_info(&sh, root_dir)?;
     if old_versions.is_empty() {
         panic!("no old versions to upgrade from")
     }
@@ -316,6 +336,7 @@ fn try_main<OnErr: FnMut(parser::Test, testrunner::TestError)>(
     println!("{} [{}]", "Testing".green().bold(), old_versions.join(", "));
 
     installer::install_all_versions(
+        &sh,
         root_dir,
         cache_dir,
         pg_config,
@@ -329,34 +350,35 @@ fn try_main<OnErr: FnMut(parser::Test, testrunner::TestError)>(
     testrunner::run_update_tests(db_conn, current_version, old_versions, on_error)
 }
 fn try_create_objects<OnErr: FnMut(parser::Test, testrunner::TestError)>(
-    db_conn: &ConnectionConfig<'_>,
+    db_conn: &ConnectionConfig,
     on_error: OnErr,
 ) -> xshell::Result<()> {
     testrunner::create_test_objects_for_package_testing(db_conn, on_error)
 }
 
 fn try_validate_objects<OnErr: FnMut(parser::Test, testrunner::TestError)>(
-    _conn: &ConnectionConfig<'_>,
+    sh: &Shell,
+    conn: &ConnectionConfig,
     root_dir: &str,
     on_error: OnErr,
 ) -> xshell::Result<()> {
-    let (_current_version, old_versions) = get_version_info(root_dir)?;
+    let (_current_version, old_versions) = get_version_info(sh, root_dir)?;
     if old_versions.is_empty() {
         panic!("no old versions to upgrade from")
     }
-    testrunner::update_to_and_validate_new_toolkit_version(_conn, on_error)
+    testrunner::update_to_and_validate_new_toolkit_version(conn, on_error)
 }
 
-fn get_version_info(root_dir: &str) -> xshell::Result<(String, Vec<String>)> {
+fn get_version_info(sh: &xshell::Shell, root_dir: &str) -> xshell::Result<(String, Vec<String>)> {
     let extension_dir = path!(root_dir / "extension");
     let control_file = path!(extension_dir / "timescaledb_toolkit.control");
     let manifest_file = path!(extension_dir / "Cargo.toml");
 
-    let manifest_contents = read_file(manifest_file)?;
-    let control_contents = read_file(control_file)?;
+    let manifest_contents = sh.read_file(manifest_file)?;
+    let control_contents = sh.read_file(control_file)?;
 
     let current_version = manifest_contents
-        .parse::<toml_edit::Document>()
+        .parse::<toml_edit::Document<String>>()
         .expect("failed to parse extension/Cargo.toml")
         .get("package")
         .expect("failed to find [package] in extension/Cargo.toml")

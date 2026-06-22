@@ -4,6 +4,7 @@ use pulldown_cmark::{
     CodeBlockKind::Fenced,
     CowStr, Event, Parser,
     Tag::{CodeBlock, Heading},
+    TagEnd,
 };
 
 use crate::{Test, TestFile};
@@ -35,10 +36,10 @@ pub fn extract_tests_from_string(s: &str, file_stem: &str) -> TestFile {
     'block_hunt: while let Some((event, span)) = parser.next() {
         match event {
             // we found a heading, add it to the stack
-            Event::Start(Heading(level)) => {
+            Event::Start(Heading { level, .. }) => {
                 heading_stack.truncate(level as usize - 1);
                 let mut header = "`".to_string();
-                consume_text_until!(parser yields Event::End(Heading(..)) =>
+                consume_text_until!(parser yields Event::End(TagEnd::Heading(_)) =>
                     |text: CowStr| header.push_str(&text)
                 );
                 header.truncate(header.trim_end().len());
@@ -53,7 +54,7 @@ pub fn extract_tests_from_string(s: &str, file_stem: &str) -> TestFile {
                 // non-test code block, consume it and continue looking
                 if let BlockKind::Other = code_block_info.kind {
                     for (event, _) in &mut parser {
-                        if let Event::End(CodeBlock(Fenced(..))) = event {
+                        if let Event::End(TagEnd::CodeBlock) = event {
                             break;
                         }
                     }
@@ -91,7 +92,7 @@ pub fn extract_tests_from_string(s: &str, file_stem: &str) -> TestFile {
                 };
 
                 // consume the lines of the test
-                consume_text_until!(parser yields Event::End(CodeBlock(Fenced(..))) =>
+                consume_text_until!(parser yields Event::End(TagEnd::CodeBlock) =>
                     |text: CowStr| test.text.push_str(&text)
                 );
 
@@ -126,7 +127,7 @@ pub fn extract_tests_from_string(s: &str, file_stem: &str) -> TestFile {
 
                         // test must be over, continue at the top
                         Some((Event::Start(CodeBlock(..)), _))
-                        | Some((Event::Start(Heading(..)), _)) => {
+                        | Some((Event::Start(Heading { .. }), _)) => {
                             tests.push(test);
                             continue 'block_hunt;
                         }
@@ -146,7 +147,7 @@ pub fn extract_tests_from_string(s: &str, file_stem: &str) -> TestFile {
                 }
 
                 // consume the output
-                consume_text_until!(parser yields Event::End(CodeBlock(Fenced(..))) =>
+                consume_text_until!(parser yields Event::End(TagEnd::CodeBlock) =>
                     |text: CowStr| {
                         let rows = text.split('\n').skip(2).filter(|s| !s.is_empty()).map(|s|
                             s.split('|').map(|s| s.trim().to_string()).collect::<Vec<_>>()

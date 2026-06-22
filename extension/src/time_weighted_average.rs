@@ -816,9 +816,9 @@ mod tests {
             // test basic with 2 points
             let expected = "(\
                 version:1,\
-                first:(ts:\"2020-01-01 00:00:00+00\",val:10),\
-                last:(ts:\"2020-01-01 00:01:00+00\",val:20),\
-                weighted_sum:900000000,\
+                first:(ts:\"2020-01-01 00:00:00+00\",val:10.0),\
+                last:(ts:\"2020-01-01 00:01:00+00\",val:20.0),\
+                weighted_sum:900000000.0,\
                 method:Linear\
             )";
             assert_eq!(select_one!(client, linear_time_weight, String), expected);
@@ -826,9 +826,9 @@ mod tests {
 
             let expected = "(\
                 version:1,\
-                first:(ts:\"2020-01-01 00:00:00+00\",val:10),\
-                last:(ts:\"2020-01-01 00:01:00+00\",val:20),\
-                weighted_sum:600000000,\
+                first:(ts:\"2020-01-01 00:00:00+00\",val:10.0),\
+                last:(ts:\"2020-01-01 00:01:00+00\",val:20.0),\
+                weighted_sum:600000000.0,\
                 method:LOCF\
             )";
             assert_eq!(select_one!(client, locf_time_weight, String), expected);
@@ -840,18 +840,18 @@ mod tests {
 
             let expected = "(\
                 version:1,\
-                first:(ts:\"2020-01-01 00:00:00+00\",val:10),\
-                last:(ts:\"2020-01-01 00:04:00+00\",val:10),\
-                weighted_sum:3600000000,\
+                first:(ts:\"2020-01-01 00:00:00+00\",val:10.0),\
+                last:(ts:\"2020-01-01 00:04:00+00\",val:10.0),\
+                weighted_sum:3600000000.0,\
                 method:Linear\
             )";
             assert_eq!(select_one!(client, linear_time_weight, String), expected);
             assert!((select_one!(client, &*avg(expected), f64) - 15.0).abs() < f64::EPSILON);
             let expected = "(\
                 version:1,\
-                first:(ts:\"2020-01-01 00:00:00+00\",val:10),\
-                last:(ts:\"2020-01-01 00:04:00+00\",val:10),\
-                weighted_sum:3600000000,\
+                first:(ts:\"2020-01-01 00:00:00+00\",val:10.0),\
+                last:(ts:\"2020-01-01 00:04:00+00\",val:10.0),\
+                weighted_sum:3600000000.0,\
                 method:LOCF\
             )";
             assert_eq!(select_one!(client, locf_time_weight, String), expected);
@@ -863,18 +863,18 @@ mod tests {
 
             let expected = "(\
                 version:1,\
-                first:(ts:\"2020-01-01 00:00:00+00\",val:10),\
-                last:(ts:\"2020-01-01 00:20:00+00\",val:30),\
-                weighted_sum:25500000000,\
+                first:(ts:\"2020-01-01 00:00:00+00\",val:10.0),\
+                last:(ts:\"2020-01-01 00:20:00+00\",val:30.0),\
+                weighted_sum:25500000000.0,\
                 method:Linear\
             )";
             assert_eq!(select_one!(client, linear_time_weight, String), expected);
             assert!((select_one!(client, &*avg(expected), f64) - 21.25).abs() < f64::EPSILON);
             let expected = "(\
                 version:1,\
-                first:(ts:\"2020-01-01 00:00:00+00\",val:10),\
-                last:(ts:\"2020-01-01 00:20:00+00\",val:30),\
-                weighted_sum:21300000000,\
+                first:(ts:\"2020-01-01 00:00:00+00\",val:10.0),\
+                last:(ts:\"2020-01-01 00:20:00+00\",val:30.0),\
+                weighted_sum:21300000000.0,\
                 method:LOCF\
             )";
             assert_eq!(select_one!(client, locf_time_weight, String), expected);

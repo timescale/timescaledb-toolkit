@@ -8,7 +8,7 @@ use syn::{
     spanned::Spanned,
     token,
     visit::Visit,
-    Attribute, Expr, Field, Ident, Result, Token, Type,
+    Attribute, Expr, ExprLit, Field, Ident, Result, Token, Type,
 };
 
 use crate::{
@@ -32,7 +32,7 @@ impl Parse for FlatSerialize {
         let field_attr_path = flat_serialize_attr_path("field_attr");
         let (per_field_attrs, attrs): (Vec<_>, _) = attrs
             .into_iter()
-            .partition(|attr| attr.path == field_attr_path);
+            .partition(|attr| attr.path() == &field_attr_path);
         let per_field_attrs: Result<_> = per_field_attrs
             .into_iter()
             .map(|a| a.parse_args_with(PerFieldsAttr::parse))
@@ -70,7 +70,7 @@ impl Parse for FlatSerializeStruct {
             let _: Token![>] = input.parse()?;
         }
         let _brace_token: token::Brace = braced!(content in input);
-        let mut fields = content.parse_terminated(FlatSerializeField::parse)?;
+        let mut fields = content.parse_terminated(FlatSerializeField::parse, Token![,])?;
         validate_self_fields(fields.iter_mut());
         Ok(Self {
             per_field_attrs: vec![],
@@ -96,7 +96,7 @@ impl Parse for FlatSerializeEnum {
         let _brace_token: token::Brace = braced!(content in input);
         let tag = Field::parse_named(&content)?;
         let _comma_token: Token![,] = content.parse()?;
-        let variants = content.parse_terminated(FlatSerializeVariant::parse)?;
+        let variants = content.parse_terminated(FlatSerializeVariant::parse, Token![,])?;
         Ok(Self {
             per_field_attrs: vec![],
             attrs: vec![],
@@ -120,7 +120,7 @@ impl Parse for FlatSerializeVariant {
         let _colon_token: Token![:] = input.parse()?;
         let tag_val = input.parse()?;
         let _brace_token: token::Brace = braced!(content in input);
-        let mut fields = content.parse_terminated(FlatSerializeField::parse)?;
+        let mut fields = content.parse_terminated(FlatSerializeField::parse, Token![,])?;
         validate_self_fields(fields.iter_mut());
         Ok(Self {
             tag_val,
@@ -142,7 +142,7 @@ impl Parse for FlatSerializeField {
         let path = flat_serialize_attr_path("flatten");
         let mut use_trait = false;
         field.attrs.retain(|attr| {
-            let is_flatten = attr.path == path;
+            let is_flatten = attr.path() == &path;
             if is_flatten {
                 use_trait = true;
                 return false;
@@ -225,8 +225,11 @@ impl Parse for PerFieldsAttr {
                 "expected `variable`",
             ));
         }
-        let fixed = match &fixed.lit {
-            syn::Lit::Str(fixed) => {
+        let fixed = match &fixed.value {
+            syn::Expr::Lit(ExprLit {
+                lit: syn::Lit::Str(fixed),
+                ..
+            }) => {
                 let mut fixed_attrs = fixed.parse_with(Attribute::parse_outer)?;
                 if fixed_attrs.len() != 1 {
                     return Err(syn::Error::new(
@@ -239,7 +242,7 @@ impl Parse for PerFieldsAttr {
 
             _ => {
                 return Err(syn::Error::new(
-                    fixed.lit.span(),
+                    fixed.span(),
                     "must contain exactly one attribute",
                 ))
             }
@@ -247,8 +250,11 @@ impl Parse for PerFieldsAttr {
 
         let variable = match variable {
             None => None,
-            Some(variable) => match &variable.lit {
-                syn::Lit::Str(variable) => {
+            Some(variable) => match &variable.value {
+                syn::Expr::Lit(ExprLit {
+                    lit: syn::Lit::Str(variable),
+                    ..
+                }) => {
                     let mut variable_attrs = variable.parse_with(Attribute::parse_outer)?;
                     if variable_attrs.len() != 1 {
                         return Err(syn::Error::new(
@@ -261,7 +267,7 @@ impl Parse for PerFieldsAttr {
 
                 _ => {
                     return Err(syn::Error::new(
-                        variable.lit.span(),
+                        variable.span(),
                         "must contain exactly one attribute",
                     ))
                 }

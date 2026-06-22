@@ -796,7 +796,7 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 val.unwrap(),
-                "(version:1,n:5,sx:100,sx2:250,sx3:0,sx4:21250)"
+                "(version:1,n:5,sx:100.0,sx2:250.0,sx3:0.0,sx4:21250.0)"
             );
         });
     }
@@ -845,9 +845,9 @@ mod tests {
                 arrow_run_pipeline_then_stats_agg(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,num_elements:3,elements:[\
-                        Arithmetic(function:Ceil,rhs:0),\
-                        Arithmetic(function:Abs,rhs:0),\
-                        Arithmetic(function:Floor,rhs:0)\
+                        Arithmetic(function:Ceil,rhs:0.0),\
+                        Arithmetic(function:Abs,rhs:0.0),\
+                        Arithmetic(function:Floor,rhs:0.0)\
                     ])'::pipelinethenstatsagg\
                 ) -> '(version:1)'::accessoraverage)"
             );
@@ -941,9 +941,9 @@ mod tests {
                 arrow_pipeline_then_sum(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,num_elements:3,elements:[\
-                        Arithmetic(function:Ceil,rhs:0),\
-                        Arithmetic(function:Abs,rhs:0),\
-                        Arithmetic(function:Floor,rhs:0)\
+                        Arithmetic(function:Ceil,rhs:0.0),\
+                        Arithmetic(function:Abs,rhs:0.0),\
+                        Arithmetic(function:Floor,rhs:0.0)\
                     ])'::pipelinethensum\
                 )"
             );
@@ -1037,9 +1037,9 @@ mod tests {
                 arrow_pipeline_then_average(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,num_elements:3,elements:[\
-                        Arithmetic(function:Ceil,rhs:0),\
-                        Arithmetic(function:Abs,rhs:0),\
-                        Arithmetic(function:Floor,rhs:0)\
+                        Arithmetic(function:Ceil,rhs:0.0),\
+                        Arithmetic(function:Abs,rhs:0.0),\
+                        Arithmetic(function:Floor,rhs:0.0)\
                     ])'::pipelinethenaverage\
                 )"
             );
@@ -1133,9 +1133,9 @@ mod tests {
                 arrow_pipeline_then_num_vals(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,num_elements:3,elements:[\
-                        Arithmetic(function:Ceil,rhs:0),\
-                        Arithmetic(function:Abs,rhs:0),\
-                        Arithmetic(function:Floor,rhs:0)\
+                        Arithmetic(function:Ceil,rhs:0.0),\
+                        Arithmetic(function:Abs,rhs:0.0),\
+                        Arithmetic(function:Floor,rhs:0.0)\
                     ])'::pipelinethennumvals\
                 )"
             );
@@ -1185,7 +1185,7 @@ mod tests {
                 .unwrap();
             assert_eq!(
                 val.unwrap(),
-                "(version:1,stats:(n:5,sx:3156624000,sx2:74649600000,sx3:0,sx4:1894671345254400000000,sy:215,sy2:2280,sy3:6720.000000000007,sy4:1788960,sxy:12960000),first:(ts:\"2020-01-01 00:00:00+00\",val:15),second:(ts:\"2020-01-02 00:00:00+00\",val:25),penultimate:(ts:\"2020-01-04 00:00:00+00\",val:10),last:(ts:\"2020-01-05 00:00:00+00\",val:30),reset_sum:45,num_resets:2,num_changes:4,bounds:(is_present:0,has_left:0,has_right:0,padding:(0,0,0,0,0),left:None,right:None))"
+                "(version:1,stats:(n:5,sx:3156624000.0,sx2:74649600000.0,sx3:0.0,sx4:1894671345254400000000.0,sy:215.0,sy2:2280.0,sy3:6720.000000000007,sy4:1788960.0,sxy:12960000.0),first:(ts:\"2020-01-01 00:00:00+00\",val:15.0),second:(ts:\"2020-01-02 00:00:00+00\",val:25.0),penultimate:(ts:\"2020-01-04 00:00:00+00\",val:10.0),last:(ts:\"2020-01-05 00:00:00+00\",val:30.0),reset_sum:45.0,num_resets:2,num_changes:4,bounds:(is_present:0,has_left:0,has_right:0,padding:(0,0,0,0,0),left:None,right:None))"
             );
 
             let val = client.update(
@@ -1220,9 +1220,9 @@ mod tests {
                 arrow_run_pipeline_then_counter_agg(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,num_elements:3,elements:[\
-                        Arithmetic(function:Ceil,rhs:0),\
-                        Arithmetic(function:Abs,rhs:0),\
-                        Arithmetic(function:Floor,rhs:0)\
+                        Arithmetic(function:Ceil,rhs:0.0),\
+                        Arithmetic(function:Abs,rhs:0.0),\
+                        Arithmetic(function:Floor,rhs:0.0)\
                     ])'::pipelinethencounteragg\
                 )"
             );
@@ -1316,9 +1316,9 @@ mod tests {
                 arrow_run_pipeline_then_hyperloglog(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,hll_size:100,num_elements:3,elements:[\
-                        Arithmetic(function:Ceil,rhs:0),\
-                        Arithmetic(function:Abs,rhs:0),\
-                        Arithmetic(function:Floor,rhs:0)\
+                        Arithmetic(function:Ceil,rhs:0.0),\
+                        Arithmetic(function:Abs,rhs:0.0),\
+                        Arithmetic(function:Floor,rhs:0.0)\
                     ])'::pipelinethenhyperloglog\
                 )"
             );
@@ -1372,7 +1372,7 @@ mod tests {
                     num_buckets:5,\
                     compactions:0,\
                     count:5,\
-                    sum:100,\
+                    sum:100.0,\
                     buckets:[\
                         (Positive(1152),1),\
                         (Positive(1355),1),\
@@ -1429,9 +1429,9 @@ mod tests {
                 arrow_run_pipeline_then_percentile_agg(\
                     timevector('1930-04-05 00:00:00+00'::timestamp with time zone, '123'::double precision), \
                     '(version:1,num_elements:3,elements:[\
-                        Arithmetic(function:Ceil,rhs:0),\
-                        Arithmetic(function:Abs,rhs:0),\
-                        Arithmetic(function:Floor,rhs:0)\
+                        Arithmetic(function:Ceil,rhs:0.0),\
+                        Arithmetic(function:Abs,rhs:0.0),\
+                        Arithmetic(function:Floor,rhs:0.0)\
                     ])'::pipelinethenpercentileagg\
                 )"
             );

@@ -8,6 +8,6 @@ name = "timescaledb_toolkit_tdigest"
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
-libc = "0.2.135"
+libc = "0.2.186"
 
 tdigest = { path="../t-digest" }

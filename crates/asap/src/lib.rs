@@ -318,10 +318,10 @@ mod tests {
     #[test]
     fn test_roughness_and_kurtosis() {
         let series_a = vec![-1.0, 1.0, -1.0, 1.0, -1.0, 1.0]; // bimodal
-        let x = (3.0 - ((9.0 + 8.0 * 1.82) as f64).sqrt()) / 4.0; // ~ -0.45, calculated for specific mean and std
+        let x = (3.0 - (9.0_f64 + 8.0 * 1.82).sqrt()) / 4.0; // ~ -0.45, calculated for specific mean and std
         let series_b = vec![-1.0, -0.8, x, -0.2, 0.5, 1.5 - x]; // uneven but monotonically increasing
-        let x = ((1.0 / 2.0) as f64).sqrt();
-        let series_c = vec![-2.0 * x, -1.0 * x, 0.0, x, 2.0 * x]; // linear
+        let x = (1.0_f64 / 2.0).sqrt();
+        let series_c = vec![-2.0 * x, -x, 0.0, x, 2.0 * x]; // linear
 
         assert_eq!(mean(&series_a), 0.0);
         assert_eq!(std(&series_a), 1.0);

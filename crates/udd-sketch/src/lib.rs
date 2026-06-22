@@ -653,7 +653,7 @@ pub fn gamma(alpha: f64) -> f64 {
 
 #[cfg(test)]
 mod tests {
-    use rand::{Rng, SeedableRng};
+    use rand::{RngExt as _, SeedableRng};
 
     use super::*;
 
@@ -856,11 +856,11 @@ mod tests {
     #[test]
     fn random_stress() {
         let mut sketch = UDDSketch::new(1000, 0.01);
-        let seed = rand::thread_rng().gen_range(0..u64::MAX);
+        let seed = rand::rng().random_range(0..u64::MAX);
         let mut rng = rand::rngs::StdRng::seed_from_u64(seed);
         let mut bounds = Vec::new();
         for _ in 0..100 {
-            let v = rng.gen_range(-1000000.0..1000000.0);
+            let v = rng.random_range(-1000000.0..1000000.0);
             sketch.add_value(v);
             bounds.push(v);
         }
@@ -869,19 +869,19 @@ mod tests {
         let mut prev = -2000000.0;
         for f in bounds.iter() {
             for _ in 0..10000 {
-                sketch.add_value(rng.gen_range(prev..*f));
+                sketch.add_value(rng.random_range(prev..*f));
             }
             prev = *f;
         }
 
-        for i in 0..100 {
-            assert!(((sketch.estimate_quantile((i as f64 + 1.0) / 100.0) / bounds[i]) - 1.0).abs() < sketch.max_error() * bounds[i].abs(),
+        for (i, bound) in bounds.iter().enumerate() {
+            assert!(((sketch.estimate_quantile((i as f64 + 1.0) / 100.0) / bound) - 1.0).abs() < sketch.max_error() * bound.abs(),
                         "Failed to correct match {} quantile with seed {}.  Received: {}, Expected: {}, Error: {}, Expected error bound: {}",
                         (i as f64 + 1.0) / 100.0,
                         seed,
                         sketch.estimate_quantile((i as f64 + 1.0) / 100.0),
-                        bounds[i],
-                        ((sketch.estimate_quantile((i as f64 + 1.0) / 100.0) / bounds[i]) - 1.0).abs() / bounds[i].abs(),
+                        bound,
+                        ((sketch.estimate_quantile((i as f64 + 1.0) / 100.0) / bound) - 1.0).abs() / bound.abs(),
                         sketch.max_error());
         }
     }
@@ -995,9 +995,7 @@ mod tests {
 
         master.sort_by(|a, b| a.partial_cmp(b).unwrap());
 
-        for i in 0..quantile_tests.len() {
-            let quantile = quantile_tests[i];
-
+        for quantile in quantile_tests {
             let mut test_val = sketch.estimate_quantile(quantile);
 
             // If test_val is infinite, use the most extreme finite value to test relative error

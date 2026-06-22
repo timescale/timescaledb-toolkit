@@ -69,9 +69,10 @@ struct ExtensionInfo {
 }
 
 fn get_extension_info_from_pg_config(pg_config: &str) -> xshell::Result<ExtensionInfo> {
-    let bin_dir = cmd!("{pg_config} --pkglibdir").read()?;
+    let sh = xshell::Shell::new()?;
+    let bin_dir = cmd!(sh, "{pg_config} --pkglibdir").read()?;
 
-    let share_dir = cmd!("{pg_config} --sharedir").read()?;
+    let share_dir = cmd!(sh, "{pg_config} --sharedir").read()?;
     let extension_dir = path!(share_dir / "extension");
 
     let control_file = path!(extension_dir / "timescaledb_toolkit.control");

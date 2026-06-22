@@ -268,11 +268,11 @@ mod tests {
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:5,flags:0,internal_padding:(0,0,0),points:[\
-                (ts:\"2020-01-04 00:00:00+00\",val:25),\
-                (ts:\"2020-01-01 00:00:00+00\",val:11),\
-                (ts:\"2020-01-03 00:00:00+00\",val:21),\
-                (ts:\"2020-01-02 00:00:00+00\",val:15),\
-                (ts:\"2020-01-05 00:00:00+00\",val:31)\
+                (ts:\"2020-01-04 00:00:00+00\",val:25.0),\
+                (ts:\"2020-01-01 00:00:00+00\",val:11.0),\
+                (ts:\"2020-01-03 00:00:00+00\",val:21.0),\
+                (ts:\"2020-01-02 00:00:00+00\",val:15.0),\
+                (ts:\"2020-01-05 00:00:00+00\",val:31.0)\
             ],null_val:[0])"
             );
         });
@@ -326,11 +326,11 @@ mod tests {
                     arrow_run_pipeline_then_materialize(\
                         timevector('2021-01-01 00:00:00+00'::timestamp with time zone, '0.1'::double precision), \
                         '(version:1,num_elements:2,elements:[\
-                            Arithmetic(function:Round,rhs:0),Arithmetic(function:Abs,rhs:0)\
+                            Arithmetic(function:Round,rhs:0.0),Arithmetic(function:Abs,rhs:0.0)\
                         ])'::pipelineforcematerialize\
                     ), \
                     '(version:1,num_elements:2,elements:[\
-                        Arithmetic(function:Abs,rhs:0),Arithmetic(function:Round,rhs:0)\
+                        Arithmetic(function:Abs,rhs:0.0),Arithmetic(function:Round,rhs:0.0)\
                     ])'::unstabletimevectorpipeline\
                 )"
             );

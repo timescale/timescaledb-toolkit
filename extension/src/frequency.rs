@@ -1694,10 +1694,7 @@ unsafe fn varlena_to_string(vl: *const pg_sys::varlena) -> String {
 mod tests {
     use super::*;
     use pgrx_macros::pg_test;
-    use rand::RngCore;
-    use rand::distributions::{Distribution, Uniform};
-    use rand::prelude::SliceRandom;
-    use rand::thread_rng;
+    use rand::{distr::Uniform, prelude::*};
     use rand_distr::Zeta;
 
     #[pg_test]
@@ -2308,7 +2305,7 @@ mod tests {
             for v in 0..(10000 - 945 - 441 - 283 - 206 - 161 - (5 * 125)) {
                 vals.push(11 + v);
             }
-            vals.shuffle(&mut thread_rng());
+            vals.shuffle(&mut rand::rng());
 
             // Probably not the most efficient way of populating this table...
             for v in vals {
@@ -2364,8 +2361,8 @@ mod tests {
 
         // This test will randomly generate 200 values in the uniform range [0, 99] and check to see any value
         // that shows up at least 3 times appears in a frequency aggregate created with freq = 0.015
-        let rand100 = Uniform::new_inclusive(0, 99);
-        let mut rng = rand::thread_rng();
+        let rand100 = Uniform::new_inclusive(0, 99).unwrap();
+        let mut rng = rand::rng();
 
         let mut counts = [0; 100];
 
@@ -2399,8 +2396,8 @@ mod tests {
 
         // This test will randomly generate 200 values in the uniform range [0, 99] and check to see any value
         // that shows up at least 3 times appears in a frequency aggregate created with freq = 0.015
-        let rand100 = Uniform::new_inclusive(0, 99);
-        let mut rng = rand::thread_rng();
+        let rand100 = Uniform::new_inclusive(0, 99).unwrap();
+        let mut rng = rand::rng();
 
         let mut counts = [0; 100];
 
@@ -2451,7 +2448,7 @@ mod tests {
         // n (5-10).  We then generate a random sample with skew 5% greater than our aggregate
         // (this should be enough to keep the sample above the target even with bad luck), and
         // verify that we correctly identify the top n values.
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         let n = rng.next_u64() % 6 + 5;
         let skew = (rng.next_u64() % 100) as f64 / 100. + 1.01;

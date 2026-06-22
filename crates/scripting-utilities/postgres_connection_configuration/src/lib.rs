@@ -2,24 +2,20 @@
 // JOSH - I'm not sure if this really warrants a crate, but it seems like if we
 //        ever change this it'll be annoying to hunt down everything ¯\_(ツ)_/¯
 
-#[derive(Copy, Clone)]
-pub struct ConnectionConfig<'s> {
-    pub host: Option<&'s str>,
-    pub port: Option<&'s str>,
-    pub user: Option<&'s str>,
-    pub password: Option<&'s str>,
-    pub database: Option<&'s str>,
+#[derive(Clone)]
+pub struct ConnectionConfig {
+    pub host: Option<String>,
+    pub port: Option<String>,
+    pub user: Option<String>,
+    pub password: Option<String>,
+    pub database: Option<String>,
 }
 
-impl<'s> ConnectionConfig<'s> {
-    pub fn with_db<'d>(&self, database: &'d str) -> ConnectionConfig<'d>
-    where
-        's: 'd,
-    {
-        ConnectionConfig {
-            database: Some(database),
-            ..*self
-        }
+impl ConnectionConfig {
+    pub fn with_db(&self, database: &str) -> ConnectionConfig {
+        let mut new = self.clone();
+        new.database = Some(database.to_owned());
+        new
     }
 
     /// get a config string we can use to connect to the db

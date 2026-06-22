@@ -9,17 +9,17 @@ use uuid::Uuid;
 
 use crate::{Test, TestFile};
 
-#[derive(Copy, Clone)]
-pub struct ConnectionConfig<'s> {
-    pub host: Option<&'s str>,
-    pub port: Option<&'s str>,
-    pub user: Option<&'s str>,
-    pub password: Option<&'s str>,
-    pub database: Option<&'s str>,
+#[derive(Clone)]
+pub struct ConnectionConfig {
+    pub host: Option<String>,
+    pub port: Option<String>,
+    pub user: Option<String>,
+    pub password: Option<String>,
+    pub database: Option<String>,
 }
 
-impl<'s> ConnectionConfig<'s> {
-    fn config_string(&self) -> Cow<'s, str> {
+impl ConnectionConfig {
+    fn config_string(&self) -> Cow<'_, str> {
         use std::fmt::Write;
 
         let ConnectionConfig {
@@ -51,7 +51,7 @@ impl<'s> ConnectionConfig<'s> {
 }
 
 pub fn run_tests<OnErr: FnMut(Test, TestError)>(
-    connection_config: ConnectionConfig<'_>,
+    connection_config: ConnectionConfig,
     startup_script: &str,
     all_tests: Vec<TestFile>,
     mut on_error: OnErr,
@@ -92,10 +92,8 @@ pub fn run_tests<OnErr: FnMut(Test, TestError)>(
     };
 
     if let Some(db) = stateless_db.as_ref() {
-        let stateless_connection_config = ConnectionConfig {
-            database: Some(db),
-            ..connection_config
-        };
+        let mut stateless_connection_config = connection_config.clone();
+        stateless_connection_config.database = Some(db.clone());
         let mut client = Client::connect(&stateless_connection_config.config_string(), NoTls)
             .expect("could not connect to test DB");
         let _ = client
@@ -119,10 +117,8 @@ pub fn run_tests<OnErr: FnMut(Test, TestError)>(
                 }
             };
 
-            let test_connection_config = ConnectionConfig {
-                database: db_name.as_deref(),
-                ..connection_config
-            };
+            let mut test_connection_config = connection_config.clone();
+            test_connection_config.database = db_name.map(|s| s.to_string());
             let mut client = Client::connect(&test_connection_config.config_string(), NoTls)
                 .expect("could not connect to test DB");
 

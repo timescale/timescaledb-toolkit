@@ -740,7 +740,7 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            let expected = r#"(version:1,num_points:5,flags:3,internal_padding:(0,0,0),points:[(ts:"2020-01-01 00:00:00+00",val:30),(ts:"2020-01-02 00:00:00+00",val:45),(ts:"2020-01-03 00:00:00+00",val:NaN),(ts:"2020-01-04 00:00:00+00",val:55.5),(ts:"2020-01-05 00:00:00+00",val:10)],null_val:[4])"#;
+            let expected = r#"(version:1,num_points:5,flags:3,internal_padding:(0,0,0),points:[(ts:"2020-01-01 00:00:00+00",val:30.0),(ts:"2020-01-02 00:00:00+00",val:45.0),(ts:"2020-01-03 00:00:00+00",val:NaN),(ts:"2020-01-04 00:00:00+00",val:55.5),(ts:"2020-01-05 00:00:00+00",val:10.0)],null_val:[4])"#;
 
             assert_eq!(tvec, expected);
 
@@ -941,7 +941,7 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            let expected = r#"(version:1,num_points:3,flags:1,internal_padding:(0,0,0),points:[(ts:"2020-01-01 00:00:00+00",val:20),(ts:"2020-01-02 00:00:00+00",val:30),(ts:"2020-01-03 00:00:00+00",val:15)],null_val:[0])"#;
+            let expected = r#"(version:1,num_points:3,flags:1,internal_padding:(0,0,0),points:[(ts:"2020-01-01 00:00:00+00",val:20.0),(ts:"2020-01-02 00:00:00+00",val:30.0),(ts:"2020-01-03 00:00:00+00",val:15.0)],null_val:[0])"#;
             assert_eq!(tvec, expected);
 
             client
@@ -958,7 +958,7 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            let expected = r#"(version:1,num_points:4,flags:2,internal_padding:(0,0,0),points:[(ts:"2020-01-01 00:00:00+00",val:20),(ts:"2020-01-02 00:00:00+00",val:30),(ts:"2020-01-03 00:00:00+00",val:15),(ts:"2019-01-04 00:00:00+00",val:NaN)],null_val:[8])"#;
+            let expected = r#"(version:1,num_points:4,flags:2,internal_padding:(0,0,0),points:[(ts:"2020-01-01 00:00:00+00",val:20.0),(ts:"2020-01-02 00:00:00+00",val:30.0),(ts:"2020-01-03 00:00:00+00",val:15.0),(ts:"2019-01-04 00:00:00+00",val:NaN)],null_val:[8])"#;
             assert_eq!(tvec, expected);
         })
     }

@@ -147,7 +147,7 @@ impl Parse for Aggregate {
                 check_duplicate!(transition_fn, f.ident.span(), "`fn transition`");
                 if f.args.is_empty() {
                     error!(
-                        f.parens.span,
+                        f.parens.span.span(),
                         "transition function must have at least one argument"
                     )
                 }
@@ -161,7 +161,7 @@ impl Parse for Aggregate {
                 check_duplicate!(final_fn, f.ident.span(), "`fn finally`");
                 if f.args.len() != 1 {
                     error!(
-                        f.parens.span,
+                        f.parens.span.span(),
                         "final function must have at one argument of type `Option<Inner<State>>`"
                     )
                 }
@@ -176,7 +176,7 @@ impl Parse for Aggregate {
                 check_duplicate!(serialize_fn, f.ident.span(), "`fn serialize`");
                 if f.args.len() != 1 {
                     error!(
-                        f.parens.span,
+                        f.parens.span.span(),
                         "serialize function must have at one argument of type `Inner<State>`"
                     )
                 }
@@ -191,7 +191,7 @@ impl Parse for Aggregate {
                 check_duplicate!(deserialize_fn, f.ident.span(), "`fn deserialize`");
                 if f.args.len() != 1 {
                     error!(
-                        f.parens.span,
+                        f.parens.span.span(),
                         "deserialize function must have at one argument of type `bytea`"
                     )
                 }
@@ -205,7 +205,7 @@ impl Parse for Aggregate {
             } else if f.ident == "combine" {
                 check_duplicate!(combine_fn, f.ident.span(), "`fn combine`");
                 if f.args.len() != 2 {
-                    error!(f.parens.span, "deserialize function must have at one argument of type `Option<Inner<State>>`")
+                    error!(f.parens.span.span(), "deserialize function must have at one argument of type `Option<Inner<State>>`")
                 }
                 for arg in &f.args {
                     if arg.sql.is_some() {
@@ -384,7 +384,7 @@ impl Parse for AggregateArg {
 }
 
 fn take_attr(attrs: &mut Vec<syn::Attribute>, path: &syn::Path) -> Option<syn::Attribute> {
-    let idx = attrs.iter().enumerate().find(|(_, a)| &a.path == path);
+    let idx = attrs.iter().enumerate().find(|(_, a)| a.path() == path);
     match idx {
         None => None,
         Some((idx, _)) => {

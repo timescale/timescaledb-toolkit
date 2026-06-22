@@ -530,11 +530,11 @@ impl FlatSerializeEnum {
                     None => 8,
                 };
 
-                if variant_size % 8 == 0 && effective_alignment >= 8 {
+                if variant_size.is_multiple_of(8) && effective_alignment >= 8 {
                     8
-                } else if variant_size % 4 == 0 && effective_alignment >= 4 {
+                } else if variant_size.is_multiple_of(4) && effective_alignment >= 4 {
                     4
-                } else if variant_size % 2 == 0 && effective_alignment >= 2 {
+                } else if variant_size.is_multiple_of(2) && effective_alignment >= 2 {
                     2
                 } else {
                     1
@@ -557,11 +557,11 @@ impl FlatSerializeEnum {
                     }
                 )*
                 let min_size = Self::MIN_LEN;
-                if min_size % 8 == 0 && min_align >= 8 {
+                if min_size.is_multiple_of(8) && min_align >= 8 {
                     Some(8)
-                } else if min_size % 4 == 0 && min_align >= 4 {
+                } else if min_size.is_multiple_of(4) && min_align >= 4 {
                     Some(4)
-                } else if min_size % 2 == 0 && min_align >= 2 {
+                } else if min_size.is_multiple_of(2) && min_align >= 2 {
                     Some(2)
                 } else {
                     Some(1)
@@ -777,11 +777,11 @@ impl FlatSerializeStruct {
                     None => None,
                     Some(min_align) => {
                         let min_size = Self::MIN_LEN;
-                        if min_size % 8 == 0 && min_align >= 8 {
+                        if min_size.is_multiple_of(8) && min_align >= 8 {
                             Some(8)
-                        } else if min_size % 4 == 0 && min_align >= 4 {
+                        } else if min_size.is_multiple_of(4) && min_align >= 4 {
                             Some(4)
-                        } else if min_size % 2 == 0 && min_align >= 2 {
+                        } else if min_size.is_multiple_of(2) && min_align >= 2 {
                             Some(2)
                         } else {
                             Some(1)
@@ -913,6 +913,7 @@ impl FlatSerializeField {
             None => {
                 let ty = self.ty_without_lifetime();
                 quote_spanned! {self.ty.span()=>
+                    #[allow(clippy::modulo_one)]
                     if (#current_size) % <#ty as flat_serialize::FlatSerializable>::REQUIRED_ALIGNMENT != 0 {
                         panic!("unaligned field: the current size of the data is not a multiple of this type's alignment")
                     }
@@ -929,6 +930,7 @@ impl FlatSerializeField {
             Some(info) => {
                 let ty = info.ty_without_lifetime();
                 quote_spanned! {self.ty.span()=>
+                    #[allow(clippy::modulo_one)]
                     if (#current_size) % <#ty as flat_serialize::FlatSerializable>::REQUIRED_ALIGNMENT != 0 {
                         panic!("unaligned field: the current size of the data is not a multiple of this type's alignment")
                     }
@@ -1388,20 +1390,17 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
                 .attrs
                 .iter()
                 .flat_map(|attr| {
-                    let meta = match attr.parse_meta() {
-                        Ok(meta) => meta,
-                        _ => return None,
-                    };
-                    let has_repr = meta.path().get_ident().is_some_and(|id| id == "repr");
-                    if !has_repr {
-                        return None;
-                    }
-                    attr.parse_args().ok().and_then(|ident: Ident| {
-                        if ident == "u8" || ident == "u16" || ident == "u32" || ident == "u64" {
-                            return Some(ident);
-                        }
+                    if attr.path().is_ident("repr") {
+                        attr.parse_args().ok().and_then(|ident: Ident| {
+                            if ident == "u8" || ident == "u16" || ident == "u32" || ident == "u64" {
+                                Some(ident)
+                            } else {
+                                None
+                            }
+                        })
+                    } else {
                         None
-                    })
+                    }
                 })
                 .collect();
             if repr.len() != 1 {
@@ -1497,20 +1496,17 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
         .attrs
         .iter()
         .flat_map(|attr| {
-            let meta = match attr.parse_meta() {
-                Ok(meta) => meta,
-                _ => return None,
-            };
-            let has_repr = meta.path().get_ident().is_some_and(|id| id == "repr");
-            if !has_repr {
-                return None;
-            }
-            attr.parse_args().ok().and_then(|ident: Ident| {
-                if ident == "C" {
-                    return Some(ident);
-                }
+            if attr.path().is_ident("repr") {
+                attr.parse_args::<Ident>().ok().and_then(|ident| {
+                    if ident == "C" {
+                        Some(ident)
+                    } else {
+                        None
+                    }
+                })
+            } else {
                 None
-            })
+            }
         })
         .count();
     if num_reprs != 1 {

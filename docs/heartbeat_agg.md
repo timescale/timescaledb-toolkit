@@ -4,13 +4,13 @@
 
 TimescaleDB Toolkit provides the `heartbeat_agg` aggregate to evaluate and track the liveness state of an underlying system based on a set of heartbeat timestamps.
 
-The aggregate constructs a timeline by trating each heartbeat as "live" for a specified duration following the timestamp. Any point in the specified overall time range that does not fall within `heartbeat_liveness` duration after a heartbeat is considered "dead" (downtime). This is particularly useful for tracking system health or finding exact intervals where a device went offline. 
+The aggregate constructs a timeline by traiting each heartbeat as "live" for a specified duration following the timestamp. Any point in the specified overall time range that does not fall within `heartbeat_liveness` duration after a heartbeat is considered "dead" (downtime). This is particularly useful for tracking system health or finding exact intervals where a device went offline. 
 
 ## Details
 
-Timescale's `heartbeat_agg` is implemented as an aggregate function that takes incoming heartbeat timestamps and groups them into contiguous live intervals.
+TimescaleDB Toolkit `heartbeat_agg` is implemented as an aggregate function that takes incoming heartbeat timestamps and groups them into contiguous live intervals.
 
-It requires to specify an aggregation window (`agg_start` and `agg_duration`). All heartbeat points passed to the aggregate must occur strictly withins this bounding interval. Note that `agg_duration` must be strictly greater than `heartbeat_liveness` The state collects these points and processes them in batches, combining overlapping liveness intervals into a consolidated timeline of up and down states.
+It requires to specify an aggregation window (`agg_start` and `agg_duration`). All heartbeat points passed to the aggregate must occur strictly withins this bounding interval. Note that `agg_duration` must be strictly greater than `heartbeat_liveness`. The state collects these points and processes them in batches, combining overlapping liveness intervals into a consolidated timeline of up and down states.
 
 Because heartbeat logs are often grouped by time buckets, the toolkit also provides a rollup function to combine multiple sub-aggregates into a single, unified liveness timeline. Additionally, interpolation functions allow bridging the liveness gap seamlessly across adjacent time buckets.
 
@@ -75,10 +75,10 @@ WITH agg AS (
     SELECT heartbeat_agg(heartbeat, '2020-01-01 00:00:00 UTC', '2h', '10m') as hb
     FROM system_health
 )
-SELECT hb -> uptime(), hb -> downtime() FROM agg;
+SELECT hb -> uptime() AS uptime, hb -> downtime() AS downtime FROM agg;
 ```
 ```
- ?column? | ?column?
+  uptime  | downtime
 ----------+----------
  00:44:10 | 01:15:50
 (1 row)
@@ -197,7 +197,7 @@ Combines multiple `HeartbeatAgg` objects into a single aggregate.
 ## dead_ranges
 
 ```SQL
-dead_ranges(agg HeartbeatAgg) RETURNS TABLE (start TIMESTAMPTZ, "end" TIMESTAMPTZ)
+dead_ranges(agg HeartbeatAgg) RETURNS TABLE (start TIMESTAMPTZ, end TIMESTAMPTZ)
 ```
 
 Returns the intervals where the system was considered offline or down within the aggregated time range. If no heartbeats were recorded, returns the entire aggregation window as a single dead range.
@@ -259,7 +259,7 @@ Evaluates if the system was live at a specific timestamp. The tested timestamp m
 ## live_ranges
 
 ```SQL
-live_ranges(agg HeartbeatAgg) RETURNS TABLE (start TIMESTAMPTZ, "end" TIMESTAMPTZ)
+live_ranges(agg HeartbeatAgg) RETURNS TABLE (start TIMESTAMPTZ, end TIMESTAMPTZ)
 ```
 
 Returns a set of intervals representing the exact periods when the system was considered up.

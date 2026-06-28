@@ -1662,10 +1662,25 @@ mod tests {
                 .get_one::<String>()
                 .unwrap()
                 .unwrap();
-            assert_eq!(
-                test,
-                "(version:1,n:4,sx:NaN,sx2:NaN,sx3:NaN,sx4:NaN,sy:inf,sy2:NaN,sy3:NaN,sy4:NaN,sxy:NaN)"
-            );
+            let round_tripped = client
+                .update(&format!("SELECT '{test}'::StatsSummary2D::TEXT"), None, &[])
+                .unwrap()
+                .first()
+                .get_one::<String>()
+                .unwrap()
+                .unwrap();
+            let summary: StatsSummary2DData = ron::from_str(&round_tripped).unwrap();
+            assert_eq!(summary.n, 4);
+            assert!(summary.sx.is_nan());
+            assert!(summary.sx2.is_nan());
+            assert!(summary.sx3.is_nan());
+            assert!(summary.sx4.is_nan());
+            assert!(summary.sy.is_infinite());
+            assert!(summary.sy.is_sign_positive());
+            assert!(summary.sy2.is_nan());
+            assert!(summary.sy3.is_nan());
+            assert!(summary.sy4.is_nan());
+            assert!(summary.sxy.is_nan());
         });
     }
 

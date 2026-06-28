@@ -106,7 +106,7 @@ impl<'a> IntoIterator for Timevector_TSTZ_F64<'a> {
 }
 
 pub static TIMEVECTOR_OID: once_cell::sync::Lazy<pg_sys::Oid> =
-    once_cell::sync::Lazy::new(Timevector_TSTZ_F64::type_oid);
+    once_cell::sync::Lazy::new(|| pgrx::regtypein("timevector_tstz_f64"));
 
 #[pg_extern(immutable, parallel_safe)]
 pub fn unnest<'a>(

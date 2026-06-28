@@ -2,9 +2,13 @@
 
 ## Description
 
-TimescaleDB Toolkit provides the `heartbeat_agg` aggregate to evaluate and track the liveness state of an underlying system based on a set of heartbeat timestamps.
+TimescaleDB Toolkit provides the `heartbeat_agg` aggregate to evaluate, track, and summarize the liveness state of an underlying system from a stream of heartbeat timestamps.
 
-The aggregate constructs a timeline by traiting each heartbeat as "live" for a specified duration following the timestamp. Any point in the specified overall time range that does not fall within `heartbeat_liveness` duration after a heartbeat is considered "dead" (downtime). This is particularly useful for tracking system health or finding exact intervals where a device went offline. 
+`heartbeat_agg(heartbeat, agg_start, agg_duration, heartbeat_liveness)`
+
+Each heartbeat in the range `[agg_start, agg_start + agg_duration]` is treated as evidence that the system was live for the following `heartbeat_liveness` interval. Overlapping live intervals are merged, and any time in the covered range not included in those merged intervals is considered downtime.
+
+This is particularly useful for analyzing the health of a system or finding exact intervals where a device went offline.
 
 ## Details
 
@@ -88,7 +92,7 @@ SELECT hb -> uptime() AS uptime, hb -> downtime() AS downtime FROM agg;
 
 Timescale continuos aggregates provide an easy way to keep heartbeat sketches up to date as new telemetry arrives.
 
-First, we create a hypertable and insert data:
+First, we create a hypertable and insert some sample telemetry data:
 
 ```SQL
 CREATE TABLE heartbeats(time TIMESTAMPTZ, device_id INT);
@@ -97,8 +101,16 @@ SELECT create_hypertable('heartbeats', 'time');
 ```
     create_hypertable
 --------------------------
- (50,public,heartbeats,t)
+ (52,public,heartbeats,t)
 (1 row)
+```
+```SQL
+INSERT INTO heartbeats VALUES
+    ('2020-01-01 00:02:00 UTC', 1),
+    ('2020-01-01 00:06:00 UTC', 1),
+    ('2020-01-01 01:15:00 UTC', 1),
+    ('2020-01-01 01:18:00 UTC', 1),
+    ('2020-01-01 00:45:00 UTC', 2);
 ```
 
 We create a continuous aggregate view that summarizes system health into 1-hour buckets. We define liveness as having received a ping in the last 5 minutes.
@@ -114,7 +126,7 @@ FROM heartbeats
 GROUP BY device_id, time_bucket('1 hour'::interval, time);
 ```
 
-We can later combine these hourly sketches acroos larger periods using the `rollup` funcion:
+We can later combine these hourly sketches across larger periods using the `rollup` function:
 
 ```SQL
 SELECT
@@ -128,11 +140,10 @@ GROUP BY device_id;
 ```
  device_id | total_daily_uptime | total_outages
 -----------+--------------------+---------------
-(0 rows)
+         1 | 00:17:00           |             3
+         2 | 00:05:00           |             2
+(2 rows)
 ```
-
-> **Note:** The query above returns 0 rows because no data has been inserted into `heartbeats` yet. Once the hypertable is populated with telemetry, `hourly_health` will contain rows and this query
-> will return results per device. 
 
 ## API
 ## Command List
@@ -208,7 +219,7 @@ Returns the intervals where the system was considered offline or down within the
 downtime(agg HeartbeatAgg) RETURNS INTERVAL
 ```
 
-Returns the total cumulative downtime (the sum of all dead ranges) during the aggregated interval.
+Returns the total downtime during the entire aggregated interval.
 
 ## interpolate
 
@@ -326,4 +337,4 @@ SELECT agg -> trim_to('2020-01-01 01:00:00 UTC'::TIMESTAMPTZ, '30m') FROM ...
 uptime(agg HeartbeatAgg) RETURNS INTERVAL
 ```
 
-Returns the total cumulative uptime (the sum of all live ranges) during the aggregate interval.
+Returns the total uptime during the entire aggregate interval.

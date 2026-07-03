@@ -2489,4 +2489,56 @@ mod tests {
             assert_eq!(agg_topn[i], top_vals[i]);
         }
     }
+
+    #[pg_test]
+    fn test_freq_agg_null_values() {
+        Spi::connect_mut(|client| {
+            client.update(
+                "CREATE TABLE test (int_data INTEGER, keep BOOLEAN, val DOUBLE PRECISION)",
+                None,
+                &[]
+            ).unwrap();
+
+            client.update(
+                "INSERT INTO test SELECT (i % 100), ((i % 100) < 50), (i% 1000)::float8 FROM generate_series(1, 1000000) i;",
+                None,
+                &[]
+            ).unwrap();
+
+            client.update("ANALYZE test;", None, &[])
+            .unwrap();
+
+            client.update(
+                "SET max_parallel_workers_per_gather = 4;",
+                None,
+                &[],
+            ).unwrap();
+
+            client.update(
+                "SET parallel_setup_cost = 0;",
+                None,
+                &[],
+            ).unwrap();
+
+            client.update(
+                "SET parallel_tuple_cost = 0;",
+                None,
+                &[],
+            ).unwrap();
+
+            client.update(
+                "SET min_parallel_table_scan_size = 0;",
+                None,
+                &[],
+            ).unwrap();
+
+            let mut result = client.update(
+                "SELECT int_data, toolkit_experimental.freq_agg(0.01, val::text) FILTER (WHERE keep) FROM test GROUP BY int_data;",
+                None,
+                &[]
+            ).unwrap();
+
+            assert!(result.next().is_none());
+        })
+    }
 }

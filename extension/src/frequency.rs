@@ -957,13 +957,14 @@ fn space_saving_text_final(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-fn space_saving_serialize(state: Internal) -> bytea {
-    let state: Inner<SpaceSavingTransState> = unsafe { state.to_inner().unwrap() };
-    crate::do_serialize!(state)
+fn space_saving_serialize(state: Internal) -> Option<bytea> {
+    let state = unsafe { state.to_inner::<SpaceSavingTransState>() };
+    state.map(|state| crate::do_serialize!(state))
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn space_saving_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
+pub fn space_saving_deserialize(bytes: Option<bytea>, _internal: Internal) -> Option<Internal> {
+    let bytes = bytes?;
     let i: SpaceSavingTransState = crate::do_deserialize!(bytes, SpaceSavingTransState);
     Inner::from(i).internal()
 }
@@ -1814,8 +1815,8 @@ mod tests {
 
         let bytes = unsafe {
             std::slice::from_raw_parts(
-                vardata_any(first.0.cast_mut_ptr()) as *const u8,
-                varsize_any_exhdr(first.0.cast_mut_ptr()),
+                vardata_any(first.unwrap().0.cast_mut_ptr()) as *const u8,
+                varsize_any_exhdr(first.unwrap().0.cast_mut_ptr()),
             )
         };
         let expected = [
@@ -1878,8 +1879,8 @@ mod tests {
 
         let bytes: &[u8] = unsafe {
             std::slice::from_raw_parts(
-                vardata_any(second.0.cast_mut_ptr()) as *const u8,
-                varsize_any_exhdr(second.0.cast_mut_ptr()),
+                vardata_any(second.unwrap().0.cast_mut_ptr()) as *const u8,
+                varsize_any_exhdr(second.unwrap().0.cast_mut_ptr()),
             )
         };
         let expected: [u8; 513] = [
@@ -1946,8 +1947,8 @@ mod tests {
 
         let bytes = unsafe {
             std::slice::from_raw_parts(
-                vardata_any(combined.0.cast_mut_ptr()) as *const u8,
-                varsize_any_exhdr(combined.0.cast_mut_ptr()),
+                vardata_any(combined.unwrap().0.cast_mut_ptr()) as *const u8,
+                varsize_any_exhdr(combined.unwrap().0.cast_mut_ptr()),
             )
         };
         let expected: [u8; 513] = [
@@ -2493,11 +2494,13 @@ mod tests {
     #[pg_test]
     fn test_freq_agg_null_values() {
         Spi::connect_mut(|client| {
-            client.update(
-                "CREATE TABLE test (int_data INTEGER, keep BOOLEAN, val DOUBLE PRECISION)",
-                None,
-                &[]
-            ).unwrap();
+            client
+                .update(
+                    "CREATE TABLE test (int_data INTEGER, keep BOOLEAN, val DOUBLE PRECISION)",
+                    None,
+                    &[],
+                )
+                .unwrap();
 
             client.update(
                 "INSERT INTO test SELECT (i % 100), ((i % 100) < 50), (i% 1000)::float8 FROM generate_series(1, 1000000) i;",
@@ -2505,40 +2508,39 @@ mod tests {
                 &[]
             ).unwrap();
 
-            client.update("ANALYZE test;", None, &[])
+            client.update("ANALYZE test;", None, &[]).unwrap();
+
+            client
+                .update("SET max_parallel_workers_per_gather = 4;", None, &[])
+                .unwrap();
+
+            client
+                .update("SET parallel_setup_cost = 0;", None, &[])
+                .unwrap();
+
+            client
+                .update("SET parallel_tuple_cost = 0;", None, &[])
+                .unwrap();
+
+            client
+                .update("SET min_parallel_table_scan_size = 0;", None, &[])
+                .unwrap();
+
+            let null_groups: i64 = Spi::get_one(
+                "SELECT count(*)
+                FROM (
+                    SELECT int_data,
+                            toolkit_experimental.freq_agg(0.01, val::text)
+                                FILTER (WHERE keep) AS agg
+                    FROM test
+                    GROUP BY int_data
+                ) t
+                WHERE agg IS NULL",
+            )
+            .unwrap()
             .unwrap();
 
-            client.update(
-                "SET max_parallel_workers_per_gather = 4;",
-                None,
-                &[],
-            ).unwrap();
-
-            client.update(
-                "SET parallel_setup_cost = 0;",
-                None,
-                &[],
-            ).unwrap();
-
-            client.update(
-                "SET parallel_tuple_cost = 0;",
-                None,
-                &[],
-            ).unwrap();
-
-            client.update(
-                "SET min_parallel_table_scan_size = 0;",
-                None,
-                &[],
-            ).unwrap();
-
-            let mut result = client.update(
-                "SELECT int_data, toolkit_experimental.freq_agg(0.01, val::text) FILTER (WHERE keep) FROM test GROUP BY int_data;",
-                None,
-                &[]
-            ).unwrap();
-
-            assert!(result.next().is_none());
-        })
+            assert_eq!(null_groups, 50);
+        });
     }
 }

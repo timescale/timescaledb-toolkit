@@ -8,7 +8,7 @@ use std::{
 
 use colored::Colorize;
 
-use clap::{Arg, Command};
+use clap::{Arg, ArgAction, Command};
 use runner::ConnectionConfig;
 mod parser;
 mod runner;
@@ -23,7 +23,8 @@ fn main() {
         .arg(Arg::new("PASSWORD").short('a').long("password").num_args(1))
         .arg(Arg::new("DB").short('d').long("database").num_args(1))
         .arg(Arg::new("INPUT").num_args(1))
-        .mut_arg("help", |_h| Arg::new("help").long("help"))
+        .disable_help_flag(true)
+        .arg(Arg::new("help").long("help").action(ArgAction::Help))
         .get_matches();
 
     let dirname = matches.remove_one::<String>("INPUT").expect("need input");

@@ -29,12 +29,20 @@ mod fft;
 pub fn asap_smooth(data: &[f64], resolution: u32) -> Vec<f64> {
     use std::borrow::Cow;
 
+    if resolution == 0 || data.is_empty() {
+        return Vec::new();
+    }
+
     let data = if data.len() > 2 * resolution as usize {
         let period = (data.len() as f64 / resolution as f64) as u32;
         Cow::Owned(sma(data, period, period))
     } else {
         Cow::Borrowed(data)
     };
+
+    if data.len() <= 1 {
+        return data.into_owned();
+    }
 
     let mut acf = Acf::new(&data, (data.len() as f64 / 10.0).round() as u32);
     let peaks = acf.find_peaks();
@@ -264,7 +272,7 @@ impl Metrics<'_> {
     }
 
     fn diffs(&self) -> Vec<f64> {
-        let mut diff = vec![0.0; (self.len - 1) as usize];
+        let mut diff = vec![0.0; self.len.saturating_sub(1) as usize];
         for i in 1..self.len as usize {
             diff[i - 1] = self.values[i] - self.values[i - 1];
         }
@@ -342,6 +350,18 @@ mod tests {
         let test = Metrics::new(&series_c);
         assert_eq!(test.roughness(), 0.0);
         assert!((test.kurtosis() - 1.7).abs() < 0.000000000001); // == 1.7
+    }
+
+    #[test]
+    fn zero_resolution_returns_no_points() {
+        let test = asap_smooth(&[0.0, 40.0, 16.0], 0);
+        assert!(test.is_empty());
+    }
+
+    #[test]
+    fn single_point_downsample_does_not_underflow() {
+        let test = asap_smooth(&[0.0, 40.0, 16.0], 1);
+        assert_eq!(test, vec![56.0 / 3.0]);
     }
 
     #[test]

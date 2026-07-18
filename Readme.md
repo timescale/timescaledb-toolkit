@@ -35,7 +35,7 @@ As for other platforms: patches welcome!
 
 ### 🔧 Tools Setup
 
-Building the extension requires valid [rust](https://www.rust-lang.org/) (we build and test on 1.89.0), [rustfmt](https://github.com/rust-lang/rustfmt), and clang installs, along with the postgres headers for whichever version of postgres you are running, and pgrx.
+Building the extension requires valid [rust](https://www.rust-lang.org/) (we build and test on 1.96.0), [rustfmt](https://github.com/rust-lang/rustfmt), and clang installs, along with the postgres headers for whichever version of postgres you are running, and pgrx.
 We recommend installing rust using the [official instructions](https://www.rust-lang.org/tools/install):
 
 ```bash

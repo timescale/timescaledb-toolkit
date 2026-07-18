@@ -44,6 +44,10 @@ pub fn asap_trans_internal(
                 (Some(ts), Some(val)) => TSPoint { ts: ts.into(), val },
             };
 
+            if resolution <= 0 {
+                error!("resolution must be greater than 0")
+            }
+
             match state {
                 None => Some(
                     ASAPTransState {
@@ -137,6 +141,10 @@ pub fn asap_on_timevector(
     mut series: Timevector_TSTZ_F64<'static>,
     resolution: i32,
 ) -> Option<Timevector_TSTZ_F64<'static>> {
+    if resolution <= 0 {
+        error!("resolution must be greater than 0")
+    }
+
     // TODO: implement this using zero copy (requires sort, find_downsample_interval, and downsample_and_gapfill on Timevector)
     if !series.is_sorted() {
         series.points.as_owned().sort_by_key(|p| p.ts);
@@ -322,6 +330,45 @@ mod tests {
             }
             assert!(value_result.next().is_none());
             assert!(tvec_result.next().is_none());
+        })
+    }
+
+    #[pg_test(error = "resolution must be greater than 0")]
+    fn test_asap_aggregate_rejects_zero_resolution() {
+        Spi::connect_mut(|client| {
+            client
+                .update(
+                    "
+                    CREATE TEMP TABLE temp_series(id int4);
+                    INSERT INTO temp_series VALUES (0), (40), (16);
+                    SELECT public.asap_smooth(now(), 1.0, t1.id)
+                    FROM temp_series AS t1;
+                    ",
+                    None,
+                    &[],
+                )
+                .unwrap();
+        })
+    }
+
+    #[pg_test(error = "resolution must be greater than 0")]
+    fn test_asap_timevector_rejects_zero_resolution() {
+        Spi::connect_mut(|client| {
+            client
+                .update(
+                    "
+                    SELECT asap_smooth(
+                        (
+                            SELECT timevector('2020-1-1'::timestamptz + i * '1d'::interval, val)
+                            FROM (VALUES (1, 0.0), (2, 40.0), (3, 16.0)) AS v(i, val)
+                        ),
+                        0
+                    );
+                    ",
+                    None,
+                    &[],
+                )
+                .unwrap();
         })
     }
 }

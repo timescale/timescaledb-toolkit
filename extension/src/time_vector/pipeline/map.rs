@@ -621,7 +621,7 @@ mod tests {
             assert_eq!(
                 val.unwrap(),
                 "(version:1,num_points:1,flags:1,internal_padding:(0,0,0),points:[\
-                (ts:\"2020-01-03 00:00:00+00\",val:60)\
+                (ts:\"2020-01-03 00:00:00+00\",val:60.0)\
             ],null_val:[0])"
             );
         });

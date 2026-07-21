@@ -115,6 +115,42 @@ jobs:
       run: |
         chown -R postgres .
 
+    - name: Report CI metadata
+      run: |
+        echo "::group::CI metadata"
+        echo "event_name=${{ github.event_name }}"
+        echo "schedule=${{ github.event.schedule || 'n/a' }}"
+        echo "ref=${{ github.ref }}"
+        echo "sha=${{ github.sha }}"
+        echo "checkout_sha=$(git rev-parse HEAD)"
+        echo "container_image=${{ inputs.container-image || 'timescaledev/toolkit-builder-test' }}:${{ matrix.container.image }}"
+        echo "matrix_pgversion=${{ matrix.pgversion }}"
+        echo "matrix_os=${{ matrix.container.os }}"
+        echo "matrix_os_version=${{ matrix.container.version }}"
+        echo "matrix_schedule=${{ matrix.container.schedule }}"
+        echo "tsdb_repo=${{ inputs.tsdb-repo || 'https://github.com/timescale/timescaledb.git' }}"
+        echo "tsdb_ref=${{ inputs.tsdb-commit == '' && 'main' || matrix.tsdb_commit || inputs.tsdb-commit }}"
+        echo "tsdb_source_build=${{ (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || inputs.tsdb-commit != '' }}"
+        echo "::endgroup::"
+
+        {
+          echo "### Test Postgres metadata"
+          echo
+          echo "| Field | Value |"
+          echo "| --- | --- |"
+          echo "| Event | \`${{ github.event_name }}\` |"
+          echo "| Schedule | \`${{ github.event.schedule || 'n/a' }}\` |"
+          echo "| GitHub SHA | \`${{ github.sha }}\` |"
+          echo "| Checkout SHA | \`$(git rev-parse HEAD)\` |"
+          echo "| Container image | \`${{ inputs.container-image || 'timescaledev/toolkit-builder-test' }}:${{ matrix.container.image }}\` |"
+          echo "| PostgreSQL | \`${{ matrix.pgversion }}\` |"
+          echo "| OS | \`${{ matrix.container.os }} ${{ matrix.container.version }}\` |"
+          echo "| Matrix schedule | \`${{ matrix.container.schedule }}\` |"
+          echo "| TimescaleDB repo | \`${{ inputs.tsdb-repo || 'https://github.com/timescale/timescaledb.git' }}\` |"
+          echo "| TimescaleDB ref | \`${{ inputs.tsdb-commit == '' && 'main' || matrix.tsdb_commit || inputs.tsdb-commit }}\` |"
+          echo "| TimescaleDB source build | \`${{ (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || inputs.tsdb-commit != '' }}\` |"
+        } >> "$GITHUB_STEP_SUMMARY"
+
     - name: Build and install TimescaleDB
       if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || inputs.tsdb-commit != '' }}
       run: ./tools/install-timescaledb '${{ matrix.pgversion }}' '${{ inputs.tsdb-repo || 'https://github.com/timescale/timescaledb.git' }}' '${{ inputs.tsdb-commit == '' && 'main' || matrix.tsdb_commit || inputs.tsdb-commit }}'

@@ -1,9 +1,72 @@
 #!/bin/sh
-git clone "$2" timescaledb
+set -e
+
+pgversion=$1
+tsdb_repo=$2
+tsdb_ref=$3
+pg_bindir=/usr/lib/postgresql/$pgversion/bin
+
+echo "::group::TimescaleDB build inputs"
+echo "pgversion=$pgversion"
+echo "tsdb_repo=$tsdb_repo"
+echo "tsdb_ref=$tsdb_ref"
+echo "pg_bindir=$pg_bindir"
+echo "pg_config=$pg_bindir/pg_config"
+if [ -x "$pg_bindir/pg_config" ]; then
+    "$pg_bindir/pg_config" --version
+    "$pg_bindir/pg_config" --configure
+else
+    echo "pg_config not found or not executable"
+fi
+if command -v cmake >/dev/null 2>&1; then
+    command -v cmake
+    cmake --version
+else
+    echo "cmake not found"
+fi
+if command -v gcc >/dev/null 2>&1; then
+    command -v gcc
+    gcc --version
+fi
+echo "::endgroup::"
+
+git clone "$tsdb_repo" timescaledb
 cd timescaledb
-git switch --detach "$3"
+git switch --detach "$tsdb_ref"
+tsdb_sha=$(git rev-parse HEAD)
+tsdb_subject=$(git log -1 --format=%s)
+tsdb_commit_time=$(git log -1 --format=%cI)
+
+echo "::group::TimescaleDB resolved revision"
+echo "tsdb_sha=$tsdb_sha"
+echo "tsdb_commit_time=$tsdb_commit_time"
+echo "tsdb_subject=$tsdb_subject"
+echo "::endgroup::"
+
+if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+    {
+        echo
+        echo "### TimescaleDB source build"
+        echo
+        echo "| Field | Value |"
+        echo "| --- | --- |"
+        echo "| PostgreSQL | \`$pgversion\` |"
+        echo "| TimescaleDB repo | \`$tsdb_repo\` |"
+        echo "| Requested ref | \`$tsdb_ref\` |"
+        echo "| Resolved SHA | \`$tsdb_sha\` |"
+        echo "| Commit time | \`$tsdb_commit_time\` |"
+        echo "| Commit subject | \`$tsdb_subject\` |"
+        echo "| pg_config | \`$pg_bindir/pg_config\` |"
+        if command -v cmake >/dev/null 2>&1; then
+            echo "| cmake | \`$(command -v cmake)\` |"
+        else
+            echo "| cmake | \`not found\` |"
+        fi
+    } >> "$GITHUB_STEP_SUMMARY"
+fi
+
 mkdir build
 cd build
 # this overwrites the files from the TimescaleDB package
-cmake .. -DUSE_OPENSSL=0 -DLINTER=0 -DCMAKE_PROGRAM_PATH=/usr/lib/postgresql/$1/bin
+cmake .. -DUSE_OPENSSL=0 -DLINTER=0 -DCMAKE_PROGRAM_PATH="$pg_bindir"
 make install

@@ -130,6 +130,7 @@ if $privileged; then
                 git \
                 make \
                 openssl-devel \
+                cmake \
                 pkg-config \
                 rpm-build \
                 sudo
@@ -200,6 +201,7 @@ EOF
                     gnupg \
                     libkrb5-dev \
                     libssl-dev \
+                    libicu-dev \
                     make \
                     pkg-config \
                     postgresql-common \

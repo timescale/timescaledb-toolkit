@@ -125,9 +125,12 @@ if $privileged; then
             # - openssl-devel
             # - make
             # - pkg-config
+            # cmake and libicu-devel are needed to build TimescaleDB from source
             yum -q -y install \
+                cmake \
                 gcc \
                 git \
+                libicu-devel \
                 make \
                 openssl-devel \
                 pkg-config \
@@ -187,7 +190,7 @@ EOF
             # - libssl-dev
             # - make
             # - pkg-config
-            # cmake and libkrb5-dev are needed to build TimescaleDB
+            # cmake, libicu-dev, and libkrb5-dev are needed to build TimescaleDB from source
             apt-get -qq install \
                     build-essential \
                     cmake \
@@ -198,6 +201,7 @@ EOF
                     gcc \
                     git \
                     gnupg \
+                    libicu-dev \
                     libkrb5-dev \
                     libssl-dev \
                     make \

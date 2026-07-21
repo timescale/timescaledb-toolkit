@@ -102,7 +102,7 @@ and feel free to comment on the features or expand the list.
 
 See above for prerequisites and installation instructions.
 
-You can run tests against a postgres version `pg15`, `pg16`, `pg17`, or `pg18` using
+You can run tests against a postgres version `pg16`, `pg17`, or `pg18` using
 
 ```
 cargo pgrx test ${postgres_version}

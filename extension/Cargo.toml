@@ -7,10 +7,11 @@ edition = "2024"
 crate-type = ["cdylib", "lib"]
 
 [features]
-default = ["pg18"]
+default = ["pg19"]
 pg16 = ["pgrx/pg16", "pgrx-tests/pg16"]
 pg17 = ["pgrx/pg17", "pgrx-tests/pg17"]
 pg18 = ["pgrx/pg18", "pgrx-tests/pg18"]
+pg19 = ["pgrx/pg19", "pgrx-tests/pg19"]
 pg_test = ["approx"]
 
 [dependencies]

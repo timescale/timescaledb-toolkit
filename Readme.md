@@ -52,7 +52,7 @@ sudo apt-get install make gcc pkg-config clang postgresql-server-dev-18 libssl-d
 Next you need [cargo-pgrx](https://github.com/tcdi/pgrx), which can be installed with
 
 ```bash
-cargo install cargo-pgrx --version 0.18.0 --locked --force
+cargo install cargo-pgrx --version 0.18.1 --locked --force
 ```
 
 You must reinstall cargo-pgrx whenever you update your Rust compiler, since cargo-pgrx needs to be built with the same compiler as Toolkit.

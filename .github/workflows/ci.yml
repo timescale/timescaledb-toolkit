@@ -28,10 +28,15 @@ on:
         description: 'Test all platforms'
         type: boolean
         default: false
+      run-test-postgres:
+        description: 'Run Test Postgres as the TimescaleDB integration tests'
+        type: boolean
+        default: false
 
 jobs:
   testpostgres:
     name: Test Postgres
+    if: ${{ github.event_name != 'workflow_dispatch' || inputs['run-test-postgres'] }}
     runs-on: ${{ contains(matrix.container.image, 'arm64') && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
     container:
       image: ${{ inputs.container-image || 'timescaledev/toolkit-builder-test' }}:${{ matrix.container.image }}
@@ -130,7 +135,7 @@ jobs:
         echo "matrix_schedule=${{ matrix.container.schedule }}"
         echo "tsdb_repo=${{ inputs.tsdb-repo || 'https://github.com/timescale/timescaledb.git' }}"
         echo "tsdb_ref=${{ inputs.tsdb-commit == '' && 'main' || matrix.tsdb_commit || inputs.tsdb-commit }}"
-        echo "tsdb_source_build=${{ (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || inputs.tsdb-commit != '' }}"
+        echo "tsdb_source_build=${{ (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || (github.event_name == 'workflow_dispatch' && inputs['run-test-postgres']) || inputs.tsdb-commit != '' }}"
         echo "::endgroup::"
 
         {
@@ -148,11 +153,11 @@ jobs:
           echo "| Matrix schedule | \`${{ matrix.container.schedule }}\` |"
           echo "| TimescaleDB repo | \`${{ inputs.tsdb-repo || 'https://github.com/timescale/timescaledb.git' }}\` |"
           echo "| TimescaleDB ref | \`${{ inputs.tsdb-commit == '' && 'main' || matrix.tsdb_commit || inputs.tsdb-commit }}\` |"
-          echo "| TimescaleDB source build | \`${{ (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || inputs.tsdb-commit != '' }}\` |"
+          echo "| TimescaleDB source build | \`${{ (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || (github.event_name == 'workflow_dispatch' && inputs['run-test-postgres']) || inputs.tsdb-commit != '' }}\` |"
         } >> "$GITHUB_STEP_SUMMARY"
 
     - name: Build and install TimescaleDB
-      if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || inputs.tsdb-commit != '' }}
+      if: ${{ (github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || (github.event_name == 'workflow_dispatch' && inputs['run-test-postgres']) || inputs.tsdb-commit != '' }}
       run: ./tools/install-timescaledb '${{ matrix.pgversion }}' '${{ inputs.tsdb-repo || 'https://github.com/timescale/timescaledb.git' }}' '${{ inputs.tsdb-commit == '' && 'main' || matrix.tsdb_commit || inputs.tsdb-commit }}'
 
     # TODO After the container image contains a primed target dir, is this still worth it?
@@ -187,16 +192,16 @@ jobs:
 
     - name: Run doc tests
       # depends on TSDB, which requires PG >=13
-      if: ${{ matrix.pgversion >= 13 && (matrix.pgversion >= 13 && (matrix.pgversion <= 15 || ((github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || inputs.tsdb-commit != ''))) }}
+      if: ${{ matrix.pgversion >= 13 && (matrix.pgversion >= 13 && (matrix.pgversion <= 15 || ((github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || (github.event_name == 'workflow_dispatch' && inputs['run-test-postgres']) || inputs.tsdb-commit != ''))) }}
       run: su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-doc 2>&1'
 
     - name: Run binary update tests (deb)
       # depends on TSDB, which requires PG >=13
-      if: ${{ (matrix.container.os == 'debian' || matrix.container.os == 'ubuntu') && (matrix.pgversion >= 13 && (matrix.pgversion <= 16 || ((github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || inputs.tsdb-commit != ''))) }}
+      if: ${{ (matrix.container.os == 'debian' || matrix.container.os == 'ubuntu') && (matrix.pgversion >= 13 && (matrix.pgversion <= 16 || ((github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || (github.event_name == 'workflow_dispatch' && inputs['run-test-postgres']) || inputs.tsdb-commit != ''))) }}
       run: |
         su postgres -c 'OS_NAME=${{ matrix.container.os }} OS_VERSION=${{ matrix.container.version }} tools/testbin -version no -bindir / -pgversions ${{ matrix.pgversion }} ci 2>&1'    
     - name: Run binary update tests (EL)
-      if: ${{ (matrix.container.os == 'rockylinux') && matrix.container.version != '9' && (matrix.pgversion >= 13 && (matrix.pgversion <= 16 || ((github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || inputs.tsdb-commit != ''))) }}
+      if: ${{ (matrix.container.os == 'rockylinux') && matrix.container.version != '9' && (matrix.pgversion >= 13 && (matrix.pgversion <= 16 || ((github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || (github.event_name == 'workflow_dispatch' && inputs['run-test-postgres']) || inputs.tsdb-commit != ''))) }}
       run: |
         su postgres -c 'OS_NAME=${{ matrix.container.os }} OS_VERSION=${{ matrix.container.version }} tools/testbin -version no -bindir / -pgversions ${{ matrix.pgversion }} rpm_ci 2>&1'
 

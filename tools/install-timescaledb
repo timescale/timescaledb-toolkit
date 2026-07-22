@@ -4,7 +4,16 @@ set -e
 pgversion=$1
 tsdb_repo=$2
 tsdb_ref=$3
-pg_bindir=/usr/lib/postgresql/$pgversion/bin
+pg_bindir=
+for candidate in "/usr/lib/postgresql/$pgversion/bin" "/usr/pgsql-$pgversion/bin"; do
+    if [ -x "$candidate/pg_config" ]; then
+        pg_bindir=$candidate
+        break
+    fi
+done
+if [ -z "$pg_bindir" ]; then
+    pg_bindir=/usr/lib/postgresql/$pgversion/bin
+fi
 
 echo "::group::TimescaleDB build inputs"
 echo "pgversion=$pgversion"

@@ -1,4 +1,4 @@
-# Gauge Aggregates [<sup><mark>experimental</mark></sup>](/docs/README.md#tag-notes)
+# Gauge Aggregates 
 
 A gauge is a metric similar to a counter, with the primary difference being
 that it measures a value that varies up and down over time, rather than an
@@ -33,7 +33,7 @@ INSERT INTO gauge_test SELECT 3, '2020-01-03 UTC'::timestamptz + make_interval(d
 ### delta
 
 ```SQL,ignore
-SELECT toolkit_experimental.delta(toolkit_experimental.gauge_agg(ts, val)) FROM gauge_test;
+SELECT delta(gauge_agg(ts, val)) FROM gauge_test;
 ```
 ```ignore
  delta
@@ -44,7 +44,7 @@ SELECT toolkit_experimental.delta(toolkit_experimental.gauge_agg(ts, val)) FROM 
 ### idelta_left
 
 ```SQL,ignore
-SELECT toolkit_experimental.idelta_left(toolkit_experimental.gauge_agg(ts, val)) FROM gauge_test;
+SELECT idelta_left(gauge_agg(ts, val)) FROM gauge_test;
 ```
 ```ignore
  idelta_left
@@ -55,7 +55,7 @@ SELECT toolkit_experimental.idelta_left(toolkit_experimental.gauge_agg(ts, val))
 ### idelta_right
 
 ```SQL,ignore
-SELECT toolkit_experimental.idelta_right(toolkit_experimental.gauge_agg(ts, val)) FROM gauge_test;
+SELECT idelta_right(gauge_agg(ts, val)) FROM gauge_test;
 ```
 ```ignore
  idelta_right
@@ -66,8 +66,8 @@ SELECT toolkit_experimental.idelta_right(toolkit_experimental.gauge_agg(ts, val)
 ### rollup
 
 ```SQL
-WITH t as (SELECT date_trunc('minute', ts), toolkit_experimental.gauge_agg(ts, val) as agg FROM gauge_test group by 1)
-    SELECT toolkit_experimental.delta(toolkit_experimental.rollup(agg)) FROM t;
+WITH t as (SELECT date_trunc('minute', ts), gauge_agg(ts, val) as agg FROM gauge_test group by 1)
+    SELECT delta(rollup(agg)) FROM t;
 ```
 ```output
  rollup delta

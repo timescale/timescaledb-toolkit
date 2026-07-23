@@ -44,18 +44,13 @@ case $OS_NAME in
         ;;
 esac
 
-# Once we completely drop support of PG15 and el/8 we should revert this fix
+# Once we completely drop support of el/8 we should revert this fix
 # 9d4157a8bde08d778684c6371daea9814fa176ea
 should_skip_postgres_version() {
     pg=$1
 
     if [ "$OS_NAME" = rockylinux ] && [ "$OS_VERSION" = 8 ] && [ "$pg" = 18 ]; then
         echo "Skipping PostgreSQL $pg on EL $OS_VERSION"
-        return 0
-    fi
-
-    if [ "$OS_NAME" = ubuntu ] && [ "$OS_VERSION" = 26.04 ] && [ "$pg" = 15 ]; then
-        echo "Skipping PostgreSQL $pg on $OS_NAME $OS_VERSION"
         return 0
     fi
 
@@ -67,16 +62,6 @@ should_skip_timescaledb_version() {
 
     if [ "$OS_NAME" = rockylinux ] && [ "$OS_VERSION" = 8 ] && [ "$pg" = 18 ]; then
         echo "Skipping TimescaleDB for PostgreSQL $pg on EL $OS_VERSION; no package is available"
-        return 0
-    fi
-
-    if [ "$OS_NAME" = rockylinux ] && [ "$OS_VERSION" = 10 ] && [ "$pg" = 15 ]; then
-        echo "Skipping TimescaleDB for PostgreSQL $pg on EL $OS_VERSION; no package is available"
-        return 0
-    fi
-
-    if [ "$OS_NAME" = ubuntu ] && [ "$OS_VERSION" = 26.04 ] && [ "$pg" = 15 ]; then
-        echo "Skipping TimescaleDB for PostgreSQL $pg on $OS_NAME $OS_VERSION; no package is available"
         return 0
     fi
 

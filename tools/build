@@ -16,7 +16,7 @@ die() {
 }
 
 usage() {
-    die 'build [ -n -pg1[234] -profile release ] ( test-crates | test-extension | install | test-doc | test-updates | clippy)'
+    die 'build [ -n -pg1[6-9] -profile release ] ( test-crates | test-extension | install | test-doc | test-updates | clippy)'
 }
 
 require_pg_version() {
@@ -78,7 +78,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
 
-        -pg1[0-9])         # If this script survives to postgresql 19, WE WIN!
+        -pg1[6-9])
             pg_version=${arg#-pg}
             pg=pg$pg_version
             [ -z "$pg_port" ] && pg_port=288$pg_version

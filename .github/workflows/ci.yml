@@ -185,17 +185,19 @@ jobs:
         su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-extension 2>&1'
 
     - name: Run doc tests
-      # depends on TSDB, which requires PG >=13
-      if: ${{ matrix.pgversion >= 13 && (matrix.pgversion >= 13 && (matrix.pgversion <= 15 || ((github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || (github.event_name == 'workflow_dispatch' && inputs['run-test-postgres']) || inputs.tsdb-commit != ''))) }}
+      # depends on TimescaleDB; PostgreSQL 16 uses the package in the image,
+      # and newer versions require a source build.
+      if: ${{ matrix.pgversion >= 16 && (matrix.pgversion <= 16 || ((github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || (github.event_name == 'workflow_dispatch' && inputs['run-test-postgres']) || inputs.tsdb-commit != '')) }}
       run: su postgres -c 'sh tools/build -pg${{ matrix.pgversion }} test-doc 2>&1'
 
     - name: Run binary update tests (deb)
-      # depends on TSDB, which requires PG >=13
-      if: ${{ (matrix.container.os == 'debian' || matrix.container.os == 'ubuntu') && (matrix.pgversion >= 13 && (matrix.pgversion <= 16 || ((github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || (github.event_name == 'workflow_dispatch' && inputs['run-test-postgres']) || inputs.tsdb-commit != ''))) }}
+      # depends on TimescaleDB; PostgreSQL 16 uses the package in the image,
+      # and newer versions require a source build.
+      if: ${{ (matrix.container.os == 'debian' || matrix.container.os == 'ubuntu') && (matrix.pgversion >= 16 && (matrix.pgversion <= 16 || ((github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || (github.event_name == 'workflow_dispatch' && inputs['run-test-postgres']) || inputs.tsdb-commit != ''))) }}
       run: |
         su postgres -c 'OS_NAME=${{ matrix.container.os }} OS_VERSION=${{ matrix.container.version }} tools/testbin -version no -bindir / -pgversions ${{ matrix.pgversion }} ci 2>&1'    
     - name: Run binary update tests (EL)
-      if: ${{ (matrix.container.os == 'rockylinux') && matrix.container.version != '9' && (matrix.pgversion >= 13 && (matrix.pgversion <= 16 || ((github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || (github.event_name == 'workflow_dispatch' && inputs['run-test-postgres']) || inputs.tsdb-commit != ''))) }}
+      if: ${{ (matrix.container.os == 'rockylinux') && matrix.container.version != '9' && (matrix.pgversion >= 16 && (matrix.pgversion <= 16 || ((github.event_name == 'schedule' && github.event.schedule == '0 8 * * 1-4') || (github.event_name == 'workflow_dispatch' && inputs['run-test-postgres']) || inputs.tsdb-commit != ''))) }}
       run: |
         su postgres -c 'OS_NAME=${{ matrix.container.os }} OS_VERSION=${{ matrix.container.version }} tools/testbin -version no -bindir / -pgversions ${{ matrix.pgversion }} rpm_ci 2>&1'
 

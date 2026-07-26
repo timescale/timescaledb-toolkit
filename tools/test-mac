@@ -1,0 +1,136 @@
+#!/bin/sh
+
+set -eu
+
+pg_version=17
+db=postgres
+open_psql=1
+auto_install_timescaledb=1
+tsdb_repo=https://github.com/timescale/timescaledb.git
+tsdb_ref=main
+
+print() {
+    printf '%s\n' "$*"
+}
+
+die() {
+    print "$*" >&2
+    exit 2
+}
+
+usage() {
+    die 'test-mac [ -pg16 | -pg17 | -pg18 | -pg19 ] [ -pgconfig PATH ] [ -db DB ] [ -no-psql ] [ -no-install-timescaledb ] [ -tsdb-repo URL ] [ -tsdb-ref REF ]'
+}
+
+find_pg_config() {
+    if [ -z "${pg_config:-}" ]; then
+        pg_config=$(which "$(sed -ne 's/"//g' -e "s/^pg$pg_version *= *//p" ~/.pgrx/config.toml)")
+    fi
+    [ -x "$pg_config" ] || die "$pg_config not executable"
+}
+
+psql_cmd() {
+    "$psql" -h localhost -p "$pg_port" -d "$db" -v ON_ERROR_STOP=1 "$@"
+}
+
+run_timescaledb_install() {
+    print "TimescaleDB is missing for $pg_config; installing it from $tsdb_repo at $tsdb_ref"
+    "$script_dir/install-timescaledb-mac" \
+        "-pg$pg_version" \
+        -pgconfig "$pg_config" \
+        -repo "$tsdb_repo" \
+        -ref "$tsdb_ref"
+}
+
+while [ $# -gt 0 ]; do
+    arg="$1"
+    shift
+    case "$arg" in
+        -pg1[6-9])
+            pg_version=${arg#-pg}
+            ;;
+        -pgconfig)
+            [ $# -gt 0 ] || usage
+            pg_config="$1"
+            shift
+            ;;
+        -db)
+            [ $# -gt 0 ] || usage
+            db="$1"
+            shift
+            ;;
+        -no-psql)
+            open_psql=0
+            ;;
+        -no-install-timescaledb)
+            auto_install_timescaledb=0
+            ;;
+        -tsdb-repo)
+            [ $# -gt 0 ] || usage
+            tsdb_repo="$1"
+            shift
+            ;;
+        -tsdb-ref)
+            [ $# -gt 0 ] || usage
+            tsdb_ref="$1"
+            shift
+            ;;
+        *)
+            usage
+            ;;
+    esac
+done
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+pg=pg$pg_version
+pg_port=288$pg_version
+
+find_pg_config
+psql="$(dirname "$pg_config")/psql"
+[ -x "$psql" ] || psql=psql
+sharedir=$("$pg_config" --sharedir)
+
+if [ ! -f "$sharedir/extension/timescaledb.control" ]; then
+    if [ "$auto_install_timescaledb" -eq 1 ]; then
+        run_timescaledb_install
+    else
+        die "timescaledb is not installed for $pg_config; missing $sharedir/extension/timescaledb.control"
+    fi
+fi
+
+print "Installing timescaledb_toolkit for $pg using $pg_config"
+(cd extension && cargo pgrx install --no-default-features --features "$pg" -c "$pg_config")
+
+print "Starting pgrx Postgres $pg on port $pg_port"
+cargo pgrx start --package timescaledb_toolkit "$pg"
+
+preload=$(psql_cmd -Atc "SHOW shared_preload_libraries")
+case ",$preload," in
+    *,timescaledb,*)
+        ;;
+    *)
+        if [ -n "$preload" ]; then
+            preload="$preload,timescaledb"
+        else
+            preload=timescaledb
+        fi
+        print "Adding timescaledb to shared_preload_libraries and restarting $pg"
+        psql_cmd -c "ALTER SYSTEM SET shared_preload_libraries = '$preload'"
+        cargo pgrx stop --package timescaledb_toolkit "$pg"
+        cargo pgrx start --package timescaledb_toolkit "$pg"
+        ;;
+esac
+
+print "Creating TimescaleDB and Toolkit extensions"
+psql_cmd <<'SQL'
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+CREATE EXTENSION IF NOT EXISTS timescaledb_toolkit;
+
+SELECT average(stats_agg(data)) AS stats_agg_bigint_average
+FROM generate_series(1::bigint, 4::bigint) AS series(data);
+SQL
+
+if [ "$open_psql" -eq 1 ]; then
+    print "Opening psql. Stop Postgres later with: cargo pgrx stop --package timescaledb_toolkit $pg"
+    exec "$psql" -h localhost -p "$pg_port" -d "$db"
+fi

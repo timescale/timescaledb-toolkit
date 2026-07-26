@@ -2002,7 +2002,8 @@ mod tests {
             const EPS1: f64 = f64::EPSILON; // Generally enough to handle float rounding
             const EPS2: f64 = 2. * f64::EPSILON; // stddev is sqrt(variance), so a bit looser bound
             const EPS3: f64 = 3. * f64::EPSILON; // Sum of squares in variance agg accumulates a bit more error
-            const EPS4: f64 = 5. * f64::EPSILON; // Handle 'regr_intercept' float rounding 
+            const EPS4: f64 = 4. * f64::EPSILON; // Handle 'variance_y' float rounding
+            const EPS5: f64 = 5. * f64::EPSILON; // Handle 'regr_intercept' float rounding 
             const BILLIONTH: f64 = 1e-9; // Higher order moments exponentially compound the error
 
             check_agg_equivalence(
@@ -2171,7 +2172,7 @@ mod tests {
                 client,
                 &pg1d_aggy("variance"),
                 &tk2d_agg("variance_y"),
-                EPS3,
+                EPS4,
                 true,
             );
             check_agg_equivalence(

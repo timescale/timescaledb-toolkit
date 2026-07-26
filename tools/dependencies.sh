@@ -3,7 +3,7 @@
 # Exceptions:
 # - crate dependencies are specified in Cargo.toml files
 # - postgres versions are duplicated in the Github Actions matrix
-# - Readme.md lists some, too.  TODO is it acceptable to just point to this file?
+# - README.md lists some, too.  TODO is it acceptable to just point to this file?
 # All our automation scripts read this, so at least we're not duplicating this
 # information across all those.
 
@@ -13,7 +13,7 @@ TSDB_PG_VERSIONS='15 16 17 18'
 
 CARGO_EDIT=0.11.2
 
-# Keep synchronized with extension/Cargo.toml and `cargo install --version N.N.N cargo-pgrx` in Readme.md .
+# Keep synchronized with extension/Cargo.toml and `cargo install --version N.N.N cargo-pgrx` in README.md .
 PGRX_VERSION=0.18.1
 
 RUST_TOOLCHAIN=1.96.0

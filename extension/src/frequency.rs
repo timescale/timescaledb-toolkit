@@ -2526,8 +2526,7 @@ mod tests {
                 .update("SET min_parallel_table_scan_size = 0;", None, &[])
                 .unwrap();
 
-            let null_groups: i64 = Spi::get_one(
-                "SELECT count(*)
+            let query = "SELECT count(*)
                 FROM (
                     SELECT int_data,
                             toolkit_experimental.freq_agg(0.01, val::text)
@@ -2535,10 +2534,24 @@ mod tests {
                     FROM test
                     GROUP BY int_data
                 ) t
-                WHERE agg IS NULL",
-            )
-            .unwrap()
-            .unwrap();
+                WHERE agg IS NULL";
+
+            let plan: String = client
+                .update(&format!("EXPLAIN (FORMAT TEXT) {query}"), None, &[])
+                .unwrap()
+                .filter_map(|row| {
+                    row.get_datum_by_ordinal(1)
+                        .ok()
+                        .and_then(|d| d.value::<String>().ok().flatten())
+                })
+                .collect::<Vec<_>>()
+                .join("\n");
+            assert!(
+                plan.contains("Gather") && plan.contains("Partial") && plan.contains("Finalize"),
+                "freq_agg test must use parallel partial aggregation; got plan:\n{plan}"
+            );
+
+            let null_groups: i64 = Spi::get_one(query).unwrap().unwrap();
 
             assert_eq!(null_groups, 50);
         });

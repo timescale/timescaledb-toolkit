@@ -4,31 +4,64 @@
 
 This changelog should be updated as part of a PR if the work is worth noting (most of them should be). If unsure, always add an entry here for any PR targeted for the next release. It's easier to remove than add an entry at final review time for the next release.
 
-## Next Release (Date TBD)
+## [1.24.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.24.0) (2026-07-27)
 
 #### New experimental features
 
+#### Stabilized features
+
+- Add equality operators for `heartbeat_agg`, allowing continuous aggregate refreshes that need to compare heartbeat aggregate states by @Dvdandrades in https://github.com/timescale/timescaledb-toolkit/pull/922
+
 #### Bug fixes
+
+- Fix `asap_smooth` SIGABRT from huge palloc requests when called with a resolution of 0 by @surister98 in https://github.com/timescale/timescaledb-toolkit/commit/0b12825c65b92cd4c58e272cd9453b38e63a9aa3
+- Handle `DoubleOverflow` in `stats_agg` for values near double precision limits without panicking, including during continuous aggregate refreshes by @Dvdandrades in https://github.com/timescale/timescaledb-toolkit/pull/932
+- Fix `freq_agg` serialization and deserialization when the aggregate is built from empty input by @Dvdandrades in https://github.com/timescale/timescaledb-toolkit/pull/937
 
 #### Other notable changes
 
+- Update Rust to 1.96.0 by @surister98 in https://github.com/timescale/timescaledb-toolkit/commit/409a5c0a9120a589d66b057c1914be2a0f537019
+- Update Rust dependencies, including pgrx 0.18.1, and fix related errors and lints by @mfelsche in https://github.com/timescale/timescaledb-toolkit/commit/fed36f5ea11600860b181d5a54aef1c65120c6b3
+- Remove PostgreSQL 15 from the CI matrix by @surister98 in https://github.com/timescale/timescaledb-toolkit/commit/5a61740c43e251df273845a47ef90d626ae93eb8
+- Improve CI and package build plumbing with deterministic test ordering, step summaries, extra image dependencies, and an explicit `run-test-postgres` trigger by @surister98 in https://github.com/timescale/timescaledb-toolkit/commit/cbecd5d14e71dad89722d772fca1f1fded8dd894
+
 #### Shout-outs
 
-**Full Changelog**: [TODO]
+@Dvdandrades, @mfelsche
+
+**Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.23.0...1.24.0
 
 ## [1.23.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.23.0) (2026-06-02)
 
 #### New experimental features
 
+#### Stabilized features
+
+- Add a stable `stats_agg(bigint)` overload that rejects BIGINT values outside the exact double precision integer range instead of silently losing precision by @surister in https://github.com/timescale/timescaledb-toolkit/pull/905
+
 #### Bug fixes
+
+- Mark `time_weight` and `rollup(TimeWeightSummary)` parallel unsafe to prevent the PostgreSQL planner from building unsafe parallel aggregate plans for order-sensitive transition state by @syvb in https://github.com/timescale/timescaledb-toolkit/commit/e051786f633f4e3d58f9c012eca802c064fe2348
+- Fix `max_n` and `max_n_by` when used on empty tables by @Dvdandrades in https://github.com/timescale/timescaledb-toolkit/pull/915
+- Fix `min_n` and `min_n_by` when used on empty tables by @Dvdandrades in https://github.com/timescale/timescaledb-toolkit/pull/917
+- Fix inverted sortedness check in ASAP timevector smoothing so already-sorted input is not unnecessarily sorted, and unsorted input is sorted before smoothing by @Dvdandrades in https://github.com/timescale/timescaledb-toolkit/pull/921
 
 #### Other notable changes
 
+- Update pgrx to 0.18.0 by @surister in https://github.com/timescale/timescaledb-toolkit/pull/910
+- Set the extension control file as `superuser = true` and `trusted = true` by @svenklemm in https://github.com/timescale/timescaledb-toolkit/commit/27409767ded53d7ef119524804bf12296d56a82d
+- Add direct upgrade support from Toolkit 1.22.0 by @surister in https://github.com/timescale/timescaledb-toolkit/commit/e6b79f599d026bd7bf60739c44a1d99c01d18752
+- Update CI/build images for newer Ubuntu and Rocky Linux versions by @surister in https://github.com/timescale/timescaledb-toolkit/pull/914
+- Update README installation guidance by @atovpeko in https://github.com/timescale/timescaledb-toolkit/pull/903
+- Apply Rust and Clippy fixes by @Dvdandrades in https://github.com/timescale/timescaledb-toolkit/pull/918
+
 #### Shout-outs
 
-**Full Changelog**: [TODO]
+@Dvdandrades, @antekresic, @atovpeko, @svenklemm, @surister, @syvb
 
-## [1.22.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.21.0) (2025-10-24)
+**Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.22.0...1.23.0
+
+## [1.22.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.22.0) (2025-10-24)
 
 #### Bug fixes
 * Fix days_in_month behaviour when supplied date is not start of month by @svenklemm in https://github.com/timescale/timescaledb-toolkit/pull/880

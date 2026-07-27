@@ -11,7 +11,7 @@
 # 7. Prepare the main branch for the next release cycle.
 # 7a. Update upgradeable_form in control file.
 # 7b. Set toolkit version to released version with '-dev' appended.
-# 7c. Update Changelog.md .
+# 7c. Update CHANGELOG.md .
 # 7d. Push to and create pull request for post-$VERSION branch (if -push).
 # 8. File issue for release tasks that are not yet automated (if -push).
 
@@ -187,7 +187,7 @@ fi
 # If we forget to update the Changelog (or forget to cherry-pick Changelog
 # updates), show a clear error message rather than letting the ed script fail
 # mysteriously.
-grep -qs "$NEXT_RELEASE_RE" Changelog.md || die 'Changelod.md lacks "Next Release" section'
+grep -qs "$NEXT_RELEASE_RE" CHANGELOG.md || die 'Changelod.md lacks "Next Release" section'
 
 # 1a. Validate contents of target commit (just upgradeable_from currently).
 if ! release_is_minor; then
@@ -209,9 +209,9 @@ start_commit $TOML
 $nop cargo update -p timescaledb_toolkit
 assert_dirty || die "failed to set toolkit version to $VERSION in Cargo.lock"
 commit Cargo.lock
-# Update Changelog.md .
+# Update CHANGELOG.md .
 branch_commit_date=`git log -1 --pretty=format:%as $branch_commit`
-$nop ed Changelog.md <<EOF
+$nop ed CHANGELOG.md <<EOF
 /$NEXT_RELEASE_RE/
 d
 i
@@ -219,8 +219,8 @@ i
 .
 wq
 EOF
-assert_dirty || die 'failed to update Changelog.md for next release'
-commit Changelog.md
+assert_dirty || die 'failed to update CHANGELOG.md for next release'
+commit CHANGELOG.md
 finish_commit "release $VERSION"
 $nop git show
 
@@ -252,7 +252,7 @@ $nop git tag $VERSION
 if $push; then
     $nop git push origin $VERSION
     # TODO gh release
-#     ed -s > release-notes Changelog.md <<EOF
+#     ed -s > release-notes CHANGELOG.md <<EOF
 # /^## \[[^]]*](https:..github.com.timescale.timescaledb-toolkit.releases.tag/
 # +,/^## \[[^]]*](https:..github.com.timescale.timescaledb-toolkit.releases.tag/p
 # EOF
@@ -281,7 +281,7 @@ if release_is_minor; then
     assert_dirty || die "failed to set toolkit version to $DEV_VERSION in Cargo.lock"
     commit Cargo.lock
 
-    # 7c. Update Changelog.md .
+    # 7c. Update CHANGELOG.md .
     # Skip for patch releases as it's not clear how to automate the cherry-pick case.
     # For now, we just have to add patch releases to the main Changelog manually.
     # The edit we apply here for minor releases would be wrong in the
@@ -291,7 +291,7 @@ if release_is_minor; then
     # automating that case is probably not feasible.
     # TODO Or is it?
     branch_commit_date=`git log -1 --pretty=format:%as $branch_commit`
-    $nop ed Changelog.md <<EOF
+    $nop ed CHANGELOG.md <<EOF
 /$NEXT_RELEASE_RE/
 a
 
@@ -309,8 +309,8 @@ a
 .
 wq
 EOF
-    assert_dirty || die 'failed to update Changelog.md for next release'
-    commit Changelog.md
+    assert_dirty || die 'failed to update CHANGELOG.md for next release'
+    commit CHANGELOG.md
 
     finish_commit "start $DEV_VERSION"
 else

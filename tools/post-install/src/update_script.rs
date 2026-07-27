@@ -103,7 +103,6 @@ enum Create {
     Cast(String),
 }
 
-const MUST_FIND_MATCH: bool = false;
 const ALLOW_NO_MATCH: bool = true;
 
 impl<Lines, Dst> UpdateScriptCreator<Lines, Dst>
@@ -292,8 +291,12 @@ where
         // if any of `PROCEDURE`, `LEFTARG`, or `RIGHTARG` refer to and
         // experimental object the operator is experimental, otherwise it isn't
         let op = extract_name(&create);
-
-        let fields = self.get_properties(&["PROCEDURE", "LEFTARG", "RIGHTARG"], MUST_FIND_MATCH);
+        let property_lines = self.take_properties();
+        let fields = get_properties_from_lines(
+            &property_lines,
+            &["PROCEDURE", "LEFTARG", "RIGHTARG"],
+            ALLOW_NO_MATCH,
+        );
 
         let is_experimental = fields
             .iter()
@@ -326,24 +329,17 @@ where
             ],
         };
         if is_experimental || self.new_stabilizations.new_operators.contains(&operator) {
-            writeln!(
-                self.upgrade_file,
-                "CREATE OPERATOR {} (\n    \
-                    PROCEDURE={}\n    \
-                    LEFTARG={}\n    \
-                    RIGHTARG={}\n    \
-                );",
-                op,
-                fields[0].as_ref().unwrap(),
-                fields[1].as_ref().unwrap(),
-                fields[2].as_ref().unwrap(),
-            )
-            .expect("cannot write CREATE OPERATOR")
+            writeln!(self.upgrade_file, "CREATE OPERATOR {create}")
+                .expect("cannot write CREATE OPERATOR");
+            for line in property_lines {
+                writeln!(self.upgrade_file, "{line}").expect("cannot write CREATE OPERATOR");
+            }
+            writeln!(self.upgrade_file, ");").expect("cannot write CREATE OPERATOR");
         }
     }
 
-    fn get_properties(&mut self, fields: &[&str], allow_no_match: bool) -> Vec<Option<String>> {
-        let mut properties = vec![None; fields.len()];
+    fn take_properties(&mut self) -> Vec<String> {
+        let mut property_lines = Vec::new();
         for line in &mut self.lines {
             // found `)` means we're done with
             // ```
@@ -354,33 +350,77 @@ where
             if line.trim_start().starts_with(')') {
                 break;
             }
-            let mut split = line.split('=');
-            let field = split.next().unwrap().trim();
-            let value = split
-                .next()
-                .unwrap_or_else(|| panic!("no value for field {field}"))
-                .trim();
-            assert_eq!(split.next(), None);
+            property_lines.push(line);
+        }
+        property_lines
+    }
 
-            let mut found_match = false;
-            for (i, property) in fields.iter().enumerate() {
-                if field.eq_ignore_ascii_case(property) {
-                    properties[i] = Some(value.to_string());
-                    found_match = true;
-                }
+    fn get_properties(&mut self, fields: &[&str], allow_no_match: bool) -> Vec<Option<String>> {
+        let property_lines = self.take_properties();
+        get_properties_from_lines(&property_lines, fields, allow_no_match)
+    }
+}
+
+fn get_properties_from_lines(
+    property_lines: &[String],
+    fields: &[&str],
+    allow_no_match: bool,
+) -> Vec<Option<String>> {
+    let mut properties = vec![None; fields.len()];
+    for line in property_lines {
+        let Some((field, value)) = line.split_once('=') else {
+            if allow_no_match {
+                continue;
             }
-            if !found_match && !allow_no_match {
-                panic!("{field} is not considered an acceptable property for this object")
+            panic!("no value for field {}", line.trim());
+        };
+        let field = field.trim();
+        let value = value.trim();
+
+        let mut found_match = false;
+        for (i, property) in fields.iter().enumerate() {
+            if field.eq_ignore_ascii_case(property) {
+                properties[i] = Some(value.to_string());
+                found_match = true;
             }
         }
-
-        properties
+        if !found_match && !allow_no_match {
+            panic!("{field} is not considered an acceptable property for this object")
+        }
     }
+
+    properties
 }
 
 enum FunctionLike {
     Fn,
     Agg,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::generate_from_install;
+
+    #[test]
+    fn operator_properties_may_contain_equals() {
+        let install_script = br#"
+CREATE OPERATOR = (
+	PROCEDURE="eq_op_heartbeat_agg",
+	LEFTARG=HeartbeatAgg, /* timescaledb_toolkit::heartbeat_agg::HeartbeatAgg */
+	RIGHTARG=HeartbeatAgg, /* timescaledb_toolkit::heartbeat_agg::HeartbeatAgg */,
+	COMMUTATOR = =,
+	NEGATOR = <>
+);
+"#;
+        let mut upgrade_script = Vec::new();
+
+        generate_from_install("1.23.0", "1.24.0", &install_script[..], &mut upgrade_script);
+
+        let upgrade_script = String::from_utf8(upgrade_script).unwrap();
+        assert!(upgrade_script.contains("CREATE OPERATOR = ("));
+        assert!(upgrade_script.contains("COMMUTATOR = =,"));
+        assert!(upgrade_script.contains("NEGATOR = <>"));
+    }
 }
 
 impl FunctionLike {

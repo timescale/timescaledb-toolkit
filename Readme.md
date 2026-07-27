@@ -60,7 +60,7 @@ You must reinstall cargo-pgrx whenever you update your Rust compiler, since carg
 Finally, setup the pgrx development environment with
 
 ```bash
-cargo pgrx init --pg18 pg_config
+cargo pgrx init --pg19 pg_config
 ```
 
 Installing from source is also available on macOS and requires the same set of prerequisites and set up commands listed above.
@@ -102,7 +102,7 @@ and feel free to comment on the features or expand the list.
 
 See above for prerequisites and installation instructions.
 
-You can run tests against a postgres version `pg15`, `pg16`, `pg17`, or `pg18` using
+You can run tests against a postgres version `pg16`, `pg17`, `pg18` or `pg19` using
 
 ```
 cargo pgrx test ${postgres_version}

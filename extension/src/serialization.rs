@@ -76,19 +76,7 @@ pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {
             pg_sys::MAXDATEFIELDS as i32,
             &mut nf,
         );
-        #[cfg(feature = "pg15")]
-        if dterr == 0 {
-            dterr = pg_sys::DecodeDateTime(
-                field.as_mut_ptr(),
-                ftype.as_mut_ptr(),
-                nf,
-                &mut dtype,
-                tm,
-                &mut fsec,
-                &mut tz,
-            )
-        }
-        #[cfg(not(feature = "pg15"))]
+        
         if dterr == 0 {
             let mut extra = pgrx::pg_sys::DateTimeErrorExtra::default();
             dterr = pg_sys::DecodeDateTime(
@@ -102,16 +90,7 @@ pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {
                 &mut extra as *mut pgrx::pg_sys::DateTimeErrorExtra,
             )
         }
-
-        #[cfg(feature = "pg15")]
-        if dterr != 0 {
-            pg_sys::DateTimeParseError(
-                dterr,
-                str.as_ptr(),
-                c"timestamptz".as_ptr().cast::<c_char>(),
-            );
-        }
-        #[cfg(not(feature = "pg15"))]
+        
         if dterr != 0 {
             pg_sys::DateTimeParseError(
                 dterr,

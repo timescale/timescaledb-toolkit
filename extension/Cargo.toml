@@ -7,19 +7,19 @@ edition = "2024"
 crate-type = ["cdylib", "lib"]
 
 [features]
-default = ["pg18"]
-pg15 = ["pgrx/pg15", "pgrx-tests/pg15"]
+default = ["pg19"]
 pg16 = ["pgrx/pg16", "pgrx-tests/pg16"]
 pg17 = ["pgrx/pg17", "pgrx-tests/pg17"]
 pg18 = ["pgrx/pg18", "pgrx-tests/pg18"]
+pg19 = ["pgrx/pg19", "pgrx-tests/pg19"]
 pg_test = ["approx"]
 
 [dependencies]
 # Keep synchronized with `cargo install --version N.N.N cargo-pgrx` in Readme.md and docker/ci/Dockerfile
 # Also `pgrx-tests` down below in `dev-dependencies`.
-pgrx = "=0.18.1"
-pgrx-macros = "=0.18.1"
-pgrx-sql-entity-graph = "=0.18.1"
+pgrx = "=0.19.1"
+pgrx-macros = "=0.19.1"
+pgrx-sql-entity-graph = "=0.19.1"
 encodings = {path="../crates/encodings"}
 flat_serialize = {path="../crates/flat_serialize/flat_serialize"}
 flat_serialize_macro = {path="../crates/flat_serialize/flat_serialize_macro"}
@@ -56,5 +56,5 @@ spfunc = "0.1.0"
 statrs = "0.18.0"
 
 [dev-dependencies]
-pgrx-tests = "=0.18.1"
+pgrx-tests = "=0.19.1"
 approx = "0.5.1"

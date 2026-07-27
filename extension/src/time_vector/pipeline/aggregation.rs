@@ -113,7 +113,7 @@ pub fn arrow_run_pipeline_then_stats_agg<'a>(
     timevector = run_pipeline_elements(timevector, pipeline.elements.iter());
     let mut stats = InternalStatsSummary1D::new();
     for TSPoint { val, .. } in timevector.iter() {
-        stats.accum(val).expect("error while running stats_agg");
+        stats_agg::unwrap_stats_result(stats.accum(val));
     }
     StatsSummary1D::from_internal(stats)
 }
@@ -799,6 +799,44 @@ mod tests {
                 "(version:1,n:5,sx:100.0,sx2:250.0,sx3:0.0,sx4:21250.0)"
             );
         });
+    }
+
+    #[pg_test]
+    fn test_stats_agg_pipeline_overflow_uses_numeric_out_of_range_sqlstate() {
+        let result = pg_sys::PgTryBuilder::new(|| {
+            Spi::connect_mut(|client| {
+                client
+                    .update(
+                        "SET LOCAL search_path TO public, toolkit_experimental",
+                        None,
+                        &[],
+                    )
+                    .unwrap();
+                client
+                    .select(
+                        "WITH input(ts, val) AS (
+                            VALUES
+                                ('2020-01-01 UTC'::timestamptz, 1e308::float8),
+                                ('2020-01-02 UTC'::timestamptz, 1e308::float8),
+                                ('2020-01-03 UTC'::timestamptz, 1e308::float8)
+                        ),
+                        series AS (
+                            SELECT timevector(ts, val) AS tv
+                            FROM input
+                        )
+                        SELECT (tv -> stats_agg())::text
+                        FROM series;",
+                        None,
+                        &[],
+                    )
+                    .unwrap();
+            });
+            false
+        })
+        .catch_when(PgSqlErrorCode::ERRCODE_NUMERIC_VALUE_OUT_OF_RANGE, |_| true)
+        .execute();
+
+        assert!(result);
     }
 
     #[pg_test]

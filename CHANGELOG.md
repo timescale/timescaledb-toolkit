@@ -9,7 +9,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 #### New experimental features
 
 #### Bug fixes
-
+- Handle `stats_agg` overflow in the experimental timevector pipeline by @darkgl06 in https://github.com/timescale/timescaledb-toolkit/issues/947
 #### Other notable changes
 
 #### Shout-outs

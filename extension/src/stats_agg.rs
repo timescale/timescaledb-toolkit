@@ -110,7 +110,7 @@ impl StatsSummary2D {
     }
 }
 
-fn unwrap_stats_result<T>(result: Result<T, StatsError>) -> T {
+pub(crate) fn unwrap_stats_result<T>(result: Result<T, StatsError>) -> T {
     result.unwrap_or_else(|StatsError::DoubleOverflow| {
         pgrx::ereport!(
             ERROR,

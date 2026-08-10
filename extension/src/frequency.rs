@@ -631,6 +631,17 @@ impl<'input> From<(&SpaceSavingTextAggregate<'input>, &pg_sys::FunctionCallInfo)
 
 ron_inout_funcs!(SpaceSavingTextAggregate<'input>);
 
+fn validate_mcv_n(n: i32) -> u32 {
+    if n <= 0 {
+        pgrx::ereport!(
+            ERROR,
+            PgSqlErrorCode::ERRCODE_INVALID_PARAMETER_VALUE,
+            "mcv aggregate requires an n value > 0"
+        );
+    }
+    n as u32
+}
+
 #[pg_extern(immutable, parallel_safe)]
 pub fn mcv_agg_trans(
     state: Internal,
@@ -669,12 +680,13 @@ pub fn mcv_agg_with_skew_trans(
     value: Option<AnyElement>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
+    let validated_n = validate_mcv_n(n);
     space_saving_trans(
         unsafe { state.to_inner() },
         value,
         fcinfo,
         |typ, collation| {
-            SpaceSavingTransState::mcv_agg_from_type_id(skew, n as u32, typ, collation)
+            SpaceSavingTransState::mcv_agg_from_type_id(skew, validated_n, typ, collation)
         },
     )
     .internal()
@@ -688,6 +700,7 @@ pub fn mcv_agg_with_skew_bigint_trans(
     value: Option<i64>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
+    let validated_n = validate_mcv_n(n);
     let value = match value {
         None => None,
         Some(val) => unsafe {
@@ -700,7 +713,7 @@ pub fn mcv_agg_with_skew_bigint_trans(
         value,
         fcinfo,
         |typ, collation| {
-            SpaceSavingTransState::mcv_agg_from_type_id(skew, n as u32, typ, collation)
+            SpaceSavingTransState::mcv_agg_from_type_id(skew, validated_n, typ, collation)
         },
     )
     .internal()
@@ -714,6 +727,7 @@ pub fn mcv_agg_with_skew_text_trans(
     value: Option<crate::raw::text>,
     fcinfo: pg_sys::FunctionCallInfo,
 ) -> Option<Internal> {
+    let validated_n = validate_mcv_n(n);
     let txt = value.map(|v| unsafe { pg_sys::pg_detoast_datum_copy(v.0.cast_mut_ptr()) });
     let value = match txt {
         None => None,
@@ -727,7 +741,7 @@ pub fn mcv_agg_with_skew_text_trans(
         value,
         fcinfo,
         |typ, collation| {
-            SpaceSavingTransState::mcv_agg_from_type_id(skew, n as u32, typ, collation)
+            SpaceSavingTransState::mcv_agg_from_type_id(skew, validated_n, typ, collation)
         },
     )
     .internal()
@@ -1697,6 +1711,25 @@ mod tests {
     use pgrx_macros::pg_test;
     use rand::{distr::Uniform, prelude::*};
     use rand_distr::Zeta;
+
+    #[pg_test]
+    fn test_mcv_agg_rejects_non_positive_n() {
+        for query in [
+            "SELECT mcv_agg(-1, value) FROM (VALUES (1), (2)) AS input(value)",
+            "SELECT mcv_agg(-1, value) FROM (VALUES (1::bigint), (2)) AS input(value)",
+            "SELECT mcv_agg(-1, value) FROM (VALUES ('one'::text), ('two')) AS input(value)",
+            "SELECT mcv_agg(0, value) FROM (VALUES (1), (2)) AS input(value)",
+        ] {
+            let result = pg_sys::PgTryBuilder::new(|| {
+                Spi::run(query).unwrap();
+                false
+            })
+            .catch_when(PgSqlErrorCode::ERRCODE_INVALID_PARAMETER_VALUE, |_| true)
+            .execute();
+
+            assert!(result, "query did not return SQLSTATE 22023: {query}");
+        }
+    }
 
     #[pg_test]
     fn test_freq_aggregate() {

@@ -22,6 +22,7 @@ AS SELECT
     time_bucket('7 day'::interval, time) as week,
     hyperloglog(64, value1) as hll,
     counter_agg(time, value1) as counter,
+    gauge_agg(time, value2) as gauge,
     stats_agg(value1, value2) as stats,
     timevector(time, value2) as tvec,
     heartbeat_agg(time, time_bucket('7 day'::interval, time), '1w', '55m') as hb
@@ -80,6 +81,37 @@ FROM weekly_aggs;
  num_resets
 ------------
          98
+```
+
+```SQL
+SELECT week, gauge -> delta() AS delta, gauge -> rate() AS rate
+FROM weekly_aggs
+WHERE week > '2020-06-01'::TIMESTAMPTZ
+ORDER BY week;
+```
+
+```output
+          week          |       delta        |          rate
+------------------------+--------------------+------------------------
+ 2020-06-08 00:00:00+00 |  -0.547950089127 | -9.11427293956e-07
+ 2020-06-15 00:00:00+00 |  -0.203697996918 | -3.38819023484e-07
+ 2020-06-22 00:00:00+00 |  0.0750605326877 |  1.24851185442e-07
+ 2020-06-29 00:00:00+00 |   0.303956408434 |   5.0558284836e-07
+ 2020-07-06 00:00:00+00 |  -0.340625638929 | -5.66576245723e-07
+ 2020-07-13 00:00:00+00 |  -0.113184931507 | -1.88265022466e-07
+ 2020-07-20 00:00:00+00 |  0.0166666666667 |  2.77223331116e-08
+ 2020-07-27 00:00:00+00 | -0.0777777777778 | -3.72498935717e-07
+```
+
+```SQL
+SELECT rollup(gauge) -> delta() AS delta, rollup(gauge) -> num_elements() AS num_elements
+FROM weekly_aggs;
+```
+
+```output
+ delta | num_elements
+-------+--------------
+     0 |         5050
 ```
 
 ```SQL

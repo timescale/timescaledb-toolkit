@@ -1,4 +1,4 @@
-# Gauge Aggregates 
+# Gauge Aggregates
 
 A gauge is a metric similar to a counter, with the primary difference being
 that it measures a value that varies up and down over time, rather than an

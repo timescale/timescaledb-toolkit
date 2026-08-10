@@ -968,12 +968,12 @@ mod tests {
                 interpolated_delta(
                     agg,
                     bucket,
-                    '1 day'::interval, 
-                    LAG(agg) OVER (ORDER BY bucket), 
+                    '1 day'::interval,
+                    LAG(agg) OVER (ORDER BY bucket),
                     LEAD(agg) OVER (ORDER BY bucket)
                 ) FROM (
-                    SELECT bucket, gauge_agg(time, value) as agg 
-                    FROM test 
+                    SELECT bucket, gauge_agg(time, value) as agg
+                    FROM test
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
@@ -995,12 +995,12 @@ mod tests {
                 interpolated_rate(
                     agg,
                     bucket,
-                    '1 day'::interval, 
-                    LAG(agg) OVER (ORDER BY bucket), 
+                    '1 day'::interval,
+                    LAG(agg) OVER (ORDER BY bucket),
                     LEAD(agg) OVER (ORDER BY bucket)
                 ) FROM (
-                    SELECT bucket, gauge_agg(time, value) as agg 
-                    FROM test 
+                    SELECT bucket, gauge_agg(time, value) as agg
+                    FROM test
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,
@@ -1055,12 +1055,12 @@ mod tests {
                 interpolated_delta(
                     agg,
                     bucket,
-                    '1 day'::interval, 
-                    LAG(agg) OVER (ORDER BY bucket), 
+                    '1 day'::interval,
+                    LAG(agg) OVER (ORDER BY bucket),
                     LEAD(agg) OVER (ORDER BY bucket)
                 ) FROM (
-                    SELECT bucket, gauge_agg(time, value) as agg 
-                    FROM test 
+                    SELECT bucket, gauge_agg(time, value) as agg
+                    FROM test
                     GROUP BY bucket
                 ) s
                 ORDER BY bucket"#,

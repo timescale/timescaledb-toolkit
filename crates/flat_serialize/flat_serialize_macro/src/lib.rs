@@ -1391,12 +1391,8 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
                 .iter()
                 .flat_map(|attr| {
                     if attr.path().is_ident("repr") {
-                        attr.parse_args().ok().and_then(|ident: Ident| {
-                            if ident == "u8" || ident == "u16" || ident == "u32" || ident == "u64" {
-                                Some(ident)
-                            } else {
-                                None
-                            }
+                        attr.parse_args().ok().filter(|ident: &Ident| {
+                            ident == "u8" || ident == "u16" || ident == "u32" || ident == "u64"
                         })
                     } else {
                         None
@@ -1497,13 +1493,7 @@ pub fn flat_serializable_derive(input: TokenStream) -> TokenStream {
         .iter()
         .flat_map(|attr| {
             if attr.path().is_ident("repr") {
-                attr.parse_args::<Ident>().ok().and_then(|ident| {
-                    if ident == "C" {
-                        Some(ident)
-                    } else {
-                        None
-                    }
-                })
+                attr.parse_args::<Ident>().ok().filter(|ident| ident == "C")
             } else {
                 None
             }

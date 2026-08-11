@@ -50,7 +50,6 @@ pub fn asap_smooth_with_metadata(data: &[f64], resolution: u32) -> AsapSmoothRes
     let preaggregation_window = if data.len() > 2 * resolution as usize {
         // period
         (data.len() as f64 / resolution as f64) as u32
-
     } else {
         1
     };

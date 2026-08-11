@@ -11,9 +11,7 @@
 
 crate::functions_stabilized_at! {
     STABLE_FUNCTIONS
-    "1.24.0" => {
-        eq_op_heartbeat_agg(heartbeatagg, heartbeatagg),
-        neq_op_heartbeat_agg(heartbeatagg, heartbeatagg),
+    "1.25.0" => {
         arrow_corr(gaugesummary,accessorcorr),
         arrow_delta(gaugesummary,accessordelta),
         arrow_extrapolated_delta(gaugesummary,accessorextrapolateddelta),
@@ -60,6 +58,10 @@ crate::functions_stabilized_at! {
         slope(gaugesummary),
         time_delta(gaugesummary),
         with_bounds(gaugesummary,tstzrange),
+    }
+    "1.24.0" => {
+        eq_op_heartbeat_agg(heartbeatagg, heartbeatagg),
+        neq_op_heartbeat_agg(heartbeatagg, heartbeatagg)
     }
     "1.23.0" => {
         stats_agg(bigint),
@@ -954,7 +956,7 @@ crate::functions_stabilized_at! {
 
 crate::types_stabilized_at! {
     STABLE_TYPES
-    "1.24.0" => {
+    "1.25.0" => {
         gaugesummary,
     }
     "1.16.0" => {
@@ -1107,9 +1109,7 @@ crate::types_stabilized_at! {
 
 crate::operators_stabilized_at! {
     STABLE_OPERATORS
-    "1.24.0" => {
-        "="(heartbeatagg, heartbeatagg),
-        "<>"(heartbeatagg, heartbeatagg),
+    "1.25.0" => {
         "->"(gaugesummary,accessorcorr),
         "->"(gaugesummary,accessorcounterzerotime),
         "->"(gaugesummary,accessordelta),
@@ -1126,6 +1126,10 @@ crate::operators_stabilized_at! {
         "->"(gaugesummary,accessorslope),
         "->"(gaugesummary,accessortimedelta),
         "->"(gaugesummary,accessorwithbounds),
+    }
+    "1.24.0" => {
+        "="(heartbeatagg, heartbeatagg),
+        "<>"(heartbeatagg, heartbeatagg),
     }
     "1.16.0" => {
         "->"(heartbeatagg,accessornumgaps),

@@ -69,10 +69,48 @@ pub fn asap_trans_internal(
 impl ASAPTransState {
     fn add_point(&mut self, point: TSPoint) {
         self.ts.push(point);
-        if let Some(window) = self.ts.windows(2).last()
-            && window[0].ts > window[1].ts
-        {
-            self.sorted = false
+        if let Some(window) = self.ts.windows(2).last() {
+            if window[0].ts > window[1].ts {
+                self.sorted = false
+            }
+        }
+    }
+}
+
+fn smooth_points(points: &[TSPoint], resolution: i32) -> Vec<TSPoint> {
+    let values: Vec<f64> = points.iter().map(|p| p.val).collect();
+    let result = asap_smooth_with_metadata(&values, resolution as u32);
+
+    let preaggregation_window = result.preaggregation_window as usize;
+    let smoothing_window = result.smoothing_window as usize;
+    let offset = smoothing_window / 2;
+
+    result
+        .values
+        .into_iter()
+        .enumerate()
+        .map(|(i, val)| {
+            let input_idx = (i + offset)
+                .saturating_mul(preaggregation_window)
+                .min(points.len() - 1);
+            TSPoint {
+                ts: points[input_idx].ts,
+                val,
+            }
+        })
+        .collect()
+}
+
+fn build_timevector(points: Vec<TSPoint>) -> Timevector_TSTZ_F64<'static> {
+    let nulls_len = points.len().div_ceil(8);
+
+    crate::build! {
+        Timevector_TSTZ_F64 {
+            num_points: points.len() as u32,
+            flags: time_vector::FLAG_IS_SORTED,
+            internal_padding: [0; 3],
+            points: points.into(),
+            null_val: std::vec::from_elem(0_u8, nulls_len).into(),
         }
     }
 }
@@ -100,38 +138,7 @@ fn asap_final_inner(
                 points.sort_by_key(|p| p.ts);
             }
 
-            let start_ts = points.first().unwrap().ts;
-            let end_ts = points.last().unwrap().ts;
-
-            let mut values: Vec<f64> = points.iter().map(|p| p.val).collect();
-            values = asap_smooth(&values, state.resolution as u32);
-
-            let interval = if values.len() > 1 {
-                (end_ts - start_ts) / (values.len() - 1) as i64
-            } else {
-                1
-            };
-
-            let points: Vec<_> = values
-                .into_iter()
-                .enumerate()
-                .map(|(i, val)| TSPoint {
-                    ts: start_ts + i as i64 * interval,
-                    val,
-                })
-                .collect();
-
-            let nulls_len = points.len().div_ceil(8);
-
-            Some(crate::build! {
-                Timevector_TSTZ_F64 {
-                    num_points: points.len() as u32,
-                    flags: time_vector::FLAG_IS_SORTED,
-                    internal_padding: [0; 3],
-                    points: points.into(),
-                    null_val: std::vec::from_elem(0_u8, nulls_len).into(),
-                }
-            })
+            Some(build_timevector(smooth_points(&points, state.resolution)))
         })
     }
 }
@@ -149,39 +156,11 @@ pub fn asap_on_timevector(
     if !series.is_sorted() {
         series.points.as_owned().sort_by_key(|p| p.ts);
     }
-    let start_ts = series.points.as_slice().first().unwrap().ts;
-    let end_ts = series.points.as_slice().last().unwrap().ts;
 
-    let values: Vec<f64> = series.points.as_slice().iter().map(|p| p.val).collect();
-
-    let result = asap_smooth(&values, resolution as u32);
-
-    let interval = if result.len() > 1 {
-        (end_ts - start_ts) / (result.len() - 1) as i64
-    } else {
-        1
-    };
-
-    let points: Vec<_> = result
-        .into_iter()
-        .enumerate()
-        .map(|(i, val)| TSPoint {
-            ts: start_ts + i as i64 * interval,
-            val,
-        })
-        .collect();
-
-    let nulls_len = points.len().div_ceil(8);
-
-    Some(crate::build! {
-        Timevector_TSTZ_F64 {
-            num_points: points.len() as u32,
-            flags: time_vector::FLAG_IS_SORTED,
-            internal_padding: [0; 3],
-            points: points.into(),
-            null_val: std::vec::from_elem(0_u8, nulls_len).into(),
-        }
-    })
+    Some(build_timevector(smooth_points(
+        series.points.as_slice(),
+        resolution,
+    )))
 }
 
 // Aggregate on only values (assumes aggregation over ordered normalized timestamp)
@@ -327,6 +306,66 @@ mod tests {
                 let t = tvec_result.next().unwrap();
                 assert_eq!(v[1].value::<&str>(), t[1].value::<&str>());
                 assert_eq!(v[2].value::<f64>().unwrap(), t[2].value::<f64>().unwrap());
+            }
+            assert!(value_result.next().is_none());
+            assert!(tvec_result.next().is_none());
+        })
+    }
+
+    #[pg_test]
+    fn test_asap_preserves_irregular_sample_timestamps() {
+        Spi::connect_mut(|client| {
+            client.update("SET timezone TO 'UTC'", None, &[]).unwrap();
+            let mut value_result = client
+                .update(
+                    "
+                    SELECT extract(epoch FROM time)::bigint
+                    FROM unnest(
+                        (
+                            SELECT asap_smooth(ts, val, 10)
+                            FROM (
+                                VALUES
+                                    ('2020-01-01 00:00:00+00'::timestamptz, 0.0),
+                                    ('2020-01-01 00:01:00+00'::timestamptz, 40.0),
+                                    ('2020-01-01 01:00:00+00'::timestamptz, 16.0)
+                            ) AS v(ts, val)
+                        )
+                    )",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            let mut tvec_result = client
+                .update(
+                    "
+                    SELECT extract(epoch FROM time)::bigint
+                    FROM unnest(
+                        (
+                            SELECT asap_smooth(
+                                (
+                                    SELECT timevector(ts, val)
+                                    FROM (
+                                        VALUES
+                                            ('2020-01-01 00:00:00+00'::timestamptz, 0.0),
+                                            ('2020-01-01 00:01:00+00'::timestamptz, 40.0),
+                                            ('2020-01-01 01:00:00+00'::timestamptz, 16.0)
+                                    ) AS v(ts, val)
+                                ),
+                                10
+                            )
+                        )
+                    )",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            for expected in [1577836800_i64, 1577836860, 1577840400] {
+                let v = value_result.next().unwrap();
+                let t = tvec_result.next().unwrap();
+                assert_eq!(v[1].value::<i64>().unwrap(), Some(expected));
+                assert_eq!(t[1].value::<i64>().unwrap(), Some(expected));
             }
             assert!(value_result.next().is_none());
             assert!(tvec_result.next().is_none());

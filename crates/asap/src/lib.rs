@@ -25,23 +25,47 @@
 
 mod fft;
 
-// Smooth out the data to promote human readability, resolution is an upper bound on the number of points returned
+/// Smooth out the data to promote human readability, resolution is an upper bound on the number of points returned
 pub fn asap_smooth(data: &[f64], resolution: u32) -> Vec<f64> {
+    asap_smooth_with_metadata(data, resolution).values
+}
+
+pub struct AsapSmoothResult {
+    pub values: Vec<f64>,
+    pub preaggregation_window: u32,
+    pub smoothing_window: u32,
+}
+
+pub fn asap_smooth_with_metadata(data: &[f64], resolution: u32) -> AsapSmoothResult {
     use std::borrow::Cow;
 
     if resolution == 0 || data.is_empty() {
-        return Vec::new();
+        return AsapSmoothResult {
+            values: Vec::new(),
+            preaggregation_window: 0,
+            smoothing_window: 0,
+        };
     }
 
-    let data = if data.len() > 2 * resolution as usize {
-        let period = (data.len() as f64 / resolution as f64) as u32;
-        Cow::Owned(sma(data, period, period))
+    let preaggregation_window = if data.len() > 2 * resolution as usize {
+        // period
+        (data.len() as f64 / resolution as f64) as u32
+
+    } else {
+        1
+    };
+    let data = if preaggregation_window > 1 {
+        Cow::Owned(sma(data, preaggregation_window, preaggregation_window))
     } else {
         Cow::Borrowed(data)
     };
 
     if data.len() <= 1 {
-        return data.into_owned();
+        return AsapSmoothResult {
+            values: data.into_owned(),
+            preaggregation_window,
+            smoothing_window: 1,
+        };
     }
 
     let mut acf = Acf::new(&data, (data.len() as f64 / 10.0).round() as u32);
@@ -92,7 +116,11 @@ pub fn asap_smooth(data: &[f64], resolution: u32) -> Vec<f64> {
     }
 
     window_size = binary_search(lb, tail, &data, min_obj, original_kurt, window_size);
-    sma(&data, window_size, 1)
+    AsapSmoothResult {
+        values: sma(&data, window_size, 1),
+        preaggregation_window,
+        smoothing_window: window_size,
+    }
 }
 
 fn binary_search(

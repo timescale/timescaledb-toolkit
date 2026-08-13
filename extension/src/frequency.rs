@@ -2589,4 +2589,68 @@ mod tests {
             assert_eq!(null_groups, 50);
         });
     }
+
+    #[pg_test]
+    fn test_raw_mcv_agg_filter_no_values() {
+        Spi::connect_mut(|client| {
+            client
+                .update(
+                    "CREATE TABLE test (ticker VARCHAR(10), ts TIMESTAMP WITHOUT TIME ZONE NOT NULL, bid_price DOUBLE PRECISION)",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            client
+                .update(
+                    "INSERT INTO test (ticker, ts, bid_price) VALUES
+                        ('AAPL', '2024-06-03 04:00:00.100', 190.50),
+                        ('AAPL', '2024-06-03 04:00:00.500', 190.50),
+                        ('AAPL', '2024-06-03 04:00:00.800', 190.52),
+                        ('AAPL', '2024-06-03 04:00:01.100', 0.00),
+                        ('AAPL', '2024-06-03 04:00:01.400', NULL),
+                        (NULL,   '2024-06-03 04:00:01.200', 100.00),
+                        (NULL,   '2024-06-03 04:00:01.600', 100.00),
+                        ('MSFT', '2024-06-03 04:00:00.200', 415.10),
+                        ('MSFT', '2024-06-03 04:00:00.700', 415.10),
+                        ('AAPL', '2024-06-03 03:59:59.999', 190.00),
+                        ('AAPL', '2024-06-03 05:00:00.000', 191.00);",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            let mut result = client
+                .update(
+                    "SELECT ticker, date_trunc('second', ts) AS bar_start,
+                                        raw_mcv_agg(100, bid_price)
+                                        FILTER (WHERE bid_price <> 0.0)::text AS bid_price_freq
+                                    FROM test
+                                    WHERE ts >= '2024-06-03 04:00:00' AND ts < '2024-06-03 05:00:00'
+                                    GROUP BY ticker, date_trunc('second', ts)
+                                    ORDER BY ticker, bar_start",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            let row = result.next().unwrap();
+            assert_eq!(row[1].value::<String>().unwrap(), Some("AAPL".to_string()));
+            assert!(row[3].value::<String>().unwrap().is_some());
+
+            let row = result.next().unwrap();
+            assert_eq!(row[1].value::<String>().unwrap(), Some("AAPL".to_string()));
+            assert!(row[3].value::<String>().unwrap().is_none());
+
+            let row = result.next().unwrap();
+            assert_eq!(row[1].value::<String>().unwrap(), Some("MSFT".to_string()));
+            assert!(row[3].value::<String>().unwrap().is_some());
+
+            let row = result.next().unwrap();
+            assert_eq!(row[1].value::<String>().unwrap(), None);
+            assert!(row[3].value::<String>().unwrap().is_some());
+
+            assert!(result.next().is_none());
+        })
+    }
 }

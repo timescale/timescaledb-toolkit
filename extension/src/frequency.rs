@@ -2733,4 +2733,36 @@ mod tests {
             assert!(result.next().is_none());
         })
     }
+
+    #[pg_test]
+    fn test_topn_mcv_agg_large_nulls() {
+        Spi::connect_mut(|client| {
+            client
+                .update(
+                    "CREATE TABLE test (time TIMESTAMPTZ NOT NULL, string_value TEXT NULL)",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            // Insert a large dataset of purely NULL string_values
+            client
+                .update(
+                    "INSERT INTO test (time, string_value)
+                     SELECT time, NULL AS string_value
+                     FROM generate_series('2020-01-01 00:00:00'::timestamp, '2020-01-06 00:00:00'::timestamp, interval '1 second') AS g1(time)",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            // The topn() function should now gracefully handle the NULLs and return 0 rows
+            let rows = client
+                .update("SELECT topn(mcv_agg(1, string_value)) FROM test", None, &[])
+                .unwrap()
+                .count();
+
+            assert_eq!(rows, 0);
+        });
+    }
 }

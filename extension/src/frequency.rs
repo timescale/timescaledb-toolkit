@@ -2665,7 +2665,6 @@ mod tests {
                 )
                 .unwrap();
 
-            // Insert a large dataset of purely NULL string_values
             client
                 .update(
                     "INSERT INTO test (time, string_value)
@@ -2676,7 +2675,6 @@ mod tests {
                 )
                 .unwrap();
 
-            // The topn() function should now gracefully handle the NULLs and return 0 rows
             let rows = client
                 .update("SELECT topn(mcv_agg(1, string_value)) FROM test", None, &[])
                 .unwrap()

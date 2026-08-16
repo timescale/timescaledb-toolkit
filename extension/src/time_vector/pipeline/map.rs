@@ -106,31 +106,54 @@ pub fn map_series_element<'a>(function: crate::raw::regproc) -> Element<'a> {
     }
 }
 
-pub fn check_user_function_type(function: pg_sys::regproc) {
+// `function` must be `fn(expected) RETURNS expected`; `signature` names it in
+// the error messages.
+fn check_user_function_signature(
+    function: pg_sys::regproc,
+    expected: pg_sys::Oid,
+    signature: &str,
+) {
     let mut argtypes: *mut pg_sys::Oid = ptr::null_mut();
     let mut nargs: ::std::os::raw::c_int = 0;
     let rettype = unsafe { pg_sys::get_func_signature(function, &mut argtypes, &mut nargs) };
 
     if nargs != 1 {
-        error!(
-            "invalid number of mapping function arguments, expected fn(timevector) RETURNS timevector"
-        )
+        error!("invalid number of mapping function arguments, expected {signature}")
     }
 
     assert!(!argtypes.is_null());
-    if unsafe { *argtypes } != *crate::time_vector::TIMEVECTOR_OID {
-        error!("invalid argument type, expected fn(timevector) RETURNS timevector")
+    if unsafe { *argtypes } != expected {
+        error!("invalid argument type, expected {signature}")
     }
 
-    if rettype != *crate::time_vector::TIMEVECTOR_OID {
-        error!("invalid return type, expected fn(timevector) RETURNS timevector")
+    if rettype != expected {
+        error!("invalid return type, expected {signature}")
     }
+}
+
+pub fn check_user_function_type(function: pg_sys::regproc) {
+    check_user_function_signature(
+        function,
+        *crate::time_vector::TIMEVECTOR_OID,
+        "fn(timevector) RETURNS timevector",
+    )
+}
+
+pub fn check_user_function_data_type(function: pg_sys::regproc) {
+    check_user_function_signature(
+        function,
+        pgrx::PgBuiltInOids::FLOAT8OID.value(),
+        "fn(double precision) RETURNS double precision",
+    )
 }
 
 pub fn apply_to_series(
     mut series: Timevector_TSTZ_F64<'_>,
     func: pg_sys::RegProcedure,
 ) -> Timevector_TSTZ_F64<'_> {
+    // Mapping function must be `fn(timevector) RETURNS timevector`.
+    check_user_function_type(func);
+
     let mut flinfo: pg_sys::FmgrInfo = unsafe { MaybeUninit::zeroed().assume_init() };
     unsafe {
         pg_sys::fmgr_info(func, &mut flinfo);
@@ -160,32 +183,12 @@ pub fn apply_to_series(
 pub fn map_data_pipeline_element(
     function: crate::raw::regproc,
 ) -> toolkit_experimental::UnstableTimevectorPipeline<'static> {
-    let mut argtypes: *mut pg_sys::Oid = ptr::null_mut();
-    let mut nargs: ::std::os::raw::c_int = 0;
-    let rettype = unsafe {
-        pg_sys::get_func_signature(
-            pg_sys::Oid::from(function.0.value() as u32),
-            &mut argtypes,
-            &mut nargs,
-        )
-    };
-
-    if nargs != 1 {
-        error!(
-            "invalid number of mapping function arguments, expected fn(double precision) RETURNS double precision"
-        )
-    }
-
-    if unsafe { *argtypes } != pgrx::PgBuiltInOids::FLOAT8OID.value() {
-        error!("invalid argument type, expected fn(double precision) RETURNS double precision")
-    }
-
-    if rettype != pgrx::PgBuiltInOids::FLOAT8OID.value() {
-        error!("invalid return type, expected fn(double precision) RETURNS double precision")
-    }
-
+    let function: pg_sys::regproc = pg_sys::Oid::from(function.0.value() as u32)
+        .try_into()
+        .unwrap();
+    check_user_function_data_type(function);
     Element::MapData {
-        function: PgProcId(pg_sys::Oid::from(function.0.value() as u32)),
+        function: PgProcId(function),
     }
     .flatten()
 }
@@ -194,6 +197,9 @@ pub fn apply_to(
     mut series: Timevector_TSTZ_F64<'_>,
     func: pg_sys::RegProcedure,
 ) -> Timevector_TSTZ_F64<'_> {
+    // Mapping function must be `fn(double precision) RETURNS double precision`.
+    check_user_function_data_type(func);
+
     let mut flinfo: pg_sys::FmgrInfo = unsafe { MaybeUninit::zeroed().assume_init() };
 
     let fn_addr: unsafe extern "C-unwind" fn(
@@ -874,6 +880,75 @@ mod tests {
                 .get_two::<String, String>()
                 .unwrap();
             assert_eq!((&*a.unwrap(), &*b.unwrap()), (one, two));
+        });
+    }
+
+    // Text-built pipeline with a mismatched-signature function must be rejected.
+    #[pg_test]
+    #[should_panic = "invalid argument type"]
+    fn test_pipeline_map_data_signature_bypass() {
+        Spi::connect_mut(|client| {
+            client
+                .update(
+                    "CREATE FUNCTION bypass_target(text) RETURNS text \
+                     AS $$ SELECT $1 $$ LANGUAGE SQL",
+                    None,
+                    &[],
+                )
+                .unwrap();
+            client
+                .update(
+                    "SELECT timevector('2021-01-01'::timestamptz, 1.0) \
+                     -> '(version:1,num_elements:1,elements:\
+                     [MapData(function:\"public.bypass_target(text)\")])'\
+                     ::toolkit_experimental.unstabletimevectorpipeline",
+                    None,
+                    &[],
+                )
+                .unwrap();
+        });
+    }
+
+    #[pg_test]
+    #[should_panic = "invalid argument type"]
+    fn test_pipeline_map_series_signature_bypass() {
+        Spi::connect_mut(|client| {
+            client
+                .update(
+                    "CREATE FUNCTION bypass_series_target(text) RETURNS text \
+                     AS $$ SELECT $1 $$ LANGUAGE SQL",
+                    None,
+                    &[],
+                )
+                .unwrap();
+            client
+                .update(
+                    "SELECT timevector('2021-01-01'::timestamptz, 1.0) \
+                     -> '(version:1,num_elements:1,elements:\
+                     [MapSeries(function:\"public.bypass_series_target(text)\")])'\
+                     ::toolkit_experimental.unstabletimevectorpipeline",
+                    None,
+                    &[],
+                )
+                .unwrap();
+        });
+    }
+
+    // MapData targeting `textout(text)` on an `f64` must be rejected.
+    #[pg_test]
+    #[should_panic = "invalid argument type"]
+    fn test_pipeline_map_data_textout_poc() {
+        Spi::connect_mut(|client| {
+            client
+                .update(
+                    "SELECT timevector('2021-01-01'::timestamptz, 3.14) \
+                     -> '(version:1,num_elements:1,elements:\
+                     [MapData(function:\"pg_catalog.textout(text)\")])'\
+                     ::toolkit_experimental.unstabletimevectorpipeline",
+                    None,
+                    &[],
+                )
+                .unwrap();
         });
     }
 }

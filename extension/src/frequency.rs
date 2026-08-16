@@ -483,7 +483,19 @@ impl<'input> From<(&SpaceSavingAggregate<'input>, &pg_sys::FunctionCallInfo)>
     }
 }
 
-ron_inout_funcs!(SpaceSavingAggregate<'input>);
+impl<'input> SpaceSavingAggregate<'input> {
+    /// Require `type_oid` and the datum count to match the stored `datums`.
+    fn validate(&self) {
+        if Oid::from(self.type_oid) != self.datums.type_oid() {
+            pgrx::error!("invalid frequency aggregate: element type does not match stored values")
+        }
+        if self.datums.iter().count() != self.num_values as usize {
+            pgrx::error!("invalid frequency aggregate: value count does not match stored data")
+        }
+    }
+}
+
+ron_inout_funcs!(SpaceSavingAggregate<'input>, validated);
 
 pg_type! {
     #[derive(Debug)]
@@ -629,7 +641,19 @@ impl<'input> From<(&SpaceSavingTextAggregate<'input>, &pg_sys::FunctionCallInfo)
     }
 }
 
-ron_inout_funcs!(SpaceSavingTextAggregate<'input>);
+impl<'input> SpaceSavingTextAggregate<'input> {
+    /// `datums` are read as varlena; require type `text` and a matching count.
+    fn validate(&self) {
+        if self.datums.type_oid() != pg_sys::TEXTOID {
+            pgrx::error!("invalid frequency aggregate: element type does not match stored values")
+        }
+        if self.datums.iter().count() != self.num_values as usize {
+            pgrx::error!("invalid frequency aggregate: value count does not match stored data")
+        }
+    }
+}
+
+ron_inout_funcs!(SpaceSavingTextAggregate<'input>, validated);
 
 fn validate_mcv_n(n: i32) -> u32 {
     if n <= 0 {
@@ -2199,6 +2223,62 @@ mod tests {
                     .unwrap()
                     .count(),
             );
+        });
+    }
+
+    // Mismatched element type must be rejected.
+    #[pg_test]
+    #[should_panic = "element type does not match stored values"]
+    fn test_mcv_agg_type_oid_confusion() {
+        Spi::connect_mut(|client| {
+            // type_oid 25 (text), datums 701 (float8)
+            client
+                .update(
+                    "SELECT into_values(\
+                     '(version:1,type_oid:25,num_values:1,values_seen:1,freq_param:1.1,\
+                     topn:1,counts:[1],overcounts:[0],datums:[701,\"3.14\"])'\
+                     ::spacesavingaggregate, 'x'::text)",
+                    None,
+                    &[],
+                )
+                .unwrap();
+        });
+    }
+
+    #[pg_test]
+    #[should_panic = "element type does not match stored values"]
+    fn test_mcv_text_agg_type_oid_confusion() {
+        Spi::connect_mut(|client| {
+            // datums claim 701 (float8), not text
+            client
+                .update(
+                    "SELECT into_values(\
+                     '(version:1,num_values:1,topn:1,values_seen:1,freq_param:1.1,\
+                     counts:[1],overcounts:[0],datums:[701,\"3.14\"])'\
+                     ::spacesavingtextaggregate)",
+                    None,
+                    &[],
+                )
+                .unwrap();
+        });
+    }
+
+    // Too many datums would index counts/overcounts out of bounds.
+    #[pg_test]
+    #[should_panic = "value count does not match stored data"]
+    fn test_mcv_agg_value_count_mismatch() {
+        Spi::connect_mut(|client| {
+            // num_values 1, two datums
+            client
+                .update(
+                    "SELECT into_values(\
+                     '(version:1,type_oid:701,num_values:1,values_seen:2,freq_param:1.1,\
+                     topn:1,counts:[1],overcounts:[0],datums:[701,\"3.14\",\"2.71\"])'\
+                     ::spacesavingaggregate, 3.14::float8)",
+                    None,
+                    &[],
+                )
+                .unwrap();
         });
     }
 

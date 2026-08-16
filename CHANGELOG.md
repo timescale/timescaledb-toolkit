@@ -14,6 +14,8 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 #### Bug fixes
 - Handle `stats_agg` overflow in the experimental timevector pipeline by @darkgl06 in https://github.com/timescale/timescaledb-toolkit/issues/947
 - Add negative check in `mcv_agg` by @darkgl06 in https://github.com/timescale/timescaledb-toolkit/pull/959
+- Fix a type confusion in timevector `map_data`/`map_series`: revalidate the mapping function's signature at execution time so a pipeline built from its text representation cannot invoke a function with a mismatched signature
+- Fix a type confusion in the space-saving (`freq_agg`/`mcv_agg`) aggregates: reject a value built from its text representation whose recorded element type disagrees with the type of its stored values
 
 #### Other notable changes
 

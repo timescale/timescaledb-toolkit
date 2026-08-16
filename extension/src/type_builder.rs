@@ -612,6 +612,11 @@ macro_rules! ron_inout_funcs {
         $crate::ron_inout_funcs_impl!($name);
     };
 
+    // Pattern 1b: `validated` runs the type's `validate(&self)` on text input.
+    ($name:ident<$lifetime:lifetime>, validated) => {
+        $crate::ron_inout_funcs_validated_impl!($name);
+    };
+
     // Pattern 2: No lifetime parameter → route to ron_inout_funcs_no_lifetime_impl!
     ($name:ident) => {
         $crate::ron_inout_funcs_no_lifetime_impl!($name);
@@ -671,6 +676,38 @@ macro_rules! ron_inout_funcs_impl {
                 let input = str_from_db_encoding(input);
                 let val = ron::from_str(input).unwrap();
                 unsafe { Self(val, $crate::type_builder::CachedDatum::None).flatten() }
+            }
+        }
+    };
+}
+
+// Like `ron_inout_funcs_impl!`, but runs the type's `validate(&self)` on each
+// value parsed from text.
+#[macro_export]
+macro_rules! ron_inout_funcs_validated_impl {
+    ($name:ident) => {
+        impl<'input> InOutFuncs for $name<'input> {
+            fn output(&self, buffer: &mut StringInfo) {
+                use $crate::serialization::{EncodedStr::*, str_to_db_encoding};
+
+                let stringified = ron::to_string(&**self).unwrap();
+                match str_to_db_encoding(&stringified) {
+                    Utf8(s) => buffer.push_str(s),
+                    Other(s) => buffer.push_bytes(s.to_bytes()),
+                }
+            }
+
+            fn input(input: &std::ffi::CStr) -> $name<'input>
+            where
+                Self: Sized,
+            {
+                use $crate::serialization::str_from_db_encoding;
+
+                let input = str_from_db_encoding(input);
+                let val = ron::from_str(input).unwrap();
+                let value = unsafe { Self(val, $crate::type_builder::CachedDatum::None).flatten() };
+                value.validate();
+                value
             }
         }
     };

@@ -497,6 +497,11 @@ impl<'a, 'b> Iterator for DatumStoreIterator<'a, 'b> {
 }
 
 impl<'a> DatumStore<'a> {
+    /// The type OID the stored datums were parsed with.
+    pub fn type_oid(&self) -> Oid {
+        self.type_oid.into()
+    }
+
     pub fn iter<'b>(&'b self) -> DatumStoreIterator<'a, 'b> {
         unsafe {
             let tentry = pg_sys::lookup_type_cache(self.type_oid.into(), 0_i32);

@@ -20,7 +20,18 @@ pg_type! {
         data: DatumStore<'input>,
     }
 }
-ron_inout_funcs!(MaxByTimes<'input>);
+
+impl MaxByTimes<'_> {
+    fn validate(&self) {
+        validate_nmost_by_parts(
+            self.values.capacity,
+            self.values.values.as_slice().len(),
+            &self.data,
+        );
+    }
+}
+
+ron_inout_funcs!(MaxByTimes<'input>, validated);
 
 impl<'input> From<MaxByTimeTransType> for MaxByTimes<'input> {
     fn from(item: MaxByTimeTransType) -> Self {
@@ -97,6 +108,7 @@ pub fn max_n_by_time_final(state: Internal) -> Option<MaxByTimes<'static>> {
 pub fn max_n_by_time_to_values(
     agg: Option<MaxByTimes<'static>>,
     _dummy: Option<AnyElement>,
+    fcinfo: pg_sys::FunctionCallInfo,
 ) -> TableIterator<
     'static,
     (
@@ -105,14 +117,17 @@ pub fn max_n_by_time_to_values(
     ),
 > {
     match agg {
-        Some(agg) => TableIterator::new(
-            agg.values
-                .values
-                .clone()
-                .into_iter()
-                .map(crate::raw::TimestampTz::from)
-                .zip(agg.data.clone().into_anyelement_iter()),
-        ),
+        Some(agg) => {
+            validate_nmost_by_dummy_type(&agg.data, fcinfo);
+            TableIterator::new(
+                agg.values
+                    .values
+                    .clone()
+                    .into_iter()
+                    .map(crate::raw::TimestampTz::from)
+                    .zip(agg.data.clone().into_anyelement_iter()),
+            )
+        }
         None => TableIterator::empty(),
     }
 }

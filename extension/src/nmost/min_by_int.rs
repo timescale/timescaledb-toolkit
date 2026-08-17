@@ -18,7 +18,18 @@ pg_type! {
         data: DatumStore<'input>,
     }
 }
-ron_inout_funcs!(MinByInts<'input>);
+
+impl MinByInts<'_> {
+    fn validate(&self) {
+        validate_nmost_by_parts(
+            self.values.capacity,
+            self.values.values.as_slice().len(),
+            &self.data,
+        );
+    }
+}
+
+ron_inout_funcs!(MinByInts<'input>, validated);
 
 impl<'input> From<MinByIntTransType> for MinByInts<'input> {
     fn from(item: MinByIntTransType) -> Self {
@@ -84,15 +95,19 @@ pub fn min_n_by_int_final(state: Internal) -> Option<MinByInts<'static>> {
 pub fn min_n_by_int_to_values(
     agg: Option<MinByInts<'static>>,
     _dummy: Option<AnyElement>,
+    fcinfo: pg_sys::FunctionCallInfo,
 ) -> TableIterator<'static, (name!(value, i64), name!(data, AnyElement))> {
     match agg {
-        Some(agg) => TableIterator::new(
-            agg.values
-                .values
-                .clone()
-                .into_iter()
-                .zip(agg.data.clone().into_anyelement_iter()),
-        ),
+        Some(agg) => {
+            validate_nmost_by_dummy_type(&agg.data, fcinfo);
+            TableIterator::new(
+                agg.values
+                    .values
+                    .clone()
+                    .into_iter()
+                    .zip(agg.data.clone().into_anyelement_iter()),
+            )
+        }
         None => TableIterator::empty(),
     }
 }
@@ -242,6 +257,38 @@ mod tests {
                 .unwrap();
 
             assert!(result.next().is_none());
+        })
+    }
+
+    #[pg_test]
+    #[should_panic = "mismatched types"]
+    fn min_by_int_into_values_rejects_datumstore_dummy_type_mismatch() {
+        Spi::connect_mut(|client| {
+            client
+                .update(
+                    "SELECT value, data, pg_typeof(data)::text
+                     FROM into_values(
+                         '(version:1,values:(version:1,capacity:1,elements:1,values:[7]),data:[25,\"hello\"])'::MinByInts,
+                         NULL::bigint
+                     )",
+                    None,
+                    &[],
+                )
+                .unwrap();
+        })
+    }
+
+    #[pg_test]
+    #[should_panic = "value count does not match stored data"]
+    fn min_by_int_rejects_value_data_count_mismatch() {
+        Spi::connect_mut(|client| {
+            client
+                .update(
+                    "SELECT '(version:1,values:(version:1,capacity:2,elements:2,values:[7,8]),data:[23,\"7\"])'::MinByInts",
+                    None,
+                    &[],
+                )
+                .unwrap();
         })
     }
 }

@@ -20,7 +20,18 @@ pg_type! {
         data: DatumStore<'input>,
     }
 }
-ron_inout_funcs!(MaxByInts<'input>);
+
+impl MaxByInts<'_> {
+    fn validate(&self) {
+        validate_nmost_by_parts(
+            self.values.capacity,
+            self.values.values.as_slice().len(),
+            &self.data,
+        );
+    }
+}
+
+ron_inout_funcs!(MaxByInts<'input>, validated);
 
 impl<'input> From<MaxByIntTransType> for MaxByInts<'input> {
     fn from(item: MaxByIntTransType) -> Self {
@@ -97,15 +108,19 @@ pub fn max_n_by_int_final(state: Internal) -> Option<MaxByInts<'static>> {
 pub fn max_n_by_int_to_values(
     agg: Option<MaxByInts<'static>>,
     _dummy: Option<AnyElement>,
+    fcinfo: pg_sys::FunctionCallInfo,
 ) -> TableIterator<'static, (name!(value, i64), name!(data, AnyElement))> {
     match agg {
-        Some(agg) => TableIterator::new(
-            agg.values
-                .values
-                .clone()
-                .into_iter()
-                .zip(agg.data.clone().into_anyelement_iter()),
-        ),
+        Some(agg) => {
+            validate_nmost_by_dummy_type(&agg.data, fcinfo);
+            TableIterator::new(
+                agg.values
+                    .values
+                    .clone()
+                    .into_iter()
+                    .zip(agg.data.clone().into_anyelement_iter()),
+            )
+        }
         None => TableIterator::empty(),
     }
 }

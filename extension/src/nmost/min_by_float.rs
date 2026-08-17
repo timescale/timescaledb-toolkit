@@ -20,7 +20,18 @@ pg_type! {
         data: DatumStore<'input>,
     }
 }
-ron_inout_funcs!(MinByFloats<'input>);
+
+impl MinByFloats<'_> {
+    fn validate(&self) {
+        validate_nmost_by_parts(
+            self.values.capacity,
+            self.values.values.as_slice().len(),
+            &self.data,
+        );
+    }
+}
+
+ron_inout_funcs!(MinByFloats<'input>, validated);
 
 impl<'input> From<MinByFloatTransType> for MinByFloats<'input> {
     fn from(item: MinByFloatTransType) -> Self {
@@ -97,15 +108,19 @@ pub fn min_n_by_float_final(state: Internal) -> Option<MinByFloats<'static>> {
 pub fn min_n_by_float_to_values(
     agg: Option<MinByFloats<'static>>,
     _dummy: Option<AnyElement>,
+    fcinfo: pg_sys::FunctionCallInfo,
 ) -> TableIterator<'static, (name!(value, f64), name!(data, AnyElement))> {
     match agg {
-        Some(agg) => TableIterator::new(
-            agg.values
-                .values
-                .clone()
-                .into_iter()
-                .zip(agg.data.clone().into_anyelement_iter()),
-        ),
+        Some(agg) => {
+            validate_nmost_by_dummy_type(&agg.data, fcinfo);
+            TableIterator::new(
+                agg.values
+                    .values
+                    .clone()
+                    .into_iter()
+                    .zip(agg.data.clone().into_anyelement_iter()),
+            )
+        }
         None => TableIterator::empty(),
     }
 }

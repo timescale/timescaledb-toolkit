@@ -147,6 +147,22 @@ pub struct NMostByTransState<T: Ord> {
     oid: pg_sys::Oid,
 }
 
+pub(crate) fn validate_nmost_by_parts(capacity: u32, value_count: usize, data: &DatumStore) {
+    if value_count > capacity as usize {
+        pgrx::error!("invalid nmost aggregate: value count exceeds capacity")
+    }
+    if data.iter().count() != value_count {
+        pgrx::error!("invalid nmost aggregate: value count does not match stored data")
+    }
+}
+
+pub(crate) fn validate_nmost_by_dummy_type(data: &DatumStore, fcinfo: pg_sys::FunctionCallInfo) {
+    let expected = unsafe { pgrx::pg_getarg_type(fcinfo, 1) };
+    if data.type_oid() != expected {
+        pgrx::error!("mismatched types")
+    }
+}
+
 impl<T: Clone + Ord> NMostByTransState<T> {
     fn new(capacity: usize, first_val: T, first_element: pgrx::AnyElement) -> NMostByTransState<T> {
         // first entry will always have index 0

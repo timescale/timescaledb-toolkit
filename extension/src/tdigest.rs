@@ -766,7 +766,6 @@ mod tests {
     #[pg_test]
     fn test_tdigest_null_values() {
         Spi::connect_mut(|client| {
-
             client
                 .update(
                     "CREATE TABLE test(time TIMESTAMPTZ NOT NULL, value TDIGEST);",

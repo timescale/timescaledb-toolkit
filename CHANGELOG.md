@@ -8,13 +8,13 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 #### New experimental features
 
-#### Stabilized features
-
 #### Bug fixes
 
 #### Other notable changes
 
 #### Shout-outs
+
+**Full Changelog**: [TODO]
 
 ## [1.25.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.25.0) (Date 2026-08-18)
 

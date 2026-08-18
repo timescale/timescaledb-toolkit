@@ -296,13 +296,14 @@ fn tdigest_compound_final(
 }
 
 #[pg_extern(immutable, parallel_safe)]
-fn tdigest_compound_serialize(state: Internal, _fcinfo: pg_sys::FunctionCallInfo) -> bytea {
-    let state: Inner<InternalTDigest> = unsafe { state.to_inner().unwrap() };
-    crate::do_serialize!(state)
+fn tdigest_compound_serialize(state: Internal, _fcinfo: pg_sys::FunctionCallInfo) -> Option<bytea> {
+    let state = unsafe { state.to_inner::<InternalTDigest>() };
+    state.map(|state| crate::do_serialize!(state))
 }
 
 #[pg_extern(immutable, parallel_safe)]
-pub fn tdigest_compound_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
+pub fn tdigest_compound_deserialize(bytes: Option<bytea>, _internal: Internal) -> Option<Internal> {
+    let bytes = bytes?;
     let i: InternalTDigest = crate::do_deserialize!(bytes, InternalTDigest);
     Inner::from(i).internal()
 }
@@ -759,6 +760,50 @@ mod tests {
 
             apx_eql(test_value.unwrap(), value.unwrap(), 0.1);
             apx_eql(test_value.unwrap(), 9.0, 0.1);
+        });
+    }
+
+    #[pg_test]
+    fn test_tdigest_null_values() {
+        Spi::connect_mut(|client| {
+            client
+                .update(
+                    "CREATE TABLE test(time TIMESTAMPTZ NOT NULL, value TDIGEST);",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            client
+                .update(
+                    "INSERT INTO test 
+                    SELECT '2026-01-01 00:00:00'::timestamptz + (g || ' milliseconds')::interval, NULL 
+                    FROM generate_series(1, 10000) g;",
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            let query = "SELECT
+                                    date_trunc('second', time),
+                                    rollup(value)
+                                FROM test
+                                GROUP BY 1
+                                ORDER BY 1;";
+
+            let rows = client.select(query, None, &[]).unwrap();
+
+            assert_eq!(rows.len(), 11);
+
+            for row in rows {
+                let rollup = row
+                    .get_datum_by_ordinal(2)
+                    .unwrap()
+                    .value::<TDigest>()
+                    .unwrap();
+
+                assert!(rollup.is_none());
+            }
         });
     }
 }

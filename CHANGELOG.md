@@ -9,21 +9,35 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 #### New experimental features
 
 #### Stabilized features
-- Stabilize `gauge_agg`, `GaugeSummary`, and associated accessors and operators by @dmunozv04 in https://github.com/timescale/timescaledb-toolkit/pull/859
 
 #### Bug fixes
-- Handle `stats_agg` overflow in the experimental timevector pipeline by @darkgl06 in https://github.com/timescale/timescaledb-toolkit/issues/947
-- Add negative check in `mcv_agg` by @darkgl06 in https://github.com/timescale/timescaledb-toolkit/pull/959
-- Fix a type confusion in timevector `map_data`/`map_series`: revalidate the mapping function's signature at execution time so a pipeline built from its text representation cannot invoke a function with a mismatched signature
-- Fix a type confusion in the space-saving (`freq_agg`/`mcv_agg`) aggregates: reject a value built from its text representation whose recorded element type disagrees with the type of its stored values
 
 #### Other notable changes
 
 #### Shout-outs
 
-**Full Changelog**: [TODO]
+## [1.25.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.25.0) (Date 2026-08-18)
 
-## [1.24.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.24.0) (2026-07-27)
+#### Stabilized features
+- Stabilize Gauge Aggregate by @dmunozv04 in #859
+
+#### Bug fixes
+- Handle overflows in timevector pipeline by @darkgl06 in #951
+- Add negative check in `mcv_agg` by @darkgl06 in #959
+- Fix type handling in timevector pipelines and space-saving aggregates by @svenklemm in #966
+- Fix `asap_smooth` skewness in unevenly spread data by @surister in #962
+- Fix type confusion in `nmost_by` by @surister in #967
+- Fix `tdigest` when used of empty input by @Dvdandrades in #965
+
+#### Other notable changes
+- Fix post-install operator property parsing by @surister in #960
+- Add Regression Test for `frequency` aggregation by @Dvdandrades in #964
+- Fix Clippy warnings by @Dvdandrades in #963
+
+#### Shout-outs
+Thanks, @darkgl06 @Dvdandrades and @dmunozv04 for your contributions.
+
+**Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.24.0...1.25.0
 
 ## [1.24.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.24.0) (2026-07-27)
 

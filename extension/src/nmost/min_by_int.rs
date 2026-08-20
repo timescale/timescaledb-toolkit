@@ -1,4 +1,5 @@
 use pgrx::iter::TableIterator;
+use pgrx::prelude::*;
 use pgrx::{AnyElement, StringInfo, callconv, nullable, rust_regtypein};
 
 use crate::nmost::min_int::*;

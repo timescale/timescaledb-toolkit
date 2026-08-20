@@ -3,7 +3,8 @@
 // function
 use aggregate_builder::aggregate;
 
-use pgrx::*;
+use pgrx::datum::Internal;
+use pgrx::prelude::*;
 
 use crate::{palloc::Inner, raw::bytea};
 

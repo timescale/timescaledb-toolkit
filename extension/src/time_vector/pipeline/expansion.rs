@@ -1,6 +1,7 @@
 use std::mem::take;
 
-use pgrx::{iter::TableIterator, *};
+use pgrx::iter::TableIterator;
+use pgrx::prelude::*;
 
 use super::*;
 

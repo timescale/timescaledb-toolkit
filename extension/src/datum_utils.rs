@@ -12,7 +12,8 @@ use serde::{
 };
 
 use pg_sys::{Datum, Oid};
-use pgrx::*;
+use pgrx::prelude::*;
+use pgrx::{AnyElement, varsize_any};
 
 use crate::serialization::{PgCollationId, ShortTypeId};
 
@@ -661,6 +662,8 @@ mod tests {
     #[pg_schema]
     pub mod toolkit_experimental {
         use super::*;
+        use pgrx::datum::Internal;
+        use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
         pg_type! {
             #[derive(Debug)]
             struct DatumStoreTester<'input> {

@@ -1,6 +1,7 @@
 #![allow(non_camel_case_types)]
 
-use pgrx::*;
+use pgrx::prelude::*;
+use pgrx::{callconv, nullable};
 use pgrx_sql_entity_graph::metadata::{
     ArgumentError, ReturnsError, ReturnsRef, SqlMappingRef, SqlTranslatable, TypeOrigin,
 };

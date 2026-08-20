@@ -10,7 +10,8 @@ mod sort;
 
 use std::convert::TryInto;
 
-use pgrx::*;
+use pgrx::prelude::*;
+use pgrx::{PgList, is_a};
 
 use super::*;
 

@@ -1,5 +1,7 @@
+use pgrx::datum::Internal;
 use pgrx::iter::TableIterator;
-use pgrx::*;
+use pgrx::prelude::*;
+use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
 
 use crate::{
     accessors::{

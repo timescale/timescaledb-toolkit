@@ -8,7 +8,8 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 use pg_sys::{Datum, Oid};
-use pgrx::*;
+use pgrx::prelude::*;
+use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
 
 use crate::{
     accessors::{AccessorDistinctCount, AccessorStderror},
@@ -480,6 +481,7 @@ fn unflatten_log(hyperloglog: HyperLogLog) -> HLL<HashableDatum, DatumHashBuilde
 mod tests {
     use super::*;
 
+    use pgrx::rust_str_to_text_p;
     use pgrx_macros::pg_test;
     use rand::distr::{Distribution, Uniform};
 

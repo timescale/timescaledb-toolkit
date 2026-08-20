@@ -1,4 +1,5 @@
-use pgrx::*;
+use pgrx::prelude::*;
+use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
 
 use crate::{
     accessors::{
@@ -1489,6 +1490,7 @@ pub fn as_method(method: &str) -> Option<Method> {
 mod tests {
     use super::*;
     use approx::relative_eq;
+    use pgrx::varlena_to_byte_slice;
 
     use pgrx_macros::pg_test;
     use rand::prelude::*;

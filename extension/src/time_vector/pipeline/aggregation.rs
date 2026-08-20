@@ -1,6 +1,6 @@
 use std::mem::take;
 
-use pgrx::*;
+use pgrx::prelude::*;
 
 use counter_agg::CounterSummaryBuilder;
 

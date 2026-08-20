@@ -1,4 +1,6 @@
-use pgrx::{iter::SetOfIterator, *};
+use pgrx::iter::SetOfIterator;
+use pgrx::prelude::*;
+use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
 
 use crate::nmost::*;
 

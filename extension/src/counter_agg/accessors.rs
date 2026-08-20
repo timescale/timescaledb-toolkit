@@ -1,4 +1,5 @@
-use pgrx::*;
+use pgrx::prelude::*;
+use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
 
 use crate::{
     counter_agg::{CounterSummary, CounterSummaryData, MetricSummary},

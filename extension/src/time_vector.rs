@@ -2,7 +2,9 @@
 
 use crate::pg_sys::timestamptz_to_str;
 use core::str::Utf8Error;
-use pgrx::{iter::TableIterator, *};
+use pgrx::iter::TableIterator;
+use pgrx::prelude::*;
+use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
 use std::ffi::CStr;
 use tera::{Context, Tera};
 

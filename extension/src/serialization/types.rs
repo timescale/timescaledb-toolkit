@@ -9,7 +9,7 @@ use flat_serialize::{FlatSerializable, WrapErr, impl_flat_serializable};
 use serde::{Deserialize, Serialize};
 
 use pg_sys::Oid;
-use pgrx::*;
+use pgrx::prelude::*;
 
 /// Possibly a premature optimization, `ShortTypId` provides the ability to
 /// serialize and deserialize type Oids as `(namespace, name)` pairs, special

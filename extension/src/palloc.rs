@@ -4,7 +4,7 @@ use std::{
     ptr::NonNull,
 };
 
-use pgrx::*;
+use pgrx::prelude::*;
 
 pub unsafe fn in_memory_context<T, F: FnOnce() -> T>(mctx: pg_sys::MemoryContext, f: F) -> T {
     let prev_ctx = unsafe { pg_sys::CurrentMemoryContext };

@@ -1,6 +1,7 @@
 use std::{convert::TryInto, ops::Deref};
 
-use pgrx::*;
+use pgrx::prelude::*;
+use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
 
 use crate::{
     accessors::{

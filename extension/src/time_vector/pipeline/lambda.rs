@@ -1,9 +1,7 @@
 use std::borrow::Cow;
 
-use pgrx::{
-    iter::{SetOfIterator, TableIterator},
-    *,
-};
+use pgrx::iter::{SetOfIterator, TableIterator};
+use pgrx::prelude::*;
 
 use super::*;
 

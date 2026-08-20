@@ -1,6 +1,7 @@
 #![allow(non_camel_case_types)]
 
-use pgrx::*;
+use pgrx::prelude::*;
+use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
 use serde::{Deserialize, Serialize};
 
 use crate::{

@@ -10,7 +10,7 @@ use flat_serialize::{FlatSerializable, WrapErr, impl_flat_serializable};
 use serde::{Deserialize, Serialize};
 
 use pg_sys::{Datum, Oid};
-use pgrx::*;
+use pgrx::prelude::*;
 
 /// `PgProcId` provides provides the ability to serialize and deserialize
 /// regprocedures as `namespace.name(args)`

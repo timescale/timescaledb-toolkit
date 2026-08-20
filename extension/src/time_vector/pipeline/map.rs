@@ -3,7 +3,7 @@ use std::{
     ptr,
 };
 
-use pgrx::*;
+use pgrx::prelude::*;
 
 use super::*;
 

@@ -1,4 +1,5 @@
-use pgrx::*;
+use pgrx::prelude::*;
+use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
 
 use aggregate_builder::aggregate;
 use countminsketch::{CountMinHashFn, CountMinSketch as CountMinSketchInternal};

@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use once_cell::sync::Lazy;
 
 use pg_sys::Oid;
-use pgrx::*;
+use pgrx::prelude::*;
 
 // TODO short collation serializer?
 

@@ -1,4 +1,4 @@
-use pgrx::*;
+use pgrx::prelude::*;
 
 use flat_serialize_macro::FlatSerializable;
 

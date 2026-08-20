@@ -2,10 +2,9 @@
 
 use std::fmt;
 
-use pgrx::{
-    iter::{SetOfIterator, TableIterator},
-    *,
-};
+use pgrx::iter::{SetOfIterator, TableIterator};
+use pgrx::prelude::*;
+use pgrx::{AnyElement, StringInfo, callconv, nullable, rust_regtypein, varlena_to_byte_slice};
 
 use pg_sys::{Datum, Oid};
 
@@ -1732,6 +1731,7 @@ unsafe fn varlena_to_string(vl: *const pg_sys::varlena) -> String {
 #[pg_schema]
 mod tests {
     use super::*;
+    use pgrx::{vardata_any, varsize_any_exhdr};
     use pgrx_macros::pg_test;
     use rand::{distr::Uniform, prelude::*};
     use rand_distr::Zeta;

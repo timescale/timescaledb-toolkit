@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, ffi::CString};
 
-use pgrx::*;
+use pgrx::prelude::*;
 
 use super::*;
 

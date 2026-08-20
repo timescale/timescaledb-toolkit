@@ -1,5 +1,5 @@
 use asap::*;
-use pgrx::*;
+use pgrx::prelude::*;
 use serde::{Deserialize, Serialize};
 
 use crate::{

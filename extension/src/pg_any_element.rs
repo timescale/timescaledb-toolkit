@@ -4,7 +4,8 @@ use std::{
     mem::size_of,
 };
 
-use pgrx::*;
+use pgrx::AnyElement;
+use pgrx::prelude::*;
 
 use pg_sys::{Datum, Oid};
 

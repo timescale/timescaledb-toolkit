@@ -1,4 +1,4 @@
-use pgrx::*;
+use pgrx::prelude::*;
 use std::borrow::Cow;
 
 use crate::{

@@ -1,6 +1,6 @@
 //! Saturating Math for Integers
 
-use pgrx::*;
+use pgrx::prelude::*;
 
 /// Computes x+y, saturating at the numeric bounds instead of overflowing
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]

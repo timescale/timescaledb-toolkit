@@ -1,5 +1,5 @@
 #[cfg(any(test, feature = "pg_test"))]
-use pgrx::*;
+use pgrx::prelude::*;
 
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]

@@ -21,8 +21,6 @@ use time_weighted_average::{
     TimeWeightError, TimeWeightMethod, TimeWeightSummary as TimeWeightSummaryInternal,
 };
 
-use crate::raw::bytea;
-
 mod accessors;
 
 use accessors::{TimeWeightInterpolatedAverageAccessor, TimeWeightInterpolatedIntegralAccessor};
@@ -154,22 +152,6 @@ impl TimeWeightTransState {
     }
 }
 
-#[pg_extern(immutable, parallel_safe, strict)]
-pub fn time_weight_trans_serialize(state: Internal) -> bytea {
-    let mut state: Inner<TimeWeightTransState> = unsafe { state.to_inner().unwrap() };
-    state.combine_summaries();
-    crate::do_serialize!(state)
-}
-
-#[pg_extern(strict, immutable, parallel_safe)]
-pub fn time_weight_trans_deserialize(bytes: bytea, _internal: Internal) -> Option<Internal> {
-    time_weight_trans_deserialize_inner(bytes).internal()
-}
-pub fn time_weight_trans_deserialize_inner(bytes: bytea) -> Inner<TimeWeightTransState> {
-    let t: TimeWeightTransState = crate::do_deserialize!(bytes, TimeWeightTransState);
-    t.into()
-}
-
 // these are technically parallel_safe (as in they can be called in a parallel context) even though the aggregate itself is parallel restricted.
 #[pg_extern(immutable, parallel_safe)]
 pub fn time_weight_trans(
@@ -255,47 +237,6 @@ pub fn time_weight_summary_trans_inner(
                 };
                 state.push_summary(&next);
                 Some(state)
-            }
-        })
-    }
-}
-
-#[pg_extern(immutable, parallel_safe)]
-pub fn time_weight_combine(
-    state1: Internal,
-    state2: Internal,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Internal> {
-    unsafe { time_weight_combine_inner(state1.to_inner(), state2.to_inner(), fcinfo).internal() }
-}
-
-pub fn time_weight_combine_inner(
-    state1: Option<Inner<TimeWeightTransState>>,
-    state2: Option<Inner<TimeWeightTransState>>,
-    fcinfo: pg_sys::FunctionCallInfo,
-) -> Option<Inner<TimeWeightTransState>> {
-    unsafe {
-        in_aggregate_context(fcinfo, || {
-            match (state1, state2) {
-                (None, None) => None,
-                (None, Some(state2)) => {
-                    let mut s = state2.clone();
-                    s.combine_points();
-                    Some(s.into())
-                }
-                (Some(state1), None) => {
-                    let mut s = state1.clone();
-                    s.combine_points();
-                    Some(s.into())
-                }
-                (Some(state1), Some(state2)) => {
-                    let mut s1 = state1.clone(); // is there a way to avoid if it doesn't need it?
-                    s1.combine_points();
-                    let mut s2 = state2.clone();
-                    s2.combine_points();
-                    s2.push_summary(&s1);
-                    Some(s2.into())
-                }
             }
         })
     }
@@ -390,9 +331,6 @@ extension_sql!(
         sfunc = time_weight_trans,\n\
         stype = internal,\n\
         finalfunc = time_weight_final,\n\
-        combinefunc = time_weight_combine,\n\
-        serialfunc = time_weight_trans_serialize,\n\
-        deserialfunc = time_weight_trans_deserialize,\n\
         parallel = unsafe\n\
     );\n\
 \n\
@@ -401,9 +339,6 @@ extension_sql!(
         sfunc = time_weight_summary_trans,\n\
         stype = internal,\n\
         finalfunc = time_weight_final,\n\
-        combinefunc = time_weight_combine,\n\
-        serialfunc = time_weight_trans_serialize,\n\
-        deserialfunc = time_weight_trans_deserialize,\n\
         parallel = unsafe\n\
     );\n\
 ",
@@ -411,11 +346,18 @@ extension_sql!(
     requires = [
         time_weight_trans,
         time_weight_final,
-        time_weight_combine,
-        time_weight_trans_serialize,
-        time_weight_trans_deserialize,
         time_weight_summary_trans
     ],
+);
+
+extension_sql!(
+    "\n\
+    DROP FUNCTION IF EXISTS time_weight_combine(internal, internal);\n\
+    DROP FUNCTION IF EXISTS time_weight_trans_serialize(internal);\n\
+    DROP FUNCTION IF EXISTS time_weight_trans_deserialize(bytea, internal);\n\
+",
+    name = "drop_time_weight_combine_serial",
+    requires = ["time_weight_agg"],
 );
 
 #[pg_operator(immutable, parallel_safe)]
@@ -880,76 +822,6 @@ mod tests {
             assert_eq!(select_one!(client, locf_time_weight, String), expected);
             assert!((select_one!(client, &*avg(expected), f64) - 17.75).abs() < f64::EPSILON);
         });
-    }
-
-    #[pg_test]
-    fn test_time_weight_byte_io() {
-        unsafe {
-            use std::ptr;
-            const BASE: i64 = 631152000000000;
-            const MIN: i64 = 60000000;
-            let state = time_weight_trans_inner(
-                None,
-                "linear".to_string(),
-                Some(BASE.into()),
-                Some(10.0),
-                ptr::null_mut(),
-            );
-            let state = time_weight_trans_inner(
-                state,
-                "linear".to_string(),
-                Some((BASE + MIN).into()),
-                Some(20.0),
-                ptr::null_mut(),
-            );
-            let state = time_weight_trans_inner(
-                state,
-                "linear".to_string(),
-                Some((BASE + 2 * MIN).into()),
-                Some(30.0),
-                ptr::null_mut(),
-            );
-            let state = time_weight_trans_inner(
-                state,
-                "linear".to_string(),
-                Some((BASE + 3 * MIN).into()),
-                Some(10.0),
-                ptr::null_mut(),
-            );
-            let state = time_weight_trans_inner(
-                state,
-                "linear".to_string(),
-                Some((BASE + 4 * MIN).into()),
-                Some(20.0),
-                ptr::null_mut(),
-            );
-            let state = time_weight_trans_inner(
-                state,
-                "linear".to_string(),
-                Some((BASE + 5 * MIN).into()),
-                Some(30.0),
-                ptr::null_mut(),
-            );
-
-            let mut control = state.unwrap();
-            let buffer =
-                time_weight_trans_serialize(Inner::from(control.clone()).internal().unwrap());
-            let buffer = pgrx::varlena::varlena_to_byte_slice(buffer.0.cast_mut_ptr());
-
-            let expected = [
-                1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 96, 194, 134, 7, 62, 2, 0,
-                0, 0, 0, 0, 0, 0, 36, 64, 0, 3, 164, 152, 7, 62, 2, 0, 0, 0, 0, 0, 0, 0, 62, 64, 0,
-                0, 0, 192, 11, 90, 246, 65,
-            ];
-            assert_eq!(buffer, expected);
-
-            let expected = pgrx::varlena::rust_byte_slice_to_bytea(&expected);
-            let new_state =
-                time_weight_trans_deserialize_inner(bytea(pg_sys::Datum::from(expected.as_ptr())));
-
-            control.combine_summaries(); // Serialized form is always combined
-            assert_eq!(&*new_state, &*control);
-        }
     }
 
     #[pg_test]

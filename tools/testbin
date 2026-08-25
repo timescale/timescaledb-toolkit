@@ -96,6 +96,9 @@ skip_from_version() {
     [ $FROM_VERSION = 1.10.0-dev ] && return
     [ $OS_NAME = debian ] && [ $OS_VERSION = 10 ] && [ `cmp_version $FROM_VERSION` -lt 011100 ] && return
     [ $OS_NAME = ubuntu ] && [ $OS_VERSION = 22.04 ] && [ `cmp_version $FROM_VERSION` -lt 010600 ] && return
+    [ $OS_NAME = debian ] && [ $OS_VERSION = 13 ] && [ `cmp_version $FROM_VERSION` -lt 012100 ] && return
+    [ $OS_NAME = ubuntu ] && [ $OS_VERSION = 26.04 ] && [ `cmp_version $FROM_VERSION` -lt 012300 ] && return
+    [ $OS_NAME = rockylinux ] && [ $OS_VERSION = 10 ] && [ `cmp_version $FROM_VERSION` -lt 012300 ] && return
 }
 
 # Requires:
@@ -105,6 +108,7 @@ skip_from_version_pg_version() {
     # skip versions without binaries for this PostgreSQL version
     [ $PG_VERSION -gt 14 ] && [ `cmp_version $FROM_VERSION` -lt 011301 ] && return
     [ $PG_VERSION -gt 15 ] && [ `cmp_version $FROM_VERSION` -lt 011801 ] && return
+    [ $PG_VERSION -gt 17 ] && [ `cmp_version $FROM_VERSION` -lt 012200 ] && return
 }
 
 # Requires:
@@ -224,10 +228,7 @@ cmp_version() {
 }
 
 print_upgradeable_from() {
-    # TODO We never shipped a 1.4 deb and the 1.5 deb is called 1.5.0
-    #  Let's draw the line there and remove those from upgradeable_from.
-    #  Someone who needs to upgrade from 1.4 or 1.5 can upgrade to 1.10.1 and then beyond.
-    sed -n "s/'//g; s/,//g; s/^# upgradeable_from = 1\.4 1\.5 //p" $CONTROL
+    sed -n "s/'//g; s/,//g; s/^# upgradeable_from = //p" $CONTROL
 }
 
 cleanup() {
@@ -245,8 +246,11 @@ run() {
     [ -d "$BINDIR" ] || die '-bindir required'
     [ -n "$TOOLKIT_VERSION" ] || die '-version required'
 
+    FROM_VERSIONS=`print_upgradeable_from`
+    [ -n "$FROM_VERSIONS" ] || die "no versions parsed from upgradeable_from in $CONTROL"
+
     trap cleanup 0
-    test_$1 `print_upgradeable_from`
+    test_$1 $FROM_VERSIONS
     trap - 0
 
     echo DONE

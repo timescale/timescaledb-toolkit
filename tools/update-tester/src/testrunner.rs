@@ -245,19 +245,7 @@ impl TestClient {
                 db_creation_client
                     .simple_query(&drop)
                     .unwrap_or_else(|e| panic!("could not drop db {test_db_name} due to {e}"));
-                let locale_flags = {
-                    match std::process::Command::new("locale").arg("-a").output() {
-                        Ok(cmd)
-                            if String::from_utf8_lossy(&cmd.stdout)
-                                .lines()
-                                .any(|l| l == "C.UTF-8") =>
-                        {
-                            "LC_COLLATE 'C.UTF-8' LC_CTYPE 'C.UTF-8'"
-                        }
-                        _ => "LC_COLLATE 'C' LC_CTYPE 'C'",
-                    }
-                };
-                let create = format!(r#"CREATE DATABASE "{test_db_name}" {locale_flags}"#,);
+                let create = format!(r#"CREATE DATABASE "{test_db_name}""#,);
                 db_creation_client
                     .simple_query(&create)
                     .unwrap_or_else(|e| panic!("could not create db {test_db_name} due to {e}"));
@@ -458,6 +446,7 @@ fn get_values(query_results: Vec<SimpleQueryMessage>) -> QueryValues {
                 }
                 Some(values)
             }
+            SimpleQueryMessage::RowDescription(_) => None,
             _ => unreachable!(),
         })
         .collect()
@@ -479,6 +468,7 @@ pub fn validate_output(output: Vec<SimpleQueryMessage>, test: &Test) -> Result<(
                 rows.push(row);
             }
             CommandComplete(_) => {}
+            RowDescription(_) => {}
             _ => unreachable!(),
         }
     }

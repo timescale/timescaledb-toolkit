@@ -150,11 +150,15 @@ fn main() {
                     .num_args(1)
             )
 	)
-// Mutates help, removing the short flag (-h) so that it can be used by HOST
-	.mut_arg("help", |_h| {
-      Arg::new("help")
-          .long("help")
-  })
+        // Mutates help, removing the short flag (-h) so that it can be used by HOST
+        .disable_help_flag(true)
+        .arg(
+            Arg::new("help")
+                .long("help")
+                .action(clap::ArgAction::Help)
+                .global(true)
+                .help("Print help")
+        )
 	.get_matches();
 
     match matches.subcommand() {

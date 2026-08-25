@@ -458,6 +458,7 @@ fn get_values(query_results: Vec<SimpleQueryMessage>) -> QueryValues {
                 }
                 Some(values)
             }
+            SimpleQueryMessage::RowDescription(_) => None,
             _ => unreachable!(),
         })
         .collect()
@@ -479,6 +480,7 @@ pub fn validate_output(output: Vec<SimpleQueryMessage>, test: &Test) -> Result<(
                 rows.push(row);
             }
             CommandComplete(_) => {}
+            RowDescription(_) => {}
             _ => unreachable!(),
         }
     }

@@ -257,7 +257,11 @@ impl TestClient {
                         _ => "LC_COLLATE 'C' LC_CTYPE 'C'",
                     }
                 };
-                let create = format!(r#"CREATE DATABASE "{test_db_name}" {locale_flags}"#,);
+                // template0 is required when the requested collation differs
+                // from the collation of the default template database.
+                let create = format!(
+                    r#"CREATE DATABASE "{test_db_name}" {locale_flags} TEMPLATE template0"#,
+                );
                 db_creation_client
                     .simple_query(&create)
                     .unwrap_or_else(|e| panic!("could not create db {test_db_name} due to {e}"));

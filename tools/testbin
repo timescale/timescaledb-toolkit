@@ -224,10 +224,7 @@ cmp_version() {
 }
 
 print_upgradeable_from() {
-    # TODO We never shipped a 1.4 deb and the 1.5 deb is called 1.5.0
-    #  Let's draw the line there and remove those from upgradeable_from.
-    #  Someone who needs to upgrade from 1.4 or 1.5 can upgrade to 1.10.1 and then beyond.
-    sed -n "s/'//g; s/,//g; s/^# upgradeable_from = 1\.4 1\.5 //p" $CONTROL
+    sed -n "s/'//g; s/,//g; s/^# upgradeable_from = //p" $CONTROL
 }
 
 cleanup() {
@@ -245,8 +242,11 @@ run() {
     [ -d "$BINDIR" ] || die '-bindir required'
     [ -n "$TOOLKIT_VERSION" ] || die '-version required'
 
+    FROM_VERSIONS=`print_upgradeable_from`
+    [ -n "$FROM_VERSIONS" ] || die "no versions parsed from upgradeable_from in $CONTROL"
+
     trap cleanup 0
-    test_$1 `print_upgradeable_from`
+    test_$1 $FROM_VERSIONS
     trap - 0
 
     echo DONE

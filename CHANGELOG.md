@@ -6,15 +6,22 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 ## Next Release (Date TBD)
 
-#### New experimental features
+### [1.26.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.26.0) (Date 2026-09-01)
 
 #### Bug fixes
 
+* Fix upgrade tests by @akuzm in https://github.com/timescale/timescaledb-toolkit/pull/975
+* Remove combine/serialize/deserialize from time_weight and rollup by @Poroma-Banerjee in https://github.com/timescale/timescaledb-toolkit/pull/974
+
 #### Other notable changes
+* Update `ASAP` documentation test output values by @Dvdandrades in https://github.com/timescale/timescaledb-toolkit/pull/973
+* start 1.26.0-dev by @github-actions[bot] in https://github.com/timescale/timescaledb-toolkit/pull/969
 
 #### Shout-outs
 
-**Full Changelog**: [TODO]
+Thanks, @Dvdandrades your contributions.
+
+**Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.25.0...1.26.0
 
 ## [1.25.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.25.0) (Date 2026-08-18)
 

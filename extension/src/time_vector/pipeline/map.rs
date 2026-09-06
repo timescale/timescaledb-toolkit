@@ -1,9 +1,9 @@
+use lambda::Value::{Double, Time, Tuple};
+use std::panic::AssertUnwindSafe;
 use std::{
     mem::{self, ManuallyDrop, MaybeUninit},
     ptr,
 };
-
-use pgrx::prelude::*;
 
 use super::*;
 
@@ -47,7 +47,6 @@ pub fn apply_lambda_to<'a>(
     let mut executor = lambda::ExpressionExecutor::new(&expression);
 
     let invoke = |time: i64, value: f64| {
-        use lambda::Value::*;
         executor.reset();
         let result = executor.exec(value, time);
         match result {
@@ -242,8 +241,6 @@ pub fn apply_to(
 }
 
 pub fn map_series(series: &mut Timevector_TSTZ_F64<'_>, mut func: impl FnMut(f64) -> f64) {
-    use std::panic::AssertUnwindSafe;
-
     let points = series.points.as_owned().iter_mut();
     // setjump guard around the loop to reduce the amount we have to
     // call it
@@ -263,7 +260,7 @@ pub fn map_series(series: &mut Timevector_TSTZ_F64<'_>, mut func: impl FnMut(f64
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgrx::*;
+    use pgrx::Spi;
     use pgrx_macros::pg_test;
 
     #[pg_test]

@@ -1,5 +1,5 @@
-use asap::*;
-use pgrx::prelude::*;
+use asap::asap_smooth_with_metadata;
+use pgrx::prelude::{error, extension_sql, pg_extern, pg_sys};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -177,10 +177,10 @@ extension_sql!(
 );
 
 #[cfg(any(test, feature = "pg_test"))]
-#[pg_schema]
+#[pgrx::pg_schema]
 mod tests {
     use approx::assert_relative_eq;
-    use pgrx::*;
+    use pgrx::Spi;
     use pgrx_macros::pg_test;
 
     #[pg_test]

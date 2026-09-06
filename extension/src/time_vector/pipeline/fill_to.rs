@@ -1,5 +1,3 @@
-use pgrx::prelude::*;
-
 use flat_serialize_macro::FlatSerializable;
 
 use serde::{Deserialize, Serialize};
@@ -141,7 +139,7 @@ pub fn fill_to<'s>(
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgrx::*;
+    use pgrx::Spi;
     use pgrx_macros::pg_test;
 
     #[pg_test]

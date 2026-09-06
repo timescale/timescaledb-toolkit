@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use pgrx::prelude::*;
+use pgrx::prelude::{InOutFuncs, error, extension_sql, opname, pg_extern, pg_operator, pg_sys};
 use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
 
 use crate::{
@@ -15,7 +15,7 @@ use crate::{
     flatten,
     palloc::{Inner, Internal, InternalAsValue, ToInternal},
     pg_type,
-    range::*,
+    range::{I64RangeWrapper, get_range},
     ron_inout_funcs,
 };
 
@@ -24,7 +24,7 @@ use tspoint::TSPoint;
 use counter_agg::{CounterSummaryBuilder, MetricSummary, range::I64Range};
 use stats_agg::stats2d::StatsSummary2D;
 
-use self::Method::*;
+use self::Method::Prometheus;
 
 use crate::raw::tstzrange;
 
@@ -875,12 +875,13 @@ pub fn as_method(method: &str) -> Option<Method> {
 }
 
 #[cfg(any(test, feature = "pg_test"))]
-#[pg_schema]
+#[pgrx::pg_schema]
 mod tests {
 
     use super::testing::*;
     use super::*;
     use approx::assert_relative_eq;
+    use pgrx::{Spi, pg_test};
 
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {

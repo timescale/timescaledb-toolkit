@@ -1,6 +1,6 @@
 #![allow(non_camel_case_types)]
 
-use pgrx::prelude::*;
+use pgrx::prelude::{FromDatum, IntoDatum, extension_sql, pg_sys};
 use pgrx::{callconv, nullable};
 use pgrx_sql_entity_graph::metadata::{
     ArgumentError, ReturnsError, ReturnsRef, SqlMappingRef, SqlTranslatable, TypeOrigin,

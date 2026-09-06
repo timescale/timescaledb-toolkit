@@ -1,8 +1,10 @@
-use pgrx::prelude::*;
+use pgrx::prelude::{pg_extern, pg_schema, pg_sys};
 use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
 
 use aggregate_builder::aggregate;
 use countminsketch::{CountMinHashFn, CountMinSketch as CountMinSketchInternal};
+
+use toolkit_experimental::CountMinSketch;
 
 use crate::{
     flatten,
@@ -74,8 +76,6 @@ pub mod toolkit_experimental {
     ron_inout_funcs!(CountMinSketch<'input>);
 }
 
-use toolkit_experimental::CountMinSketch;
-
 #[aggregate]
 impl toolkit_experimental::count_min_sketch {
     type State = CountMinSketchInternal;
@@ -135,7 +135,7 @@ pub fn approx_count<'a>(item: String, aggregate: Option<CountMinSketch<'a>>) -> 
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use super::*;
+    use pgrx::Spi;
     use pgrx_macros::pg_test;
 
     #[pg_test]

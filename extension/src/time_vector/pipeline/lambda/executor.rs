@@ -1,6 +1,17 @@
-use pgrx::prelude::*;
-
 use super::*;
+
+use BinOp::{And, Div, Eq, Ge, Gt, Le, Lt, Minus, Mul, Neq, Or, Plus, Pow};
+use ExpressionSegment::{
+    Binary, BuildTuple, DoubleConstant, FunctionCall, IntervalConstant, TimeConstant, TimeVar,
+    Unary, UserVar, ValueVar,
+};
+use Function::{
+    Abs, Acos, Acosh, Asin, Asinh, Atan, Atan2, Atanh, Cbrt, Ceil, Cos, Cosh, Floor, Ln, Log,
+    Log10, Pi, Round, Sign, Sin, Sinh, Sqrt, Tan, Tanh, Trunc,
+};
+use Type::Double;
+use Type::{Interval, Time};
+use UnaryOp::{Negative, Not};
 
 pub struct ExpressionExecutor<'e, T> {
     exprs: &'e Expression,
@@ -50,7 +61,6 @@ where
         time: i64,
         // trace_function: impl FnMut(&ExpressionSegment, &Value),
     ) -> Value {
-        use ExpressionSegment::*;
         let res = match expr {
             ValueVar => Value::Double(value),
             TimeVar => Value::Time(time),
@@ -94,7 +104,6 @@ where
         value: f64,
         time: i64,
     ) -> Value {
-        use Function::*;
         macro_rules! unary_function {
             ($func:ident ( )) => {{
                 let then = self.exec_expression(&args[0], value, time).float();
@@ -150,8 +159,6 @@ where
         value: f64,
         time: i64,
     ) -> Value {
-        use Type::*;
-        use UnaryOp::*;
         match op {
             Not => {
                 let val = self.exec_expression(expr, value, time).bool();
@@ -179,9 +186,6 @@ where
         value: f64,
         time: i64,
     ) -> Value {
-        use BinOp::*;
-        use Type::*;
-
         // FIXME pgrx wraps all functions in rust wrappers, which makes them
         //       uncallable with DirectFunctionCall(). Is there a way to
         //       export both?

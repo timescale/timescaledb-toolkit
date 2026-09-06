@@ -6,9 +6,8 @@
 
 #![allow(non_camel_case_types)]
 
-use pgrx::iter::TableIterator;
-use pgrx::prelude::*;
-use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
+use pgrx::prelude::{default, extension_sql, opname, pg_extern, pg_operator, pg_schema, pg_sys};
+use pgrx::{StringInfo, callconv, iter::TableIterator, nullable, rust_regtypein};
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 
@@ -30,7 +29,13 @@ use crate::{
 use toolkit_experimental::{CompactStateAgg, CompactStateAggData};
 
 mod accessors;
-use accessors::*;
+use accessors::{
+    AccessorDurationIn, AccessorDurationInInt, AccessorDurationInRange, AccessorDurationInRangeInt,
+    AccessorInterpolatedDurationIn, AccessorInterpolatedDurationInInt,
+    AccessorInterpolatedStateIntTimeline, AccessorInterpolatedStatePeriods,
+    AccessorInterpolatedStatePeriodsInt, AccessorInterpolatedStateTimeline, AccessorStateAt,
+    AccessorStateAtInt, AccessorStatePeriods, AccessorStatePeriodsInt,
+};
 pub mod rollup;
 
 /// The data of a state.
@@ -1852,6 +1857,7 @@ mod tests {
     use std::sync::atomic::Ordering::Relaxed;
 
     use super::*;
+    use pgrx::Spi;
     use pgrx_macros::pg_test;
 
     macro_rules! select_one {

@@ -2,8 +2,6 @@
 
 use std::{collections::HashMap, ffi::CString};
 
-use pgrx::prelude::*;
-
 use super::*;
 
 use pest::{
@@ -12,10 +10,22 @@ use pest::{
     prec_climber::{Assoc, Operator, PrecClimber},
 };
 
-use ExpressionSegment::*;
-use Rule::*;
-use Type::*;
-use UnaryOp::*;
+use Assoc::{Left, Right};
+use ExpressionSegment::{
+    Binary, BuildTuple, DoubleConstant, FunctionCall, IntervalConstant, TimeConstant, TimeVar,
+    Unary, UserVar, ValueVar,
+};
+use Function::{
+    Abs, Acos, Acosh, Asin, Asinh, Atan, Atan2, Atanh, Cbrt, Ceil, Cos, Cosh, Floor, Ln, Log,
+    Log10, Pi, Round, Sign, Sin, Sinh, Sqrt, Tan, Tanh, Trunc,
+};
+use Rule::{
+    EOI, WHITESPACE, add, and, binops, calculation, divide, eq, function, function_name, ge, gt,
+    int, interval, le, let_expr, lt, multiply, neg, neq, not, num, operation, or, power, string,
+    subtract, term, time, time_var, tuple, unary, val_var, var,
+};
+use Type::{Bool, Double, Tuple};
+use UnaryOp::{Negative, Not};
 
 // Idealized expression grammar ignoring precedence
 // ```
@@ -411,8 +421,6 @@ fn parse_interval(val: &str) -> *mut pg_sys::Interval {
 
 // This static determines the precedence of infix operators
 static PREC_CLIMBER: once_cell::sync::Lazy<PrecClimber<Rule>> = once_cell::sync::Lazy::new(|| {
-    use Assoc::*;
-
     // operators according to their precedence, ordered in a vector
     // from lowest to highest. Multiple operators with the same precedence are
     // joined with `|`
@@ -435,7 +443,6 @@ static PREC_CLIMBER: once_cell::sync::Lazy<PrecClimber<Rule>> = once_cell::sync:
 // Maps function name to a tuple (num arguments, function identifier)
 static BUILTIN_FUNCTION: once_cell::sync::Lazy<HashMap<&str, (usize, Function)>> =
     once_cell::sync::Lazy::new(|| {
-        use Function::*;
         [
             ("abs", (1, Abs)),
             ("cbrt", (1, Cbrt)),

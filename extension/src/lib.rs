@@ -54,7 +54,7 @@ mod type_builder;
 #[cfg(any(test, feature = "pg_test"))]
 mod aggregate_builder_tests;
 
-use pgrx::prelude::*;
+use pgrx::prelude::{extension_sql, pg_guard, pg_sys};
 
 pgrx::pg_module_magic!();
 

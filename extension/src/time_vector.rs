@@ -2,9 +2,11 @@
 
 use crate::pg_sys::timestamptz_to_str;
 use core::str::Utf8Error;
-use pgrx::iter::TableIterator;
-use pgrx::prelude::*;
-use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
+use pgrx::prelude::{
+    FromDatum, InOutFuncs, IntoDatum, PgBuiltInOids, error, extension_sql, name, opname, pg_extern,
+    pg_operator, pg_schema, pg_sys,
+};
+use pgrx::{StringInfo, callconv, iter::TableIterator, nullable, rust_regtypein};
 use std::ffi::CStr;
 use tera::{Context, Tera};
 
@@ -19,7 +21,7 @@ use tspoint::TSPoint;
 
 pub use iter::Iter;
 
-use flat_serialize::*;
+use flat_serialize::FlatSerializable;
 
 mod iter;
 mod pipeline;
@@ -526,7 +528,7 @@ pub fn arrow_timevector_asof<'a>(
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgrx::*;
+    use pgrx::Spi;
     use pgrx_macros::pg_test;
 
     #[pg_test]

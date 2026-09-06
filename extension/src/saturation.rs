@@ -1,6 +1,6 @@
 //! Saturating Math for Integers
 
-use pgrx::prelude::*;
+use pgrx::prelude::pg_extern;
 
 /// Computes x+y, saturating at the numeric bounds instead of overflowing
 #[pg_extern(schema = "toolkit_experimental", immutable, parallel_safe)]
@@ -35,7 +35,7 @@ fn saturating_mul(x: i32, y: i32) -> i32 {
 }
 
 #[cfg(any(test, feature = "pg_test"))]
-#[pg_schema]
+#[pgrx::pg_schema]
 mod tests {
     use super::*;
     use pgrx_macros::pg_test;

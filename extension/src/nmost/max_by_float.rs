@@ -1,9 +1,12 @@
 use pgrx::iter::TableIterator;
-use pgrx::prelude::*;
+use pgrx::prelude::{InOutFuncs, extension_sql, name, pg_extern, pg_sys};
 use pgrx::{AnyElement, StringInfo, callconv, nullable, rust_regtypein};
 
-use crate::nmost::max_float::*;
-use crate::nmost::*;
+use crate::nmost::max_float::{MaxFloats, MaxFloatsData};
+use crate::nmost::{
+    DatumStore, NMostByTransState, nmost_by_rollup_trans_function, nmost_by_trans_function,
+    validate_nmost_by_dummy_type, validate_nmost_by_parts,
+};
 
 use crate::{
     build, flatten,
@@ -157,9 +160,9 @@ extension_sql!(
 );
 
 #[cfg(any(test, feature = "pg_test"))]
-#[pg_schema]
+#[pgrx::pg_schema]
 mod tests {
-    use super::*;
+    use pgrx::Spi;
     use pgrx_macros::pg_test;
 
     #[pg_test]

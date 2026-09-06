@@ -1,7 +1,5 @@
 use std::mem::take;
 
-use pgrx::prelude::*;
-
 use counter_agg::CounterSummaryBuilder;
 
 use super::*;
@@ -752,7 +750,7 @@ ALTER FUNCTION "arrow_run_pipeline_then_percentile_agg" SUPPORT toolkit_experime
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgrx::*;
+    use pgrx::{PgSqlErrorCode, Spi, pg_sys};
     use pgrx_macros::pg_test;
 
     #[pg_test]

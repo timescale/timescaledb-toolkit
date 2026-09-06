@@ -1,4 +1,7 @@
-use pgrx::prelude::*;
+use pgrx::prelude::{
+    InOutFuncs, PgSqlErrorCode, default, error, extension_sql, opname, pg_extern, pg_operator,
+    pg_sys,
+};
 use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
 
 use crate::{
@@ -19,7 +22,7 @@ pub use stats_agg::stats1d::StatsSummary1D as InternalStatsSummary1D;
 pub use stats_agg::stats2d::StatsSummary2D as InternalStatsSummary2D;
 use stats_agg::{StatsError, XYPair};
 
-use crate::stats_agg::Method::*;
+use crate::stats_agg::Method::{Population, Sample};
 use stats_agg::TwoFloat;
 
 use crate::raw::bytea;
@@ -1486,11 +1489,11 @@ pub fn as_method(method: &str) -> Option<Method> {
 // }
 
 #[cfg(any(test, feature = "pg_test"))]
-#[pg_schema]
+#[pgrx::pg_schema]
 mod tests {
     use super::*;
     use approx::relative_eq;
-    use pgrx::varlena_to_byte_slice;
+    use pgrx::{Spi, varlena_to_byte_slice, warning};
 
     use pgrx_macros::pg_test;
     use rand::prelude::*;

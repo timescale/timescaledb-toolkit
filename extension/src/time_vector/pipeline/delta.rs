@@ -1,5 +1,3 @@
-use pgrx::prelude::*;
-
 use super::*;
 
 use crate::accessors::AccessorDelta;
@@ -62,7 +60,7 @@ pub fn timevector_delta<'s>(series: &Timevector_TSTZ_F64<'s>) -> Timevector_TSTZ
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgrx::*;
+    use pgrx::Spi;
     use pgrx_macros::pg_test;
 
     #[pg_test]

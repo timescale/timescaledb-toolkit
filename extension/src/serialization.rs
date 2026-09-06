@@ -6,7 +6,7 @@ use std::{
     os::raw::{c_char, c_int},
 };
 
-use pgrx::pg_sys::{self};
+use pgrx::pg_sys;
 
 use std::ffi::CStr;
 

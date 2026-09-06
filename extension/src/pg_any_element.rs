@@ -5,9 +5,7 @@ use std::{
 };
 
 use pgrx::AnyElement;
-use pgrx::prelude::*;
-
-use pg_sys::{Datum, Oid};
+use pgrx::prelude::pg_sys::{self, Datum, Oid};
 
 use crate::datum_utils::{DatumHashBuilder, deep_copy_datum};
 

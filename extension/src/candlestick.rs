@@ -1,4 +1,4 @@
-use pgrx::prelude::*;
+use pgrx::prelude::{InOutFuncs, error, extension_sql, opname, pg_extern, pg_operator, pg_sys};
 use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
 use serde::{Deserialize, Serialize};
 
@@ -512,11 +512,12 @@ pub fn vwap(candlestick: Option<Candlestick>) -> Option<f64> {
 }
 
 #[cfg(any(test, feature = "pg_test"))]
-#[pg_schema]
+#[pgrx::pg_schema]
 mod tests {
     use std::ptr;
 
     use super::*;
+    use pgrx::Spi;
     use pgrx_macros::pg_test;
 
     macro_rules! select_one {

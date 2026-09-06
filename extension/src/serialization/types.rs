@@ -8,8 +8,7 @@ use flat_serialize::{FlatSerializable, WrapErr, impl_flat_serializable};
 
 use serde::{Deserialize, Serialize};
 
-use pg_sys::Oid;
-use pgrx::*;
+use pgrx::pg_sys::{self, Oid};
 
 /// Possibly a premature optimization, `ShortTypId` provides the ability to
 /// serialize and deserialize type Oids as `(namespace, name)` pairs, special
@@ -317,7 +316,7 @@ unsafe fn get_struct<T>(tuple: pg_sys::HeapTuple) -> *mut T {
 }
 
 #[cfg(any(test, feature = "pg_test"))]
-#[pg_schema]
+#[pgrx::pg_schema]
 mod tests {
 
     use super::{PgTypId, ShortTypeId};

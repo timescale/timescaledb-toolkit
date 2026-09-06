@@ -11,8 +11,11 @@ use serde::{
     ser::SerializeSeq,
 };
 
-use pg_sys::{Datum, Oid};
-use pgrx::*;
+use pgrx::{
+    AnyElement, FromDatum,
+    pg_sys::{self, Datum, Oid},
+    varsize_any,
+};
 
 use crate::serialization::{PgCollationId, ShortTypeId};
 
@@ -651,16 +654,19 @@ impl<'a> IntoIterator for DatumStore<'a> {
 }
 
 #[cfg(any(test, feature = "pg_test"))]
-#[pg_schema]
+#[pgrx::pg_schema]
 mod tests {
     use super::*;
     use crate::{build, palloc::Inner, pg_type, ron_inout_funcs};
-    use aggregate_builder::*;
+    use aggregate_builder::aggregate;
+    use pgrx::Spi;
     use pgrx_macros::pg_test;
 
-    #[pg_schema]
+    #[pgrx::pg_schema]
     pub mod toolkit_experimental {
         use super::*;
+        use pgrx::datum::Internal;
+        use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
         pg_type! {
             #[derive(Debug)]
             struct DatumStoreTester<'input> {

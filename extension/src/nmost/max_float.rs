@@ -1,6 +1,10 @@
-use pgrx::{iter::SetOfIterator, *};
+use pgrx::iter::SetOfIterator;
+use pgrx::prelude::{extension_sql, opname, pg_extern, pg_operator, pg_sys};
+use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
 
-use crate::nmost::*;
+use crate::nmost::{
+    NMostTransState, nmost_rollup_trans_function, nmost_trans_combine, nmost_trans_function,
+};
 
 use crate::{
     accessors::{AccessorIntoArray, AccessorIntoValues},
@@ -189,9 +193,9 @@ extension_sql!(
 );
 
 #[cfg(any(test, feature = "pg_test"))]
-#[pg_schema]
+#[pgrx::pg_schema]
 mod tests {
-    use super::*;
+    use pgrx::Spi;
     use pgrx_macros::pg_test;
 
     #[pg_test]

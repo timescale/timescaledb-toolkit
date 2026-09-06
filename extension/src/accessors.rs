@@ -1,4 +1,5 @@
-use pgrx::*;
+use pgrx::prelude::{InOutFuncs, default, error, pg_extern, pg_sys};
+use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
 
 use counter_agg::range::I64Range;
 

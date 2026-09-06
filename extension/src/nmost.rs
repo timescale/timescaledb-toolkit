@@ -1,4 +1,4 @@
-use pgrx::*;
+use pgrx::prelude::pg_sys;
 
 use serde::{Deserialize, Serialize};
 

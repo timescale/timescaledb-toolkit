@@ -77,6 +77,14 @@ impl StatsSummary1D {
             sx4: st.sx4,
         })
     }
+
+    fn sql_eq(&self, other: &Self) -> bool {
+        self.n == other.n
+            && float8_eq(self.sx, other.sx)
+            && float8_eq(self.sx2, other.sx2)
+            && float8_eq(self.sx3, other.sx3)
+            && float8_eq(self.sx4, other.sx4)
+    }
 }
 
 impl StatsSummary2D {
@@ -108,6 +116,56 @@ impl StatsSummary2D {
             sxy: st.sxy,
         })
     }
+
+    fn sql_eq(&self, other: &Self) -> bool {
+        self.n == other.n
+            && float8_eq(self.sx, other.sx)
+            && float8_eq(self.sx2, other.sx2)
+            && float8_eq(self.sx3, other.sx3)
+            && float8_eq(self.sx4, other.sx4)
+            && float8_eq(self.sy, other.sy)
+            && float8_eq(self.sy2, other.sy2)
+            && float8_eq(self.sy3, other.sy3)
+            && float8_eq(self.sy4, other.sy4)
+            && float8_eq(self.sxy, other.sxy)
+    }
+}
+
+// PostgreSQL considers all NaN values equal, unlike Rust's f64 equality.
+fn float8_eq(left: f64, right: f64) -> bool {
+    left == right || (left.is_nan() && right.is_nan())
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(=)]
+#[negator(<>)]
+#[commutator(=)]
+pub fn eq_op_stats_summary_1d(left: StatsSummary1D, right: StatsSummary1D) -> bool {
+    left.sql_eq(&right)
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(<>)]
+#[negator(=)]
+#[commutator(<>)]
+pub fn neq_op_stats_summary_1d(left: StatsSummary1D, right: StatsSummary1D) -> bool {
+    !left.sql_eq(&right)
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(=)]
+#[negator(<>)]
+#[commutator(=)]
+pub fn eq_op_stats_summary_2d(left: StatsSummary2D, right: StatsSummary2D) -> bool {
+    left.sql_eq(&right)
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(<>)]
+#[negator(=)]
+#[commutator(<>)]
+pub fn neq_op_stats_summary_2d(left: StatsSummary2D, right: StatsSummary2D) -> bool {
+    !left.sql_eq(&right)
 }
 
 pub(crate) fn unwrap_stats_result<T>(result: Result<T, StatsError>) -> T {
@@ -1497,6 +1555,89 @@ mod tests {
     const VALS: usize = 10000; // Number of values to use for each run
     const SEED: Option<u64> = None; // RNG seed, generated from entropy if None
     const PRINT_VALS: bool = false; // Print out test values on error, this can be spammy if VALS is high
+
+    #[pg_test]
+    fn test_stats_summary_equality_operators() {
+        Spi::connect_mut(|client| {
+            let one_dimensional = client
+                .select(
+                    "WITH summaries AS (
+                        SELECT
+                            stats_agg(value) AS all_values,
+                            stats_agg(value) FILTER (WHERE value < 3) AS subset
+                        FROM (VALUES (1::DOUBLE PRECISION), (2), (3)) data(value)
+                    )
+                    SELECT
+                        all_values = all_values
+                        AND NOT all_values <> all_values
+                        AND NOT all_values = subset
+                        AND all_values <> subset
+                    FROM summaries",
+                    None,
+                    &[],
+                )
+                .unwrap()
+                .first()
+                .get_one::<bool>()
+                .unwrap();
+            assert_eq!(one_dimensional, Some(true));
+
+            let two_dimensional = client
+                .select(
+                    "WITH summaries AS (
+                        SELECT
+                            stats_agg(y, x) AS all_values,
+                            stats_agg(y, x) FILTER (WHERE x < 3) AS subset
+                        FROM (VALUES
+                            (1::DOUBLE PRECISION, 2::DOUBLE PRECISION),
+                            (2, 4),
+                            (3, 6)
+                        ) data(x, y)
+                    )
+                    SELECT
+                        all_values = all_values
+                        AND NOT all_values <> all_values
+                        AND NOT all_values = subset
+                        AND all_values <> subset
+                    FROM summaries",
+                    None,
+                    &[],
+                )
+                .unwrap()
+                .first()
+                .get_one::<bool>()
+                .unwrap();
+            assert_eq!(two_dimensional, Some(true));
+        });
+    }
+
+    #[pg_test]
+    fn test_stats_summary_equality_operators_treat_nan_as_equal() {
+        Spi::connect_mut(|client| {
+            let result = client
+                .select(
+                    "WITH summaries AS (
+                        SELECT
+                            stats_agg(value) AS one_dimensional,
+                            stats_agg(value, value) AS two_dimensional
+                        FROM (VALUES ('NaN'::DOUBLE PRECISION)) data(value)
+                    )
+                    SELECT
+                        one_dimensional = one_dimensional
+                        AND NOT one_dimensional <> one_dimensional
+                        AND two_dimensional = two_dimensional
+                        AND NOT two_dimensional <> two_dimensional
+                    FROM summaries",
+                    None,
+                    &[],
+                )
+                .unwrap()
+                .first()
+                .get_one::<bool>()
+                .unwrap();
+            assert_eq!(result, Some(true));
+        });
+    }
 
     #[pg_test]
     fn test_stats_agg_text_io() {

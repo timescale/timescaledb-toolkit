@@ -11,6 +11,12 @@
 
 crate::functions_stabilized_at! {
     STABLE_FUNCTIONS
+    "1.27.0" => {
+        eq_op_stats_summary_1d(statssummary1d, statssummary1d),
+        eq_op_stats_summary_2d(statssummary2d, statssummary2d),
+        neq_op_stats_summary_1d(statssummary1d, statssummary1d),
+        neq_op_stats_summary_2d(statssummary2d, statssummary2d),
+    }
     "1.25.0" => {
         arrow_corr(gaugesummary,accessorcorr),
         arrow_delta(gaugesummary,accessordelta),
@@ -1106,6 +1112,12 @@ crate::types_stabilized_at! {
 
 crate::operators_stabilized_at! {
     STABLE_OPERATORS
+    "1.27.0" => {
+        "="(statssummary1d, statssummary1d),
+        "="(statssummary2d, statssummary2d),
+        "<>"(statssummary1d, statssummary1d),
+        "<>"(statssummary2d, statssummary2d),
+    }
     "1.25.0" => {
         "->"(gaugesummary,accessorcorr),
         "->"(gaugesummary,accessorcounterzerotime),

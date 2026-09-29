@@ -257,3 +257,73 @@ unsafe impl GlobalAlloc for PanickingAllocator {
         }
     }
 }
+
+#[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
+mod tests {
+    use pgrx::pg_sys::errcodes::PgSqlErrorCode;
+    use pgrx::pg_sys::ffi::pg_guard_ffi_boundary;
+    use pgrx::{pg_sys::PgTryBuilder, pg_test};
+    use std::alloc::{Layout, alloc, dealloc};
+
+    #[derive(Debug, Eq, PartialEq)]
+    enum AllocationFailure {
+        PgOutOfMemory,
+        RustPanic,
+        DidNotFail,
+    }
+
+    fn force_global_allocator_oom() {
+        // This is a valid Layout but too large for the system allocator to satisfy.
+        // It drives the toolkit global allocator's null-return handling without
+        // consuming memory on the test machine.
+        let layout = Layout::from_size_align(isize::MAX as usize, 1).unwrap();
+
+        unsafe {
+            let ptr = alloc(layout);
+            if !ptr.is_null() {
+                dealloc(ptr, layout);
+            }
+        }
+    }
+
+    fn catch_allocation_failure() -> AllocationFailure {
+        PgTryBuilder::new(|| unsafe {
+            pg_guard_ffi_boundary(|| {
+                force_global_allocator_oom();
+                AllocationFailure::DidNotFail
+            })
+        })
+        .catch_when(PgSqlErrorCode::ERRCODE_OUT_OF_MEMORY, |_| {
+            AllocationFailure::PgOutOfMemory
+        })
+        .catch_rust_panic(|_| AllocationFailure::RustPanic)
+        .execute()
+    }
+
+    /// Forces two OOMs to validate that the extension DOES NOT
+    /// sigabrt, this test can perform differently with OOM guard enabled.
+    /// Depending on the version IF this fails we should get either a sigabrt or some
+    /// crash-like postgres error, for example:
+    /// [2026-09-29 13:45:40.900 CEST] [45672] [6abba4e3.b268]: LOG:  client backend (PID 45710) was terminated by signal 6: Abort trap: 6
+    /// [2026-09-29 13:45:40.900 CEST] [45672] [6abba4e3.b268]: DETAIL:  Failed process was running: SELECT "tests"."global_allocator_oom_raises_pg_error_twice_in_one_backend"();
+    /// [2026-09-29 13:45:40.900 CEST] [45672] [6abba4e3.b268]: LOG:  terminating any other active server processes
+    /// You normally SHOULD NOT see this erroring.
+
+    #[pg_test]
+    fn global_allocator_oom_raises_pg_error_twice_in_one_backend() {
+        let first = catch_allocation_failure();
+        let second = catch_allocation_failure();
+
+        assert_eq!(
+            first,
+            AllocationFailure::PgOutOfMemory,
+            "first allocation failure should be raised as a PostgreSQL out_of_memory ERROR"
+        );
+        assert_eq!(
+            second,
+            AllocationFailure::PgOutOfMemory,
+            "second allocation failure in the same backend should also be recoverable"
+        );
+    }
+}

@@ -3,7 +3,7 @@ use std::{
     ops::{Deref, DerefMut},
     ptr::NonNull,
 };
-
+use std::ffi::c_void;
 use pgrx::*;
 
 pub unsafe fn in_memory_context<T, F: FnOnce() -> T>(mctx: pg_sys::MemoryContext, f: F) -> T {
@@ -169,14 +169,56 @@ type Errfinish = unsafe extern "C" fn(
     *const ::core::ffi::c_char,
 );
 
+/// Postgres error functions ptrs, stored at _PG_init to avoid dlsym allocating memory in oom
+/// scenarios.
+struct PgErrorFns {
+    errstart: Errstart,
+    errcode: Errcode,
+    errmsg: Errmsg,
+    errfinish: Errfinish,
+}
+
 /// The PostgreSQL backend's main thread, recorded in _PG_init.
 static PG_MAIN_THREAD: std::sync::OnceLock<std::thread::ThreadId> = std::sync::OnceLock::new();
+
+static PG_ERROR_FNS:  std::sync::OnceLock<Option<PgErrorFns>> = std::sync::OnceLock::new();
 
 /// Record the current thread as the PostgreSQL main thread.
 /// Call from _PG_init, which PostgreSQL runs on the backend's thread.
 pub fn record_pg_main_thread() {
     let _ = PG_MAIN_THREAD.set(std::thread::current().id());
+
 }
+
+pub fn record_pg_error_fns(){
+    let _ = PG_ERROR_FNS.set({ resolve_pg_error_fns() });
+}
+
+/// Returns typed functions for PG's ERRSTART, ERRCODE, ERRMSG and ERRFINISH.
+///
+/// Returns all or None.
+pub fn resolve_pg_error_fns() -> Option<PgErrorFns> {
+    unsafe {
+        let errstart = dlsym(RTLD_DEFAULT, c"errstart".as_ptr());
+        let errcode = dlsym(RTLD_DEFAULT, c"errcode".as_ptr());
+        let errmsg = dlsym(RTLD_DEFAULT, c"errmsg".as_ptr());
+        let errfinish = dlsym(RTLD_DEFAULT, c"errfinish".as_ptr());
+
+        if errstart.is_null() || errcode.is_null() || errmsg.is_null() || errfinish.is_null() {
+            return None;
+        }
+
+        Some(PgErrorFns {
+            // Transmute because dlsym returns an untyped pointer
+            errstart: std::mem::transmute(errstart),
+            errcode: std::mem::transmute(errcode),
+            errmsg: std::mem::transmute(errmsg),
+            errfinish: std::mem::transmute(errfinish),
+        })
+    }
+
+}
+
 
 fn on_pg_main_thread() -> bool {
     PG_MAIN_THREAD.get() == Some(&std::thread::current().id())
@@ -187,24 +229,11 @@ fn on_pg_main_thread() -> bool {
 /// it is safe to call from inside the global allocator.
 unsafe fn pg_oom_error() -> ! {
     unsafe {
-        let errstart = dlsym(RTLD_DEFAULT, c"errstart".as_ptr());
-        let errcode = dlsym(RTLD_DEFAULT, c"errcode".as_ptr());
-        let errmsg = dlsym(RTLD_DEFAULT, c"errmsg".as_ptr());
-        let errfinish = dlsym(RTLD_DEFAULT, c"errfinish".as_ptr());
-        if !errstart.is_null() && !errcode.is_null() && !errmsg.is_null() && !errfinish.is_null() {
-            let errstart: Errstart = std::mem::transmute(errstart);
-            let errcode: Errcode = std::mem::transmute(errcode);
-            let errmsg: Errmsg = std::mem::transmute(errmsg);
-            let errfinish: Errfinish = std::mem::transmute(errfinish);
-            if errstart(
-                pg_sys::elog::PgLogLevel::ERROR as ::core::ffi::c_int,
-                std::ptr::null(),
-            ) {
-                errcode(
-                    pg_sys::errcodes::PgSqlErrorCode::ERRCODE_OUT_OF_MEMORY as ::core::ffi::c_int,
-                );
-                errmsg(c"Out of memory".as_ptr());
-                errfinish(c"palloc.rs".as_ptr(), 0, std::ptr::null());
+        if let Some(Some(fns)) = PG_ERROR_FNS.get() {
+            if (fns.errstart)(PgLogLevel::ERROR as _, std::ptr::null()) {
+                (fns.errcode)(PgSqlErrorCode::ERRCODE_OUT_OF_MEMORY as _);
+                (fns.errmsg)(c"Out of memory".as_ptr());
+                (fns.errfinish)(c"palloc.rs".as_ptr(), 0, std::ptr::null());
             }
         }
     }

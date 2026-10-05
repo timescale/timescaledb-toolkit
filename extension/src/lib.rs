@@ -61,6 +61,7 @@ pgrx::pg_module_magic!();
 #[pg_guard]
 pub extern "C-unwind" fn _PG_init() {
     crate::palloc::record_pg_main_thread();
+    crate::palloc::record_pg_error_fns();
 }
 
 extension_sql!(

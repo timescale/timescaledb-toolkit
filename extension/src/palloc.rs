@@ -3,7 +3,6 @@ use std::{
     ops::{Deref, DerefMut},
     ptr::NonNull,
 };
-use std::ffi::c_void;
 use pgrx::*;
 
 pub unsafe fn in_memory_context<T, F: FnOnce() -> T>(mctx: pg_sys::MemoryContext, f: F) -> T {
@@ -181,6 +180,7 @@ struct PgErrorFns {
 /// The PostgreSQL backend's main thread, recorded in _PG_init.
 static PG_MAIN_THREAD: std::sync::OnceLock<std::thread::ThreadId> = std::sync::OnceLock::new();
 
+/// The PostgreSQL error functions
 static PG_ERROR_FNS:  std::sync::OnceLock<Option<PgErrorFns>> = std::sync::OnceLock::new();
 
 /// Record the current thread as the PostgreSQL main thread.
@@ -190,14 +190,15 @@ pub fn record_pg_main_thread() {
 
 }
 
+/// Records pg error functions
 pub fn record_pg_error_fns(){
-    let _ = PG_ERROR_FNS.set({ resolve_pg_error_fns() });
+    let _ = PG_ERROR_FNS.set(resolve_pg_error_fns());
 }
 
 /// Returns typed functions for PG's ERRSTART, ERRCODE, ERRMSG and ERRFINISH.
 ///
 /// Returns all or None.
-pub fn resolve_pg_error_fns() -> Option<PgErrorFns> {
+fn resolve_pg_error_fns() -> Option<PgErrorFns> {
     unsafe {
         let errstart = dlsym(RTLD_DEFAULT, c"errstart".as_ptr());
         let errcode = dlsym(RTLD_DEFAULT, c"errcode".as_ptr());

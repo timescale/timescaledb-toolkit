@@ -26,6 +26,9 @@ pub struct Encoded(u32);
 
 const NUM_HIGH_BITS: u8 = 25;
 
+/// How many bits each value waiting in the `to_merge` buffer takes up.
+const ENCODED_BITS: u64 = (std::mem::size_of::<Encoded>() * 8) as u64;
+
 pub type Overflowing = bool;
 
 impl<'s> Storage<'s> {
@@ -73,13 +76,26 @@ impl<'s> Storage<'s> {
 
     fn add_encoded(&mut self, encoded: Encoded) -> Overflowing {
         self.to_merge.insert(encoded);
-        let max_sparse_bitsize = (1u64 << self.precision) * 6;
         // TODO what threshold?
-        if self.to_merge.len() as u64 * 32 > max_sparse_bitsize / 4 {
+        if self.to_merge.len() as u64 * ENCODED_BITS > self.sparse_limit_bits() / 4 {
             self.merge_buffers();
-            return self.compressed.num_bytes() as u64 * 8 > max_sparse_bitsize;
+            return self.is_overflowing();
         }
         false
+    }
+
+    /// The largest size, in bits, that the sparse layout may reach. This is
+    /// the size of the dense layout: one 6-bit counter for each of the
+    /// `2^precision` slots.
+    fn sparse_limit_bits(&self) -> u64 {
+        (1u64 << self.precision) * 6
+    }
+
+    /// True when this sketch has grown larger than the dense layout would
+    /// be, so it should be switched over. Only looks at values that have
+    /// already been merged in, so call `merge_buffers` first.
+    pub fn is_overflowing(&self) -> bool {
+        self.compressed.num_bytes() as u64 * 8 > self.sparse_limit_bits()
     }
 
     pub fn estimate_count(&mut self) -> u64 {
@@ -183,7 +199,7 @@ impl<'s> Storage<'s> {
 
         let mut overflowing = false;
         for encoded in other.iter() {
-            overflowing = self.add_encoded(encoded)
+            overflowing |= self.add_encoded(encoded)
         }
         overflowing
     }

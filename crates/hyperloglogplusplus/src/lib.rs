@@ -64,6 +64,7 @@ impl<'s, T, B> HyperLogLog<'s, T, B> {
     pub fn estimate_count(&mut self) -> u64 {
         use HyperLogLogStorage::*;
 
+        self.merge_all();
         match &mut self.storage {
             Sparse(s) => s.estimate_count(),
             Dense(s) => s.estimate_count(),
@@ -99,10 +100,18 @@ impl<'s, T, B> HyperLogLog<'s, T, B> {
         &self.storage
     }
 
+    /// Merges any values still waiting to be added. If the sketch has grown
+    /// too big in the process, it is switched from the sparse layout to the
+    /// fixed-size dense layout, so the layout only depends on what the sketch
+    /// holds and not on the order in which values arrived.
     pub fn merge_all(&mut self) {
-        match &mut self.storage {
-            HyperLogLogStorage::Sparse(s) => s.merge_buffers(),
-            HyperLogLogStorage::Dense(_) => {}
+        use HyperLogLogStorage::*;
+
+        if let Sparse(s) = &mut self.storage {
+            s.merge_buffers();
+            if s.is_overflowing() {
+                self.storage = Dense(s.immutable_to_dense());
+            }
         }
     }
 
@@ -149,8 +158,11 @@ where
         match (&mut self.storage, &other.storage) {
             (Sparse(s), Sparse(o)) => {
                 let overflowing = s.merge_in(o);
-                if overflowing {
-                    let dense = s.to_dense();
+                // the size is only checked every so often while values are
+                // added, so check once more at the end
+                s.merge_buffers();
+                if overflowing || s.is_overflowing() {
+                    let dense = s.immutable_to_dense();
                     self.storage = Dense(dense);
                 }
             }
@@ -368,8 +380,6 @@ mod tests {
         assert_eq!(hll_b.estimate_count(), baseline.estimate_count())
     }
 
-    // FIXME needs hash collision check
-    #[cfg(feature = "flaky_tests")]
     #[quickcheck]
     fn quick_merge_hll_8(values_a: Vec<u64>, values_b: Vec<u64>) {
         let mut hll_a = HyperLogLog::new(8, FnvBuildHasher::default());
@@ -387,15 +397,75 @@ mod tests {
 
         hll_a.merge_all();
         hll_b.merge_in(&hll_a);
-        let estimate = hll_b.estimate_count();
-        let baseline = baseline.estimate_count();
-        // FIXME
-        // if there's a hash collision between the elements unique to a and b
-        // the counts could be off slightly, check if there is in fact such a
-        // collision
-        if estimate > baseline + 5 || estimate < baseline.saturating_sub(6) {
-            panic!("{} != {}", estimate, baseline)
+        baseline.merge_all();
+        if hll_b.is_sparse() == baseline.is_sparse() {
+            assert_eq!(hll_b.estimate_count(), baseline.estimate_count());
+            return;
         }
+        // A sketch almost always grows as values are added. The exception is
+        // when a value replaces an existing entry: the stored size can then
+        // shrink by a byte or two. So two sketches holding the same values can
+        // end up in different layouts, but only when they sit right at the
+        // size limit.
+        // A sparse sketch over the limit is always wrong.
+        let sparse = if hll_b.is_sparse() { &hll_b } else { &baseline };
+        let limit = (1 << 8) * 6 / 8;
+        assert!(
+            sparse.num_bytes() <= limit && sparse.num_bytes() + 4 >= limit,
+            "layouts differ but the sparse sketch is not right at the limit: {} of {} bytes",
+            sparse.num_bytes(),
+            limit,
+        );
+    }
+
+    #[test]
+    fn merge_8_small_split() {
+        let mut hll_a = HyperLogLog::new(8, FnvBuildHasher::default());
+        let mut hll_b = HyperLogLog::new(8, FnvBuildHasher::default());
+        let mut baseline = HyperLogLog::new(8, FnvBuildHasher::default());
+        for i in 0u64..66 {
+            if i < 2 {
+                hll_a.add(&i);
+            } else {
+                hll_b.add(&i);
+            }
+            baseline.add(&i);
+        }
+        hll_a.merge_all();
+        hll_b.merge_in(&hll_a);
+        assert_eq!(hll_b.estimate_count(), baseline.estimate_count());
+        assert!(!hll_b.is_sparse());
+        assert!(!baseline.is_sparse());
+    }
+
+    #[test]
+    fn rollup_sparse_converts_to_dense() {
+        // Combine many small sketches in two rounds, the way stacked
+        // continuous aggregates do. Once the combined sketch is big enough,
+        // it should switch from the sparse layout to the dense layout.
+        let mut top = HyperLogLog::new(8, FnvBuildHasher::default());
+        for group in 0u64..400 {
+            let mut mid = HyperLogLog::new(8, FnvBuildHasher::default());
+            for part in 0u64..4 {
+                let mut leaf = HyperLogLog::new(8, FnvBuildHasher::default());
+                for i in 0u64..5 {
+                    leaf.add(&(group * 100 + part * 10 + i));
+                }
+                leaf.merge_all();
+                mid.merge_in(&leaf);
+            }
+            mid.merge_all();
+            assert!(mid.is_sparse());
+            top.merge_in(&mid);
+            top.merge_all();
+            // a sketch that has grown past the size limit must not stay in
+            // the sparse layout
+            if let HyperLogLogStorage::Sparse(s) = &top.storage {
+                assert!(!s.is_overflowing());
+            }
+        }
+        assert!(!top.is_sparse());
+        assert!(top.num_bytes() <= (1 << 8) * 6 / 8 + 1);
     }
 
     #[quickcheck]

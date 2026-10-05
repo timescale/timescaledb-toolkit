@@ -10,6 +10,8 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 #### Bug fixes
 
+* `rollup(hyperloglog)`: combined sketches now switch from the sparse layout to the fixed-size dense layout once they grow large, instead of growing without limit ([#982](https://github.com/timescale/timescaledb-toolkit/issues/982)). Oversized sketches already stored in the sparse layout switch the next time they are combined, so distinct counts from rolled-up sketches may change slightly after upgrading.
+
 #### Other notable changes
 
 #### Shout-outs

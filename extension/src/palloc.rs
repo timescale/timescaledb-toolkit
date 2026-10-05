@@ -1,9 +1,9 @@
+use pgrx::*;
 use std::{
     alloc::{GlobalAlloc, Layout, System},
     ops::{Deref, DerefMut},
     ptr::NonNull,
 };
-use pgrx::*;
 
 pub unsafe fn in_memory_context<T, F: FnOnce() -> T>(mctx: pg_sys::MemoryContext, f: F) -> T {
     let prev_ctx = unsafe { pg_sys::CurrentMemoryContext };
@@ -181,17 +181,16 @@ struct PgErrorFns {
 static PG_MAIN_THREAD: std::sync::OnceLock<std::thread::ThreadId> = std::sync::OnceLock::new();
 
 /// The PostgreSQL error functions
-static PG_ERROR_FNS:  std::sync::OnceLock<Option<PgErrorFns>> = std::sync::OnceLock::new();
+static PG_ERROR_FNS: std::sync::OnceLock<Option<PgErrorFns>> = std::sync::OnceLock::new();
 
 /// Record the current thread as the PostgreSQL main thread.
 /// Call from _PG_init, which PostgreSQL runs on the backend's thread.
 pub fn record_pg_main_thread() {
     let _ = PG_MAIN_THREAD.set(std::thread::current().id());
-
 }
 
 /// Records pg error functions
-pub fn record_pg_error_fns(){
+pub fn record_pg_error_fns() {
     let _ = PG_ERROR_FNS.set(resolve_pg_error_fns());
 }
 
@@ -211,15 +210,13 @@ fn resolve_pg_error_fns() -> Option<PgErrorFns> {
 
         Some(PgErrorFns {
             // Transmute because dlsym returns an untyped pointer
-            errstart: std::mem::transmute(errstart),
-            errcode: std::mem::transmute(errcode),
-            errmsg: std::mem::transmute(errmsg),
-            errfinish: std::mem::transmute(errfinish),
+            errstart: std::mem::transmute::<*mut std::ffi::c_void, Errstart>(errstart),
+            errcode: std::mem::transmute::<*mut std::ffi::c_void, Errcode>(errcode),
+            errmsg: std::mem::transmute::<*mut std::ffi::c_void, Errmsg>(errmsg),
+            errfinish: std::mem::transmute::<*mut std::ffi::c_void, Errfinish>(errfinish),
         })
     }
-
 }
-
 
 fn on_pg_main_thread() -> bool {
     PG_MAIN_THREAD.get() == Some(&std::thread::current().id())
@@ -230,12 +227,12 @@ fn on_pg_main_thread() -> bool {
 /// it is safe to call from inside the global allocator.
 unsafe fn pg_oom_error() -> ! {
     unsafe {
-        if let Some(Some(fns)) = PG_ERROR_FNS.get() {
-            if (fns.errstart)(PgLogLevel::ERROR as _, std::ptr::null()) {
-                (fns.errcode)(PgSqlErrorCode::ERRCODE_OUT_OF_MEMORY as _);
-                (fns.errmsg)(c"Out of memory".as_ptr());
-                (fns.errfinish)(c"palloc.rs".as_ptr(), 0, std::ptr::null());
-            }
+        if let Some(Some(fns)) = PG_ERROR_FNS.get()
+            && (fns.errstart)(PgLogLevel::ERROR as _, std::ptr::null())
+        {
+            (fns.errcode)(PgSqlErrorCode::ERRCODE_OUT_OF_MEMORY as _);
+            (fns.errmsg)(c"Out of memory".as_ptr());
+            (fns.errfinish)(c"palloc.rs".as_ptr(), 0, std::ptr::null());
         }
     }
     // errfinish never returns for ERROR; only reachable outside a real

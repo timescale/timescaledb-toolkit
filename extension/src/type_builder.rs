@@ -339,7 +339,7 @@ macro_rules! pg_type_impl {
                     };
                     let (data, _) = match unsafe { [<$name Data>]::try_ref(bytes) } {
                         Ok(wrapped) => wrapped,
-                        Err(e) => error!(concat!("invalid ", stringify!($name), " {:?}, got len {}"), e, bytes.len()),
+                        Err(e) => pgrx::error!(concat!("invalid ", stringify!($name), " {:?}, got len {}"), e, bytes.len()),
                     };
 
                     $name(data, $crate::type_builder::CachedDatum::FromInput(bytes)).into()
@@ -656,7 +656,7 @@ macro_rules! ron_inout_funcs_no_lifetime_impl {
 #[macro_export]
 macro_rules! ron_inout_funcs_impl {
     ($name:ident) => {
-        impl<'input> InOutFuncs for $name<'input> {
+        impl<'input> pgrx::InOutFuncs for $name<'input> {
             fn output(&self, buffer: &mut StringInfo) {
                 use $crate::serialization::{EncodedStr::*, str_to_db_encoding};
 

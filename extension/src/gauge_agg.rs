@@ -1,4 +1,5 @@
-use pgrx::*;
+use pgrx::prelude::{InOutFuncs, error, extension_sql, opname, pg_extern, pg_operator, pg_sys};
+use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
 
 use serde::{Deserialize, Serialize};
 
@@ -672,13 +673,14 @@ impl From<MetricSummary> for GaugeSummary {
 }
 
 #[cfg(any(test, feature = "pg_test"))]
-#[pg_schema]
+#[pgrx::pg_schema]
 mod tests {
     use pgrx_macros::pg_test;
 
     use crate::counter_agg::testing::*;
 
     use super::*;
+    use pgrx::Spi;
 
     macro_rules! select_one {
         ($client:expr, $stmt:expr, $type:ty) => {

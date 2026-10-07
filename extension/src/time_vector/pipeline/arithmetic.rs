@@ -1,9 +1,10 @@
-use pgrx::*;
-
 use super::*;
 
 use super::Element::Arithmetic;
-use Function::*;
+use Function::{
+    Abs, Add, Cbrt, Ceil, Div, Floor, Ln, Log10, LogN, Mod, Mul, Power, Round, Sign, Sqrt, Sub,
+    Trunc,
+};
 
 #[derive(
     Debug, Copy, Clone, flat_serialize_macro::FlatSerializable, serde::Serialize, serde::Deserialize,
@@ -288,7 +289,7 @@ pub fn pipeline_trunc() -> toolkit_experimental::UnstableTimevectorPipeline<'sta
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgrx::*;
+    use pgrx::Spi;
     use pgrx_macros::pg_test;
 
     #[pg_test]

@@ -1,6 +1,7 @@
 use std::{convert::TryInto, ops::Deref};
 
-use pgrx::*;
+use pgrx::prelude::{InOutFuncs, extension_sql, opname, pg_extern, pg_operator, pg_sys};
+use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
 
 use crate::{
     accessors::{
@@ -426,10 +427,10 @@ pub fn tdigest_sum(digest: TDigest<'_>) -> f64 {
 }
 
 #[cfg(any(test, feature = "pg_test"))]
-#[pg_schema]
+#[pgrx::pg_schema]
 mod tests {
     use super::*;
-
+    use pgrx::Spi;
     use pgrx_macros::pg_test;
 
     // Assert equality between two floats, within some fixed error range.

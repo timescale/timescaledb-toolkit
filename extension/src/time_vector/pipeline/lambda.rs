@@ -1,9 +1,8 @@
 use std::borrow::Cow;
 
-use pgrx::{
-    iter::{SetOfIterator, TableIterator},
-    *,
-};
+use Value::{Bool, Double, Time, Tuple};
+use pgrx::iter::{SetOfIterator, TableIterator};
+use std::mem::discriminant;
 
 use super::*;
 
@@ -354,9 +353,6 @@ impl Value {
 
 impl PartialOrd for Value {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        use Value::*;
-        use std::mem::discriminant;
-
         // XXX `NodeTag` somewhere inside `pg_sys::FunctionCallInfo` triggers
         // `improper_ctypes` lint. The `pgrx` author explains the issue in
         // details here:
@@ -378,7 +374,7 @@ impl PartialOrd for Value {
             (Double(l0), Double(r0)) => l0.partial_cmp(r0),
             (Time(l0), Time(r0)) => l0.partial_cmp(r0),
             (Tuple(l0), Tuple(r0)) => l0.partial_cmp(r0),
-            (Interval(l0), Interval(r0)) => unsafe {
+            (Value::Interval(l0), Value::Interval(r0)) => unsafe {
                 let res = pg_sys::DirectFunctionCall2Coll(
                     Some(interval_cmp),
                     pg_sys::InvalidOid,
@@ -410,7 +406,7 @@ impl PartialEq for Value {
             (Double(l0), Double(r0)) => l0 == r0,
             (Time(l0), Time(r0)) => l0 == r0,
             (Tuple(l0), Tuple(r0)) => l0 == r0,
-            (Interval(l0), Interval(r0)) => unsafe {
+            (Value::Interval(l0), Value::Interval(r0)) => unsafe {
                 let res = pg_sys::DirectFunctionCall2Coll(
                     Some(interval_eq),
                     pg_sys::InvalidOid,

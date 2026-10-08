@@ -183,7 +183,7 @@ impl<'s> Storage<'s> {
 
         let mut overflowing = false;
         for encoded in other.iter() {
-            overflowing = self.add_encoded(encoded)
+            overflowing |= self.add_encoded(encoded);
         }
         overflowing
     }

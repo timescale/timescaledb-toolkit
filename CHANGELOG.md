@@ -11,6 +11,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 #### Bug fixes
 
 * Add equality operators for `statssummary1d` and `statssummary2d`
+* Fix `rollup`/`hyperloglog_union` of sparse `hyperloglog` sketches never converting to dense (#982)
 
 #### Other notable changes
 

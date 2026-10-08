@@ -329,6 +329,35 @@ mod tests {
         assert!(hll.num_bytes() <= (1 << 16) * 6 / 8 + 1)
     }
 
+    #[test]
+    fn test_merge_sparse_overflows_to_dense() {
+        let sketch = |range: std::ops::Range<i32>| {
+            let mut hll = HyperLogLog::new(16, FnvBuildHasher::default());
+            for i in range {
+                hll.add(&i);
+            }
+            hll.merge_all();
+            assert!(hll.is_sparse());
+            hll
+        };
+
+        let mut left = sketch(0..10_000);
+        left.merge_in(&sketch(10_000..20_000));
+        let mut right = sketch(20_000..30_000);
+        right.merge_in(&sketch(30_000..40_000));
+        right.merge_all();
+        left.merge_in(&right);
+
+        let mut expected = HyperLogLog::new(16, FnvBuildHasher::default());
+        for i in 0..40_000 {
+            expected.add(&i);
+        }
+
+        assert!(!left.is_sparse());
+        assert_eq!(left.num_bytes(), 49_153);
+        assert_eq!(left.estimate_count(), expected.estimate_count());
+    }
+
     #[quickcheck]
     fn quick_hll_16(values: HashSet<u64>) -> TestResult {
         let mut hll = HyperLogLog::new(16, FnvBuildHasher::default());

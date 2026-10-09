@@ -1,10 +1,9 @@
+use pgrx::*;
 use std::{
     alloc::{GlobalAlloc, Layout, System},
     ops::{Deref, DerefMut},
     ptr::NonNull,
 };
-
-use pgrx::*;
 
 pub unsafe fn in_memory_context<T, F: FnOnce() -> T>(mctx: pg_sys::MemoryContext, f: F) -> T {
     let prev_ctx = unsafe { pg_sys::CurrentMemoryContext };
@@ -124,17 +123,138 @@ unsafe impl<T> ToInternal for *const T {
 // likelihood of aborts.
 //
 // [1] `oom=panic` tracking issue: https://github.com/rust-lang/rust/issues/43596
+//
+// Update (2026): on rustc >= 1.93, the panic!() approach aborts the whole
+// backend. The second out-of-memory panic that unwinds out of the global
+// allocator in one backend fails with "fatal runtime error: failed to
+// initiate panic" (bisected: 1.92 unwinds correctly, 1.93 aborts). An
+// unwind out of GlobalAlloc is documented undefined behavior, `-Zoom=panic`
+// was removed in 1.94, and `set_alloc_error_hook` is still nightly-only, so
+// no stable panic-based design exists. Instead, on the backend main thread
+// (recorded in _PG_init) we now report the error the way PostgreSQL C code
+// does: errstart/errfinish longjmp to the error handler and abort the
+// transaction without unwinding Rust frames. The skipped frames leak their
+// allocations on this path, which is acceptable. Other threads keep the
+// panic fallback. PostgreSQL's ErrorContext has a preallocated reserve, so
+// the report also works under genuine memory exhaustion.
 struct PanickingAllocator;
 
 #[global_allocator]
 static ALLOCATOR: PanickingAllocator = PanickingAllocator;
+
+// pgrx does not expose these in pg_sys (it routes errors through its
+// panic-based ereport! macro, which is exactly what we cannot use here).
+// Resolve them at runtime with dlsym: a link-time reference would make
+// the `cargo pgrx test` harness executable fail to link, because unlike
+// the extension cdylib it cannot have undefined symbols.
+unsafe extern "C" {
+    fn dlsym(
+        handle: *mut ::core::ffi::c_void,
+        symbol: *const ::core::ffi::c_char,
+    ) -> *mut ::core::ffi::c_void;
+}
+
+#[cfg(target_os = "macos")]
+const RTLD_DEFAULT: *mut ::core::ffi::c_void = -2isize as *mut ::core::ffi::c_void;
+#[cfg(not(target_os = "macos"))]
+const RTLD_DEFAULT: *mut ::core::ffi::c_void = std::ptr::null_mut();
+
+type Errstart = unsafe extern "C" fn(::core::ffi::c_int, *const ::core::ffi::c_char) -> bool;
+type Errcode = unsafe extern "C" fn(::core::ffi::c_int) -> ::core::ffi::c_int;
+type Errmsg = unsafe extern "C" fn(*const ::core::ffi::c_char, ...) -> ::core::ffi::c_int;
+type Errfinish = unsafe extern "C" fn(
+    *const ::core::ffi::c_char,
+    ::core::ffi::c_int,
+    *const ::core::ffi::c_char,
+);
+
+/// Postgres error functions ptrs, stored at _PG_init to avoid dlsym allocating memory in oom
+/// scenarios.
+struct PgErrorFns {
+    errstart: Errstart,
+    errcode: Errcode,
+    errmsg: Errmsg,
+    errfinish: Errfinish,
+}
+
+/// The PostgreSQL backend's main thread, recorded in _PG_init.
+static PG_MAIN_THREAD: std::sync::OnceLock<std::thread::ThreadId> = std::sync::OnceLock::new();
+
+/// The PostgreSQL error functions
+static PG_ERROR_FNS: std::sync::OnceLock<Option<PgErrorFns>> = std::sync::OnceLock::new();
+
+/// Record the current thread as the PostgreSQL main thread.
+/// Call from _PG_init, which PostgreSQL runs on the backend's thread.
+pub fn record_pg_main_thread() {
+    let _ = PG_MAIN_THREAD.set(std::thread::current().id());
+}
+
+/// Records pg error functions
+pub fn record_pg_error_fns() {
+    let _ = PG_ERROR_FNS.set(resolve_pg_error_fns());
+}
+
+/// Returns typed functions for PG's ERRSTART, ERRCODE, ERRMSG and ERRFINISH.
+///
+/// Returns all or None.
+fn resolve_pg_error_fns() -> Option<PgErrorFns> {
+    unsafe {
+        let errstart = dlsym(RTLD_DEFAULT, c"errstart".as_ptr());
+        let errcode = dlsym(RTLD_DEFAULT, c"errcode".as_ptr());
+        let errmsg = dlsym(RTLD_DEFAULT, c"errmsg".as_ptr());
+        let errfinish = dlsym(RTLD_DEFAULT, c"errfinish".as_ptr());
+
+        if errstart.is_null() || errcode.is_null() || errmsg.is_null() || errfinish.is_null() {
+            return None;
+        }
+
+        Some(PgErrorFns {
+            // Transmute because dlsym returns an untyped pointer
+            errstart: std::mem::transmute::<*mut std::ffi::c_void, Errstart>(errstart),
+            errcode: std::mem::transmute::<*mut std::ffi::c_void, Errcode>(errcode),
+            errmsg: std::mem::transmute::<*mut std::ffi::c_void, Errmsg>(errmsg),
+            errfinish: std::mem::transmute::<*mut std::ffi::c_void, Errfinish>(errfinish),
+        })
+    }
+}
+
+fn on_pg_main_thread() -> bool {
+    PG_MAIN_THREAD.get() == Some(&std::thread::current().id())
+}
+
+/// Raise a PostgreSQL "Out of memory" ERROR, which longjmps to the active
+/// error handler and aborts the transaction. Never unwinds Rust frames, so
+/// it is safe to call from inside the global allocator.
+unsafe fn pg_oom_error() -> ! {
+    unsafe {
+        if let Some(Some(fns)) = PG_ERROR_FNS.get()
+            && (fns.errstart)(PgLogLevel::ERROR as _, std::ptr::null())
+        {
+            (fns.errcode)(PgSqlErrorCode::ERRCODE_OUT_OF_MEMORY as _);
+            (fns.errmsg)(c"Out of memory".as_ptr());
+            (fns.errfinish)(c"palloc.rs".as_ptr(), 0, std::ptr::null());
+        }
+    }
+    // errfinish never returns for ERROR; only reachable outside a real
+    // PostgreSQL backend or if errstart refused the report.
+    std::process::abort()
+}
+
+/// Handle an allocation failure: PostgreSQL ERROR on the main thread,
+/// Rust panic elsewhere.
+unsafe fn oom() -> ! {
+    if on_pg_main_thread() {
+        unsafe { pg_oom_error() }
+    }
+    panic!("Out of memory")
+}
 
 unsafe impl GlobalAlloc for PanickingAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         unsafe {
             let p = System.alloc(layout);
             if p.is_null() {
-                panic!("Out of memory")
+                oom()
             }
             p
         }
@@ -148,7 +268,7 @@ unsafe impl GlobalAlloc for PanickingAllocator {
         unsafe {
             let p = System.alloc_zeroed(layout);
             if p.is_null() {
-                panic!("Out of memory")
+                oom()
             }
             p
         }
@@ -158,9 +278,79 @@ unsafe impl GlobalAlloc for PanickingAllocator {
         unsafe {
             let p = System.realloc(ptr, layout, new_size);
             if p.is_null() {
-                panic!("Out of memory")
+                oom()
             }
             p
         }
+    }
+}
+
+#[cfg(any(test, feature = "pg_test"))]
+#[pg_schema]
+mod tests {
+    use pgrx::pg_sys::errcodes::PgSqlErrorCode;
+    use pgrx::pg_sys::ffi::pg_guard_ffi_boundary;
+    use pgrx::{pg_sys::PgTryBuilder, pg_test};
+    use std::alloc::{Layout, alloc, dealloc};
+
+    #[derive(Debug, Eq, PartialEq)]
+    enum AllocationFailure {
+        PgOutOfMemory,
+        RustPanic,
+        DidNotFail,
+    }
+
+    fn force_global_allocator_oom() {
+        // This is a valid Layout but too large for the system allocator to satisfy.
+        // It drives the toolkit global allocator's null-return handling without
+        // consuming memory on the test machine.
+        let layout = Layout::from_size_align(isize::MAX as usize, 1).unwrap();
+
+        unsafe {
+            let ptr = alloc(layout);
+            if !ptr.is_null() {
+                dealloc(ptr, layout);
+            }
+        }
+    }
+
+    fn catch_allocation_failure() -> AllocationFailure {
+        PgTryBuilder::new(|| unsafe {
+            pg_guard_ffi_boundary(|| {
+                force_global_allocator_oom();
+                AllocationFailure::DidNotFail
+            })
+        })
+        .catch_when(PgSqlErrorCode::ERRCODE_OUT_OF_MEMORY, |_| {
+            AllocationFailure::PgOutOfMemory
+        })
+        .catch_rust_panic(|_| AllocationFailure::RustPanic)
+        .execute()
+    }
+
+    /// Forces two OOMs to validate that the extension DOES NOT
+    /// sigabrt, this test can perform differently with OOM guard enabled.
+    /// Depending on the version IF this fails we should get either a sigabrt or some
+    /// crash-like postgres error, for example:
+    /// [2026-09-29 13:45:40.900 CEST] [45672] [6abba4e3.b268]: LOG:  client backend (PID 45710) was terminated by signal 6: Abort trap: 6
+    /// [2026-09-29 13:45:40.900 CEST] [45672] [6abba4e3.b268]: DETAIL:  Failed process was running: SELECT "tests"."global_allocator_oom_raises_pg_error_twice_in_one_backend"();
+    /// [2026-09-29 13:45:40.900 CEST] [45672] [6abba4e3.b268]: LOG:  terminating any other active server processes
+    /// You normally SHOULD NOT see this erroring.
+
+    #[pg_test]
+    fn global_allocator_oom_raises_pg_error_twice_in_one_backend() {
+        let first = catch_allocation_failure();
+        let second = catch_allocation_failure();
+
+        assert_eq!(
+            first,
+            AllocationFailure::PgOutOfMemory,
+            "first allocation failure should be raised as a PostgreSQL out_of_memory ERROR"
+        );
+        assert_eq!(
+            second,
+            AllocationFailure::PgOutOfMemory,
+            "second allocation failure in the same backend should also be recoverable"
+        );
     }
 }

@@ -1,0 +1,190 @@
+name: Toolkit - Build packages
+# TODO Move to timescaledb-toolkit if we can access the hosted arm64 runner there.
+
+on:
+  # TODO pull_request:
+  # TODO I don't see why we should build on every push to main.  And what's release_toolkit_apt?
+  # push:
+  #   branches:
+  #     - main
+  #     - release_toolkit_apt
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release'
+        type: string
+        required: true
+      upload-artifacts:
+        description: 'Upload artifacts to PackageCloud'
+        type: boolean
+        required: false
+        default: false
+      commit-id:
+        description: 'commit id corresponding to Version to release'
+        type: string
+        required: false
+      tag-base:
+        description: 'Base name of container tag'
+        type: string
+        required: false
+  workflow_call:
+    inputs:
+      version:
+        description: 'Version to release'
+        type: string
+        required: true
+      upload-artifacts:
+        description: 'Upload artifacts to PackageCloud'
+        type: boolean
+        required: false
+        default: false
+      commit-id:
+        description: 'commit id corresponding to Version to release'
+        type: string
+        required: false
+      tag-base:
+        description: 'Base name of container tag'
+        type: string
+        required: false
+
+jobs:
+  package:
+    name: TimescaleDB Toolkit ${{ matrix.distro }} ${{ matrix.version }} ${{ matrix.name }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    env:
+      RUBYOPT: -W0
+    strategy:
+      fail-fast: false
+      # Duplicated from toolkit-image.yml - see documentation there.
+      # TODO deduplicate
+      matrix:
+        include:
+          # Rocky 8 amd64
+          - distro: rockylinux/rockylinux
+            version: 8
+            kind: GitHub
+            runner: ubuntu-22.04
+            arch: x86_64
+          # Rocky 9 amd64
+          - distro: rockylinux/rockylinux
+            version: 9
+            kind: GitHub
+            runner: ubuntu-22.04
+            arch: x86_64
+          # Rocky 10 amd64
+          - distro: rockylinux/rockylinux
+            version: 10
+            kind: GitHub
+            runner: ubuntu-22.04
+            arch: x86_64
+          # Debian - latest three releases, amd64
+          - distro: debian
+            version: 11
+            name: bullseye
+            kind: GitHub
+            runner: ubuntu-22.04
+            arch: amd64
+          - distro: debian
+            version: 12
+            name: bookworm
+            kind: GitHub
+            runner: ubuntu-22.04
+            arch: amd64
+          - distro: debian
+            version: 13
+            name: trixie
+            kind: GitHub
+            runner: ubuntu-22.04
+            arch: amd64
+          # Debian - latest three releases, arm64
+          - distro: debian
+            version: 11
+            name: bullseye
+            kind: RunsOn
+            runner: runs-on/fleet=linux-8cpu/env=ue1
+            arch: arm64
+          - distro: debian
+            version: 12
+            name: bookworm
+            kind: RunsOn
+            runner: runs-on/fleet=linux-8cpu/env=ue1
+            arch: arm64
+          - distro: debian
+            version: 13
+            name: trixie
+            kind: RunsOn
+            runner: runs-on/fleet=linux-8cpu/env=ue1
+            arch: arm64
+          # Ubuntu - latest two LTS, amd64
+          - distro: ubuntu
+            version: 24.04
+            name: noble
+            kind: GitHub
+            runner: ubuntu-22.04
+            arch: amd64
+          - distro: ubuntu
+            version: 26.04
+            name: resolute
+            kind: GitHub
+            runner: ubuntu-22.04
+            arch: amd64
+          # Ubuntu - latest two LTS, arm64
+          - distro: ubuntu
+            version: 24.04
+            name: noble
+            runner: runs-on/fleet=linux-8cpu/env=ue1
+            kind: RunsOn
+            arch: arm64
+          - distro: ubuntu
+            version: 26.04
+            name: resolute
+            runner: runs-on/fleet=linux-8cpu/env=ue1
+            kind: RunsOn
+            arch: arm64
+
+    steps:
+    - name: Install package_cloud
+      run: |
+        sudo apt-get -qq update
+        sudo apt-get -qq install gcc g++ make ruby-all-dev
+        sudo gem install rake --no-doc
+        sudo gem install rainbow -v 2.2.2 --no-doc
+        sudo gem install package_cloud --no-doc
+
+    - name: Checkout
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+    - name: Build Package
+      run: |
+        # `version` is required for all triggers but 'pull_request'.
+        # `commit-id` too, but we just omit that one.
+        tag_base="${{ inputs.tag-base || 'timescaledev/toolkit-builder' }}"
+        tag_distro="${{ matrix.distro }}"
+        tag_distro="${tag_distro##*/}"
+        docker_image="${tag_base}:${tag_distro}-${{ matrix.version }}-${{ matrix.arch }}"
+
+        docker pull "$docker_image"
+        toolkit/docker-run-package.sh \
+            $PWD/pkgdump \
+            "$docker_image" \
+            ${{ matrix.arch }} \
+            ${{ matrix.distro }} \
+            ${{ matrix.version }} \
+            ${{ inputs.version || 'LATEST-PR-ONLY' }} \
+            ${{ inputs.commit-id }}
+        ls pkgdump
+
+    - name: Upload to packagecloud when on release branch
+      if: ${{ inputs.upload-artifacts || endsWith(github.ref, 'release_toolkit_apt') }}
+      env:
+        PACKAGECLOUD_TOKEN: ${{ secrets.PACKAGECLOUD_TOKEN }}
+      run: toolkit/upload-packages.sh ${{ matrix.distro }} ${{ matrix.version }} ${{ matrix.name }}
+
+    - name: Upload packages as artifact
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      with:
+        # We don't have to get so specific if we don't want to:  if we were to just say "name: Toolkit packages",
+        # github will happily bundle them into one zip.
+        name: TimescaleDB toolkit ${{ matrix.distro == 'rockylinux/rockylinux' && 'rockylinux' || matrix.distro }} ${{ matrix.version }} ${{ matrix.arch }}
+        path: pkgdump
+        overwrite: true

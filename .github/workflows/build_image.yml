@@ -1,0 +1,180 @@
+name: Toolkit - Build container image for building and packaging
+on:
+  # TODO fix and enable.  currently, even when no pull request exists, github is not happy:
+  # The workflow is not valid.
+  # .github/workflows/toolkit-image.yml (Line: 9, Col: 18):
+  # Unrecognized named-value: 'github'. Located at position 1 within expression: github.event.pull_request.number
+  # pull_request:
+  #   inputs:
+  #     tag-base:
+  #       type: string
+  #       default: timescaledev/toolkit-builder-pr${{ github.event.pull_request.number }}
+  #     toolkit-commit:
+  #       type: string
+  #       default: main
+  workflow_dispatch:
+    inputs:
+      tag-base:
+        description: 'Base name of container tag'
+        type: string
+        required: true
+      toolkit-commit:
+        description: 'Toolkit commit (branch, tag, etc.) to build image from'
+        type: string
+        required: true
+
+jobs:
+  build_images:
+    env:
+      DOCKER_BUILDKIT: 1
+      DOCKER_BUILDX_VERSION: "0.11.2"
+      ARCH: ${{ matrix.arch }}
+      IMAGE_TAG: ${{ inputs.tag-base }}:${{ matrix.tag_distro }}-${{ matrix.version }}-${{ matrix.arch }}
+      OS_CODE_NAME: ${{ matrix.name }}
+      OS_NAME: ${{ matrix.distro }}
+      OS_VERSION: ${{ matrix.version || 'none' }}
+
+    name: Toolkit build image ${{ matrix.distro }} ${{ matrix.version }} ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # Keys:
+        # - distro: source image name, e.g. rockylinux/rockylinux, debian, etc.
+        # - tag_distro: distro name used in the published image tag when distro
+        #   is not already a valid Docker tag component
+        # - version: distro version used to assemble base image name and postgresql package names
+        # - name: code name of version (omit except for Debian derivatives)
+        # - kind: GitHub (normal github-hosted) | RunsOn (RunsOn fleet for our aarch64 builds)
+        # - runner: complementary to `kind`.  `ubuntu-22.04` for `kind: GitHub`
+        # - arch: Used for both Docker platform AND package architecture.
+        #   - ( x86_64 | aarch64 ) for Red Hat derivatives.
+        #   - ( amd64 | arm64 ) for Debian derivatives.
+        #   Docker understands both.
+        # platform we ask GitHub run our scripts on.  Our scripts launch the
+        # target system (e.g. Debian-11) under Docker from there.
+        # The EC2 type run an image not controlled by this configuration, but by aws/kops/values/eu-west-1.yaml in
+        # https://github.com/timescale/savannah-infra/pull/1581/files#diff-a486fc78304661c6f53041d462e4cfaf1e461d228a162ef34d68c87e7886f3ccR29
+        include:
+          # Rocky 8 amd64
+          - distro: rockylinux/rockylinux
+            tag_distro: rockylinux
+            version: 8
+            kind: GitHub
+            runner: ubuntu-22.04
+            arch: x86_64
+          # Rocky 9 amd64
+          - distro: rockylinux/rockylinux
+            tag_distro: rockylinux
+            version: 9
+            kind: GitHub
+            runner: ubuntu-22.04
+            arch: x86_64
+          - distro: rockylinux/rockylinux
+            tag_distro: rockylinux
+            version: 10
+            kind: GitHub
+            runner: ubuntu-22.04
+            arch: x86_64
+          # Debian - latest three releases, amd64
+          - distro: debian
+            tag_distro: debian
+            version: 11
+            name: bullseye
+            kind: GitHub
+            runner: ubuntu-22.04
+            arch: amd64
+          - distro: debian
+            tag_distro: debian
+            version: 12
+            name: bookworm
+            kind: GitHub
+            runner: ubuntu-22.04
+            arch: amd64
+          - distro: debian
+            tag_distro: debian
+            version: 13
+            name: trixie
+            kind: GitHub
+            runner: ubuntu-22.04
+            arch: amd64
+          # Debian - latest three releases, arm64
+          - distro: debian
+            tag_distro: debian
+            version: 11
+            name: bullseye
+            kind: RunsOn
+            runner: runs-on/fleet=linux-8cpu/env=ue1
+            arch: arm64
+          - distro: debian
+            tag_distro: debian
+            version: 12
+            name: bookworm
+            kind: RunsOn
+            runner: runs-on/fleet=linux-8cpu/env=ue1
+            arch: arm64
+          - distro: debian
+            tag_distro: debian
+            version: 13
+            name: trixie
+            kind: RunsOn
+            runner: runs-on/fleet=linux-8cpu/env=ue1
+            arch: arm64
+          # Ubuntu - latest two LTS, amd64
+          - distro: ubuntu
+            tag_distro: ubuntu
+            version: 24.04
+            name: noble
+            kind: GitHub
+            runner: ubuntu-22.04
+            arch: amd64
+          - distro: ubuntu
+            tag_distro: ubuntu
+            version: 26.04
+            name: resolute
+            kind: GitHub
+            runner: ubuntu-22.04
+            arch: amd64
+          # Ubuntu - latest two LTS, arm64
+          - distro: ubuntu
+            tag_distro: ubuntu
+            version: 24.04
+            name: noble
+            runner: runs-on/fleet=linux-8cpu/env=ue1
+            kind: RunsOn
+            arch: arm64
+          - distro: ubuntu
+            tag_distro: ubuntu
+            version: 26.04
+            name: resolute
+            runner: runs-on/fleet=linux-8cpu/env=ue1
+            kind: RunsOn
+            arch: arm64
+
+    steps:
+    - name: Login to DockerHub
+      env:
+        DOCKER_USER: ${{ secrets.ORG_DOCKER_HUB_USERNAME }}
+        DOCKER_PASS: ${{ secrets.ORG_DOCKER_HUB_ACCESS_TOKEN }}
+      run: docker login -u $DOCKER_USER -p $DOCKER_PASS
+
+    - name: Checkout
+      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        repository: timescale/timescaledb-toolkit
+        ref: ${{ inputs.toolkit-commit }}
+
+    - name: Build Image
+      run: |
+           docker build \
+                --platform "$ARCH" \
+                --build-arg ARCH="$ARCH" \
+                --build-arg OS_NAME="$OS_NAME" \
+                --build-arg OS_VERSION="$OS_VERSION" \
+                --build-arg OS_CODE_NAME="$OS_CODE_NAME" \
+                -f docker/ci/Dockerfile \
+                -t "$IMAGE_TAG" \
+                .
+
+    - name: Push Image
+      run: docker push "$IMAGE_TAG"

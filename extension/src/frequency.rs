@@ -2,12 +2,15 @@
 
 use std::fmt;
 
-use pgrx::{
-    iter::{SetOfIterator, TableIterator},
-    *,
+use pgrx::prelude::{
+    FromDatum, InOutFuncs, PgSqlErrorCode, extension_sql, name, opname, pg_extern, pg_operator,
+    pg_sys::{self, Datum, Oid},
 };
-
-use pg_sys::{Datum, Oid};
+use pgrx::{
+    AnyElement, StringInfo, callconv,
+    iter::{SetOfIterator, TableIterator},
+    nullable, rust_regtypein, varlena_to_byte_slice,
+};
 
 use serde::{
     Deserialize, Serialize,
@@ -1729,9 +1732,10 @@ unsafe fn varlena_to_string(vl: *const pg_sys::varlena) -> String {
 }
 
 #[cfg(any(test, feature = "pg_test"))]
-#[pg_schema]
+#[pgrx::pg_schema]
 mod tests {
     use super::*;
+    use pgrx::{Spi, vardata_any, varsize_any_exhdr};
     use pgrx_macros::pg_test;
     use rand::{distr::Uniform, prelude::*};
     use rand_distr::Zeta;

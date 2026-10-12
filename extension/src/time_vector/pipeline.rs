@@ -10,7 +10,7 @@ mod sort;
 
 use std::convert::TryInto;
 
-use pgrx::*;
+use pgrx::{PgList, is_a};
 
 use super::*;
 
@@ -324,7 +324,7 @@ pub fn lttb_pipeline_element(
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgrx::*;
+    use pgrx::Spi;
     use pgrx_macros::pg_test;
 
     #[pg_test]

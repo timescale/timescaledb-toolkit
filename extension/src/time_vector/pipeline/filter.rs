@@ -1,5 +1,3 @@
-use pgrx::*;
-
 use super::*;
 
 // TODO is (stable, parallel_safe) correct?
@@ -59,7 +57,7 @@ pub fn filter_lambda_over_series(
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgrx::*;
+    use pgrx::Spi;
     use pgrx_macros::pg_test;
 
     #[pg_test]

@@ -18,8 +18,36 @@ static ALTERABLE_PROPERTIES: [&str; 6] = [
 #[path = "../../../extension/src/stabilization_info.rs"]
 mod stabilization_info;
 
+// Fails the update if any objects outside the extension depend on objects
+// in toolkit_experimental, which DROP SCHEMA ... CASCADE would
+// otherwise drop along with their data.
+const CHECK_NO_EXPERIMENTAL_DEPENDENCIES: &str = r#"DO $$
+BEGIN
+    IF EXISTS (
+        SELECT
+        FROM pg_catalog.pg_depend dep
+        CROSS JOIN LATERAL pg_catalog.pg_identify_object(dep.refclassid, dep.refobjid, 0) ref
+        -- objects in the schema, and the schema itself
+        WHERE COALESCE(ref.schema, ref.identity) OPERATOR(pg_catalog.=) 'toolkit_experimental'
+          -- skip internal and auto-created helper objects
+          AND dep.deptype OPERATOR(pg_catalog.=) ANY ('{n,a}'::pg_catalog."char"[])
+          -- skip extension objects, they get recreated anyway
+          AND NOT EXISTS (
+              SELECT FROM pg_catalog.pg_depend ext
+              WHERE ext.classid OPERATOR(pg_catalog.=) dep.classid
+                AND ext.objid OPERATOR(pg_catalog.=) dep.objid
+                AND ext.deptype OPERATOR(pg_catalog.=) 'e')
+    ) THEN
+        -- abort the whole update so nothing gets dropped
+        RAISE EXCEPTION 'cannot update timescaledb_toolkit: objects depend on the toolkit_experimental schema'
+            USING HINT = 'Drop or migrate the objects that depend on toolkit_experimental, then retry ALTER EXTENSION timescaledb_toolkit UPDATE.';
+    END IF;
+END
+$$;"#;
+
 // our update script is a copy of the install script with the following changes
-// 1. we drop the experimental schema so everything inside it is dropped.
+// 1. we fail the update if any user objects depend on the experimental schema,
+//    otherwise we drop the experimental schema so everything inside it is dropped.
 // 2. drop the event triggers in case we're coming from a version that had them
 // 3. for all CREATEs we check if the object is new in `current_version`
 //     a. if it is, we output the CREATE as-is
@@ -32,9 +60,11 @@ pub(crate) fn generate_from_install(
 ) {
     let new_stabilizations = new_stabilizations(from_version, current_version);
 
+    writeln!(&mut upgrade_file, "{CHECK_NO_EXPERIMENTAL_DEPENDENCIES}").unwrap();
     writeln!(
         &mut upgrade_file,
-        "DROP SCHEMA IF EXISTS toolkit_experimental CASCADE;\n\
+        "-- experimental objects are always recreated from scratch
+        DROP SCHEMA IF EXISTS toolkit_experimental CASCADE;\n\
         -- drop the EVENT TRIGGERs; there's no CREATE OR REPLACE for those
         DROP EVENT TRIGGER IF EXISTS disallow_experimental_deps CASCADE;\n\
         DROP EVENT TRIGGER IF EXISTS disallow_experimental_dependencies_on_views CASCADE;\n\
@@ -420,6 +450,22 @@ CREATE OPERATOR = (
         assert!(upgrade_script.contains("CREATE OPERATOR = ("));
         assert!(upgrade_script.contains("COMMUTATOR = =,"));
         assert!(upgrade_script.contains("NEGATOR = <>"));
+    }
+
+    #[test]
+    fn dependency_check_precedes_experimental_schema_drop() {
+        let mut upgrade_script = Vec::new();
+
+        generate_from_install("1.23.0", "1.24.0", &b""[..], &mut upgrade_script);
+
+        let upgrade_script = String::from_utf8(upgrade_script).unwrap();
+        let check = upgrade_script
+            .find("cannot update timescaledb_toolkit: objects depend on the toolkit_experimental schema")
+            .expect("missing experimental dependency check");
+        let drop = upgrade_script
+            .find("DROP SCHEMA IF EXISTS toolkit_experimental CASCADE;")
+            .expect("missing experimental schema drop");
+        assert!(check < drop);
     }
 }
 

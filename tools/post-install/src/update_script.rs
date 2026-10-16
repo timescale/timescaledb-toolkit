@@ -18,8 +18,46 @@ static ALTERABLE_PROPERTIES: [&str; 6] = [
 #[path = "../../../extension/src/stabilization_info.rs"]
 mod stabilization_info;
 
+// Fails the update if DROP SCHEMA toolkit_experimental CASCADE would drop
+// anything that isn't part of the extension, such as user tables with columns
+// of experimental types, or views using experimental functions or operators.
+// It follows the same dependencies as the CASCADE does, starting at the schema.
+// Objects that only depend internally or automatically on an experimental
+// object, like the array types of experimental types, are followed but don't
+// count as user objects.
+const CHECK_NO_EXPERIMENTAL_DEPENDENCIES: &str = r#"DO $$
+BEGIN
+    IF EXISTS (
+        WITH RECURSIVE dropped(classid, objid, deptype) AS (
+            SELECT 'pg_catalog.pg_namespace'::pg_catalog.regclass::pg_catalog.oid,
+                   pg_catalog.to_regnamespace('toolkit_experimental')::pg_catalog.oid,
+                   'i'::pg_catalog."char"
+          UNION
+            SELECT dep.classid, dep.objid, dep.deptype
+            FROM dropped d
+            JOIN pg_catalog.pg_depend dep
+              ON dep.refclassid OPERATOR(pg_catalog.=) d.classid
+             AND dep.refobjid OPERATOR(pg_catalog.=) d.objid
+            WHERE dep.deptype OPERATOR(pg_catalog.=) ANY ('{n,a,i}'::pg_catalog."char"[])
+        )
+        SELECT FROM dropped d
+        WHERE d.deptype OPERATOR(pg_catalog.=) 'n'
+          AND NOT EXISTS (
+              SELECT FROM pg_catalog.pg_depend ext
+              WHERE ext.classid OPERATOR(pg_catalog.=) d.classid
+                AND ext.objid OPERATOR(pg_catalog.=) d.objid
+                AND ext.deptype OPERATOR(pg_catalog.=) 'e')
+    ) THEN
+        -- abort the whole update so nothing gets dropped
+        RAISE EXCEPTION 'cannot drop toolkit_experimental because other objects depend on it'
+            USING HINT = 'Drop or migrate the objects that depend on toolkit_experimental, then retry ALTER EXTENSION timescaledb_toolkit UPDATE.';
+    END IF;
+END
+$$;"#;
+
 // our update script is a copy of the install script with the following changes
-// 1. we drop the experimental schema so everything inside it is dropped.
+// 1. we fail the update if any user objects depend on the experimental schema,
+//    otherwise we drop the experimental schema so everything inside it is dropped.
 // 2. drop the event triggers in case we're coming from a version that had them
 // 3. for all CREATEs we check if the object is new in `current_version`
 //     a. if it is, we output the CREATE as-is
@@ -32,9 +70,11 @@ pub(crate) fn generate_from_install(
 ) {
     let new_stabilizations = new_stabilizations(from_version, current_version);
 
+    writeln!(&mut upgrade_file, "{CHECK_NO_EXPERIMENTAL_DEPENDENCIES}").unwrap();
     writeln!(
         &mut upgrade_file,
-        "DROP SCHEMA IF EXISTS toolkit_experimental CASCADE;\n\
+        "-- experimental objects are always recreated from scratch
+        DROP SCHEMA IF EXISTS toolkit_experimental CASCADE;\n\
         -- drop the EVENT TRIGGERs; there's no CREATE OR REPLACE for those
         DROP EVENT TRIGGER IF EXISTS disallow_experimental_deps CASCADE;\n\
         DROP EVENT TRIGGER IF EXISTS disallow_experimental_dependencies_on_views CASCADE;\n\
@@ -420,6 +460,22 @@ CREATE OPERATOR = (
         assert!(upgrade_script.contains("CREATE OPERATOR = ("));
         assert!(upgrade_script.contains("COMMUTATOR = =,"));
         assert!(upgrade_script.contains("NEGATOR = <>"));
+    }
+
+    #[test]
+    fn dependency_check_precedes_experimental_schema_drop() {
+        let mut upgrade_script = Vec::new();
+
+        generate_from_install("1.23.0", "1.24.0", &b""[..], &mut upgrade_script);
+
+        let upgrade_script = String::from_utf8(upgrade_script).unwrap();
+        let check = upgrade_script
+            .find("cannot drop toolkit_experimental because other objects depend on it")
+            .expect("missing experimental dependency check");
+        let drop = upgrade_script
+            .find("DROP SCHEMA IF EXISTS toolkit_experimental CASCADE;")
+            .expect("missing experimental schema drop");
+        assert!(check < drop);
     }
 }
 

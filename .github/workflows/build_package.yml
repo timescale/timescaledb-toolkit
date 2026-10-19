@@ -164,7 +164,7 @@ jobs:
         docker_image="${tag_base}:${tag_distro}-${{ matrix.version }}-${{ matrix.arch }}"
 
         docker pull "$docker_image"
-        toolkit/docker-run-package.sh \
+        scripts/docker-run-package.sh \
             $PWD/pkgdump \
             "$docker_image" \
             ${{ matrix.arch }} \
@@ -178,7 +178,7 @@ jobs:
       if: ${{ inputs.upload-artifacts || endsWith(github.ref, 'release_toolkit_apt') }}
       env:
         PACKAGECLOUD_TOKEN: ${{ secrets.PACKAGECLOUD_TOKEN }}
-      run: toolkit/upload-packages.sh ${{ matrix.distro }} ${{ matrix.version }} ${{ matrix.name }}
+      run: scripts/upload-packages.sh ${{ matrix.distro }} ${{ matrix.version }} ${{ matrix.name }}
 
     - name: Upload packages as artifact
       uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

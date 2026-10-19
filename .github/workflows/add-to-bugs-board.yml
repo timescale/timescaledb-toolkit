@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/add-to-project@v1.0.2
         with:
-          project-url: https://github.com/orgs/timescale/projects/55
+          project-url: https://github.com/orgs/timescale/projects/186
           github-token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
 
 

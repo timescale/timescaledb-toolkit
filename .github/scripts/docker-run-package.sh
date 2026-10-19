@@ -45,5 +45,5 @@ docker run \
         /bin/sh -exs <<EOF
 exec 2>&1
 cd timescaledb-toolkit
-su postgres -c "/release-build-scripts/.github/toolkit/package-$pkg.sh $OS_NAME $DOCKER_PACKAGE_DIR $TOOLKIT_VERSION $TOOLKIT_COMMIT"
+su postgres -c "/release-build-scripts/.github/scripts/package-$pkg.sh $OS_NAME $DOCKER_PACKAGE_DIR $TOOLKIT_VERSION $TOOLKIT_COMMIT"
 EOF

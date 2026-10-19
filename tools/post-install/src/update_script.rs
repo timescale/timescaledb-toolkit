@@ -18,39 +18,45 @@ static ALTERABLE_PROPERTIES: [&str; 6] = [
 #[path = "../../../extension/src/stabilization_info.rs"]
 mod stabilization_info;
 
-// Fails the update if DROP SCHEMA toolkit_experimental CASCADE would drop
-// anything that isn't part of the extension, such as user tables with columns
-// of experimental types, or views using experimental functions or operators.
-// It follows the same dependencies as the CASCADE does, starting at the schema.
-// Objects that only depend internally or automatically on an experimental
-// object, like the array types of experimental types, are followed but don't
-// count as user objects.
+// Fails the update if any objects outside the extension depend on objects
+// in toolkit_experimental, which DROP SCHEMA ... CASCADE would
+// otherwise drop along with their data.
 const CHECK_NO_EXPERIMENTAL_DEPENDENCIES: &str = r#"DO $$
+DECLARE
+    dependents pg_catalog.text;
 BEGIN
-    IF EXISTS (
-        WITH RECURSIVE dropped(classid, objid, deptype) AS (
-            SELECT 'pg_catalog.pg_namespace'::pg_catalog.regclass::pg_catalog.oid,
-                   pg_catalog.to_regnamespace('toolkit_experimental')::pg_catalog.oid,
-                   'i'::pg_catalog."char"
-          UNION
-            SELECT dep.classid, dep.objid, dep.deptype
-            FROM dropped d
-            JOIN pg_catalog.pg_depend dep
-              ON dep.refclassid OPERATOR(pg_catalog.=) d.classid
-             AND dep.refobjid OPERATOR(pg_catalog.=) d.objid
-            WHERE dep.deptype OPERATOR(pg_catalog.=) ANY ('{n,a,i}'::pg_catalog."char"[])
-        )
-        SELECT FROM dropped d
-        WHERE d.deptype OPERATOR(pg_catalog.=) 'n'
+    SELECT pg_catalog.string_agg(d.description, E'\n' ORDER BY d.description)
+    INTO dependents
+    FROM (
+        SELECT DISTINCT pg_catalog.pg_describe_object(dep.classid, dep.objid, dep.objsubid) AS description
+        -- start from the extension's members rather than scanning all of pg_depend
+        FROM pg_catalog.pg_depend member
+        CROSS JOIN LATERAL pg_catalog.pg_identify_object(member.classid, member.objid, 0) ref
+        JOIN pg_catalog.pg_depend dep
+          ON dep.refclassid OPERATOR(pg_catalog.=) member.classid
+         AND dep.refobjid OPERATOR(pg_catalog.=) member.objid
+        WHERE member.refclassid OPERATOR(pg_catalog.=) 'pg_catalog.pg_extension'::pg_catalog.regclass
+          AND member.refobjid OPERATOR(pg_catalog.=) (
+              SELECT oid FROM pg_catalog.pg_extension
+              WHERE extname OPERATOR(pg_catalog.=) 'timescaledb_toolkit')
+          AND member.deptype OPERATOR(pg_catalog.=) 'e'
+          -- objects in the schema, and the schema itself
+          AND COALESCE(ref.schema, ref.identity) OPERATOR(pg_catalog.=) 'toolkit_experimental'
+          -- skip internal and auto-created helper objects
+          AND dep.deptype OPERATOR(pg_catalog.=) ANY ('{n,a}'::pg_catalog."char"[])
+          -- skip extension objects, they get recreated anyway
           AND NOT EXISTS (
               SELECT FROM pg_catalog.pg_depend ext
-              WHERE ext.classid OPERATOR(pg_catalog.=) d.classid
-                AND ext.objid OPERATOR(pg_catalog.=) d.objid
+              WHERE ext.classid OPERATOR(pg_catalog.=) dep.classid
+                AND ext.objid OPERATOR(pg_catalog.=) dep.objid
                 AND ext.deptype OPERATOR(pg_catalog.=) 'e')
-    ) THEN
+    ) d;
+
+    IF dependents IS NOT NULL THEN
         -- abort the whole update so nothing gets dropped
-        RAISE EXCEPTION 'cannot drop toolkit_experimental because other objects depend on it'
-            USING HINT = 'Drop or migrate the objects that depend on toolkit_experimental, then retry ALTER EXTENSION timescaledb_toolkit UPDATE.';
+        RAISE EXCEPTION 'cannot update timescaledb_toolkit: objects depend on the toolkit_experimental schema'
+            USING DETAIL = pg_catalog.format(E'Updating drops and recreates toolkit_experimental, which would drop these objects:\n%s', dependents),
+                  HINT = 'Drop or migrate these objects off toolkit_experimental, then retry ALTER EXTENSION timescaledb_toolkit UPDATE.';
     END IF;
 END
 $$;"#;
@@ -470,7 +476,7 @@ CREATE OPERATOR = (
 
         let upgrade_script = String::from_utf8(upgrade_script).unwrap();
         let check = upgrade_script
-            .find("cannot drop toolkit_experimental because other objects depend on it")
+            .find("cannot update timescaledb_toolkit: objects depend on the toolkit_experimental schema")
             .expect("missing experimental dependency check");
         let drop = upgrade_script
             .find("DROP SCHEMA IF EXISTS toolkit_experimental CASCADE;")

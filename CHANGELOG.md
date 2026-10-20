@@ -15,7 +15,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 #### Other notable changes
 
-* Extension updates now fail instead of dropping user objects that depend on `toolkit_experimental`, along with their data, such as table columns of experimental types or views using experimental functions
+* Extension updates now fail instead of silently dropping columns of `toolkit_experimental` types, along with their data
 
 #### Shout-outs
 

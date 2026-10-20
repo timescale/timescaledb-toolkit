@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/add-to-project@v1.0.2
         with:
-          project-url: https://github.com/orgs/timescale/projects/55
+          project-url: https://github.com/orgs/timescale/projects/186
           github-token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
 
 
@@ -27,7 +27,7 @@ jobs:
         with:
           gh_token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
           organization: timescale
-          project_id: 55
+          project_id: 186
           resource_node_id: ${{ github.event.issue.node_id }}
           status_value: 'Waiting for Author'
 
@@ -57,6 +57,6 @@ jobs:
         with:
           gh_token: ${{ secrets.ORG_AUTOMATION_TOKEN }}
           organization: timescale
-          project_id: 55
+          project_id: 186
           resource_node_id: ${{ github.event.issue.node_id }}
           status_value: 'Waiting for Engineering'

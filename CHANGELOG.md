@@ -15,6 +15,8 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 #### Other notable changes
 
+* Extension updates now fail instead of silently dropping columns of `toolkit_experimental` types, along with their data
+
 #### Shout-outs
 
 **Full Changelog**: [TODO]

@@ -18,6 +18,29 @@ static ALTERABLE_PROPERTIES: [&str; 6] = [
 #[path = "../../../extension/src/stabilization_info.rs"]
 mod stabilization_info;
 
+// Fails the update if any tables, views or types have columns of types from
+// toolkit_experimental, which DROP SCHEMA ... CASCADE would otherwise drop,
+// along with their data.
+const CHECK_NO_EXPERIMENTAL_COLUMNS: &str = r#"DO $$
+BEGIN
+    IF EXISTS (
+        SELECT
+        FROM pg_catalog.pg_attribute att
+        JOIN pg_catalog.pg_class rel ON rel.oid OPERATOR(pg_catalog.=) att.attrelid
+        JOIN pg_catalog.pg_type typ ON typ.oid OPERATOR(pg_catalog.=) att.atttypid
+        -- the base type, for columns of a domain type
+        LEFT JOIN pg_catalog.pg_type base ON base.oid OPERATOR(pg_catalog.=) typ.typbasetype
+        -- array types live in the same schema as their element type
+        WHERE pg_catalog.to_regnamespace('toolkit_experimental')::pg_catalog.oid OPERATOR(pg_catalog.=)
+              ANY (ARRAY[rel.relnamespace, typ.typnamespace, base.typnamespace])
+    ) THEN
+        -- abort the whole update so nothing gets dropped
+        RAISE EXCEPTION 'cannot update timescaledb_toolkit: columns use toolkit_experimental types'
+            USING HINT = 'Drop or migrate the objects with columns of toolkit_experimental types, then retry ALTER EXTENSION timescaledb_toolkit UPDATE.';
+    END IF;
+END
+$$;"#;
+
 // our update script is a copy of the install script with the following changes
 // 1. we drop the experimental schema so everything inside it is dropped.
 // 2. drop the event triggers in case we're coming from a version that had them
@@ -32,6 +55,7 @@ pub(crate) fn generate_from_install(
 ) {
     let new_stabilizations = new_stabilizations(from_version, current_version);
 
+    writeln!(&mut upgrade_file, "{CHECK_NO_EXPERIMENTAL_COLUMNS}").unwrap();
     writeln!(
         &mut upgrade_file,
         "DROP SCHEMA IF EXISTS toolkit_experimental CASCADE;\n\
@@ -420,6 +444,22 @@ CREATE OPERATOR = (
         assert!(upgrade_script.contains("CREATE OPERATOR = ("));
         assert!(upgrade_script.contains("COMMUTATOR = =,"));
         assert!(upgrade_script.contains("NEGATOR = <>"));
+    }
+
+    #[test]
+    fn dependency_check_precedes_experimental_schema_drop() {
+        let mut upgrade_script = Vec::new();
+
+        generate_from_install("1.23.0", "1.24.0", &b""[..], &mut upgrade_script);
+
+        let upgrade_script = String::from_utf8(upgrade_script).unwrap();
+        let check = upgrade_script
+            .find("cannot update timescaledb_toolkit: columns use toolkit_experimental types")
+            .expect("missing experimental dependency check");
+        let drop = upgrade_script
+            .find("DROP SCHEMA IF EXISTS toolkit_experimental CASCADE;")
+            .expect("missing experimental schema drop");
+        assert!(check < drop);
     }
 }
 

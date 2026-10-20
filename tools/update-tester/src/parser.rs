@@ -31,24 +31,6 @@ pub struct Test {
     pub min_toolkit_version: Option<Version>,
 }
 
-impl Test {
-    // for checks the runner builds itself rather than reading from a markdown file
-    pub fn generated(location: String, header: String, text: String) -> Self {
-        Test {
-            location,
-            header,
-            text,
-            output: Vec::new(),
-            transactional: false,
-            ignore_output: false,
-            precision_limits: HashMap::new(),
-            creation: false,
-            validation: false,
-            min_toolkit_version: None,
-        }
-    }
-}
-
 pub fn extract_tests(root: &str) -> Vec<TestFile> {
     // TODO handle when root is a file
     let mut all_tests = vec![];

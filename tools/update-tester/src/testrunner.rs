@@ -48,12 +48,7 @@ pub fn run_update_tests<OnErr: FnMut(Test, TestError)>(
                 }
             }
         });
-        if let Err(failure) =
-            check_update_blocked_by_experimental_dependencies(root_config, &old_toolkit_version)
-        {
-            let (test, error) = *failure;
-            on_error(test, error);
-        }
+        check_update_blocked_by_experimental_dependencies(root_config, &old_toolkit_version);
         eprintln!(
             "{} {old_toolkit_version} -> {current_toolkit_version}",
             "Finished".bold().green()
@@ -160,73 +155,41 @@ pub fn update_to_and_validate_new_toolkit_version<OnErr: FnMut(Test, TestError)>
 fn check_update_blocked_by_experimental_dependencies(
     root_config: &ConnectionConfig,
     old_toolkit_version: &str,
-) -> Result<(), Box<(Test, TestError)>> {
+) {
+    // the experimental type the check uses only exists from 1.8.0 on
+    if Version::parse(old_toolkit_version).unwrap() < Version::new(1, 8, 0) {
+        return;
+    }
     let test_db_name = format!("tsdb_toolkit_experimental_deps_{old_toolkit_version}");
     let test_config = root_config.with_db(&test_db_name);
-    let failed = |text: &str, error: TestError| {
-        let test = Test::generated(
-            format!("update-tester:{old_toolkit_version}"),
-            "experimental dependency check".to_string(),
-            text.to_string(),
-        );
-        Box::new((test, error))
-    };
     with_temporary_db(&test_db_name, root_config, || {
         let mut test_client = connect_to(&test_config);
         test_client.install_toolkit_at_version(old_toolkit_version);
-
-        let find_experimental_type = "\
-            SELECT pg_catalog.format('%I.%I', n.nspname, t.typname) \
-            FROM pg_catalog.pg_type t \
-            JOIN pg_catalog.pg_namespace n ON n.oid = t.typnamespace \
-            WHERE n.nspname = 'toolkit_experimental' \
-              AND t.typtype = 'b' \
-              AND t.typcategory <> 'A' \
-            ORDER BY t.typname \
-            LIMIT 1";
-        let experimental_type = test_client
-            .simple_query(find_experimental_type)
-            .map_err(|e| failed(find_experimental_type, e.into()))?;
-        let Some(experimental_type) = get_values(experimental_type)
-            .pop()
-            .and_then(|mut row| row.pop())
-            .flatten()
-        else {
-            eprintln!("no experimental types in {old_toolkit_version}, skipping dependency check");
-            return Ok(());
-        };
-
-        let create = format!("CREATE TABLE experimental_dependency (value {experimental_type})");
         test_client
-            .simple_query(&create)
-            .map_err(|e| failed(&create, e.into()))?;
+            .simple_query(
+                "CREATE TABLE experimental_dependency (value toolkit_experimental.countminsketch)",
+            )
+            .unwrap_or_else(|e| panic!("could not create table of experimental type due to {e}"));
 
-        let update = "ALTER EXTENSION timescaledb_toolkit UPDATE";
-        match test_client.simple_query(update) {
-            Ok(_) => {
-                let error = "update succeeded while a column depends on toolkit_experimental";
-                return Err(failed(update, TestError::OutputError(error.to_string())));
-            }
-            Err(e)
-                if e.as_db_error().is_some_and(|e| {
-                    e.message()
-                        .contains("objects depend on the toolkit_experimental schema")
-                        && e.detail().is_some_and(|detail| {
-                            detail.contains("column value of table experimental_dependency")
-                        })
-                }) => {}
-            Err(e) => {
-                let error = format!("unexpected update error: {e}");
-                return Err(failed(update, TestError::OutputError(error)));
-            }
-        }
+        let error = match test_client.simple_query("ALTER EXTENSION timescaledb_toolkit UPDATE") {
+            Ok(_) => panic!("update from {old_toolkit_version} succeeded while a column depends on toolkit_experimental"),
+            Err(e) => e,
+        };
+        let blocked = error.as_db_error().is_some_and(|e| {
+            e.message()
+                .contains("objects depend on the toolkit_experimental schema")
+                && e.detail().is_some_and(|detail| {
+                    detail.contains("column value of table experimental_dependency")
+                })
+        });
+        assert!(
+            blocked,
+            "unexpected error updating from {old_toolkit_version}: {error}"
+        );
 
-        let select = "SELECT value FROM experimental_dependency";
-        test_client.simple_query(select).map_err(|e| {
-            let error = format!("column of experimental type was dropped: {e}");
-            failed(select, TestError::OutputError(error))
-        })?;
-        Ok(())
+        test_client
+            .simple_query("SELECT value FROM experimental_dependency")
+            .unwrap_or_else(|e| panic!("column of experimental type was dropped: {e}"));
     })
 }
 

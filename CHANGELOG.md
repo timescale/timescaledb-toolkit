@@ -15,7 +15,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 #### Other notable changes
 
-* Extension updates now fail instead of silently dropping objects that depend on `toolkit_experimental`
+* Extension updates now fail instead of silently dropping table columns of `toolkit_experimental` types along with their data
 
 #### Shout-outs
 

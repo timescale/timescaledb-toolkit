@@ -32,8 +32,6 @@ BEGIN
         LEFT JOIN pg_catalog.pg_type base ON base.oid OPERATOR(pg_catalog.=) typ.typbasetype
         -- tables, partitioned tables and materialized views
         WHERE rel.relkind OPERATOR(pg_catalog.=) ANY ('{r,p,m}'::pg_catalog."char"[])
-          AND att.attnum OPERATOR(pg_catalog.>) 0
-          AND NOT att.attisdropped
           -- array types live in the same schema as their element type
           AND pg_catalog.to_regnamespace('toolkit_experimental')::pg_catalog.oid OPERATOR(pg_catalog.=)
               ANY (ARRAY[rel.relnamespace, typ.typnamespace, base.typnamespace])

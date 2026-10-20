@@ -18,9 +18,9 @@ static ALTERABLE_PROPERTIES: [&str; 6] = [
 #[path = "../../../extension/src/stabilization_info.rs"]
 mod stabilization_info;
 
-// Fails the update if any table columns use types from toolkit_experimental,
-// which DROP SCHEMA ... CASCADE would otherwise drop along with their data.
-// Views and other objects without data are still dropped.
+// Fails the update if any tables, views or types have columns of types from
+// toolkit_experimental, which DROP SCHEMA ... CASCADE would otherwise drop,
+// along with their data.
 const CHECK_NO_EXPERIMENTAL_COLUMNS: &str = r#"DO $$
 BEGIN
     IF EXISTS (
@@ -30,15 +30,13 @@ BEGIN
         JOIN pg_catalog.pg_type typ ON typ.oid OPERATOR(pg_catalog.=) att.atttypid
         -- the base type, for columns of a domain type
         LEFT JOIN pg_catalog.pg_type base ON base.oid OPERATOR(pg_catalog.=) typ.typbasetype
-        -- tables, partitioned tables and materialized views
-        WHERE rel.relkind OPERATOR(pg_catalog.=) ANY ('{r,p,m}'::pg_catalog."char"[])
-          -- array types live in the same schema as their element type
-          AND pg_catalog.to_regnamespace('toolkit_experimental')::pg_catalog.oid OPERATOR(pg_catalog.=)
+        -- array types live in the same schema as their element type
+        WHERE pg_catalog.to_regnamespace('toolkit_experimental')::pg_catalog.oid OPERATOR(pg_catalog.=)
               ANY (ARRAY[rel.relnamespace, typ.typnamespace, base.typnamespace])
     ) THEN
         -- abort the whole update so nothing gets dropped
-        RAISE EXCEPTION 'cannot update timescaledb_toolkit: table columns use toolkit_experimental types'
-            USING HINT = 'Drop the columns or migrate them off toolkit_experimental, then retry ALTER EXTENSION timescaledb_toolkit UPDATE.';
+        RAISE EXCEPTION 'cannot update timescaledb_toolkit: columns use toolkit_experimental types'
+            USING HINT = 'Drop or migrate the objects with columns of toolkit_experimental types, then retry ALTER EXTENSION timescaledb_toolkit UPDATE.';
     END IF;
 END
 $$;"#;
@@ -456,7 +454,7 @@ CREATE OPERATOR = (
 
         let upgrade_script = String::from_utf8(upgrade_script).unwrap();
         let check = upgrade_script
-            .find("cannot update timescaledb_toolkit: table columns use toolkit_experimental types")
+            .find("cannot update timescaledb_toolkit: columns use toolkit_experimental types")
             .expect("missing experimental dependency check");
         let drop = upgrade_script
             .find("DROP SCHEMA IF EXISTS toolkit_experimental CASCADE;")

@@ -62,8 +62,7 @@ END
 $$;"#;
 
 // our update script is a copy of the install script with the following changes
-// 1. we fail the update if any user objects depend on the experimental schema,
-//    otherwise we drop the experimental schema so everything inside it is dropped.
+// 1. we drop the experimental schema so everything inside it is dropped.
 // 2. drop the event triggers in case we're coming from a version that had them
 // 3. for all CREATEs we check if the object is new in `current_version`
 //     a. if it is, we output the CREATE as-is
@@ -79,8 +78,7 @@ pub(crate) fn generate_from_install(
     writeln!(&mut upgrade_file, "{CHECK_NO_EXPERIMENTAL_DEPENDENCIES}").unwrap();
     writeln!(
         &mut upgrade_file,
-        "-- experimental objects are always recreated from scratch
-        DROP SCHEMA IF EXISTS toolkit_experimental CASCADE;\n\
+        "DROP SCHEMA IF EXISTS toolkit_experimental CASCADE;\n\
         -- drop the EVENT TRIGGERs; there's no CREATE OR REPLACE for those
         DROP EVENT TRIGGER IF EXISTS disallow_experimental_deps CASCADE;\n\
         DROP EVENT TRIGGER IF EXISTS disallow_experimental_dependencies_on_views CASCADE;\n\

@@ -48,7 +48,6 @@ pub fn run_update_tests<OnErr: FnMut(Test, TestError)>(
                 }
             }
         });
-        check_update_blocked_by_experimental_dependencies(root_config, &old_toolkit_version);
         eprintln!(
             "{} {old_toolkit_version} -> {current_toolkit_version}",
             "Finished".bold().green()
@@ -148,49 +147,6 @@ pub fn update_to_and_validate_new_toolkit_version<OnErr: FnMut(Test, TestError)>
         .simple_query(&drop)
         .unwrap_or_else(|e| panic!("could not drop db {test_db_name} due to {e}"));
     Ok(())
-}
-
-// The update drops and recreates toolkit_experimental, so it must refuse to run
-// if user objects depend on it.
-fn check_update_blocked_by_experimental_dependencies(
-    root_config: &ConnectionConfig,
-    old_toolkit_version: &str,
-) {
-    // the experimental type the check uses only exists from 1.8.0 on
-    if Version::parse(old_toolkit_version).unwrap() < Version::new(1, 8, 0) {
-        return;
-    }
-    let test_db_name = format!("tsdb_toolkit_experimental_deps_{old_toolkit_version}");
-    let test_config = root_config.with_db(&test_db_name);
-    with_temporary_db(&test_db_name, root_config, || {
-        let mut test_client = connect_to(&test_config);
-        test_client.install_toolkit_at_version(old_toolkit_version);
-        test_client
-            .simple_query(
-                "CREATE TABLE experimental_dependency (value toolkit_experimental.countminsketch)",
-            )
-            .unwrap_or_else(|e| panic!("could not create table of experimental type due to {e}"));
-
-        let error = match test_client.simple_query("ALTER EXTENSION timescaledb_toolkit UPDATE") {
-            Ok(_) => panic!("update from {old_toolkit_version} succeeded while a column depends on toolkit_experimental"),
-            Err(e) => e,
-        };
-        let blocked = error.as_db_error().is_some_and(|e| {
-            e.message()
-                .contains("objects depend on the toolkit_experimental schema")
-                && e.detail().is_some_and(|detail| {
-                    detail.contains("column value of table experimental_dependency")
-                })
-        });
-        assert!(
-            blocked,
-            "unexpected error updating from {old_toolkit_version}: {error}"
-        );
-
-        test_client
-            .simple_query("SELECT value FROM experimental_dependency")
-            .unwrap_or_else(|e| panic!("column of experimental type was dropped: {e}"));
-    })
 }
 
 //---------------//

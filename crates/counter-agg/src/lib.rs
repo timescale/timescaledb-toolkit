@@ -360,7 +360,10 @@ impl CounterSummaryBuilder {
 
     /// expects time-ordered input
     pub fn add_point(&mut self, incoming: &TSPoint) -> Result<(), CounterError> {
-        self.0.reset(incoming);
+        // points at the same time as the last one are ignored, so they must not count as resets
+        if incoming.ts > self.0.last.ts {
+            self.0.reset(incoming);
+        }
         self.0.add_point(incoming)
     }
 

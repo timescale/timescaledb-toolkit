@@ -1753,6 +1753,38 @@ mod tests {
         });
     }
 
+    #[pg_test]
+    fn counter_agg_ignores_reset_from_duplicate_timestamp() {
+        Spi::connect_mut(|client| {
+            client
+                .update(
+                    "CREATE TABLE test(ts timestamptz, val DOUBLE PRECISION)",
+                    None,
+                    &[],
+                )
+                .unwrap();
+            client.update("SET TIME ZONE 'UTC'", None, &[]).unwrap();
+            client
+                .update(
+                    r#"INSERT INTO test VALUES
+                    ('2020-01-01 00:00:00+00', 0.0),
+                    ('2020-01-01 00:00:05+00', 10.0),
+                    ('2020-01-01 00:00:05+00', 2.0),
+                    ('2020-01-01 00:00:10+00', 20.0)"#,
+                    None,
+                    &[],
+                )
+                .unwrap();
+
+            // only one of the two points at 00:00:05 is used, so there is no reset either way
+            let stmt = "SELECT delta(counter_agg(ts, val)) FROM test";
+            assert_eq!(20.0, select_one!(client, stmt, f64));
+
+            let stmt = "SELECT num_resets(counter_agg(ts, val)) FROM test";
+            assert_eq!(0, select_one!(client, stmt, i64));
+        });
+    }
+
     // #[pg_test]
     // fn test_combine_aggregate(){
     //     Spi::connect_mut(|client| {

@@ -91,6 +91,26 @@ fn adding_out_of_order_counter() {
 }
 
 #[test]
+fn adding_duplicate_time_counter() {
+    let startpt = TSPoint { ts: 0, val: 0.0 };
+    let mut summary = CounterSummaryBuilder::new(&startpt, None);
+
+    summary.add_point(&TSPoint { ts: 5, val: 10.0 }).unwrap();
+    // a point at the same time as the last one is ignored, even when its value is lower
+    summary.add_point(&TSPoint { ts: 5, val: 2.0 }).unwrap();
+    summary.add_point(&TSPoint { ts: 10, val: 20.0 }).unwrap();
+
+    let summary = summary.build();
+    assert_eq!(summary.last, TSPoint { ts: 10, val: 20.0 });
+    assert_relative_eq!(summary.reset_sum, 0.0);
+    assert_eq!(summary.num_resets, 0);
+    assert_eq!(summary.num_changes, 2);
+    assert_eq!(summary.stats.count(), 3);
+    assert_relative_eq!(summary.stats.sum().unwrap().y, 0.0 + 10.0 + 20.0);
+    assert_relative_eq!(summary.delta(), 20.0);
+}
+
+#[test]
 fn test_counter_delta() {
     let startpt = &TSPoint { ts: 0, val: 10.0 };
     let mut summary = CounterSummaryBuilder::new(startpt, None);

@@ -149,7 +149,7 @@ pub fn check_user_function_data_type(function: pg_sys::regproc) {
 
 /// Checks whether the user has the needed permissions in the ACL to perform the query.
 /// PG15 uses pg_proc_aclcheck
-fn check_user_function_execute(function: pg_sys::Oid) {
+fn check_user_function_execute_acl(function: pg_sys::Oid) {
     unsafe {
         let role = pg_sys::GetUserId();
 
@@ -180,14 +180,14 @@ fn check_user_function_execute(function: pg_sys::Oid) {
 
 pub fn apply_to_series(
     mut series: Timevector_TSTZ_F64<'_>,
-    func: pg_sys::RegProcedure,
+    function: pg_sys::RegProcedure,
 ) -> Timevector_TSTZ_F64<'_> {
     // Mapping function must be `fn(timevector) RETURNS timevector`.
-    check_user_function_type(func);
-
+    check_user_function_type(function);
+    check_user_function_execute_acl(function);
     let mut flinfo: pg_sys::FmgrInfo = unsafe { MaybeUninit::zeroed().assume_init() };
     unsafe {
-        pg_sys::fmgr_info(func, &mut flinfo);
+        pg_sys::fmgr_info(function, &mut flinfo);
     };
 
     unsafe {
@@ -217,7 +217,7 @@ pub fn map_data_pipeline_element(
     let function: pg_sys::regproc = pg_sys::Oid::from(function.0.value() as u32)
         .try_into()
         .unwrap();
-    check_user_function_execute(function);
+    check_user_function_execute_acl(function);
     check_user_function_data_type(function);
     Element::MapData {
         function: PgProcId(function),
@@ -227,10 +227,11 @@ pub fn map_data_pipeline_element(
 
 pub fn apply_to(
     mut series: Timevector_TSTZ_F64<'_>,
-    func: pg_sys::RegProcedure,
+    function: pg_sys::RegProcedure,
 ) -> Timevector_TSTZ_F64<'_> {
     // Mapping function must be `fn(double precision) RETURNS double precision`.
-    check_user_function_data_type(func);
+    check_user_function_data_type(function);
+    check_user_function_execute_acl(function);
 
     let mut flinfo: pg_sys::FmgrInfo = unsafe { MaybeUninit::zeroed().assume_init() };
 
@@ -238,7 +239,7 @@ pub fn apply_to(
         *mut pg_sys::FunctionCallInfoBaseData,
     ) -> pg_sys::Datum;
     let mut fc_info = unsafe {
-        pg_sys::fmgr_info(func, &mut flinfo);
+        pg_sys::fmgr_info(function, &mut flinfo);
         fn_addr = flinfo.fn_addr.expect("null function in timevector map");
         union FcInfo1 {
             data: ManuallyDrop<pg_sys::FunctionCallInfoBaseData>,

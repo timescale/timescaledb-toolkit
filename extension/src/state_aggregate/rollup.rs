@@ -108,17 +108,15 @@ impl OwnedCompactStateAgg {
             "earlier aggregate must be non-empty"
         );
 
-        let later_states =
-            String::from_utf8(later.states.to_vec()).expect("invalid later UTF-8 states");
-        let mut merged_states =
-            String::from_utf8(earlier.states.to_vec()).expect("invalid earlier UTF-8 states");
+        let later_states = states_from_bytes(&later.states);
+        let mut merged_states = states_from_bytes(&earlier.states).to_owned();
         let mut merged_durations = earlier.durations.into_iter().collect::<Vec<_>>();
 
         let earlier_len = earlier.combined_durations.len();
 
         let mut merged_last_state = None;
         for (later_idx, dis) in later.durations.iter().enumerate() {
-            let materialized_dis = dis.state.materialize(&later_states);
+            let materialized_dis = dis.state.materialize(later_states);
             let merged_duration_info =
                 merged_durations
                     .iter_mut()
@@ -154,7 +152,7 @@ impl OwnedCompactStateAgg {
             .chain(later.combined_durations.into_iter().map(|tis| {
                 let state = tis
                     .state
-                    .materialize(&later_states)
+                    .materialize(later_states)
                     .existing_entry(&merged_states);
                 TimeInState { state, ..tis }
             }))

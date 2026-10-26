@@ -17,6 +17,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 * Reject lambdas longer than 1024 bytes or with parentheses nested deeper than 256 levels #999 
 * Reject `rollup` of frequency aggregates built from different element types #1006
 * Reject `topn` on a frequency aggregate when the type argument is a `NULL` of a different type than the aggregate 
+* Fix missing acl check in pipeline map (#997)
 
 #### Other notable changes
 

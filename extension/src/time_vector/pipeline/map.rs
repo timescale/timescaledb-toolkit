@@ -3,9 +3,9 @@ use std::{
     ptr,
 };
 
-use pgrx::*;
-use pgrx::pg_sys::AclMode;
 use super::*;
+use pgrx::pg_sys::AclMode;
+use pgrx::*;
 
 use crate::serialization::PgProcId;
 
@@ -154,11 +154,7 @@ fn check_user_function_execute_acl(function: pg_sys::Oid) {
         let role = pg_sys::GetUserId();
 
         #[cfg(feature = "pg15")]
-        let result = pg_sys::pg_proc_aclcheck(
-            function,
-            role,
-            pg_sys::ACL_EXECUTE,
-        );
+        let result = pg_sys::pg_proc_aclcheck(function, role, pg_sys::ACL_EXECUTE);
 
         #[cfg(any(feature = "pg16", feature = "pg17", feature = "pg18"))]
         let result = pg_sys::object_aclcheck(

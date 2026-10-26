@@ -4,7 +4,7 @@ use std::{
 };
 
 use pgrx::*;
-
+use pgrx::pg_sys::AclMode;
 use super::*;
 
 use crate::serialization::PgProcId;
@@ -147,6 +147,37 @@ pub fn check_user_function_data_type(function: pg_sys::regproc) {
     )
 }
 
+/// Checks whether the user has the needed permissions in the ACL to perform the query.
+/// PG15 uses pg_proc_aclcheck
+fn check_user_function_execute(function: pg_sys::Oid) {
+    unsafe {
+        let role = pg_sys::GetUserId();
+
+        #[cfg(feature = "pg15")]
+        let result = pg_sys::pg_proc_aclcheck(
+            function,
+            role,
+            pg_sys::ACL_EXECUTE,
+        );
+
+        #[cfg(any(feature = "pg16", feature = "pg17", feature = "pg18"))]
+        let result = pg_sys::object_aclcheck(
+            pg_sys::ProcedureRelationId,
+            function,
+            role,
+            pg_sys::ACL_EXECUTE as AclMode,
+        );
+
+        if result != pg_sys::AclResult::ACLCHECK_OK {
+            pg_sys::aclcheck_error(
+                result,
+                pg_sys::ObjectType::OBJECT_FUNCTION,
+                pg_sys::get_func_name(function),
+            );
+        }
+    }
+}
+
 pub fn apply_to_series(
     mut series: Timevector_TSTZ_F64<'_>,
     func: pg_sys::RegProcedure,
@@ -186,6 +217,7 @@ pub fn map_data_pipeline_element(
     let function: pg_sys::regproc = pg_sys::Oid::from(function.0.value() as u32)
         .try_into()
         .unwrap();
+    check_user_function_execute(function);
     check_user_function_data_type(function);
     Element::MapData {
         function: PgProcId(function),

@@ -15,6 +15,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 * Fix `counter_agg` counting a reset for an ignored point that has the same timestamp as the previous point
 * Reject `StateAgg` and `CompactStateAgg` values whose state names are invalid UTF-8 #998
 * Reject lambdas longer than 1024 bytes or with parentheses nested deeper than 256 levels #999 
+* Fix missing acl check in pipeline map (#997)
 
 #### Other notable changes
 

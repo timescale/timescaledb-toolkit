@@ -295,6 +295,25 @@ mod tests {
     use pgrx::*;
     use pgrx_macros::pg_test;
 
+    fn assert_permission_denied_as(role: &str, query: &str) {
+        Spi::run(&format!("SET LOCAL ROLE {role}")).unwrap();
+        let denied = pg_sys::PgTryBuilder::new(|| {
+            Spi::run(query).unwrap();
+            false
+        })
+        .catch_when(PgSqlErrorCode::ERRCODE_INSUFFICIENT_PRIVILEGE, |_| true)
+        .execute();
+        Spi::run("RESET ROLE").unwrap();
+
+        assert!(denied, "query did not return SQLSTATE 42501: {query}");
+    }
+
+    fn assert_allowed_as(role: &str, query: &str) {
+        Spi::run(&format!("SET LOCAL ROLE {role}")).unwrap();
+        Spi::run(query).unwrap();
+        Spi::run("RESET ROLE").unwrap();
+    }
+
     #[pg_test]
     fn test_pipeline_map_lambda() {
         Spi::connect_mut(|client| {
@@ -660,6 +679,134 @@ mod tests {
             ],null_val:[0])"
             );
         });
+    }
+
+    #[pg_test]
+    fn test_pipeline_map_data_execute_acl() {
+        const ROLE: &str = "toolkit_map_data_acl_role";
+        const TEXT_PIPELINE_QUERY: &str = r#"
+            WITH input(time, value) AS (
+                VALUES ('2021-01-01 UTC'::timestamptz, 1.0::double precision)
+            )
+            SELECT (
+                timevector(time, value)
+                -> '(version:1,num_elements:1,elements:[MapData(function:"public.toolkit_map_data_acl_target(double precision)")])'
+                   ::toolkit_experimental.unstabletimevectorpipeline
+            )::text
+            FROM input
+        "#;
+        const STORED_PIPELINE_QUERY: &str = r#"
+            WITH input(time, value) AS (
+                VALUES ('2021-01-01 UTC'::timestamptz, 1.0::double precision)
+            )
+            SELECT (
+                timevector(time, value)
+                -> (SELECT pipeline FROM pg_temp.toolkit_map_data_acl_pipeline)
+            )::text
+            FROM input
+        "#;
+
+        Spi::run("SET LOCAL search_path TO public, toolkit_experimental").unwrap();
+        Spi::run(&format!(
+            "CREATE ROLE {ROLE} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT"
+        ))
+        .unwrap();
+        Spi::run(
+            "CREATE FUNCTION public.toolkit_map_data_acl_target(double precision) \
+             RETURNS double precision LANGUAGE SQL IMMUTABLE AS 'SELECT $1 + 1'",
+        )
+        .unwrap();
+        Spi::run(
+            "CREATE TEMP TABLE toolkit_map_data_acl_pipeline AS \
+             SELECT toolkit_experimental.map_data( \
+                 'public.toolkit_map_data_acl_target' \
+             ) AS pipeline",
+        )
+        .unwrap();
+        Spi::run(&format!(
+            "GRANT SELECT ON TABLE toolkit_map_data_acl_pipeline TO {ROLE}"
+        ))
+        .unwrap();
+        Spi::run(
+            "REVOKE EXECUTE ON FUNCTION \
+             public.toolkit_map_data_acl_target(double precision) FROM PUBLIC",
+        )
+        .unwrap();
+
+        assert_permission_denied_as(ROLE, TEXT_PIPELINE_QUERY);
+        assert_permission_denied_as(ROLE, STORED_PIPELINE_QUERY);
+
+        Spi::run(&format!(
+            "GRANT EXECUTE ON FUNCTION \
+             public.toolkit_map_data_acl_target(double precision) TO {ROLE}"
+        ))
+        .unwrap();
+        assert_allowed_as(ROLE, TEXT_PIPELINE_QUERY);
+        assert_allowed_as(ROLE, STORED_PIPELINE_QUERY);
+    }
+
+    #[pg_test]
+    fn test_pipeline_map_series_execute_acl() {
+        const ROLE: &str = "toolkit_map_series_acl_role";
+        const TEXT_PIPELINE_QUERY: &str = r#"
+            WITH input(time, value) AS (
+                VALUES ('2021-01-01 UTC'::timestamptz, 1.0::double precision)
+            )
+            SELECT (
+                timevector(time, value)
+                -> '(version:1,num_elements:1,elements:[MapSeries(function:"public.toolkit_map_series_acl_target(public.timevector_tstz_f64)")])'
+                   ::toolkit_experimental.unstabletimevectorpipeline
+            )::text
+            FROM input
+        "#;
+        const STORED_PIPELINE_QUERY: &str = r#"
+            WITH input(time, value) AS (
+                VALUES ('2021-01-01 UTC'::timestamptz, 1.0::double precision)
+            )
+            SELECT (
+                timevector(time, value)
+                -> (SELECT pipeline FROM pg_temp.toolkit_map_series_acl_pipeline)
+            )::text
+            FROM input
+        "#;
+
+        Spi::run("SET LOCAL search_path TO public, toolkit_experimental").unwrap();
+        Spi::run(&format!(
+            "CREATE ROLE {ROLE} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT"
+        ))
+        .unwrap();
+        Spi::run(
+            "CREATE FUNCTION public.toolkit_map_series_acl_target(timevector_tstz_f64) \
+             RETURNS timevector_tstz_f64 LANGUAGE SQL IMMUTABLE AS 'SELECT $1'",
+        )
+        .unwrap();
+        Spi::run(
+            "CREATE TEMP TABLE toolkit_map_series_acl_pipeline AS \
+             SELECT toolkit_experimental.map_series( \
+                 'public.toolkit_map_series_acl_target' \
+             ) AS pipeline",
+        )
+        .unwrap();
+        Spi::run(&format!(
+            "GRANT SELECT ON TABLE toolkit_map_series_acl_pipeline TO {ROLE}"
+        ))
+        .unwrap();
+        Spi::run(
+            "REVOKE EXECUTE ON FUNCTION \
+             public.toolkit_map_series_acl_target(timevector_tstz_f64) FROM PUBLIC",
+        )
+        .unwrap();
+
+        assert_permission_denied_as(ROLE, TEXT_PIPELINE_QUERY);
+        assert_permission_denied_as(ROLE, STORED_PIPELINE_QUERY);
+
+        Spi::run(&format!(
+            "GRANT EXECUTE ON FUNCTION \
+             public.toolkit_map_series_acl_target(timevector_tstz_f64) TO {ROLE}"
+        ))
+        .unwrap();
+        assert_allowed_as(ROLE, TEXT_PIPELINE_QUERY);
+        assert_allowed_as(ROLE, STORED_PIPELINE_QUERY);
     }
 
     #[pg_test]

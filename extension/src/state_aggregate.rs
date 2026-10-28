@@ -251,8 +251,9 @@ pub mod toolkit_experimental {
             self.get_materialized(&state.materialize(self.states_as_str()))
         }
         pub(super) fn get_materialized(&self, state: &MaterializedState) -> Option<i64> {
+            let states = self.states_as_str();
             for record in self.durations.iter() {
-                if record.state.materialize(self.states_as_str()) == *state {
+                if record.state.materialize(states) == *state {
                     return Some(record.duration);
                 }
             }
@@ -260,9 +261,7 @@ pub mod toolkit_experimental {
         }
 
         pub(super) fn states_as_str(&self) -> &str {
-            let states: &[u8] = self.states.as_slice();
-            // SAFETY: came from a String in `new` a few lines up
-            unsafe { std::str::from_utf8_unchecked(states) }
+            states_from_bytes(self.states.as_slice())
         }
 
         pub(super) fn interpolate(
@@ -281,9 +280,7 @@ pub mod toolkit_experimental {
                 );
             }
 
-            let mut states = std::str::from_utf8(self.states.as_slice())
-                .unwrap()
-                .to_string();
+            let mut states = self.states_as_str().to_string();
             let mut durations: Vec<DurationInState> = self.durations.iter().collect();
 
             let mut combined_durations = if self.compact {
@@ -413,6 +410,11 @@ pub mod toolkit_experimental {
     }
 
     ron_inout_funcs!(CompactStateAgg<'input>);
+}
+
+fn states_from_bytes(states: &[u8]) -> &str {
+    std::str::from_utf8(states)
+        .unwrap_or_else(|_| panic!("invalid state aggregate: states are not valid UTF-8"))
 }
 
 pg_type! {
@@ -781,6 +783,7 @@ fn duration_in_inner<'a>(
                 "unreachable: interval specified for compact aggregate"
             );
 
+            let states = agg.states_as_str();
             let mut total = 0;
             for tis in agg.combined_durations.iter() {
                 let tis_start_time = i64::max(tis.start_time, start);
@@ -789,7 +792,7 @@ fn duration_in_inner<'a>(
                     // combined_durations is sorted, so after this point there can't be any more
                     break;
                 };
-                if tis_end_time >= start && tis.state.materialize(agg.states_as_str()) == state {
+                if tis_end_time >= start && tis.state.materialize(states) == state {
                     let amount = tis_end_time - tis_start_time;
                     assert!(amount >= 0, "incorrectly ordered times");
                     total += amount;
@@ -2667,6 +2670,55 @@ SELECT toolkit_experimental.duration_in('one', toolkit_experimental.compact_stat
             let expected = "(version:1,compact_state_agg:(version:1,states_len:0,durations_len:1,durations:[(duration:0,state:(a:9223372036854775807,b:-67876545))],combined_durations_len:1,combined_durations:[(start_time:631188000000000,end_time:631188000000000,state:(a:9223372036854775807,b:-67876545))],first_time:631188000000000,last_time:631188000000000,first_state:0,last_state:0,states:[],compact:false,integer_states:true))";
             assert_eq!(agg_text, expected);
         });
+    }
+
+    // The tests replace the first byte of the state 'starting' (115) with 255,
+    // which is never valid UTF-8.
+
+    #[pg_test(error = "invalid state aggregate: states are not valid UTF-8")]
+    fn state_agg_rejects_invalid_utf8() {
+        Spi::run(
+            "SELECT duration_in(replace(\
+                state_agg('2020-01-01'::timestamptz, 'starting')::TEXT, \
+                'states:[115,', 'states:[255,')::stateagg, 'starting')",
+        )
+        .unwrap();
+    }
+
+    #[pg_test(error = "invalid state aggregate: states are not valid UTF-8")]
+    fn compact_state_agg_rejects_invalid_utf8() {
+        Spi::run(
+            "SELECT toolkit_experimental.duration_in(replace(\
+                toolkit_experimental.compact_state_agg('2020-01-01'::timestamptz, 'starting')::TEXT, \
+                'states:[115,', 'states:[255,')::toolkit_experimental.compactstateagg, 'starting')",
+        )
+        .unwrap();
+    }
+
+    // Rollup merges the earlier aggregate into the later one and checks both.
+
+    #[pg_test(error = "invalid state aggregate: states are not valid UTF-8")]
+    fn rollup_rejects_invalid_utf8_in_earlier() {
+        Spi::run(
+            "SELECT rollup(agg)::TEXT FROM (\
+                SELECT replace(state_agg('2020-01-01'::timestamptz, 'starting')::TEXT, \
+                    'states:[115,', 'states:[255,')::stateagg AS agg \
+                UNION ALL \
+                SELECT state_agg('2020-01-02'::timestamptz, 'running')) aggs",
+        )
+        .unwrap();
+    }
+
+    #[pg_test(error = "invalid state aggregate: states are not valid UTF-8")]
+    fn rollup_rejects_invalid_utf8_in_later() {
+        Spi::run(
+            "SELECT rollup(agg)::TEXT FROM (\
+                SELECT state_agg('2020-01-01'::timestamptz, 'running') AS agg \
+                UNION ALL \
+                SELECT replace(state_agg('2020-01-02'::timestamptz, 'starting')::TEXT, \
+                    'states:[115,', 'states:[255,')::stateagg) aggs",
+        )
+        .unwrap();
     }
 
     #[pg_test]

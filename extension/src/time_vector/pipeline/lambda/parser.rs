@@ -34,7 +34,26 @@ use UnaryOp::*;
 #[grammar = "time_vector/pipeline/lambda/lambda_expr.pest"] // relative to src
 pub struct ExpressionParser;
 
+// Very long or deeply nested lambdas can crash the server, so we reject them.
+const MAX_LAMBDA_LENGTH: usize = 1024;
+const MAX_PAREN_DEPTH: usize = 256;
+
 pub fn parse_expression(input: &str) -> Expression {
+    if input.len() > MAX_LAMBDA_LENGTH {
+        panic!("lambda expression is too long, the maximum length is {MAX_LAMBDA_LENGTH} bytes")
+    }
+    // Count the depth before parsing the expression to make sure we are in the limit
+    let mut depth = 0usize;
+    for b in input.bytes() {
+        match b {
+            b'(' => depth += 1,
+            b')' => depth = depth.saturating_sub(1),
+            _ => continue,
+        }
+        if depth > MAX_PAREN_DEPTH {
+            panic!("lambda expression is nested too deeply, the maximum depth is {MAX_PAREN_DEPTH}")
+        }
+    }
     let parsed = ExpressionParser::parse(calculation, input).unwrap_or_else(|e| panic!("{}", e));
 
     let mut variables = Vec::new();

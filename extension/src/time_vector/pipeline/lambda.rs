@@ -957,4 +957,33 @@ mod tests {
             );
         });
     }
+
+    #[pg_test]
+    fn test_lambda_nesting_at_max_length() {
+        for input in [
+            format!("{}1{}", "(".repeat(256), ")".repeat(256)),
+            format!("{}1", "-".repeat(1023)),
+            format!("{}1", "1+".repeat(511)),
+            format!("{}1", "2^".repeat(511)),
+        ] {
+            Spi::run(&format!(
+                "SELECT toolkit_experimental.f64_lambda($${input}$$, now(), 0.0)"
+            ))
+            .unwrap();
+        }
+    }
+
+    // used to crash the server
+    #[pg_test(error = "lambda expression is too long, the maximum length is 1024 bytes")]
+    fn test_lambda_too_long() {
+        let input = format!("{}1", "-".repeat(50_000));
+        Spi::run(&format!("SELECT $${input}$$::toolkit_experimental.lambda")).unwrap();
+    }
+
+    // used to crash the server
+    #[pg_test(error = "lambda expression is nested too deeply, the maximum depth is 256")]
+    fn test_lambda_nesting_too_deep() {
+        let input = format!("{}1{}", "(".repeat(257), ")".repeat(257));
+        Spi::run(&format!("SELECT $${input}$$::toolkit_experimental.lambda")).unwrap();
+    }
 }

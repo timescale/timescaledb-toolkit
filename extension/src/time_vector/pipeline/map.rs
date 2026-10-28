@@ -100,6 +100,7 @@ pub fn map_series_element<'a>(function: crate::raw::regproc) -> Element<'a> {
     let function: pg_sys::regproc = pg_sys::Oid::from(function.0.value() as u32)
         .try_into()
         .unwrap();
+    check_user_function_execute_acl(function);
     check_user_function_type(function);
     Element::MapSeries {
         function: PgProcId(function),

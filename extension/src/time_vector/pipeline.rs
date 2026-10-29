@@ -109,7 +109,7 @@ pub mod toolkit_experimental {
     ron_inout_funcs!(UnstableTimevectorPipeline<'input>);
 }
 
-#[pg_operator(immutable, parallel_safe)]
+#[pg_operator(volatile, parallel_unsafe)]
 #[opname(->)]
 pub fn arrow_run_pipeline<'a>(
     timevector: Timevector_TSTZ_F64<'a>,
@@ -326,6 +326,34 @@ pub fn lttb_pipeline_element(
 mod tests {
     use pgrx::*;
     use pgrx_macros::pg_test;
+
+    #[pg_test]
+    fn test_pipeline_executors_are_volatile_and_parallel_unsafe() {
+        let executor_count = Spi::get_one::<i64>(
+            r#"
+                SELECT count(*)
+                FROM pg_proc
+                WHERE proname IN (
+                    'arrow_run_pipeline',
+                    'arrow_run_pipeline_then_unnest',
+                    'arrow_run_pipeline_then_materialize',
+                    'arrow_run_pipeline_then_stats_agg',
+                    'arrow_pipeline_then_sum',
+                    'arrow_pipeline_then_average',
+                    'arrow_pipeline_then_num_vals',
+                    'arrow_run_pipeline_then_counter_agg',
+                    'arrow_run_pipeline_then_hyperloglog',
+                    'arrow_run_pipeline_then_percentile_agg'
+                )
+                  AND provolatile = 'v'
+                  AND proparallel = 'u'
+            "#,
+        )
+        .unwrap()
+        .unwrap();
+
+        assert_eq!(executor_count, 10);
+    }
 
     #[pg_test]
     fn test_pipeline_lttb() {

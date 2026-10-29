@@ -100,7 +100,6 @@ pub fn map_series_element<'a>(function: crate::raw::regproc) -> Element<'a> {
     let function: pg_sys::regproc = pg_sys::Oid::from(function.0.value() as u32)
         .try_into()
         .unwrap();
-    check_user_function_execute_acl(function);
     check_user_function_type(function);
     Element::MapSeries {
         function: PgProcId(function),
@@ -684,6 +683,8 @@ mod tests {
     #[pg_test]
     fn test_pipeline_map_data_execute_acl() {
         const ROLE: &str = "toolkit_map_data_acl_role";
+        const CONSTRUCTOR_QUERY: &str =
+            "SELECT toolkit_experimental.map_data('public.toolkit_map_data_acl_target')";
         const TEXT_PIPELINE_QUERY: &str = r#"
             WITH input(time, value) AS (
                 VALUES ('2021-01-01 UTC'::timestamptz, 1.0::double precision)
@@ -733,6 +734,7 @@ mod tests {
         )
         .unwrap();
 
+        assert_allowed_as(ROLE, CONSTRUCTOR_QUERY);
         assert_permission_denied_as(ROLE, TEXT_PIPELINE_QUERY);
         assert_permission_denied_as(ROLE, STORED_PIPELINE_QUERY);
 
@@ -748,6 +750,8 @@ mod tests {
     #[pg_test]
     fn test_pipeline_map_series_execute_acl() {
         const ROLE: &str = "toolkit_map_series_acl_role";
+        const CONSTRUCTOR_QUERY: &str =
+            "SELECT toolkit_experimental.map_series('public.toolkit_map_series_acl_target')";
         const TEXT_PIPELINE_QUERY: &str = r#"
             WITH input(time, value) AS (
                 VALUES ('2021-01-01 UTC'::timestamptz, 1.0::double precision)
@@ -797,6 +801,7 @@ mod tests {
         )
         .unwrap();
 
+        assert_allowed_as(ROLE, CONSTRUCTOR_QUERY);
         assert_permission_denied_as(ROLE, TEXT_PIPELINE_QUERY);
         assert_permission_denied_as(ROLE, STORED_PIPELINE_QUERY);
 
@@ -809,13 +814,18 @@ mod tests {
         assert_allowed_as(ROLE, STORED_PIPELINE_QUERY);
     }
 
-    /// Tests that after revoking execution permission the function still
-    /// gets checked ant not cached.
+    /// Tests that cached plans recheck execution permission after it is revoked.
     #[pg_test]
     fn test_pipeline_map_execute_acl_after_cached_plan() {
         const ROLE: &str = "toolkit_map_cached_acl_role";
         const MAP_DATA_STATEMENT: &str = "toolkit_map_data_cached_acl";
         const MAP_SERIES_STATEMENT: &str = "toolkit_map_series_cached_acl";
+        const SUM_STATEMENT: &str = "toolkit_map_sum_cached_acl";
+        const AVERAGE_STATEMENT: &str = "toolkit_map_average_cached_acl";
+        const CONSTANT_TIMEVECTOR: &str = r#"
+            '(version:1,num_points:1,flags:1,internal_padding:(0,0,0),points:[(ts:"2021-01-01 00:00:00+00",val:1.0)],null_val:[0])'
+                ::public.timevector_tstz_f64
+        "#;
 
         Spi::run("SET LOCAL search_path TO public, toolkit_experimental").unwrap();
         Spi::run("SET LOCAL plan_cache_mode TO force_generic_plan").unwrap();
@@ -859,7 +869,7 @@ mod tests {
             r#"
                 PREPARE {MAP_DATA_STATEMENT} AS
                 SELECT (
-                    timevector('2021-01-01 UTC'::timestamptz, 1.0::double precision)
+                    {CONSTANT_TIMEVECTOR}
                     -> '(version:1,num_elements:1,elements:[MapData(function:"public.toolkit_cached_map_data_acl_target(double precision)")])'
                        ::toolkit_experimental.unstabletimevectorpipeline
                 )::text
@@ -870,15 +880,39 @@ mod tests {
             r#"
                 PREPARE {MAP_SERIES_STATEMENT} AS
                 SELECT (
-                    timevector('2021-01-01 UTC'::timestamptz, 1.0::double precision)
+                    {CONSTANT_TIMEVECTOR}
                     -> '(version:1,num_elements:1,elements:[MapSeries(function:"public.toolkit_cached_map_series_acl_target(public.timevector_tstz_f64)")])'
                        ::toolkit_experimental.unstabletimevectorpipeline
                 )::text
             "#
         ))
         .unwrap();
+        Spi::run(&format!(
+            r#"
+                PREPARE {SUM_STATEMENT} AS
+                SELECT (
+                    {CONSTANT_TIMEVECTOR}
+                    -> '(version:1,num_elements:1,elements:[MapData(function:"public.toolkit_cached_map_data_acl_target(double precision)")])'
+                       ::toolkit_experimental.pipelinethensum
+                )::text
+            "#
+        ))
+        .unwrap();
+        Spi::run(&format!(
+            r#"
+                PREPARE {AVERAGE_STATEMENT} AS
+                SELECT (
+                    {CONSTANT_TIMEVECTOR}
+                    -> '(version:1,num_elements:1,elements:[MapData(function:"public.toolkit_cached_map_data_acl_target(double precision)")])'
+                       ::toolkit_experimental.pipelinethenaverage
+                )::text
+            "#
+        ))
+        .unwrap();
         Spi::run(&format!("EXECUTE {MAP_DATA_STATEMENT}")).unwrap();
         Spi::run(&format!("EXECUTE {MAP_SERIES_STATEMENT}")).unwrap();
+        Spi::run(&format!("EXECUTE {SUM_STATEMENT}")).unwrap();
+        Spi::run(&format!("EXECUTE {AVERAGE_STATEMENT}")).unwrap();
         Spi::run("RESET ROLE").unwrap();
 
         Spi::run(&format!(
@@ -894,9 +928,13 @@ mod tests {
 
         assert_permission_denied_as(ROLE, &format!("EXECUTE {MAP_DATA_STATEMENT}"));
         assert_permission_denied_as(ROLE, &format!("EXECUTE {MAP_SERIES_STATEMENT}"));
+        assert_permission_denied_as(ROLE, &format!("EXECUTE {SUM_STATEMENT}"));
+        assert_permission_denied_as(ROLE, &format!("EXECUTE {AVERAGE_STATEMENT}"));
 
         Spi::run(&format!("DEALLOCATE {MAP_DATA_STATEMENT}")).unwrap();
         Spi::run(&format!("DEALLOCATE {MAP_SERIES_STATEMENT}")).unwrap();
+        Spi::run(&format!("DEALLOCATE {SUM_STATEMENT}")).unwrap();
+        Spi::run(&format!("DEALLOCATE {AVERAGE_STATEMENT}")).unwrap();
     }
 
     #[pg_test]

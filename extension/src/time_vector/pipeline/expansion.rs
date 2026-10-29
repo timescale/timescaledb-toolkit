@@ -79,7 +79,7 @@ pub fn arrow_finalize_with_unnest<'p>(
     }
 }
 
-#[pg_operator(immutable, parallel_safe)]
+#[pg_operator(volatile, parallel_unsafe)]
 #[opname(->)]
 pub fn arrow_run_pipeline_then_unnest<'a>(
     timevector: Timevector_TSTZ_F64<'a>,
@@ -134,7 +134,7 @@ pub fn arrow_force_materialize<'e>(
     }
 }
 
-#[pg_operator(immutable, parallel_safe)]
+#[pg_operator(volatile, parallel_unsafe)]
 #[opname(->)]
 pub fn arrow_run_pipeline_then_materialize<'a>(
     timevector: Timevector_TSTZ_F64<'a>,

@@ -11,9 +11,10 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 #### Bug fixes
 
 * Add equality operators for `statssummary1d` and `statssummary2d`
-* Fix `rollup`/`hyperloglog_union` of sparse `hyperloglog` sketches never converting to dense (#982)
+* Fix `rollup`/`hyperloglog_union` of sparse `hyperloglog` sketches never converting to dense #982
 * Fix `counter_agg` counting a reset for an ignored point that has the same timestamp as the previous point
-* Reject `StateAgg` and `CompactStateAgg` values whose state names are invalid UTF-8 (#998)
+* Reject `StateAgg` and `CompactStateAgg` values whose state names are invalid UTF-8 #998
+* Reject lambdas longer than 1024 bytes or with parentheses nested deeper than 256 levels #999 
 
 #### Other notable changes
 

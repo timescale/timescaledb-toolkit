@@ -4,6 +4,7 @@ use std::{
 };
 
 use super::*;
+#[cfg(any(feature = "pg16", feature = "pg17", feature = "pg18"))]
 use pgrx::pg_sys::AclMode;
 use pgrx::*;
 
@@ -295,16 +296,32 @@ mod tests {
     use pgrx_macros::pg_test;
 
     fn assert_permission_denied_as(role: &str, query: &str) {
-        Spi::run(&format!("SET LOCAL ROLE {role}")).unwrap();
-        let denied = pg_sys::PgTryBuilder::new(|| {
-            Spi::run(query).unwrap();
-            false
-        })
-        .catch_when(PgSqlErrorCode::ERRCODE_INSUFFICIENT_PRIVILEGE, |_| true)
-        .execute();
-        Spi::run("RESET ROLE").unwrap();
+        const QUERY_DELIMITER: &str = "$toolkit_acl_query$";
+        assert!(!query.contains(QUERY_DELIMITER));
 
-        assert!(denied, "query did not return SQLSTATE 42501: {query}");
+        Spi::run(&format!("SET LOCAL ROLE {role}")).unwrap();
+        Spi::run(&format!(
+            r#"
+                DO $toolkit_acl_test$
+                DECLARE
+                    permission_denied boolean := false;
+                BEGIN
+                    BEGIN
+                        EXECUTE {QUERY_DELIMITER}{query}{QUERY_DELIMITER};
+                    EXCEPTION
+                        WHEN insufficient_privilege THEN
+                            permission_denied := true;
+                    END;
+
+                    IF NOT permission_denied THEN
+                        RAISE EXCEPTION 'query did not return SQLSTATE 42501';
+                    END IF;
+                END
+                $toolkit_acl_test$
+            "#
+        ))
+        .unwrap();
+        Spi::run("RESET ROLE").unwrap();
     }
 
     fn assert_allowed_as(role: &str, query: &str) {

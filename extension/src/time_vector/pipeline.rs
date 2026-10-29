@@ -109,7 +109,7 @@ pub mod toolkit_experimental {
     ron_inout_funcs!(UnstableTimevectorPipeline<'input>);
 }
 
-#[pg_operator(immutable, parallel_safe)]
+#[pg_operator(volatile, parallel_unsafe)]
 #[opname(->)]
 pub fn arrow_run_pipeline<'a>(
     timevector: Timevector_TSTZ_F64<'a>,

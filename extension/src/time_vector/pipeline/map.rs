@@ -4,7 +4,6 @@ use std::{
 };
 
 use super::*;
-#[cfg(any(feature = "pg16", feature = "pg17", feature = "pg18"))]
 use pgrx::pg_sys::AclMode;
 use pgrx::*;
 

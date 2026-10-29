@@ -214,7 +214,6 @@ pub fn map_data_pipeline_element(
     let function: pg_sys::regproc = pg_sys::Oid::from(function.0.value() as u32)
         .try_into()
         .unwrap();
-    check_user_function_execute_acl(function);
     check_user_function_data_type(function);
     Element::MapData {
         function: PgProcId(function),

@@ -347,6 +347,10 @@ impl SpaceSavingTransState {
     }
 
     fn combine(one: &SpaceSavingTransState, two: &SpaceSavingTransState) -> SpaceSavingTransState {
+        if one.type_oid() != two.type_oid() {
+            panic!("cannot combine frequency aggregates with different element types")
+        }
+
         // This takes an entry from a TransState, updates it with any state from the other TransState, and adds the result into the map
         fn new_entry(
             entry: &SpaceSavingEntry,
@@ -2280,6 +2284,50 @@ mod tests {
                 )
                 .unwrap();
         });
+    }
+
+    #[pg_test(error = "cannot combine frequency aggregates with different element types")]
+    fn test_mcv_agg_rollup_rejects_mixed_types() {
+        Spi::run(
+            "SELECT rollup(agg) FROM (\
+                SELECT raw_mcv_agg(5, v) agg FROM (VALUES (1), (2)) t(v) \
+                UNION ALL \
+                SELECT raw_mcv_agg(5, v) FROM (VALUES (1.5::numeric), (2.5)) t(v)\
+            ) s",
+        )
+        .unwrap();
+    }
+
+    #[pg_test(error = "cannot combine frequency aggregates with different element types")]
+    fn test_mcv_agg_rollup_rejects_mixed_types_reversed() {
+        Spi::run(
+            "SELECT rollup(agg) FROM (\
+                SELECT raw_mcv_agg(5, v) agg FROM (VALUES (1.5::numeric), (2.5)) t(v) \
+                UNION ALL \
+                SELECT raw_mcv_agg(5, v) FROM (VALUES (1), (2)) t(v)\
+            ) s",
+        )
+        .unwrap();
+    }
+
+    #[pg_test(error = "cannot combine frequency aggregates with different element types")]
+    fn test_freq_agg_rollup_rejects_mixed_types() {
+        Spi::run(
+            "SELECT rollup(agg) FROM (\
+                SELECT toolkit_experimental.raw_freq_agg(0.1, v) agg FROM (VALUES (1), (2)) t(v) \
+                UNION ALL \
+                SELECT toolkit_experimental.raw_freq_agg(0.1, v) FROM (VALUES ('a'::varchar), ('b')) t(v)\
+            ) s",
+        )
+        .unwrap();
+    }
+
+    #[pg_test(error = "cannot combine frequency aggregates with different element types")]
+    fn test_combine_rejects_mixed_types() {
+        let ints = SpaceSavingTransState::mcv_agg_from_type_id(1.1, 5, pg_sys::INT4OID, None);
+        let numerics =
+            SpaceSavingTransState::mcv_agg_from_type_id(1.1, 5, pg_sys::NUMERICOID, None);
+        SpaceSavingTransState::combine(&ints, &numerics);
     }
 
     #[pg_test]

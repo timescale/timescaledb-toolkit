@@ -874,8 +874,11 @@ pub fn rollup_agg_trans_inner(
 ) -> Option<Inner<SpaceSavingTransState>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
-            let trans = (&value, &fcinfo).into();
+            let trans: SpaceSavingTransState = (&value, &fcinfo).into();
             if let Some(state) = state {
+                if state.type_oid() != trans.type_oid() {
+                    panic!("cannot combine frequency aggregates with different element types")
+                }
                 Some(SpaceSavingTransState::combine(&state, &trans).into())
             } else {
                 Some(trans.into())
@@ -2280,6 +2283,42 @@ mod tests {
                 )
                 .unwrap();
         });
+    }
+
+    #[pg_test(error = "cannot combine frequency aggregates with different element types")]
+    fn test_mcv_agg_rollup_rejects_mixed_types() {
+        Spi::run(
+            "SELECT rollup(agg) FROM (\
+                SELECT raw_mcv_agg(5, v) agg FROM (VALUES (1), (2)) t(v) \
+                UNION ALL \
+                SELECT raw_mcv_agg(5, v) FROM (VALUES (1.5::numeric), (2.5)) t(v)\
+            ) s",
+        )
+        .unwrap();
+    }
+
+    #[pg_test(error = "cannot combine frequency aggregates with different element types")]
+    fn test_mcv_agg_rollup_rejects_mixed_types_reversed() {
+        Spi::run(
+            "SELECT rollup(agg) FROM (\
+                SELECT raw_mcv_agg(5, v) agg FROM (VALUES (1.5::numeric), (2.5)) t(v) \
+                UNION ALL \
+                SELECT raw_mcv_agg(5, v) FROM (VALUES (1), (2)) t(v)\
+            ) s",
+        )
+        .unwrap();
+    }
+
+    #[pg_test(error = "cannot combine frequency aggregates with different element types")]
+    fn test_freq_agg_rollup_rejects_mixed_types() {
+        Spi::run(
+            "SELECT rollup(agg) FROM (\
+                SELECT toolkit_experimental.raw_freq_agg(0.1, v) agg FROM (VALUES (1), (2)) t(v) \
+                UNION ALL \
+                SELECT toolkit_experimental.raw_freq_agg(0.1, v) FROM (VALUES ('a'::varchar), ('b')) t(v)\
+            ) s",
+        )
+        .unwrap();
     }
 
     #[pg_test]

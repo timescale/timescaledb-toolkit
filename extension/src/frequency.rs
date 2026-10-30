@@ -347,6 +347,10 @@ impl SpaceSavingTransState {
     }
 
     fn combine(one: &SpaceSavingTransState, two: &SpaceSavingTransState) -> SpaceSavingTransState {
+        if one.type_oid() != two.type_oid() {
+            panic!("cannot combine frequency aggregates with different element types")
+        }
+
         // This takes an entry from a TransState, updates it with any state from the other TransState, and adds the result into the map
         fn new_entry(
             entry: &SpaceSavingEntry,
@@ -874,11 +878,8 @@ pub fn rollup_agg_trans_inner(
 ) -> Option<Inner<SpaceSavingTransState>> {
     unsafe {
         in_aggregate_context(fcinfo, || {
-            let trans: SpaceSavingTransState = (&value, &fcinfo).into();
+            let trans = (&value, &fcinfo).into();
             if let Some(state) = state {
-                if state.type_oid() != trans.type_oid() {
-                    panic!("cannot combine frequency aggregates with different element types")
-                }
                 Some(SpaceSavingTransState::combine(&state, &trans).into())
             } else {
                 Some(trans.into())
@@ -2319,6 +2320,14 @@ mod tests {
             ) s",
         )
         .unwrap();
+    }
+
+    #[pg_test(error = "cannot combine frequency aggregates with different element types")]
+    fn test_combine_rejects_mixed_types() {
+        let ints = SpaceSavingTransState::mcv_agg_from_type_id(1.1, 5, pg_sys::INT4OID, None);
+        let numerics =
+            SpaceSavingTransState::mcv_agg_from_type_id(1.1, 5, pg_sys::NUMERICOID, None);
+        SpaceSavingTransState::combine(&ints, &numerics);
     }
 
     #[pg_test]

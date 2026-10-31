@@ -96,6 +96,7 @@ skip_from_version() {
     [ $FROM_VERSION = 1.10.0-dev ] && return
     [ $OS_NAME = debian ] && [ $OS_VERSION = 10 ] && [ `cmp_version $FROM_VERSION` -lt 011100 ] && return
     [ $OS_NAME = ubuntu ] && [ $OS_VERSION = 22.04 ] && [ `cmp_version $FROM_VERSION` -lt 010600 ] && return
+    [ $OS_NAME = ubuntu ] && [ $OS_VERSION = 24.04 ] && [ `cmp_version $FROM_VERSION` -lt 012100 ] && return
     [ $OS_NAME = debian ] && [ $OS_VERSION = 13 ] && [ `cmp_version $FROM_VERSION` -lt 012100 ] && return
     [ $OS_NAME = ubuntu ] && [ $OS_VERSION = 26.04 ] && [ `cmp_version $FROM_VERSION` -lt 012300 ] && return
     [ $OS_NAME = rockylinux ] && [ $OS_VERSION = 10 ] && [ `cmp_version $FROM_VERSION` -lt 012300 ] && return

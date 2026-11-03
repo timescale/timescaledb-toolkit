@@ -24,7 +24,7 @@ use crate::{
     build,
     datum_utils::{
         DatumFromSerializedTextReader, DatumHashBuilder, DatumStore, TextSerializableDatumWriter,
-        deep_copy_datum,
+        check_arg_type, deep_copy_datum,
     },
     palloc::{Inner, Internal, InternalAsValue, ToInternal},
     pg_any_element::{PgAnyElement, PgAnyElementHashMap},
@@ -1302,7 +1302,8 @@ extension_sql!(
 #[pg_extern(immutable, parallel_safe, name = "into_values")]
 pub fn freq_iter<'a>(
     agg: SpaceSavingAggregate<'a>,
-    ty: AnyElement,
+    #[allow(unused_variables)] ty: AnyElement,
+    fcinfo: pg_sys::FunctionCallInfo,
 ) -> TableIterator<
     'a,
     (
@@ -1311,10 +1312,8 @@ pub fn freq_iter<'a>(
         name!(max_freq, f64),
     ),
 > {
+    check_arg_type(fcinfo, 1, Oid::from(agg.type_oid));
     unsafe {
-        if ty.oid().to_u32() != agg.type_oid {
-            pgrx::error!("mischatched types")
-        }
         let counts = agg.counts.slice().iter().zip(agg.overcounts.slice().iter());
         TableIterator::new(agg.datums.clone().into_iter().zip(counts).map_while(
             move |(value, (&count, &overcount))| {
@@ -1444,13 +1443,16 @@ fn validate_topn_for_mcv_agg(
 pub fn topn(
     agg: SpaceSavingAggregate<'_>,
     n: i32,
-    ty: Option<AnyElement>,
+    #[allow(unused_variables)] ty: Option<AnyElement>,
+    fcinfo: pg_sys::FunctionCallInfo,
 ) -> SetOfIterator<'_, AnyElement> {
-    // If called with a NULL, assume type matches
-    if ty.is_some() && ty.unwrap().oid().to_u32() != agg.type_oid {
-        pgrx::error!("mischatched types")
-    }
+    check_arg_type(fcinfo, 2, Oid::from(agg.type_oid));
+    topn_unchecked(agg, n)
+}
 
+/// Callers must already have checked that the result type matches the
+/// aggregate's element type.
+fn topn_unchecked(agg: SpaceSavingAggregate<'_>, n: i32) -> SetOfIterator<'_, AnyElement> {
     validate_topn_for_mcv_agg(
         n,
         agg.topn as u32,
@@ -1479,13 +1481,15 @@ pub fn topn(
 #[pg_extern(immutable, parallel_safe, name = "topn")]
 pub fn default_topn(
     agg: SpaceSavingAggregate<'_>,
-    ty: Option<AnyElement>,
+    #[allow(unused_variables)] ty: Option<AnyElement>,
+    fcinfo: pg_sys::FunctionCallInfo,
 ) -> SetOfIterator<'_, AnyElement> {
     if agg.topn == 0 {
         pgrx::error!("frequency aggregates require a N parameter to topn")
     }
+    check_arg_type(fcinfo, 1, Oid::from(agg.type_oid));
     let n = agg.topn as i32;
-    topn(agg, n, ty)
+    topn_unchecked(agg, n)
 }
 
 #[pg_extern(immutable, parallel_safe, name = "topn")]
@@ -2330,6 +2334,70 @@ mod tests {
         SpaceSavingTransState::combine(&ints, &numerics);
     }
 
+    #[pg_test(error = "mismatched types")]
+    fn test_topn_rejects_null_of_wrong_type() {
+        Spi::run("SELECT topn(raw_mcv_agg(5, v), 2, NULL::text) FROM (VALUES (1), (2), (2)) t(v)")
+            .unwrap();
+    }
+
+    #[pg_test(error = "mismatched types")]
+    fn test_default_topn_rejects_null_of_wrong_type() {
+        Spi::run("SELECT topn(raw_mcv_agg(5, v), NULL::text) FROM (VALUES (1), (2), (2)) t(v)")
+            .unwrap();
+    }
+
+    #[pg_test(error = "mismatched types")]
+    fn test_freq_agg_topn_rejects_null_of_wrong_type() {
+        Spi::run(
+            "SELECT topn(toolkit_experimental.raw_freq_agg(0.1, v), 2, NULL::text) \
+             FROM (VALUES (1), (2), (2)) t(v)",
+        )
+        .unwrap();
+    }
+
+    #[pg_test]
+    fn test_topn_accepts_null_of_matching_type() {
+        for query in [
+            "SELECT topn(raw_mcv_agg(5, v), 1, NULL::int)",
+            "SELECT topn(raw_mcv_agg(1, v), NULL::int)",
+        ] {
+            let top =
+                Spi::get_one::<i32>(&format!("{query} FROM (VALUES (1), (2), (2), (2)) t(v)"))
+                    .unwrap();
+            assert_eq!(top, Some(2), "{query}");
+        }
+    }
+
+    // The returned values would be typed as the domain without its CHECK
+    // constraint ever being applied.
+    #[pg_test(error = "mismatched types")]
+    fn test_topn_rejects_domain_over_aggregate_type() {
+        Spi::run("CREATE DOMAIN big_int AS int CHECK (VALUE > 100)").unwrap();
+        Spi::run(
+            "SELECT topn(raw_mcv_agg(5, v), 1, NULL::big_int) FROM (VALUES (1), (2), (2)) t(v)",
+        )
+        .unwrap();
+    }
+
+    #[pg_test(error = "mismatched types")]
+    fn test_topn_rejects_base_type_of_domain_aggregate() {
+        Spi::run("CREATE DOMAIN int_domain AS int").unwrap();
+        Spi::run(
+            "SELECT topn(raw_mcv_agg(5, v::int_domain), 1, NULL::int) \
+             FROM (VALUES (1), (2), (2)) t(v)",
+        )
+        .unwrap();
+    }
+
+    #[pg_test(error = "mismatched types")]
+    fn test_into_values_rejects_wrong_type() {
+        Spi::run(
+            "SELECT * FROM (SELECT raw_mcv_agg(5, v) agg FROM (VALUES (1), (2), (2)) t(v)) s, \
+             LATERAL into_values(agg, ''::text)",
+        )
+        .unwrap();
+    }
+
     #[pg_test]
     fn test_into_values() {
         Spi::connect_mut(|client| {
@@ -2638,9 +2706,8 @@ mod tests {
         }
 
         let state = space_saving_final(state, fcinfo).unwrap();
-        let value =
-            unsafe { AnyElement::from_polymorphic_datum(Datum::from(0), false, pg_sys::INT4OID) };
-        let t: Vec<AnyElement> = default_topn(state, Some(value.unwrap())).collect();
+        let n = state.topn as i32;
+        let t: Vec<AnyElement> = topn_unchecked(state, n).collect();
         let agg_topn: Vec<usize> = t.iter().map(|x| x.datum().value()).collect();
 
         let mut temp: Vec<(usize, &usize)> = counts.iter().enumerate().collect();

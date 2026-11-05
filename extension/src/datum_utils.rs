@@ -650,6 +650,15 @@ impl<'a> IntoIterator for DatumStore<'a> {
     }
 }
 
+/// Wrapper around `pgrx::pg_getarg_type`: panics with "mismatched types" unless
+/// argument `argno` was declared with exactly the type `expected`.
+pub(crate) fn check_arg_type(fcinfo: pg_sys::FunctionCallInfo, argno: usize, expected: Oid) {
+    let actual = unsafe { pgrx::pg_getarg_type(fcinfo, argno) };
+    if actual != expected {
+        panic!("mismatched types")
+    }
+}
+
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {

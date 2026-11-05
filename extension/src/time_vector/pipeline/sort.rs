@@ -1,5 +1,3 @@
-use pgrx::*;
-
 use super::*;
 
 // TODO is (immutable, parallel_safe) correct?
@@ -60,7 +58,7 @@ pub fn sort_timevector(mut series: Timevector_TSTZ_F64<'_>) -> Timevector_TSTZ_F
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgrx::*;
+    use pgrx::Spi;
     use pgrx_macros::pg_test;
 
     #[pg_test]

@@ -1,5 +1,5 @@
 use crate::raw::TimestampTz;
-use pgrx::prelude::*;
+use pgrx::prelude::{TableIterator, extension_sql, name, pg_extern};
 
 #[pg_extern(
     name = "generate_periodic_normal_series",
@@ -124,9 +124,9 @@ $$;
 );
 
 #[cfg(any(test, feature = "pg_test"))]
-#[pg_schema]
+#[pgrx::pg_schema]
 mod tests {
-    use pgrx::*;
+    use pgrx::Spi;
     use pgrx_macros::pg_test;
 
     #[pg_test]

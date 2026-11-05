@@ -148,15 +148,10 @@ pub fn check_user_function_data_type(function: pg_sys::regproc) {
 }
 
 /// Checks whether the user has the needed permissions in the ACL to perform the query.
-/// PG15 uses pg_proc_aclcheck
 fn check_user_function_execute_acl(function: pg_sys::Oid) {
     unsafe {
         let role = pg_sys::GetUserId();
 
-        #[cfg(feature = "pg15")]
-        let result = pg_sys::pg_proc_aclcheck(function, role, pg_sys::ACL_EXECUTE);
-
-        #[cfg(any(feature = "pg16", feature = "pg17", feature = "pg18"))]
         let result = pg_sys::object_aclcheck(
             pg_sys::ProcedureRelationId,
             function,

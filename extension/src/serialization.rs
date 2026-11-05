@@ -76,7 +76,7 @@ pub extern "C" fn _ts_toolkit_decode_timestamptz(text: &str) -> i64 {
             pg_sys::MAXDATEFIELDS as i32,
             &mut nf,
         );
-
+        
         if dterr == 0 {
             let mut extra = pgrx::pg_sys::DateTimeErrorExtra::default();
             dterr = pg_sys::DecodeDateTime(

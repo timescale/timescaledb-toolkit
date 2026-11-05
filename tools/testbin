@@ -100,6 +100,12 @@ skip_from_version() {
     [ $OS_NAME = debian ] && [ $OS_VERSION = 13 ] && [ `cmp_version $FROM_VERSION` -lt 012100 ] && return
     [ $OS_NAME = ubuntu ] && [ $OS_VERSION = 26.04 ] && [ `cmp_version $FROM_VERSION` -lt 012300 ] && return
     [ $OS_NAME = rockylinux ] && [ $OS_VERSION = 10 ] && [ `cmp_version $FROM_VERSION` -lt 012300 ] && return
+    # toolkit 1.19.0 and 1.21.0 rpms were not published for EL8 (don't know why)
+    # repo name is 'rockylinux/rockylinux'
+    [ "${OS_NAME##*/}" = rockylinux ] && [ "$OS_VERSION" = 8 ] && [ "$FROM_VERSION" = 1.19.0 ] && return
+    [ "${OS_NAME##*/}" = rockylinux ] && [ "$OS_VERSION" = 8 ] && [ "$FROM_VERSION" = 1.21.0 ] && return
+    [ "${OS_NAME##*/}" = rockylinux ] && [ "$OS_VERSION" = 8 ] && [ "$FROM_VERSION" = 1.26.0 ] && return
+    return 1
 }
 
 # Requires:

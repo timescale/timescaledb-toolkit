@@ -3,9 +3,9 @@ use std::{
     ptr,
 };
 
-use pgrx::*;
-
 use super::*;
+use pgrx::pg_sys::AclMode;
+use pgrx::*;
 
 use crate::serialization::PgProcId;
 
@@ -147,16 +147,43 @@ pub fn check_user_function_data_type(function: pg_sys::regproc) {
     )
 }
 
+/// Checks whether the user has the needed permissions in the ACL to perform the query.
+/// PG15 uses pg_proc_aclcheck
+fn check_user_function_execute_acl(function: pg_sys::Oid) {
+    unsafe {
+        let role = pg_sys::GetUserId();
+
+        #[cfg(feature = "pg15")]
+        let result = pg_sys::pg_proc_aclcheck(function, role, pg_sys::ACL_EXECUTE);
+
+        #[cfg(any(feature = "pg16", feature = "pg17", feature = "pg18"))]
+        let result = pg_sys::object_aclcheck(
+            pg_sys::ProcedureRelationId,
+            function,
+            role,
+            pg_sys::ACL_EXECUTE as AclMode,
+        );
+
+        if result != pg_sys::AclResult::ACLCHECK_OK {
+            pg_sys::aclcheck_error(
+                result,
+                pg_sys::ObjectType::OBJECT_FUNCTION,
+                pg_sys::get_func_name(function),
+            );
+        }
+    }
+}
+
 pub fn apply_to_series(
     mut series: Timevector_TSTZ_F64<'_>,
-    func: pg_sys::RegProcedure,
+    function: pg_sys::RegProcedure,
 ) -> Timevector_TSTZ_F64<'_> {
     // Mapping function must be `fn(timevector) RETURNS timevector`.
-    check_user_function_type(func);
-
+    check_user_function_type(function);
+    check_user_function_execute_acl(function);
     let mut flinfo: pg_sys::FmgrInfo = unsafe { MaybeUninit::zeroed().assume_init() };
     unsafe {
-        pg_sys::fmgr_info(func, &mut flinfo);
+        pg_sys::fmgr_info(function, &mut flinfo);
     };
 
     unsafe {
@@ -195,10 +222,11 @@ pub fn map_data_pipeline_element(
 
 pub fn apply_to(
     mut series: Timevector_TSTZ_F64<'_>,
-    func: pg_sys::RegProcedure,
+    function: pg_sys::RegProcedure,
 ) -> Timevector_TSTZ_F64<'_> {
     // Mapping function must be `fn(double precision) RETURNS double precision`.
-    check_user_function_data_type(func);
+    check_user_function_data_type(function);
+    check_user_function_execute_acl(function);
 
     let mut flinfo: pg_sys::FmgrInfo = unsafe { MaybeUninit::zeroed().assume_init() };
 
@@ -206,7 +234,7 @@ pub fn apply_to(
         *mut pg_sys::FunctionCallInfoBaseData,
     ) -> pg_sys::Datum;
     let mut fc_info = unsafe {
-        pg_sys::fmgr_info(func, &mut flinfo);
+        pg_sys::fmgr_info(function, &mut flinfo);
         fn_addr = flinfo.fn_addr.expect("null function in timevector map");
         union FcInfo1 {
             data: ManuallyDrop<pg_sys::FunctionCallInfoBaseData>,
@@ -265,6 +293,41 @@ pub fn map_series(series: &mut Timevector_TSTZ_F64<'_>, mut func: impl FnMut(f64
 mod tests {
     use pgrx::*;
     use pgrx_macros::pg_test;
+
+    fn assert_permission_denied_as(role: &str, query: &str) {
+        const QUERY_DELIMITER: &str = "$toolkit_acl_query$";
+        assert!(!query.contains(QUERY_DELIMITER));
+
+        Spi::run(&format!("SET LOCAL ROLE {role}")).unwrap();
+        Spi::run(&format!(
+            r#"
+                DO $toolkit_acl_test$
+                DECLARE
+                    permission_denied boolean := false;
+                BEGIN
+                    BEGIN
+                        EXECUTE {QUERY_DELIMITER}{query}{QUERY_DELIMITER};
+                    EXCEPTION
+                        WHEN insufficient_privilege THEN
+                            permission_denied := true;
+                    END;
+
+                    IF NOT permission_denied THEN
+                        RAISE EXCEPTION 'query did not return SQLSTATE 42501';
+                    END IF;
+                END
+                $toolkit_acl_test$
+            "#
+        ))
+        .unwrap();
+        Spi::run("RESET ROLE").unwrap();
+    }
+
+    fn assert_allowed_as(role: &str, query: &str) {
+        Spi::run(&format!("SET LOCAL ROLE {role}")).unwrap();
+        Spi::run(query).unwrap();
+        Spi::run("RESET ROLE").unwrap();
+    }
 
     #[pg_test]
     fn test_pipeline_map_lambda() {
@@ -631,6 +694,263 @@ mod tests {
             ],null_val:[0])"
             );
         });
+    }
+
+    #[pg_test]
+    fn test_pipeline_map_data_execute_acl() {
+        const ROLE: &str = "toolkit_map_data_acl_role";
+        const CONSTRUCTOR_QUERY: &str =
+            "SELECT toolkit_experimental.map_data('public.toolkit_map_data_acl_target')";
+        const TEXT_PIPELINE_QUERY: &str = r#"
+            WITH input(time, value) AS (
+                VALUES ('2021-01-01 UTC'::timestamptz, 1.0::double precision)
+            )
+            SELECT (
+                timevector(time, value)
+                -> '(version:1,num_elements:1,elements:[MapData(function:"public.toolkit_map_data_acl_target(double precision)")])'
+                   ::toolkit_experimental.unstabletimevectorpipeline
+            )::text
+            FROM input
+        "#;
+        const STORED_PIPELINE_QUERY: &str = r#"
+            WITH input(time, value) AS (
+                VALUES ('2021-01-01 UTC'::timestamptz, 1.0::double precision)
+            )
+            SELECT (
+                timevector(time, value)
+                -> (SELECT pipeline FROM pg_temp.toolkit_map_data_acl_pipeline)
+            )::text
+            FROM input
+        "#;
+
+        Spi::run("SET LOCAL search_path TO public, toolkit_experimental").unwrap();
+        Spi::run(&format!(
+            "CREATE ROLE {ROLE} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT"
+        ))
+        .unwrap();
+        Spi::run(
+            "CREATE FUNCTION public.toolkit_map_data_acl_target(double precision) \
+             RETURNS double precision LANGUAGE SQL IMMUTABLE AS 'SELECT $1 + 1'",
+        )
+        .unwrap();
+        Spi::run(
+            "CREATE TEMP TABLE toolkit_map_data_acl_pipeline AS \
+             SELECT toolkit_experimental.map_data( \
+                 'public.toolkit_map_data_acl_target' \
+             ) AS pipeline",
+        )
+        .unwrap();
+        Spi::run(&format!(
+            "GRANT SELECT ON TABLE toolkit_map_data_acl_pipeline TO {ROLE}"
+        ))
+        .unwrap();
+        Spi::run(
+            "REVOKE EXECUTE ON FUNCTION \
+             public.toolkit_map_data_acl_target(double precision) FROM PUBLIC",
+        )
+        .unwrap();
+
+        assert_allowed_as(ROLE, CONSTRUCTOR_QUERY);
+        assert_permission_denied_as(ROLE, TEXT_PIPELINE_QUERY);
+        assert_permission_denied_as(ROLE, STORED_PIPELINE_QUERY);
+
+        Spi::run(&format!(
+            "GRANT EXECUTE ON FUNCTION \
+             public.toolkit_map_data_acl_target(double precision) TO {ROLE}"
+        ))
+        .unwrap();
+        assert_allowed_as(ROLE, TEXT_PIPELINE_QUERY);
+        assert_allowed_as(ROLE, STORED_PIPELINE_QUERY);
+    }
+
+    #[pg_test]
+    fn test_pipeline_map_series_execute_acl() {
+        const ROLE: &str = "toolkit_map_series_acl_role";
+        const CONSTRUCTOR_QUERY: &str =
+            "SELECT toolkit_experimental.map_series('public.toolkit_map_series_acl_target')";
+        const TEXT_PIPELINE_QUERY: &str = r#"
+            WITH input(time, value) AS (
+                VALUES ('2021-01-01 UTC'::timestamptz, 1.0::double precision)
+            )
+            SELECT (
+                timevector(time, value)
+                -> '(version:1,num_elements:1,elements:[MapSeries(function:"public.toolkit_map_series_acl_target(public.timevector_tstz_f64)")])'
+                   ::toolkit_experimental.unstabletimevectorpipeline
+            )::text
+            FROM input
+        "#;
+        const STORED_PIPELINE_QUERY: &str = r#"
+            WITH input(time, value) AS (
+                VALUES ('2021-01-01 UTC'::timestamptz, 1.0::double precision)
+            )
+            SELECT (
+                timevector(time, value)
+                -> (SELECT pipeline FROM pg_temp.toolkit_map_series_acl_pipeline)
+            )::text
+            FROM input
+        "#;
+
+        Spi::run("SET LOCAL search_path TO public, toolkit_experimental").unwrap();
+        Spi::run(&format!(
+            "CREATE ROLE {ROLE} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT"
+        ))
+        .unwrap();
+        Spi::run(
+            "CREATE FUNCTION public.toolkit_map_series_acl_target(timevector_tstz_f64) \
+             RETURNS timevector_tstz_f64 LANGUAGE SQL IMMUTABLE AS 'SELECT $1'",
+        )
+        .unwrap();
+        Spi::run(
+            "CREATE TEMP TABLE toolkit_map_series_acl_pipeline AS \
+             SELECT toolkit_experimental.map_series( \
+                 'public.toolkit_map_series_acl_target' \
+             ) AS pipeline",
+        )
+        .unwrap();
+        Spi::run(&format!(
+            "GRANT SELECT ON TABLE toolkit_map_series_acl_pipeline TO {ROLE}"
+        ))
+        .unwrap();
+        Spi::run(
+            "REVOKE EXECUTE ON FUNCTION \
+             public.toolkit_map_series_acl_target(timevector_tstz_f64) FROM PUBLIC",
+        )
+        .unwrap();
+
+        assert_allowed_as(ROLE, CONSTRUCTOR_QUERY);
+        assert_permission_denied_as(ROLE, TEXT_PIPELINE_QUERY);
+        assert_permission_denied_as(ROLE, STORED_PIPELINE_QUERY);
+
+        Spi::run(&format!(
+            "GRANT EXECUTE ON FUNCTION \
+             public.toolkit_map_series_acl_target(timevector_tstz_f64) TO {ROLE}"
+        ))
+        .unwrap();
+        assert_allowed_as(ROLE, TEXT_PIPELINE_QUERY);
+        assert_allowed_as(ROLE, STORED_PIPELINE_QUERY);
+    }
+
+    /// Tests that cached plans recheck execution permission after it is revoked.
+    #[pg_test]
+    fn test_pipeline_map_execute_acl_after_cached_plan() {
+        const ROLE: &str = "toolkit_map_cached_acl_role";
+        const MAP_DATA_STATEMENT: &str = "toolkit_map_data_cached_acl";
+        const MAP_SERIES_STATEMENT: &str = "toolkit_map_series_cached_acl";
+        const SUM_STATEMENT: &str = "toolkit_map_sum_cached_acl";
+        const AVERAGE_STATEMENT: &str = "toolkit_map_average_cached_acl";
+        const CONSTANT_TIMEVECTOR: &str = r#"
+            '(version:1,num_points:1,flags:1,internal_padding:(0,0,0),points:[(ts:"2021-01-01 00:00:00+00",val:1.0)],null_val:[0])'
+                ::public.timevector_tstz_f64
+        "#;
+
+        Spi::run("SET LOCAL search_path TO public, toolkit_experimental").unwrap();
+        Spi::run("SET LOCAL plan_cache_mode TO force_generic_plan").unwrap();
+        Spi::run(&format!(
+            "CREATE ROLE {ROLE} NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT"
+        ))
+        .unwrap();
+        Spi::run(
+            "CREATE FUNCTION public.toolkit_cached_map_data_acl_target(double precision) \
+             RETURNS double precision LANGUAGE SQL IMMUTABLE AS 'SELECT $1 + 1'",
+        )
+        .unwrap();
+        Spi::run(
+            "CREATE FUNCTION public.toolkit_cached_map_series_acl_target(timevector_tstz_f64) \
+             RETURNS timevector_tstz_f64 LANGUAGE SQL IMMUTABLE AS 'SELECT $1'",
+        )
+        .unwrap();
+        Spi::run(
+            "REVOKE EXECUTE ON FUNCTION \
+             public.toolkit_cached_map_data_acl_target(double precision) FROM PUBLIC",
+        )
+        .unwrap();
+        Spi::run(
+            "REVOKE EXECUTE ON FUNCTION \
+             public.toolkit_cached_map_series_acl_target(timevector_tstz_f64) FROM PUBLIC",
+        )
+        .unwrap();
+        Spi::run(&format!(
+            "GRANT EXECUTE ON FUNCTION \
+             public.toolkit_cached_map_data_acl_target(double precision) TO {ROLE}"
+        ))
+        .unwrap();
+        Spi::run(&format!(
+            "GRANT EXECUTE ON FUNCTION \
+             public.toolkit_cached_map_series_acl_target(timevector_tstz_f64) TO {ROLE}"
+        ))
+        .unwrap();
+
+        Spi::run(&format!("SET LOCAL ROLE {ROLE}")).unwrap();
+        Spi::run(&format!(
+            r#"
+                PREPARE {MAP_DATA_STATEMENT} AS
+                SELECT (
+                    {CONSTANT_TIMEVECTOR}
+                    -> '(version:1,num_elements:1,elements:[MapData(function:"public.toolkit_cached_map_data_acl_target(double precision)")])'
+                       ::toolkit_experimental.unstabletimevectorpipeline
+                )::text
+            "#
+        ))
+        .unwrap();
+        Spi::run(&format!(
+            r#"
+                PREPARE {MAP_SERIES_STATEMENT} AS
+                SELECT (
+                    {CONSTANT_TIMEVECTOR}
+                    -> '(version:1,num_elements:1,elements:[MapSeries(function:"public.toolkit_cached_map_series_acl_target(public.timevector_tstz_f64)")])'
+                       ::toolkit_experimental.unstabletimevectorpipeline
+                )::text
+            "#
+        ))
+        .unwrap();
+        Spi::run(&format!(
+            r#"
+                PREPARE {SUM_STATEMENT} AS
+                SELECT (
+                    {CONSTANT_TIMEVECTOR}
+                    -> '(version:1,num_elements:1,elements:[MapData(function:"public.toolkit_cached_map_data_acl_target(double precision)")])'
+                       ::toolkit_experimental.pipelinethensum
+                )::text
+            "#
+        ))
+        .unwrap();
+        Spi::run(&format!(
+            r#"
+                PREPARE {AVERAGE_STATEMENT} AS
+                SELECT (
+                    {CONSTANT_TIMEVECTOR}
+                    -> '(version:1,num_elements:1,elements:[MapData(function:"public.toolkit_cached_map_data_acl_target(double precision)")])'
+                       ::toolkit_experimental.pipelinethenaverage
+                )::text
+            "#
+        ))
+        .unwrap();
+        Spi::run(&format!("EXECUTE {MAP_DATA_STATEMENT}")).unwrap();
+        Spi::run(&format!("EXECUTE {MAP_SERIES_STATEMENT}")).unwrap();
+        Spi::run(&format!("EXECUTE {SUM_STATEMENT}")).unwrap();
+        Spi::run(&format!("EXECUTE {AVERAGE_STATEMENT}")).unwrap();
+        Spi::run("RESET ROLE").unwrap();
+
+        Spi::run(&format!(
+            "REVOKE EXECUTE ON FUNCTION \
+             public.toolkit_cached_map_data_acl_target(double precision) FROM {ROLE}"
+        ))
+        .unwrap();
+        Spi::run(&format!(
+            "REVOKE EXECUTE ON FUNCTION \
+             public.toolkit_cached_map_series_acl_target(timevector_tstz_f64) FROM {ROLE}"
+        ))
+        .unwrap();
+
+        assert_permission_denied_as(ROLE, &format!("EXECUTE {MAP_DATA_STATEMENT}"));
+        assert_permission_denied_as(ROLE, &format!("EXECUTE {MAP_SERIES_STATEMENT}"));
+        assert_permission_denied_as(ROLE, &format!("EXECUTE {SUM_STATEMENT}"));
+        assert_permission_denied_as(ROLE, &format!("EXECUTE {AVERAGE_STATEMENT}"));
+
+        Spi::run(&format!("DEALLOCATE {MAP_DATA_STATEMENT}")).unwrap();
+        Spi::run(&format!("DEALLOCATE {MAP_SERIES_STATEMENT}")).unwrap();
+        Spi::run(&format!("DEALLOCATE {SUM_STATEMENT}")).unwrap();
+        Spi::run(&format!("DEALLOCATE {AVERAGE_STATEMENT}")).unwrap();
     }
 
     #[pg_test]

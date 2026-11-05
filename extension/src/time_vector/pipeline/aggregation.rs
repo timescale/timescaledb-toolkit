@@ -101,7 +101,7 @@ pub mod toolkit_experimental {
     ron_inout_funcs!(PipelineThenPercentileAgg<'input>);
 }
 
-#[pg_operator(immutable, parallel_safe)]
+#[pg_operator(volatile, parallel_unsafe)]
 #[opname(->)]
 pub fn arrow_run_pipeline_then_stats_agg<'a>(
     mut timevector: Timevector_TSTZ_F64<'a>,
@@ -219,7 +219,7 @@ extension_sql!(
     requires = [AccessorSum, PipelineThenSum, sum_pipeline_element],
 );
 
-#[pg_operator(immutable, parallel_safe)]
+#[pg_operator(volatile, parallel_unsafe)]
 #[opname(->)]
 pub fn arrow_pipeline_then_sum<'a>(
     timevector: Timevector_TSTZ_F64<'a>,
@@ -313,7 +313,7 @@ extension_sql!(
     ],
 );
 
-#[pg_operator(immutable, parallel_safe)]
+#[pg_operator(volatile, parallel_unsafe)]
 #[opname(->)]
 pub fn arrow_pipeline_then_average<'a>(
     timevector: Timevector_TSTZ_F64<'a>,
@@ -415,7 +415,7 @@ extension_sql!(
     ],
 );
 
-#[pg_operator(immutable, parallel_safe)]
+#[pg_operator(volatile, parallel_unsafe)]
 #[opname(->)]
 pub fn arrow_pipeline_then_num_vals<'a>(
     timevector: Timevector_TSTZ_F64<'a>,
@@ -478,7 +478,7 @@ ALTER FUNCTION "arrow_pipeline_then_num_vals" SUPPORT toolkit_experimental.pipel
 );
 
 // TODO support gauge
-#[pg_operator(immutable, parallel_safe)]
+#[pg_operator(volatile, parallel_unsafe)]
 #[opname(->)]
 pub fn arrow_run_pipeline_then_counter_agg<'a>(
     mut timevector: Timevector_TSTZ_F64<'a>,
@@ -573,7 +573,7 @@ ALTER FUNCTION "arrow_run_pipeline_then_counter_agg" SUPPORT toolkit_experimenta
     ],
 );
 
-#[pg_operator(immutable, parallel_safe)]
+#[pg_operator(volatile, parallel_unsafe)]
 #[opname(->)]
 pub fn arrow_run_pipeline_then_hyperloglog<'a>(
     mut timevector: Timevector_TSTZ_F64<'a>,
@@ -666,7 +666,7 @@ ALTER FUNCTION "arrow_run_pipeline_then_hyperloglog" SUPPORT toolkit_experimenta
     ],
 );
 
-#[pg_operator(immutable, parallel_safe)]
+#[pg_operator(volatile, parallel_unsafe)]
 #[opname(->)]
 pub fn arrow_run_pipeline_then_percentile_agg<'a>(
     mut timevector: Timevector_TSTZ_F64<'a>,

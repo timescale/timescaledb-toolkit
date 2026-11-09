@@ -13,6 +13,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 * Add equality operators for `statssummary1d` and `statssummary2d`
 * Fix `rollup`/`hyperloglog_union` of sparse `hyperloglog` sketches never converting to dense #982
 * Fix `counter_agg` counting a reset for an ignored point that has the same timestamp as the previous point
+* Fix `interpolated_delta` and `interpolated_rate` raising an error for `NULL` counter summaries by @darkgl06 in #1011
 * Reject `StateAgg` and `CompactStateAgg` values whose state names are invalid UTF-8 #998
 * Reject lambdas longer than 1024 bytes or with parentheses nested deeper than 256 levels #999 
 * Reject `rollup` of frequency aggregates built from different element types #1006

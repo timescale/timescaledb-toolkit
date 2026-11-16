@@ -47,17 +47,6 @@ git log -1
 
 . tools/dependencies.sh
 
-# Ubuntu 26.04 skips postgres 15 as there are no tsdb packages.
-if [ "$OS_NAME" = ubuntu ] && [ "$OS_VERSION" = 26.04 ]; then
-    filtered_pg_versions=
-    for pg in $PG_VERSIONS; do
-        [ "$pg" = 15 ] && continue
-        filtered_pg_versions="${filtered_pg_versions:+$filtered_pg_versions }$pg"
-    done
-    PG_VERSIONS=$filtered_pg_versions
-    echo "Skipping PostgreSQL 15 packages for Ubuntu 26.04; PG_VERSIONS=$PG_VERSIONS"
-fi
-
 mkdir debian
 ln -s /usr/bin/dh debian/rules
 

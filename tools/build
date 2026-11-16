@@ -16,11 +16,17 @@ die() {
 }
 
 usage() {
-    die 'build [ -n -pg1[234] -profile release ] ( test-crates | test-extension | install | test-doc | test-updates | clippy)'
+    die 'build [ -n ] [ -pg16 | -pg17 | -pg18 ] [ -profile release ] ( test-crates | test-extension | install | test-doc | test-updates | clippy)'
 }
 
 require_pg_version() {
-    [ -n "$pg_version" ] || die 'specify one of -pg15 | -pg16 | -pg17 | -pg18'
+    case "$pg_version" in
+        16 | 17 | 18)
+            ;;
+        *)
+            die 'specify one of -pg16 | -pg17 | -pg18'
+            ;;
+    esac
 }
 
 find_pg_config() {
@@ -78,7 +84,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
 
-        -pg1[0-9])         # If this script survives to postgresql 19, WE WIN!
+        -pg16 | -pg17 | -pg18)
             pg_version=${arg#-pg}
             pg=pg$pg_version
             [ -z "$pg_port" ] && pg_port=288$pg_version

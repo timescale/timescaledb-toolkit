@@ -607,17 +607,19 @@ fn counter_agg_extrapolated_delta(summary: CounterSummary, method: &str) -> Opti
 
 #[pg_extern(name = "interpolated_delta", immutable, parallel_safe)]
 fn counter_agg_interpolated_delta(
-    summary: CounterSummary,
+    summary: Option<CounterSummary>,
     start: crate::raw::TimestampTz,
     duration: crate::raw::Interval,
     prev: Option<CounterSummary>,
     next: Option<CounterSummary>,
-) -> f64 {
+) -> Option<f64> {
     let interval = crate::datum_utils::interval_to_ms(&start, &duration);
-    summary
-        .interpolate(start.into(), interval, prev, next)
-        .to_internal_counter_summary()
-        .delta()
+    Some(
+        summary?
+            .interpolate(start.into(), interval, prev, next)
+            .to_internal_counter_summary()
+            .delta(),
+    )
 }
 
 #[pg_operator(immutable, parallel_safe)]
@@ -625,7 +627,7 @@ fn counter_agg_interpolated_delta(
 pub fn arrow_counter_interpolated_delta(
     sketch: CounterSummary,
     accessor: CounterInterpolatedDeltaAccessor,
-) -> f64 {
+) -> Option<f64> {
     let prev = if accessor.flags & 1 == 1 {
         Some(accessor.prev.clone().into())
     } else {
@@ -638,7 +640,7 @@ pub fn arrow_counter_interpolated_delta(
     };
 
     counter_agg_interpolated_delta(
-        sketch,
+        Some(sketch),
         accessor.timestamp.into(),
         accessor.interval.into(),
         prev,
@@ -667,14 +669,14 @@ fn counter_agg_extrapolated_rate(summary: CounterSummary, method: &str) -> Optio
 
 #[pg_extern(name = "interpolated_rate", immutable, parallel_safe)]
 fn counter_agg_interpolated_rate(
-    summary: CounterSummary,
+    summary: Option<CounterSummary>,
     start: crate::raw::TimestampTz,
     duration: crate::raw::Interval,
     prev: Option<CounterSummary>,
     next: Option<CounterSummary>,
 ) -> Option<f64> {
     let interval = crate::datum_utils::interval_to_ms(&start, &duration);
-    summary
+    summary?
         .interpolate(start.into(), interval, prev, next)
         .to_internal_counter_summary()
         .rate()
@@ -698,7 +700,7 @@ pub fn arrow_counter_interpolated_rate(
     };
 
     counter_agg_interpolated_rate(
-        sketch,
+        Some(sketch),
         accessor.timestamp.into(),
         accessor.interval.into(),
         prev,
@@ -1479,6 +1481,104 @@ mod tests {
             );
             assert!(rates.next().is_none());
         });
+    }
+
+    #[pg_test]
+    fn counter_agg_interpolated_delta_null_summary() {
+        assert_eq!(
+            Spi::get_one::<f64>(
+                "SELECT interpolated_delta(
+                    NULL::CounterSummary,
+                    '2020-01-01 00:00:00+00'::timestamptz,
+                    '5 minutes'::interval,
+                    NULL::CounterSummary,
+                    NULL::CounterSummary
+                )"
+            )
+            .unwrap(),
+            None
+        );
+    }
+
+    #[pg_test]
+    fn counter_agg_interpolated_rate_null_summary() {
+        assert_eq!(
+            Spi::get_one::<f64>(
+                "SELECT interpolated_rate(
+                    NULL::CounterSummary,
+                    '2020-01-01 00:00:00+00'::timestamptz,
+                    '5 minutes'::interval,
+                    NULL::CounterSummary,
+                    NULL::CounterSummary
+                )"
+            )
+            .unwrap(),
+            None
+        );
+    }
+
+    // Generate empty buckets without requiring the TimescaleDB extension.
+    fn interpolated_values_with_empty_bucket(accessor: &str) -> Vec<Option<f64>> {
+        Spi::connect_mut(|client| {
+            let query = format!(
+                r#"WITH summaries AS (
+                    SELECT bucket, counter_agg(ts, val) AS summary
+                    FROM generate_series(
+                        '2020-01-01 00:00:00+00'::timestamptz,
+                        '2020-01-01 00:10:00+00'::timestamptz,
+                        '5 minutes'::interval
+                    ) AS buckets(bucket)
+                    LEFT JOIN (VALUES
+                        ('2020-01-01 00:00:00+00'::timestamptz, 10.0::double precision),
+                        ('2020-01-01 00:04:00+00'::timestamptz, 250.0::double precision),
+                        ('2020-01-01 00:10:00+00'::timestamptz, 300.0::double precision),
+                        ('2020-01-01 00:14:00+00'::timestamptz, 780.0::double precision)
+                    ) AS data(ts, val)
+                        ON ts >= bucket AND ts < bucket + '5 minutes'::interval
+                    GROUP BY bucket
+                )
+                SELECT {accessor}(
+                    summary,
+                    bucket,
+                    '5 minutes'::interval,
+                    NULL::CounterSummary,
+                    NULL::CounterSummary
+                ), summary -> {accessor}(
+                    bucket,
+                    '5 minutes'::interval,
+                    NULL::CounterSummary,
+                    NULL::CounterSummary
+                )
+                FROM summaries
+                ORDER BY bucket"#
+            );
+            client
+                .update(&query, None, &[])
+                .unwrap()
+                .map(|row| {
+                    let direct = row[1].value::<f64>().unwrap();
+                    let arrow = row[2].value::<f64>().unwrap();
+                    assert_eq!(direct, arrow);
+                    direct
+                })
+                .collect()
+        })
+    }
+
+    #[pg_test]
+    fn counter_agg_interpolated_delta_empty_buckets() {
+        assert_eq!(
+            interpolated_values_with_empty_bucket("interpolated_delta"),
+            vec![Some(240.0), None, Some(480.0)]
+        );
+    }
+
+    #[pg_test]
+    fn counter_agg_interpolated_rate_empty_buckets() {
+        assert_eq!(
+            interpolated_values_with_empty_bucket("interpolated_rate"),
+            vec![Some(1.0), None, Some(2.0)]
+        );
     }
 
     #[pg_test]

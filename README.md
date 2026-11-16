@@ -95,7 +95,7 @@ Other platforms may work. Patches are welcome.
 
 You need:
 
-- PostgreSQL 15, 16, 17, or 18, including server development headers.
+- PostgreSQL 16, 17, or 18, including server development headers.
 - Rust 1.96.0 with `rustfmt` and `clippy` components. The repository includes a
   `rust-toolchain.toml` file for rustup.
 - `clang`, `make`, `gcc`, `pkg-config`, and OpenSSL development libraries.

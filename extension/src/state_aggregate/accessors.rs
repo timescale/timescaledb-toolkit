@@ -3,8 +3,11 @@ use crate::{
     pg_type,
     raw::{Interval, TimestampTz},
     ron_inout_funcs,
-    state_aggregate::*,
+    state_aggregate::{NO_INTERVAL_MARKER, StateAgg, StateAggData},
 };
+
+use pgrx::prelude::{InOutFuncs, default, error, pg_extern, pg_sys};
+use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
 
 pg_type! {
     struct AccessorInterpolatedStateTimeline<'input> {

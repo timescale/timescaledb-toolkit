@@ -1,6 +1,6 @@
 use std::mem::take;
 
-use pgrx::{iter::TableIterator, *};
+use pgrx::iter::TableIterator;
 
 use super::*;
 
@@ -174,7 +174,7 @@ ALTER FUNCTION "arrow_run_pipeline_then_materialize" SUPPORT toolkit_experimenta
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgrx::*;
+    use pgrx::Spi;
     use pgrx_macros::pg_test;
 
     #[pg_test]

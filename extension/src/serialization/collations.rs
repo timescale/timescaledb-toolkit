@@ -11,8 +11,7 @@ use serde::{Deserialize, Serialize};
 
 use once_cell::sync::Lazy;
 
-use pg_sys::Oid;
-use pgrx::*;
+use pgrx::prelude::pg_sys::{self, Oid};
 
 // TODO short collation serializer?
 
@@ -255,7 +254,7 @@ unsafe fn get_struct<T>(tuple: pg_sys::HeapTuple) -> *mut T {
 }
 
 #[cfg(any(test, feature = "pg_test"))]
-#[pg_schema]
+#[pgrx::pg_schema]
 mod tests {
 
     use super::PgCollationId;

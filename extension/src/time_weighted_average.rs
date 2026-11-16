@@ -1,6 +1,9 @@
 #![allow(non_camel_case_types)]
 
-use pgrx::*;
+use pgrx::prelude::{
+    InOutFuncs, default, error, extension_sql, opname, pg_extern, pg_operator, pg_sys,
+};
+use pgrx::{StringInfo, callconv, nullable, rust_regtypein};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -521,9 +524,10 @@ pub fn arrow_time_weighted_average_interpolated_integral(
 }
 
 #[cfg(any(test, feature = "pg_test"))]
-#[pg_schema]
+#[pgrx::pg_schema]
 mod tests {
     use super::*;
+    use pgrx::Spi;
 
     use pgrx_macros::pg_test;
     macro_rules! select_one {

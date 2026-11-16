@@ -1,6 +1,6 @@
 use tspoint::TSPoint;
 
-use Iter::*;
+use Iter::Slice;
 
 pub enum Iter<'a> {
     Slice {

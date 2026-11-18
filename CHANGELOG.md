@@ -10,25 +10,38 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 #### Bug fixes
 
-* Add equality operators for `statssummary1d` and `statssummary2d`
-* Fix `rollup`/`hyperloglog_union` of sparse `hyperloglog` sketches never converting to dense #982
-* Fix `counter_agg` counting a reset for an ignored point that has the same timestamp as the previous point
 * Fix `interpolated_delta` and `interpolated_rate` raising an error for `NULL` counter summaries by @darkgl06 in #1011
-* Reject `StateAgg` and `CompactStateAgg` values whose state names are invalid UTF-8 #998
-* Reject lambdas longer than 1024 bytes or with parentheses nested deeper than 256 levels #999 
-* Reject `rollup` of frequency aggregates built from different element types #1006
-* Reject `topn` on a frequency aggregate when the type argument is a `NULL` of a different type than the aggregate #1008
-* Fix missing acl check in pipeline map #997
 
 #### Other notable changes
+
+* Drop support for building and releasing PostgreSQL 15 binaries by @surister in #1010
 
 #### Shout-outs
 
 **Full Changelog**: [TODO]
 
-## [1.26.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.26.0) (2026-09-01)
+## [1.27.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.27.0%2Bp2) (2026-11-05)
 
-### [1.26.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.26.0) (Date 2026-09-01)
+#### Bug fixes
+
+* Add equality operators for `statssummary1d` and `statssummary2d` by @darkgl06 in #981
+* Fix `rollup`/`hyperloglog_union` of sparse `hyperloglog` sketches never converting to dense by @mkleen in #984
+* Fix `counter_agg` counting a reset for an ignored point that has the same timestamp as the previous point by @RaphaelFakhri in #995
+* Reject `StateAgg` and `CompactStateAgg` values whose state names are invalid UTF-8 by @mkleen in #998
+* Reject lambdas longer than 1024 bytes or with parentheses nested deeper than 256 levels by @mkleen in #999
+* Reject `rollup` of frequency aggregates built from different element types by @mkleen in #1006
+* Reject `topn` on a frequency aggregate when the type argument is a `NULL` of a different type than the aggregate by @mkleen in #1008
+* Fix missing acl check in `arrow_run_pipeline_*` functions by @surister in #997
+
+#### Other notable changes
+
+* Add workflows to build the docker image and packages by @surister in #985
+
+#### Shout-outs
+
+**Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.26.0...1.27.0
+
+## [1.26.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.26.0) (2026-09-01)
 
 #### Bug fixes
 

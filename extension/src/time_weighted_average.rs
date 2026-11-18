@@ -11,6 +11,7 @@ use crate::{
     aggregate_utils::in_aggregate_context,
     duration::DurationUnit,
     flatten,
+    float_utils::float8_eq,
     palloc::{Inner, Internal, InternalAsValue, ToInternal},
     pg_type, ron_inout_funcs,
 };
@@ -272,6 +273,27 @@ fn time_weight_final_inner(
             })
         })
     }
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(=)]
+#[negator(<>)]
+#[commutator(=)]
+pub fn eq_op_time_weight_summary(left: TimeWeightSummary, right: TimeWeightSummary) -> bool {
+    left.method == right.method
+        && left.first.ts == right.first.ts
+        && float8_eq(left.first.val, right.first.val)
+        && left.last.ts == right.last.ts
+        && float8_eq(left.last.val, right.last.val)
+        && float8_eq(left.weighted_sum, right.weighted_sum)
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(<>)]
+#[negator(=)]
+#[commutator(<>)]
+pub fn neq_op_time_weight_summary(left: TimeWeightSummary, right: TimeWeightSummary) -> bool {
+    !eq_op_time_weight_summary(left, right)
 }
 
 #[pg_operator(immutable, parallel_safe)]
@@ -537,6 +559,29 @@ mod tests {
                 .unwrap()
         };
     }
+
+    #[pg_test]
+    fn test_time_weight_summary_equality() {
+        Spi::connect_mut(|client| {
+            // b differs from a only in an interior value (weighted_sum), c only
+            // in the last value and linear only in the method (LOCF and Linear
+            // have the same weighted_sum for 1, 2, 1).
+            let stmt = "SELECT a = a AND a <> b AND a <> c AND a <> linear AND nan = nan
+                FROM (SELECT
+                    time_weight('LOCF', ts, a) AS a,
+                    time_weight('LOCF', ts, b) AS b,
+                    time_weight('LOCF', ts, c) AS c,
+                    time_weight('Linear', ts, a) AS linear,
+                    time_weight('LOCF', ts, nan) AS nan
+                FROM (VALUES
+                    ('2020-01-01'::timestamptz, 1::float8, 1::float8, 1::float8, 1::float8),
+                    ('2020-01-02', 2, 3, 2, 'NaN'),
+                    ('2020-01-03', 1, 1, 5, 1)
+                ) v(ts, a, b, c, nan)) s";
+            assert!(select_one!(client, stmt, bool));
+        });
+    }
+
     #[pg_test]
     fn test_time_weight_aggregate() {
         Spi::connect_mut(|client| {

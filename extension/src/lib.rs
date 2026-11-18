@@ -42,6 +42,7 @@ pub mod utilities;
 mod aggregate_utils;
 mod datum_utils;
 mod duration;
+mod float_utils;
 mod palloc;
 mod pg_any_element;
 mod raw;

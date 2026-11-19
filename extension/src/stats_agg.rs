@@ -10,6 +10,7 @@ use crate::{
     },
     aggregate_utils::in_aggregate_context,
     build,
+    float_utils::float8_eq,
     palloc::{Inner, Internal, InternalAsValue, ToInternal},
     pg_type, ron_inout_funcs,
 };
@@ -129,11 +130,6 @@ impl StatsSummary2D {
             && float8_eq(self.sy4, other.sy4)
             && float8_eq(self.sxy, other.sxy)
     }
-}
-
-// PostgreSQL considers all NaN values equal, unlike Rust's f64 equality.
-fn float8_eq(left: f64, right: f64) -> bool {
-    left == right || (left.is_nan() && right.is_nan())
 }
 
 #[pg_operator(immutable, parallel_safe)]

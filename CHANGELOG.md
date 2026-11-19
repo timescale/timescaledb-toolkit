@@ -11,6 +11,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 #### Bug fixes
 
 * Fix `interpolated_delta` and `interpolated_rate` raising an error for `NULL` counter summaries by @darkgl06 in #1011
+* Add equality operators for `timeweightsummary` #1019
 
 #### Other notable changes
 

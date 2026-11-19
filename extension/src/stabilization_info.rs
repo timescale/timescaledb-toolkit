@@ -11,6 +11,10 @@
 
 crate::functions_stabilized_at! {
     STABLE_FUNCTIONS
+    "1.28.0" => {
+        eq_op_time_weight_summary(timeweightsummary, timeweightsummary),
+        neq_op_time_weight_summary(timeweightsummary, timeweightsummary),
+    }
     "1.27.0" => {
         eq_op_stats_summary_1d(statssummary1d, statssummary1d),
         eq_op_stats_summary_2d(statssummary2d, statssummary2d),
@@ -1112,6 +1116,10 @@ crate::types_stabilized_at! {
 
 crate::operators_stabilized_at! {
     STABLE_OPERATORS
+    "1.28.0" => {
+        "="(timeweightsummary, timeweightsummary),
+        "<>"(timeweightsummary, timeweightsummary),
+    }
     "1.27.0" => {
         "="(statssummary1d, statssummary1d),
         "="(statssummary2d, statssummary2d),

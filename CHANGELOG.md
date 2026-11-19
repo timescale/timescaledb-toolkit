@@ -11,7 +11,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 #### Bug fixes
 
 * Fix `interpolated_delta` and `interpolated_rate` raising an error for `NULL` counter summaries by @darkgl06 in #1011
-* Add equality operators for `timeweightsummary` #1019
+* Add equality operators for `timeweightsummary` #1020
 
 #### Other notable changes
 
@@ -19,7 +19,9 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 #### Shout-outs
 
-**Full Changelog**: [TODO]
+Thanks, @darkgl06 for your contribution.
+
+**Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.27.0...1.28.0
 
 ## [1.27.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.27.0) (2026-11-05)
 

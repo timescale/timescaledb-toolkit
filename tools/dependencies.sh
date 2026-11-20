@@ -9,7 +9,7 @@
 
 PG_VERSIONS='16 17 18 19'
 
-TSDB_PG_VERSIONS='16 17 18 19'
+TSDB_PG_VERSIONS='16 17 18' # tsdb doesn't have pg19 yet
 
 CARGO_EDIT=0.11.2
 

@@ -16,15 +16,15 @@ die() {
 }
 
 usage() {
-    die 'build [ -n ] [ -pg16 | -pg17 | -pg18 ] [ -profile release ] ( test-crates | test-extension | install | test-doc | test-updates | clippy)'
+    die 'build [ -n ] [ -pg16 | -pg17 | -pg18 | -pg19 ] [ -profile release ] ( test-crates | test-extension | install | test-doc | test-updates | clippy)'
 }
 
 require_pg_version() {
     case "$pg_version" in
-        16 | 17 | 18)
+        16 | 17 | 18 | 19)
             ;;
         *)
-            die 'specify one of -pg16 | -pg17 | -pg18'
+            die 'specify one of -pg16 | -pg17 | -pg18 | -pg19'
             ;;
     esac
 }
@@ -84,7 +84,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
 
-        -pg16 | -pg17 | -pg18)
+        -pg16 | -pg17 | -pg18 | -pg19)
             pg_version=${arg#-pg}
             pg=pg$pg_version
             [ -z "$pg_port" ] && pg_port=288$pg_version

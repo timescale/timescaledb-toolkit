@@ -49,7 +49,7 @@ esac
 should_skip_postgres_version() {
     pg=$1
 
-    if [ "$OS_NAME" = rockylinux ] && [ "$OS_VERSION" = 8 ] && [ "$pg" = 18 ]; then
+    if [ "$OS_NAME" = rockylinux ] && [ "$OS_VERSION" = 8 ] && { [ "$pg" = 18 ] || [ "$pg" = 19 ]; }; then
         echo "Skipping PostgreSQL $pg on EL $OS_VERSION"
         return 0
     fi
@@ -60,7 +60,7 @@ should_skip_postgres_version() {
 should_skip_timescaledb_version() {
     pg=$1
 
-    if [ "$OS_NAME" = rockylinux ] && [ "$OS_VERSION" = 8 ] && [ "$pg" = 18 ]; then
+    if [ "$OS_NAME" = rockylinux ] && [ "$OS_VERSION" = 8 ] && { [ "$pg" = 18 ] || [ "$pg" = 19 ]; }; then
         echo "Skipping TimescaleDB for PostgreSQL $pg on EL $OS_VERSION; no package is available"
         return 0
     fi

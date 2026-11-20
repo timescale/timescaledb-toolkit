@@ -50,10 +50,10 @@ git log -1
 . tools/dependencies.sh
 
 
-# EL8 skips PostgreSQL 18.
+# EL8 skips PostgreSQL 18 and newer.
 case $OS_VERSION in
     8)
-        skip_pg_versions=18
+        skip_pg_versions='18 19'
         ;;
     *)
         skip_pg_versions=

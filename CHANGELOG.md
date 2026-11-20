@@ -12,6 +12,8 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 #### Other notable changes
 
+* Add PostgreSQL 19 support
+
 #### Shout-outs
 
 **Full Changelog**: [TODO]

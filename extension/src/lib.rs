@@ -40,6 +40,7 @@ pub mod uddsketch;
 pub mod utilities;
 
 mod aggregate_utils;
+mod build_info;
 mod datum_utils;
 mod duration;
 mod float_utils;

@@ -8,6 +8,8 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 #### New experimental features
 
+* Add `toolkit_experimental.get_git_commit()` returning the Git tag and commit hash the extension was built from
+
 #### Bug fixes
 
 #### Other notable changes

@@ -566,7 +566,7 @@ fn interpolated_rate(
     next: Option<GaugeSummary>,
 ) -> Option<f64> {
     let interval = crate::datum_utils::interval_to_ms(&start, &interval);
-    MetricSummary::from(summary?.interpolate(start.into(), interval, prev, next)).rate(),
+    MetricSummary::from(summary?.interpolate(start.into(), interval, prev, next)).rate()
 }
 
 #[pg_operator(immutable, parallel_safe)]

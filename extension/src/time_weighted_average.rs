@@ -11,6 +11,7 @@ use crate::{
     aggregate_utils::in_aggregate_context,
     duration::DurationUnit,
     flatten,
+    float_utils::float8_eq,
     palloc::{Inner, Internal, InternalAsValue, ToInternal},
     pg_type, ron_inout_funcs,
 };
@@ -272,6 +273,27 @@ fn time_weight_final_inner(
             })
         })
     }
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(=)]
+#[negator(<>)]
+#[commutator(=)]
+pub fn eq_op_time_weight_summary(left: TimeWeightSummary, right: TimeWeightSummary) -> bool {
+    left.method == right.method
+        && left.first.ts == right.first.ts
+        && float8_eq(left.first.val, right.first.val)
+        && left.last.ts == right.last.ts
+        && float8_eq(left.last.val, right.last.val)
+        && float8_eq(left.weighted_sum, right.weighted_sum)
+}
+
+#[pg_operator(immutable, parallel_safe)]
+#[opname(<>)]
+#[negator(=)]
+#[commutator(<>)]
+pub fn neq_op_time_weight_summary(left: TimeWeightSummary, right: TimeWeightSummary) -> bool {
+    !eq_op_time_weight_summary(left, right)
 }
 
 #[pg_operator(immutable, parallel_safe)]
@@ -537,6 +559,68 @@ mod tests {
                 .unwrap()
         };
     }
+
+    #[pg_test]
+    fn test_time_weight_summary_equality() {
+        Spi::connect_mut(|client| {
+            // b differs from a only in an interior value (weighted_sum), c only
+            // in the last value and linear only in the method (LOCF and Linear
+            // have the same weighted_sum for 1, 2, 1).
+            // Summaries must also survive a text round-trip, as with replication.
+            let stmt = "SELECT a = a AND NOT a <> a AND a <> b AND a <> c AND a <> linear
+                    AND nan = nan AND NOT nan <> nan
+                    AND a = a::text::timeweightsummary
+                    AND nan = nan::text::timeweightsummary
+                FROM (SELECT
+                    time_weight('LOCF', ts, a) AS a,
+                    time_weight('LOCF', ts, b) AS b,
+                    time_weight('LOCF', ts, c) AS c,
+                    time_weight('Linear', ts, a) AS linear,
+                    time_weight('LOCF', ts, nan) AS nan
+                FROM (VALUES
+                    ('2020-01-01'::timestamptz, 1::float8, 1::float8, 1::float8, 1::float8),
+                    ('2020-01-02', 2, 3, 2, 'NaN'),
+                    ('2020-01-03', 1, 1, 5, 1)
+                ) v(ts, a, b, c, nan)) s";
+            assert!(select_one!(client, stmt, bool));
+        });
+    }
+
+    #[pg_test]
+    fn test_time_weight_summary_equality_fields() {
+        let tw = |first_ts: &str, first_val: &str, last_ts: &str, last_val: &str| {
+            format!(
+                "'(version:1,\
+                first:(ts:\"2020-01-0{first_ts} 00:00:00+00\",val:{first_val}),\
+                last:(ts:\"2020-01-0{last_ts} 00:00:00+00\",val:{last_val}),\
+                weighted_sum:1.0,method:LOCF)'"
+            )
+        };
+        let base = tw("1", "1.0", "3", "1.0");
+        // Each comparison isolates one field; NaN endpoints must equal
+        // themselves. NULLs propagate and an untyped literal resolves.
+        let stmt = format!(
+            "SELECT base <> {first_ts} AND base <> {first_val} AND base <> {last_ts}
+                AND nan_first = nan_first AND nan_last = nan_last
+                AND base <> nan_first AND base <> nan_last
+                AND base = {base}
+                AND (base = NULL) IS NULL AND (base <> NULL) IS NULL
+                AND (NULL::timeweightsummary = NULL::timeweightsummary) IS NULL
+            FROM (SELECT
+                {base}::timeweightsummary AS base,
+                {nan_first}::timeweightsummary AS nan_first,
+                {nan_last}::timeweightsummary AS nan_last) s",
+            first_ts = tw("2", "1.0", "3", "1.0"),
+            first_val = tw("1", "2.0", "3", "1.0"),
+            last_ts = tw("1", "1.0", "4", "1.0"),
+            nan_first = tw("1", "NaN", "3", "1.0"),
+            nan_last = tw("1", "1.0", "3", "NaN"),
+        );
+        Spi::connect_mut(|client| {
+            assert!(select_one!(client, &*stmt, bool));
+        });
+    }
+
     #[pg_test]
     fn test_time_weight_aggregate() {
         Spi::connect_mut(|client| {

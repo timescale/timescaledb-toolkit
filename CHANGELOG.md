@@ -10,12 +10,42 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 #### Bug fixes
 
+#### Other notable changes
+
+* Add PostgreSQL 19 support
+
+#### Shout-outs
+
+**Full Changelog**: [TODO]
+
+## [1.28.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.28.0) (2026-11-19)
+
+#### New experimental features
+
+#### Bug fixes
+
+* Fix `interpolated_delta` and `interpolated_rate` raising an error for `NULL` counter summaries by @darkgl06 in #1011
+* Add equality operators for `timeweightsummary` #1020
+
+#### Other notable changes
+
+* Drop support for building and releasing PostgreSQL 15 binaries #1010
+
+#### Shout-outs
+
+Thanks, @darkgl06 for your contribution.
+
+**Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.27.0...1.28.0
+
+## [1.27.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.27.0) (2026-11-05)
+
+#### Bug fixes
+
 * Add equality operators for `statssummary1d` and `statssummary2d`
 * Fix `rollup`/`hyperloglog_union` of sparse `hyperloglog` sketches never converting to dense #982
 * Fix `counter_agg` counting a reset for an ignored point that has the same timestamp as the previous point
-* Fix `interpolated_delta` and `interpolated_rate` raising an error for `NULL` counter summaries by @darkgl06 in #1011
 * Reject `StateAgg` and `CompactStateAgg` values whose state names are invalid UTF-8 #998
-* Reject lambdas longer than 1024 bytes or with parentheses nested deeper than 256 levels #999 
+* Reject lambdas longer than 1024 bytes or with parentheses nested deeper than 256 levels #999
 * Reject `rollup` of frequency aggregates built from different element types #1006
 * Reject `topn` on a frequency aggregate when the type argument is a `NULL` of a different type than the aggregate #1008
 * Fix missing acl check in pipeline map #997
@@ -24,11 +54,9 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 #### Shout-outs
 
-**Full Changelog**: [TODO]
+**Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.26.0...1.27.0
 
 ## [1.26.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.26.0) (2026-09-01)
-
-### [1.26.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.26.0) (Date 2026-09-01)
 
 #### Bug fixes
 

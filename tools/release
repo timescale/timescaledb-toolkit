@@ -5,9 +5,9 @@
 # 1a. Validate contents of target commit (just upgradeable_from currently).
 # 2. Set toolkit version on branch.
 # 3. Run tests.
-# 4. Push (if -push) the branch so release-build-scripts repository [1] can see the commit from #2.
-# 5. Trigger (if -push) toolkit packaging actions in release-build-scripts repository.
-# 6. Tag the release (and push, if -push). [2]
+# 4. Push (if -push) the branch so the packaging workflow can fetch the commit from #2.
+# 5. Trigger (if -push) the toolkit packaging workflow in this repository.
+# 6. Tag the release (and push, if -push). [1]
 # 7. Prepare the main branch for the next release cycle.
 # 7a. Update upgradeable_form in control file.
 # 7b. Set toolkit version to released version with '-dev' appended.
@@ -15,13 +15,10 @@
 # 7d. Push to and create pull request for post-$VERSION branch (if -push).
 # 8. File issue for release tasks that are not yet automated (if -push).
 
-# [1] We need a self-hosted runner for arm64 build, which we can only get with
-#     a private repository, so we must delegate packaging to that.
-
-# [2] This means we publish a tag before testing binaries.  We'd rather test first.
+# [1] This means we publish a tag before testing binaries.  We'd rather test first.
 #     TODO How?
-#     - Can we have release-build-scripts gh back to an action over here?
-#     - Can we have a trigger that watches for release-build-scripts action to finish?
+#     - Can the release workflow call the reusable packaging workflow and wait for it?
+#     - Can the release script wait for the dispatched packaging workflow to finish?
 
 # Sample run:
 # tools/release -n -push -version 1.11.0 9c2b04d
@@ -236,11 +233,11 @@ if $push; then
     $nop git push origin $branch
 fi
 
-# 5. Trigger toolkit packaging actions in release-build-scripts repository.
+# 5. Trigger the toolkit packaging workflow in this repository.
 branch_commit=`git log -1 --pretty=format:%h`
 if $push; then
-    $nop gh workflow run toolkit-package.yml \
-        -R timescale/release-build-scripts \
+    $nop gh workflow run build_package.yml \
+        -R timescale/timescaledb-toolkit \
         -r $MAIN_BRANCH \
         -f version=$VERSION \
         -f commit-id=$branch_commit \

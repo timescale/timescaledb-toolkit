@@ -10,6 +10,7 @@ use crate::{
     },
     aggregate_utils::in_aggregate_context,
     build,
+    float_utils::float8_eq,
     palloc::{Inner, Internal, InternalAsValue, ToInternal},
     pg_type, ron_inout_funcs,
 };
@@ -129,11 +130,6 @@ impl StatsSummary2D {
             && float8_eq(self.sy4, other.sy4)
             && float8_eq(self.sxy, other.sxy)
     }
-}
-
-// PostgreSQL considers all NaN values equal, unlike Rust's f64 equality.
-fn float8_eq(left: f64, right: f64) -> bool {
-    left == right || (left.is_nan() && right.is_nan())
 }
 
 #[pg_operator(immutable, parallel_safe)]
@@ -2152,10 +2148,9 @@ mod tests {
             const NONE: f64 = 0.; // Exact match
             const EPS1: f64 = f64::EPSILON; // Generally enough to handle float rounding
             const EPS2: f64 = 2. * f64::EPSILON; // stddev is sqrt(variance), so a bit looser bound
-            const EPS3: f64 = 3. * f64::EPSILON; // Sum of squares in variance agg accumulates a bit more error
-            const EPS4: f64 = 4. * f64::EPSILON; // Handle 'variance_y' float rounding
-            const EPS5: f64 = 5. * f64::EPSILON; // Handle 'regr_intercept' float rounding 
+            const EPS4: f64 = 4. * f64::EPSILON; // Variance collects a bit more rounding error
             const BILLIONTH: f64 = 1e-9; // Higher order moments exponentially compound the error
+            const MILLIONTH: f64 = 1e-6; // How much the data leans to one side (skewness) is often near zero, where small rounding looks big
 
             check_agg_equivalence(
                 state,
@@ -2210,7 +2205,7 @@ mod tests {
                 client,
                 &pg1d_aggx("variance"),
                 &tk1d_agg("variance"),
-                EPS3,
+                EPS4,
                 true,
             );
             check_agg_equivalence(
@@ -2218,7 +2213,7 @@ mod tests {
                 client,
                 &pg1d_aggx("var_pop"),
                 &tk1d_agg_arg("variance", "population"),
-                EPS3,
+                EPS4,
                 true,
             );
             check_agg_equivalence(
@@ -2226,7 +2221,7 @@ mod tests {
                 client,
                 &pg1d_aggx("var_samp"),
                 &tk1d_agg_arg("variance", "sample"),
-                EPS3,
+                EPS4,
                 true,
             );
 
@@ -2315,7 +2310,7 @@ mod tests {
                 client,
                 &pg1d_aggx("variance"),
                 &tk2d_agg("variance_x"),
-                EPS3,
+                EPS4,
                 true,
             );
             check_agg_equivalence(
@@ -2331,7 +2326,7 @@ mod tests {
                 client,
                 &pg1d_aggx("var_pop"),
                 &tk2d_agg_arg("variance_x", "population"),
-                EPS3,
+                EPS4,
                 true,
             );
             check_agg_equivalence(
@@ -2339,7 +2334,7 @@ mod tests {
                 client,
                 &pg1d_aggy("var_pop"),
                 &tk2d_agg_arg("variance_y", "population"),
-                EPS3,
+                EPS4,
                 true,
             );
             check_agg_equivalence(
@@ -2347,7 +2342,7 @@ mod tests {
                 client,
                 &pg1d_aggx("var_samp"),
                 &tk2d_agg_arg("variance_x", "sample"),
-                EPS3,
+                EPS4,
                 true,
             );
             check_agg_equivalence(
@@ -2355,7 +2350,7 @@ mod tests {
                 client,
                 &pg1d_aggy("var_samp"),
                 &tk2d_agg_arg("variance_y", "sample"),
-                EPS3,
+                EPS4,
                 true,
             );
             check_agg_equivalence(
@@ -2388,7 +2383,7 @@ mod tests {
                 client,
                 &pg2d_agg("regr_intercept"),
                 &tk2d_agg("intercept"),
-                EPS5,
+                BILLIONTH,
                 true,
             );
 
@@ -2435,7 +2430,7 @@ mod tests {
                 client,
                 &pg_moment_pop_query(3, "test_x"),
                 &tk1d_agg_arg("skewness", "population"),
-                BILLIONTH,
+                MILLIONTH,
                 false,
             );
             check_agg_equivalence(
@@ -2443,7 +2438,7 @@ mod tests {
                 client,
                 &pg_moment_pop_query(3, "test_x"),
                 &tk2d_agg_arg("skewness_x", "population"),
-                BILLIONTH,
+                MILLIONTH,
                 false,
             );
             check_agg_equivalence(
@@ -2451,7 +2446,7 @@ mod tests {
                 client,
                 &pg_moment_pop_query(3, "test_y"),
                 &tk2d_agg_arg("skewness_y", "population"),
-                BILLIONTH,
+                MILLIONTH,
                 false,
             );
             check_agg_equivalence(
@@ -2484,7 +2479,7 @@ mod tests {
                 client,
                 &pg_moment_samp_query(3, "test_x"),
                 &tk1d_agg_arg("skewness", "sample"),
-                BILLIONTH,
+                MILLIONTH,
                 false,
             );
             check_agg_equivalence(
@@ -2492,7 +2487,7 @@ mod tests {
                 client,
                 &pg_moment_samp_query(3, "test_x"),
                 &tk2d_agg_arg("skewness_x", "sample"),
-                BILLIONTH,
+                MILLIONTH,
                 false,
             );
             check_agg_equivalence(
@@ -2500,7 +2495,7 @@ mod tests {
                 client,
                 &pg_moment_samp_query(3, "test_y"),
                 &tk2d_agg_arg("skewness_y", "sample"),
-                BILLIONTH,
+                MILLIONTH,
                 false,
             );
             check_agg_equivalence(

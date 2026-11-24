@@ -95,29 +95,29 @@ Other platforms may work. Patches are welcome.
 
 You need:
 
-- PostgreSQL 16, 17, or 18, including server development headers.
+- PostgreSQL 16, 17, 18, or 19, including server development headers.
 - Rust 1.96.0 with `rustfmt` and `clippy` components. The repository includes a
   `rust-toolchain.toml` file for rustup.
 - `clang`, `make`, `gcc`, `pkg-config`, and OpenSSL development libraries.
-- `cargo-pgrx` 0.18.1.
+- `cargo-pgrx` 0.19.1.
 
 On Ubuntu, after configuring the PostgreSQL apt repository, install the common
 build dependencies with:
 
 ```bash
-sudo apt-get install make gcc pkg-config clang postgresql-server-dev-18 libssl-dev
+sudo apt-get install make gcc pkg-config clang postgresql-server-dev-19 libssl-dev
 ```
 
 Install the matching pgrx CLI:
 
 ```bash
-cargo install cargo-pgrx --version 0.18.1 --locked --force
+cargo install cargo-pgrx --version 0.19.1 --locked --force
 ```
 
 Initialize pgrx for the PostgreSQL version you want to target:
 
 ```bash
-cargo pgrx init --pg18 pg_config
+cargo pgrx init --pg19 pg_config
 ```
 
 If you update the Rust compiler, reinstall `cargo-pgrx` with the same compiler.
@@ -152,7 +152,7 @@ On macOS, `tools/test-mac` can install Toolkit into a pgrx-managed PostgreSQL,
 ensure TimescaleDB is available, start the server, and open `psql`:
 
 ```bash
-tools/test-mac -pg18
+tools/test-mac -pg19
 ```
 
 ## Development
@@ -167,22 +167,22 @@ Common commands:
 cargo test --workspace --exclude timescaledb_toolkit
 
 # Run extension tests against a pgrx PostgreSQL target.
-cargo pgrx test pg18
+cargo pgrx test pg19
 
 # Run clippy with the same shape used by project tooling.
 tools/build clippy
 
 # Run SQL documentation tests against a started pgrx server.
-tools/build -pg18 test-doc
+tools/build -pg19 test-doc
 ```
 
 The helper script `tools/build` wraps several CI-style tasks:
 
 ```bash
-tools/build -pg18 test-crates
-tools/build -pg18 test-extension
-tools/build -pg18 install
-tools/build -pg18 test-doc
+tools/build -pg19 test-crates
+tools/build -pg19 test-extension
+tools/build -pg19 install
+tools/build -pg19 test-doc
 ```
 
 ## Contributing

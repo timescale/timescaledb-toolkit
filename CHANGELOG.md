@@ -13,6 +13,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 #### Other notable changes
 
 * Add PostgreSQL 19 support
+* Drop support for building and releasing Debian 11 packages
 
 #### Shout-outs
 

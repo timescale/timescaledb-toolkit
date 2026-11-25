@@ -70,10 +70,6 @@ jobs:
           version: "12"
           image: debian-12-amd64
           schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
-        - os: debian
-          version: "11"
-          image: debian-11-amd64
-          schedule: ${{ inputs.all-platforms || ( github.event_name == 'schedule' && github.event.schedule == '0 6 * * 1-4' ) }}
         - os: ubuntu
           version: "26.04"
           image: ubuntu-26.04-amd64
@@ -164,7 +160,7 @@ jobs:
     #   Only possible advantage is this one is per-pg-version but what's the impact?
     - name: Cache cargo target dir
       uses: actions/cache@v4
-      if: ${{ matrix.container.image == 'debian-11-amd64' }}
+      if: ${{ matrix.container.image == 'debian-12-amd64' }}
       with:
         path: target
         key: ${{ runner.os }}-test-pg${{ matrix.pgversion }}-target-${{ hashFiles('Cargo.lock', '.github/workflows/ci.yml') }}
@@ -203,7 +199,7 @@ jobs:
     name: Test Crates
     runs-on: ubuntu-24.04
     container:
-      image: ${{ inputs.container-image || 'timescaledev/toolkit-builder' }}:debian-11-amd64
+      image: ${{ inputs.container-image || 'timescaledev/toolkit-builder' }}:debian-12-amd64
       env:
         CARGO_INCREMENTAL: 0
         CARGO_NET_RETRY: 10

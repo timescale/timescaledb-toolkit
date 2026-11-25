@@ -52,7 +52,7 @@ jobs:
         #   - ( amd64 | arm64 ) for Debian derivatives.
         #   Docker understands both.
         # platform we ask GitHub run our scripts on.  Our scripts launch the
-        # target system (e.g. Debian-11) under Docker from there.
+        # target system (e.g. Debian-12) under Docker from there.
         # The EC2 type run an image not controlled by this configuration, but by aws/kops/values/eu-west-1.yaml in
         # https://github.com/timescale/savannah-infra/pull/1581/files#diff-a486fc78304661c6f53041d462e4cfaf1e461d228a162ef34d68c87e7886f3ccR29
         include:
@@ -76,14 +76,7 @@ jobs:
             kind: GitHub
             runner: ubuntu-22.04
             arch: x86_64
-          # Debian - latest three releases, amd64
-          - distro: debian
-            tag_distro: debian
-            version: 11
-            name: bullseye
-            kind: GitHub
-            runner: ubuntu-22.04
-            arch: amd64
+          # Debian - latest two releases, amd64
           - distro: debian
             tag_distro: debian
             version: 12
@@ -98,14 +91,7 @@ jobs:
             kind: GitHub
             runner: ubuntu-22.04
             arch: amd64
-          # Debian - latest three releases, arm64
-          - distro: debian
-            tag_distro: debian
-            version: 11
-            name: bullseye
-            kind: RunsOn
-            runner: runs-on/fleet=linux-8cpu/env=ue1
-            arch: arm64
+          # Debian - latest two releases, arm64
           - distro: debian
             tag_distro: debian
             version: 12

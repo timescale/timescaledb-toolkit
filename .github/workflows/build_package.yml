@@ -77,13 +77,7 @@ jobs:
             kind: GitHub
             runner: ubuntu-22.04
             arch: x86_64
-          # Debian - latest three releases, amd64
-          - distro: debian
-            version: 11
-            name: bullseye
-            kind: GitHub
-            runner: ubuntu-22.04
-            arch: amd64
+          # Debian - latest two releases, amd64
           - distro: debian
             version: 12
             name: bookworm
@@ -96,13 +90,7 @@ jobs:
             kind: GitHub
             runner: ubuntu-22.04
             arch: amd64
-          # Debian - latest three releases, arm64
-          - distro: debian
-            version: 11
-            name: bullseye
-            kind: RunsOn
-            runner: runs-on/fleet=linux-8cpu/env=ue1
-            arch: arm64
+          # Debian - latest two releases, arm64
           - distro: debian
             version: 12
             name: bookworm

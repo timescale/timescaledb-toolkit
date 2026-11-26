@@ -1,4 +1,4 @@
-// Git info for get_git_commit(). No git means NULL.
+// Git info for get_toolkit_git_commit(). No git means NULL.
 
 use std::process::Command;
 
@@ -10,7 +10,7 @@ fn git(args: &[&str]) -> Option<String> {
 }
 
 fn main() {
-    // Rebuild on commit and checkout. Not on .git/index: git status rewrites it.
+    // Rebuild on commit and checkout
     if let Some(dir) = git(&["rev-parse", "--absolute-git-dir"]) {
         println!("cargo:rerun-if-changed={dir}/logs/HEAD");
     }

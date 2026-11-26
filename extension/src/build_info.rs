@@ -2,7 +2,7 @@ use pgrx::{iter::TableIterator, *};
 
 /// Git commit this build came from. NULL if unknown.
 #[pg_extern(stable, parallel_safe, schema = "toolkit_experimental")]
-pub fn get_git_commit() -> TableIterator<
+pub fn get_toolkit_git_commit() -> TableIterator<
     'static,
     (
         name!(commit_tag, Option<&'static str>),
@@ -22,8 +22,10 @@ mod tests {
     use pgrx_macros::pg_test;
 
     #[pg_test]
-    fn get_git_commit_returns_one_row() {
-        let n = Spi::get_one::<i64>("SELECT count(*) FROM toolkit_experimental.get_git_commit()");
+    fn get_toolkit_git_commit_returns_one_row() {
+        let n = Spi::get_one::<i64>(
+            "SELECT count(*) FROM toolkit_experimental.get_toolkit_git_commit()",
+        );
         assert_eq!(n, Ok(Some(1)));
     }
 }

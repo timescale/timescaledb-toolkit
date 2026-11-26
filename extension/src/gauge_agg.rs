@@ -530,14 +530,17 @@ fn extrapolated_delta(summary: GaugeSummary) -> Option<f64> {
 
 #[pg_extern(immutable, parallel_safe)]
 fn interpolated_delta(
-    summary: GaugeSummary,
+    summary: Option<GaugeSummary>,
     start: crate::raw::TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<GaugeSummary>,
     next: Option<GaugeSummary>,
-) -> f64 {
+) -> Option<f64> {
     let interval = crate::datum_utils::interval_to_ms(&start, &interval);
-    MetricSummary::from(summary.interpolate(start.into(), interval, prev, next)).delta()
+    Some(
+        MetricSummary::from(summary?.interpolate(start.into(), interval, prev, next))
+            .delta(),
+    )
 }
 
 #[pg_operator(immutable, parallel_safe)]
@@ -556,14 +559,14 @@ fn extrapolated_rate(summary: GaugeSummary) -> Option<f64> {
 
 #[pg_extern(immutable, parallel_safe)]
 fn interpolated_rate(
-    summary: GaugeSummary,
+    summary: Option<GaugeSummary>,
     start: crate::raw::TimestampTz,
     interval: crate::raw::Interval,
     prev: Option<GaugeSummary>,
     next: Option<GaugeSummary>,
 ) -> Option<f64> {
     let interval = crate::datum_utils::interval_to_ms(&start, &interval);
-    MetricSummary::from(summary.interpolate(start.into(), interval, prev, next)).rate()
+    MetricSummary::from(summary?.interpolate(start.into(), interval, prev, next)).rate()
 }
 
 #[pg_operator(immutable, parallel_safe)]
@@ -1027,6 +1030,40 @@ mod tests {
         });
     }
 
+    #[pg_test]
+    fn gauge_agg_interpolated_delta_null_summary() {
+        assert_eq!(
+            Spi::get_one::<f64>(
+                "SELECT interpolated_delta(
+                    NULL::GaugeSummary,
+                    '2020-01-01 00:00:00+00'::timestamptz,
+                    '5 minutes'::interval,
+                    NULL::GaugeSummary,
+                    NULL::GaugeSummary
+                )"
+            )
+            .unwrap(),
+            None
+        );
+    }
+    
+    #[pg_test]
+    fn gauge_agg_interpolated_rate_null_summary() {
+        assert_eq!(
+            Spi::get_one::<f64>(
+                "SELECT interpolated_rate(
+                    NULL::GaugeSummary,
+                    '2020-01-01 00:00:00+00'::timestamptz,
+                    '5 minutes'::interval,
+                    NULL::GaugeSummary,
+                    NULL::GaugeSummary
+                )"
+            )
+            .unwrap(),
+            None
+        );
+    }
+    
     #[pg_test]
     fn guage_agg_interpolated_delta_with_aligned_point() {
         Spi::connect_mut(|client| {

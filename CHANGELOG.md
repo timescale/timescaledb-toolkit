@@ -10,6 +10,8 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 #### Bug fixes
 
+* Fix Gauge `interpolated_delta` and `interpolated_rate` raising an error for `NULL` counter summaries by @aimtsou in #1012
+
 #### Other notable changes
 
 #### Shout-outs

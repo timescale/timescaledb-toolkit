@@ -1,15 +1,13 @@
-# Dependency configuration
-# Ideally, all dependencies would be specified in just one place.
-# Exceptions:
-# - crate dependencies are specified in Cargo.toml files
-# - README.md lists some, too.  TODO is it acceptable to just point to this file?
-# All our automation scripts read this, so at least we're not duplicating this
-# information across all those.
+# There is also configuration
 
+# PG_RELEASES with minor versions.
 PG_RELEASES='16.16 17.12 18.7 19.0'
+
+# PG major versions.
 PG_VERSIONS=$(echo "$PG_RELEASES" | sed 's/\.[0-9][0-9]*//g')
 
-TSDB_PG_VERSIONS=$PG_VERSIONS
+# PG supported by TSDB
+TSDB_PG_VERSIONS='16 17 18' # PG19 not yet released by TSDB.
 
 CARGO_EDIT=0.11.2
 

@@ -23,6 +23,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           source tools/dependencies.sh
+          # Gets the postgres version from dependencies.sh
           echo "postgres=$(jq -cn --arg versions "$PG_RELEASES" '$versions | split(" ")')" >> "$GITHUB_OUTPUT"
           if [[ "$GITHUB_EVENT_NAME" == schedule ]]; then
             ref=$(gh api repos/timescale/timescaledb/commits/main --jq .sha)

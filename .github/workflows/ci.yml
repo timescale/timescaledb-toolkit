@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   versions:
-    runs-on: runs-on/fleet=linux-8cpu/env=ue1
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
     outputs:
       postgres: ${{ steps.versions.outputs.postgres }}
     steps:
@@ -29,7 +29,6 @@ jobs:
       fail-fast: false
       matrix:
         postgres: ${{ fromJSON(needs.versions.outputs.postgres) }}
-
     steps:
       - uses: actions/checkout@v5
       - uses: ./.github/actions/setup-postgres

@@ -152,7 +152,7 @@ impl TDigest {
                 TDigest::new(centroids, sum, count, max, min, sz),
             ];
 
-            Self::merge_digests(digests)
+            Self::merge_digests(&[&digests[0], &digests[1]])
         }
     }
 
@@ -417,7 +417,7 @@ impl TDigest {
     }
 
     // Merge multiple T-Digests
-    pub fn merge_digests(digests: Vec<TDigest>) -> TDigest {
+    pub fn merge_digests(digests: &[&TDigest]) -> TDigest {
         let n_centroids: usize = digests.iter().map(|d| d.centroids.len()).sum();
         if n_centroids == 0 {
             return TDigest::default();
@@ -433,7 +433,7 @@ impl TDigest {
         let mut max = OrderedFloat::from(f64::NEG_INFINITY);
 
         let mut start: usize = 0;
-        for digest in digests.into_iter() {
+        for digest in digests.iter() {
             starts.push(start);
 
             let curr_count: u64 = digest.count();
@@ -441,8 +441,8 @@ impl TDigest {
                 min = std::cmp::min(min, digest.min);
                 max = std::cmp::max(max, digest.max);
                 count += curr_count;
-                for centroid in digest.centroids {
-                    centroids.push(centroid);
+                for centroid in &digest.centroids {
+                    centroids.push(centroid.clone());
                     start += 1;
                 }
             }
@@ -733,7 +733,7 @@ impl Builder {
         if !other.buffer.is_empty() {
             digvec[1].merge_unsorted(other.buffer);
         }
-        self.digested = TDigest::merge_digests(digvec);
+        self.digested = TDigest::merge_digests(&[&digvec[0], &digvec[1]]);
     }
 }
 
@@ -902,7 +902,7 @@ mod tests {
             digests.push(t)
         }
 
-        let t = TDigest::merge_digests(digests);
+        let t = TDigest::merge_digests(&digests.iter().collect::<Vec<_>>());
 
         let ans = t.estimate_quantile(1.0);
         let expected: f64 = 1000.0;
@@ -1035,7 +1035,7 @@ mod tests {
         let digest2 = TDigest::new_with_size(20).merge_unsorted(batch3.clone());
         let digest2 = digest2.merge_unsorted(batch4.clone());
 
-        let digest = TDigest::merge_digests(vec![digest1, digest2]);
+        let digest = TDigest::merge_digests(&[&digest1, &digest2]);
 
         let quantile_tests = [0.01, 0.1, 0.25, 0.5, 0.6, 0.8, 0.95];
         let tolerated_percentile_error = [0.010001, 0.100001, 0.2, 0.30, 0.275, 0.1725, 0.050001]; // .000001 cases are to handle rounding errors on cases that might return infinities

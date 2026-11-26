@@ -240,10 +240,8 @@ pub fn tdigest_compound_trans_inner(
                 (Some(a), Some(b)) => {
                     assert_eq!(a.max_size(), b.max_buckets as usize);
                     Some(
-                        InternalTDigest::merge_digests(
-                            vec![a.deref().clone(), b.to_internal_tdigest()], // TODO: TDigest merge with self
-                        )
-                        .into(),
+                        InternalTDigest::merge_digests(&[a.deref(), &b.to_internal_tdigest()])
+                            .into(),
                     )
                 }
             }
@@ -275,10 +273,8 @@ pub fn tdigest_compound_combine_inner(
                 (Some(state1), Some(state2)) => {
                     assert_eq!(state1.max_size(), state2.max_size());
                     Some(
-                        InternalTDigest::merge_digests(
-                            vec![state1.deref().clone(), state2.deref().clone()], // TODO: TDigest merge with self
-                        )
-                        .into(),
+                        InternalTDigest::merge_digests(&[state1.deref(), state2.deref()])
+                            .into(),
                     )
                 }
             }

@@ -1878,12 +1878,7 @@ mod tests {
 
         let first = super::space_saving_serialize(state);
 
-        let bytes = unsafe {
-            std::slice::from_raw_parts(
-                vardata_any(first.unwrap().0.cast_mut_ptr()) as *const u8,
-                varsize_any_exhdr(first.unwrap().0.cast_mut_ptr()),
-            )
-        };
+        let bytes = unsafe { varlena_to_byte_slice(first.unwrap().0.cast_mut_ptr()) };
         let expected = [
             1, 1, // versions
             15, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence
@@ -1942,12 +1937,7 @@ mod tests {
 
         let second = super::space_saving_serialize(state);
 
-        let bytes: &[u8] = unsafe {
-            std::slice::from_raw_parts(
-                vardata_any(second.unwrap().0.cast_mut_ptr()) as *const u8,
-                varsize_any_exhdr(second.unwrap().0.cast_mut_ptr()),
-            )
-        };
+        let bytes = unsafe { varlena_to_byte_slice(second.unwrap().0.cast_mut_ptr()) };
         let expected: [u8; 513] = [
             1, 1, // versions
             22, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence
@@ -2010,12 +2000,7 @@ mod tests {
             .unwrap(),
         );
 
-        let bytes = unsafe {
-            std::slice::from_raw_parts(
-                vardata_any(combined.unwrap().0.cast_mut_ptr()) as *const u8,
-                varsize_any_exhdr(combined.unwrap().0.cast_mut_ptr()),
-            )
-        };
+        let bytes = unsafe { varlena_to_byte_slice(combined.unwrap().0.cast_mut_ptr()) };
         let expected: [u8; 513] = [
             1, 1, // versions
             22, 0, 0, 0, 0, 0, 0, 0, // size hint for sequence

@@ -29,7 +29,7 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 #### Shout-outs
 
-**Full Changelog**: [TODO]
+**Full Changelog**: https://github.com/timescale/timescaledb-toolkit/compare/1.28.0...1.29.0
 
 ## [1.28.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.28.0) (2026-11-19)
 

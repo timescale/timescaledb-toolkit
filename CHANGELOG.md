@@ -12,6 +12,18 @@ This changelog should be updated as part of a PR if the work is worth noting (mo
 
 #### Other notable changes
 
+#### Shout-outs
+
+**Full Changelog**: [TODO]
+
+## [1.29.0](https://github.com/timescale/timescaledb-toolkit/releases/tag/1.29.0) (2026-11-26)
+
+#### New experimental features
+
+#### Bug fixes
+
+#### Other notable changes
+
 * Add PostgreSQL 19 support
 * Drop support for building and releasing Debian 11 packages
 

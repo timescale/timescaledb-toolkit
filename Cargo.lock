@@ -2465,7 +2465,7 @@ dependencies = [
 
 [[package]]
 name = "timescaledb_toolkit"
-version = "1.29.0-dev"
+version = "1.29.0"
 dependencies = [
  "aggregate_builder",
  "approx",

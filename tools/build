@@ -2,6 +2,8 @@
 
 set -ex
 
+. "$(dirname "$0")/dependencies.sh"
+
 print() {
     printf '%s\n' "$*"
 }
@@ -32,7 +34,7 @@ require_pg_version() {
 find_pg_config() {
     if [ -z "$pg_config" ]; then
         require_pg_version
-        pg_config=`command -v $(sed -ne 's/"//g' -e "s/^pg$pg_version *= *//p" ~/.pgrx/config.toml)`
+        pg_config=$(cargo pgrx info pg-config "$pg_version")
     fi
     [ -x "$pg_config" ] || die "$pg_config not executable"
 }
@@ -86,6 +88,7 @@ while [ $# -gt 0 ]; do
 
         -pg16 | -pg17 | -pg18 | -pg19)
             pg_version=${arg#-pg}
+            require_pg_version
             pg=pg$pg_version
             [ -z "$pg_port" ] && pg_port=288$pg_version
             ;;
@@ -127,12 +130,12 @@ while [ $# -gt 0 ]; do
         test-doc)
             find_profile
             require_pg_version
-            $nop cargo pgrx start --package timescaledb_toolkit $pg || (cat /home/postgres/.pgrx/${pg_version}.log; false)
-            $nop cargo run --profile $profile -p sql-doctester -- \
-                 -h localhost \
-                 -p $pg_port \
-                 docs
-            $nop cargo pgrx stop --package timescaledb_toolkit $pg
+            $nop cargo pgrx start --package timescaledb_toolkit $pg || (cat "${PGRX_HOME:-$HOME/.pgrx}/${pg_version}.log"; false)
+            (
+                trap '$nop cargo pgrx stop --package timescaledb_toolkit "$pg"' 0
+                $nop cargo run --profile $profile -p sql-doctester -- \
+                    -h localhost -p "$pg_port" -u "$(id -un)" -d postgres docs
+            )
             ;;
 
         test-updates)

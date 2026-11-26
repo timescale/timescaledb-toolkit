@@ -2,14 +2,14 @@
 # Ideally, all dependencies would be specified in just one place.
 # Exceptions:
 # - crate dependencies are specified in Cargo.toml files
-# - postgres versions are duplicated in the Github Actions matrix
 # - README.md lists some, too.  TODO is it acceptable to just point to this file?
 # All our automation scripts read this, so at least we're not duplicating this
 # information across all those.
 
-PG_VERSIONS='16 17 18 19'
+PG_RELEASES='16.16 17.12 18.7 19.0'
+PG_VERSIONS=$(echo "$PG_RELEASES" | sed 's/\.[0-9][0-9]*//g')
 
-TSDB_PG_VERSIONS='16 17 18' # tsdb doesn't have pg19 yet
+TSDB_PG_VERSIONS=$PG_VERSIONS
 
 CARGO_EDIT=0.11.2
 

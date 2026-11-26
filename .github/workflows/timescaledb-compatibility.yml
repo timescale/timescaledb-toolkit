@@ -1,0 +1,64 @@
+name: TimescaleDB compatibility
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  versions:
+    runs-on: runs-on/fleet=linux-2cpu/env=ue1
+    outputs:
+      postgres: ${{ steps.versions.outputs.postgres }}
+      timescaledb: ${{ steps.versions.outputs.timescaledb }}
+    steps:
+      - uses: actions/checkout@v5
+      - id: versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          source tools/dependencies.sh
+          echo "postgres=$(jq -cn --arg versions "$PG_RELEASES" '$versions | split(" ")')" >> "$GITHUB_OUTPUT"
+          if [[ "$GITHUB_EVENT_NAME" == schedule ]]; then
+            ref=$(gh api repos/timescale/timescaledb/commits/main --jq .sha)
+          else
+            ref=$(gh api repos/timescale/timescaledb/releases/latest --jq .tag_name)
+          fi
+          echo "timescaledb=$ref" >> "$GITHUB_OUTPUT"
+
+  test:
+    name: TimescaleDB ${{ needs.versions.outputs.timescaledb }} / PostgreSQL ${{ matrix.postgres }}
+    needs: versions
+    runs-on: runs-on/fleet=linux-8cpu-x64-ubuntu24/env=ue1
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: ${{ fromJSON(needs.versions.outputs.postgres) }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-postgres
+        with:
+          version: ${{ matrix.postgres }}
+      - uses: actions/checkout@v5
+        with:
+          repository: timescale/timescaledb
+          ref: ${{ needs.versions.outputs.timescaledb }}
+          path: timescaledb
+      - name: Install TimescaleDB
+        run: |
+          cmake -S timescaledb -B timescaledb/build -DPG_CONFIG="$(command -v pg_config)" -DREGRESS_CHECKS=OFF
+          cmake --build timescaledb/build --parallel "$(nproc)"
+          cmake --install timescaledb/build
+          echo "shared_preload_libraries = 'timescaledb'" >> "$PGRX_HOME/data-$PG_MAJOR/postgresql.conf"
+      - name: Test upgrades from released Toolkit binaries
+        run: |
+          curl -fsSL https://packagecloud.io/timescale/timescaledb/gpgkey | sudo gpg --dearmor -o /etc/apt/keyrings/timescaledb.gpg
+          echo 'deb [signed-by=/etc/apt/keyrings/timescaledb.gpg] https://packagecloud.io/timescale/timescaledb/ubuntu/ noble main' | sudo tee /etc/apt/sources.list.d/timescaledb.list
+          OS_NAME=ubuntu OS_VERSION=24.04 tools/testbin -pgversions "$PG_MAJOR" ci
+      - name: Run SQL integration tests
+        run: tools/build "-pg$PG_MAJOR" test-doc

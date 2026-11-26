@@ -24,7 +24,7 @@ jobs:
   test:
     name: PostgreSQL ${{ matrix.postgres }}
     needs: versions
-    runs-on: runs-on/fleet=linux-8cpu-x64-ubuntu24/env=ue1
+    runs-on: runs-on/fleet=linux-16cpu/env=ue1
     strategy:
       fail-fast: false
       matrix:

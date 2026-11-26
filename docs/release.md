@@ -229,13 +229,12 @@ Is the authentication token working?
 Has the packaging action in the `release-build-scripts` repository
 gone missing?
 
-## Make a container image to run all the above on
+## Build container images for CI and packaging
 
-`.github/workflows/toolkit-image.yml` configures the GitHub action which
+`.github/workflows/build_image.yml` configures the GitHub action which
 builds all our supported container images.
 
-One image is special:  debian-11-amd64.  This is the one we run all our GitHub
-actions on.
+Several jobs use debian-12-amd64 as their default container image.
 
 `docker/ci/Dockerfile` is the entry-point and it runs `docker/ci/setup.sh` to
 do the work:

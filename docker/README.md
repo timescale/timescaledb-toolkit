@@ -20,8 +20,8 @@ it to the development repository:
 ```bash
 ARCH=amd64
 OS_NAME=debian
-OS_VERSION=11
-OS_CODE_NAME=bullseye
+OS_VERSION=12
+OS_CODE_NAME=bookworm
 DOCKER_BUILDKIT=1 docker build \
                 --platform $ARCH \
                 --build-arg ARCH=$ARCH \

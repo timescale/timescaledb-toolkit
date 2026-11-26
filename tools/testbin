@@ -51,7 +51,7 @@ die() {
 }
 
 usage() {
-    die 'testbin [-n] -bindir DIR -version VERSION -pgversions "[V1] [V2]..." ( ci | deb | rpm )'
+    die 'testbin [-n] [-bindir DIR -version VERSION] [-pgversions "MAJOR ..."] (ci | deb | rpm | rpm_ci)'
 }
 
 # Requires:
@@ -67,13 +67,13 @@ select_pg() {
 # Must select_pg first.
 start_test() {
     $nop cargo pgrx start --package timescaledb_toolkit pg$PG_VERSION
-    $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- create-test-objects -u $LOGNAME -h 127.1 -p $PG_PORT
+    $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- create-test-objects -d postgres -u "$LOGNAME" -h 127.1 -p "$PG_PORT" "$@"
 }
 
 # Run the second half (new toolkit) of the test and stop postgres.
 # Must select_pg first.
 finish_test() {
-    $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- validate-test-objects -u $LOGNAME -h 127.1 -p $PG_PORT
+    $nop cargo run --manifest-path tools/update-tester/Cargo.toml -- validate-test-objects -d postgres -u "$LOGNAME" -h 127.1 -p "$PG_PORT"
     $nop cargo pgrx stop --package timescaledb_toolkit pg$PG_VERSION
 }
 
@@ -153,27 +153,41 @@ test_deb() {
     done
 }
 
-test_ci() {
+test_ci() (
     deb_init
-
-    # When run under CI after a recent release, the Packages file in the
-    # container image don't know about the latest version.
     $nop sudo apt-get update
+    workdir=$(mktemp -d)
+    trap 'rm -rf "$workdir"' EXIT
 
-    for FROM_VERSION; do
-        deb_start_test || continue
-        for PG_VERSION in $PG_VERSIONS; do
+    for PG_VERSION in $PG_VERSIONS; do
+        select_pg
+        pg_config=$(cargo pgrx info pg-config "$PG_VERSION")
+        libdir=$("$pg_config" --pkglibdir)
+        extdir=$("$pg_config" --sharedir)/extension
+        $nop tools/build "-pg$PG_VERSION" install
+
+        for FROM_VERSION; do
+            skip_from_version && continue
             skip_from_version_pg_version && continue
-            select_pg $PG_VERSION
-            $nop sudo dpkg -P timescaledb-toolkit-postgresql-$PG_VERSION
-            # Installing (and possibly uninstalling) toolkit binary gives this back to root but we need to write to it.
-            $nop sudo chown $LOGNAME /usr/lib/postgresql/$PG_VERSION/lib /usr/share/postgresql/$PG_VERSION/extension
-            $nop tools/build -pg$PG_VERSION install
+            pkg=timescaledb-toolkit-postgresql-$PG_VERSION
+            staging="$workdir/$PG_VERSION-$FROM_VERSION"
+            mkdir "$staging"
+            (
+                cd "$staging"
+                $nop apt-get download "$pkg=1:$FROM_VERSION~$OS_NAME$OS_VERSION"
+                $nop dpkg-deb -x ./*.deb .
+            )
+            library="timescaledb_toolkit-$FROM_VERSION.so"
+            sql="timescaledb_toolkit--$FROM_VERSION.sql"
+            $nop cp "$staging/usr/lib/postgresql/$PG_VERSION/lib/$library" "$libdir/"
+            $nop cp "$staging/usr/share/postgresql/$PG_VERSION/extension/$sql" "$extdir/"
 
+            start_test --from "$FROM_VERSION" --with-timescaledb
+            $nop rm "$libdir/$library" "$extdir/$sql"
             finish_test
         done
     done
-}
+)
 
 rpm_start_test() {
     for PG_VERSION in $PG_VERSIONS; do
@@ -247,11 +261,12 @@ cleanup() {
 }
 
 run() {
-    [ -n "$LOGNAME" ] || die 'LOGNAME environment variable must be set to the login name'
+    LOGNAME=${LOGNAME:-$(id -un)}
     [ -n "$PG_VERSIONS" ] || die '-pgversions required'
-    # TODO Requiring -bindir and -version when not all methods need them is awkward but eh.
-    [ -d "$BINDIR" ] || die '-bindir required'
-    [ -n "$TOOLKIT_VERSION" ] || die '-version required'
+    if [ "$1" = deb ] || [ "$1" = rpm ]; then
+        [ -d "$BINDIR" ] || die '-bindir required'
+        [ -n "$TOOLKIT_VERSION" ] || die '-version required'
+    fi
 
     FROM_VERSIONS=`print_upgradeable_from`
     [ -n "$FROM_VERSIONS" ] || die "no versions parsed from upgradeable_from in $CONTROL"

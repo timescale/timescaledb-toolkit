@@ -84,6 +84,11 @@ fn main() {
 	    Command::new("create-test-objects")
             .long_flag("create-test-objects")
             .about("Creates test objects in a db using the currently installed version of Toolkit")
+            .arg(Arg::new("from").long("from").value_name("VERSION")
+                .help("Create Toolkit at this installed version"))
+            .arg(Arg::new("with-timescaledb").long("with-timescaledb")
+                .action(clap::ArgAction::SetTrue)
+                .help("Install TimescaleDB in each upgrade test database"))
             .arg(
                 Arg::new("HOST")
                     .short('h')
@@ -254,7 +259,14 @@ fn main() {
                 eprintln!("{}", error.annotate_position(&test.text));
                 eprintln!("{error}\n");
             };
-            let res = try_create_objects(&connection_config, on_error);
+            let res = testrunner::create_test_objects_for_package_testing(
+                &connection_config,
+                create_test_object_matches
+                    .get_one::<String>("from")
+                    .map(String::as_str),
+                create_test_object_matches.get_flag("with-timescaledb"),
+                on_error,
+            );
             if let Err(err) = res {
                 eprintln!("{err}");
                 process::exit(1);
@@ -353,24 +365,17 @@ fn try_main<OnErr: FnMut(parser::Test, testrunner::TestError)>(
 
     testrunner::run_update_tests(db_conn, current_version, old_versions, on_error)
 }
-fn try_create_objects<OnErr: FnMut(parser::Test, testrunner::TestError)>(
-    db_conn: &ConnectionConfig,
-    on_error: OnErr,
-) -> xshell::Result<()> {
-    testrunner::create_test_objects_for_package_testing(db_conn, on_error)
-}
-
 fn try_validate_objects<OnErr: FnMut(parser::Test, testrunner::TestError)>(
     sh: &Shell,
     conn: &ConnectionConfig,
     root_dir: &str,
     on_error: OnErr,
 ) -> xshell::Result<()> {
-    let (_current_version, old_versions) = get_version_info(sh, root_dir)?;
+    let (current_version, old_versions) = get_version_info(sh, root_dir)?;
     if old_versions.is_empty() {
         panic!("no old versions to upgrade from")
     }
-    testrunner::update_to_and_validate_new_toolkit_version(conn, on_error)
+    testrunner::update_to_and_validate_new_toolkit_version(conn, &current_version, on_error)
 }
 
 fn get_version_info(sh: &xshell::Shell, root_dir: &str) -> xshell::Result<(String, Vec<String>)> {

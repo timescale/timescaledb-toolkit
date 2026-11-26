@@ -28,8 +28,11 @@ pub fn run_update_tests<OnErr: FnMut(Test, TestError)>(
         with_temporary_db(&test_db_name, root_config, || {
             let mut test_client = connect_to(&test_config);
 
-            let errors = test_client
-                .create_test_objects_from_files(test_config.clone(), old_toolkit_version.clone());
+            let errors = test_client.create_test_objects_from_files(
+                test_config.clone(),
+                old_toolkit_version.clone(),
+                false,
+            );
 
             for (test, error) in errors {
                 match error {
@@ -58,6 +61,8 @@ pub fn run_update_tests<OnErr: FnMut(Test, TestError)>(
 
 pub fn create_test_objects_for_package_testing<OnErr: FnMut(Test, TestError)>(
     root_config: &ConnectionConfig,
+    from_version: Option<&str>,
+    with_timescaledb: bool,
     mut on_error: OnErr,
 ) -> Result<(), xshell::Error> {
     eprintln!(" {}", "Creating test objects".bold().cyan());
@@ -78,15 +83,25 @@ pub fn create_test_objects_for_package_testing<OnErr: FnMut(Test, TestError)>(
 
     let mut test_client = connect_to(&test_config);
 
-    let create = "CREATE EXTENSION timescaledb_toolkit";
-    test_client
-        .simple_query(create)
-        .unwrap_or_else(|e| panic!("could not install extension due to {e}",));
+    if with_timescaledb {
+        test_client.install_timescaledb();
+    }
+    if let Some(version) = from_version {
+        test_client.install_toolkit_at_version(version);
+    } else {
+        test_client
+            .simple_query("CREATE EXTENSION timescaledb_toolkit")
+            .expect("could not install Toolkit");
+    }
 
     let current_toolkit_version = test_client.get_installed_extension_version();
 
     // create test objects
-    let errors = test_client.create_test_objects_from_files(test_config, current_toolkit_version);
+    let errors = test_client.create_test_objects_from_files(
+        test_config,
+        current_toolkit_version,
+        with_timescaledb,
+    );
 
     for (test, error) in errors {
         match error {
@@ -111,6 +126,7 @@ fn connect_to(config: &ConnectionConfig) -> TestClient {
 
 pub fn update_to_and_validate_new_toolkit_version<OnErr: FnMut(Test, TestError)>(
     root_config: &ConnectionConfig,
+    expected_version: &str,
     mut on_error: OnErr,
 ) -> Result<(), xshell::Error> {
     // update extension to new version
@@ -123,6 +139,10 @@ pub fn update_to_and_validate_new_toolkit_version<OnErr: FnMut(Test, TestError)>
     let old_toolkit_version = test_client.get_installed_extension_version();
 
     test_client.update_to_current_toolkit_version();
+    assert_eq!(
+        test_client.get_installed_extension_version(),
+        expected_version
+    );
     // run validation tests
     let errors = test_client.validate_test_objects_from_files(test_config, old_toolkit_version);
 
@@ -194,9 +214,14 @@ struct TestClient(Client);
 type QueryValues = Vec<Vec<Option<String>>>;
 
 impl TestClient {
+    fn install_timescaledb(&mut self) {
+        self.simple_query("CREATE EXTENSION timescaledb")
+            .expect("could not install TimescaleDB");
+    }
+
     fn install_toolkit_at_version(&mut self, old_toolkit_version: &str) {
-        let create =
-            format!(r#"CREATE EXTENSION timescaledb_toolkit VERSION "{old_toolkit_version}""#);
+        let version = old_toolkit_version.replace('"', "\"\"");
+        let create = format!(r#"CREATE EXTENSION timescaledb_toolkit VERSION "{version}""#);
         self.simple_query(&create).unwrap_or_else(|e| {
             panic!("could not install extension at version {old_toolkit_version} due to {e}",)
         });
@@ -206,6 +231,7 @@ impl TestClient {
         &mut self,
         root_config: ConnectionConfig,
         current_toolkit_version: String,
+        with_timescaledb: bool,
     ) -> Vec<(Test, Result<(), TestError>)> {
         let all_tests = parser::extract_tests("tests/update");
         // Hack to match previous versions of toolkit that don't conform to Semver.
@@ -250,16 +276,17 @@ impl TestClient {
                     .simple_query(&create)
                     .unwrap_or_else(|e| panic!("could not create db {test_db_name} due to {e}"));
 
-                let test_config = root_config.with_db(&test_db_name);
-
-                let mut test_client = connect_to(&test_config);
-                test_client
+                db_creation_client
                     .simple_query(&format!(
                         r#"ALTER DATABASE "{test_db_name}" SET timezone TO 'UTC';"#,
                     ))
                     .unwrap_or_else(|e| panic!("could not set time zone to UTC due to {e}"));
 
-                // install new version and make sure it is correct
+                let test_config = root_config.with_db(&test_db_name);
+                let mut test_client = connect_to(&test_config);
+                if with_timescaledb {
+                    test_client.install_timescaledb();
+                }
                 test_client.install_toolkit_at_version(&current_toolkit_version);
                 let installed_version = test_client.get_installed_extension_version();
                 assert_eq!(
@@ -336,7 +363,7 @@ impl TestClient {
 
                 test_client.validate_stable_objects_exist();
 
-                tests
+                let results: Vec<_> = tests
                     .tests
                     .into_iter()
                     .filter(|x| x.validation)
@@ -344,11 +371,20 @@ impl TestClient {
                         Some(min_version) => min_version <= &old_toolkit_semver,
                         None => true,
                     })
-                    .map(move |test| {
+                    .map(|test| {
                         let output = run_test(&mut test_client, &test);
-                        // ensure that the DB is dropped after the client
                         (test, output)
                     })
+                    .collect();
+                test_client
+                    .0
+                    .close()
+                    .expect("could not close test connection");
+                if results.iter().all(|(_, result)| result.is_ok()) {
+                    self.simple_query(&format!(r#"DROP DATABASE "{test_db_name}""#))
+                        .expect("could not drop test database");
+                }
+                results
             })
             .collect();
         errors

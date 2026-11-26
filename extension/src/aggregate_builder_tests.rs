@@ -3,7 +3,8 @@
 // function
 use aggregate_builder::aggregate;
 
-use pgrx::*;
+use pgrx::datum::Internal;
+use pgrx::prelude::{pg_schema, pg_sys};
 
 use crate::{palloc::Inner, raw::bytea};
 
@@ -82,7 +83,7 @@ impl toolkit_experimental::parallel_anything {
 #[cfg(any(test, feature = "pg_test"))]
 #[pg_schema]
 mod tests {
-    use pgrx::*;
+    use pgrx::{Spi, spi};
     use pgrx_macros::pg_test;
 
     #[pg_test]
